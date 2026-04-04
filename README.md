@@ -13,7 +13,7 @@ browser-automation-core/
 │
 ├── launch_browser.ps1       ← Generic Chrome launcher (shared automation profile)
 ├── launch_browser.bat       ← Wrapper bat — starts Chrome on the shared automation profile
-├── browser_core.ts          ← Global: connect, fastClick, fastFill, screenshots
+├── browser_core.ts          ← Global: connect, smartClick, smartFill, screenshots
 ├── selector_store.ts        ← Global: the selector caching pattern (reference)
 │
 └── project-template/        ← COPY THIS for every new project
@@ -52,13 +52,13 @@ npx ts-node main.ts
 
 | What | Why it's fast |
 |---|---|
-| `fastClick(page, sel)` | Uses `el.click()` in `page.evaluate()` — zero Playwright overhead |
-| `fastFill(page, sel, val)` | `focus → Ctrl+A → type delay:0` — no React re-render triggers |
-| `loadSelectors()` | Reads from JSON at import time — no network, no DOM |
+| `smartClick(page, sel)` | Uses Playwright actionability checks with a compact retry path |
+| `smartFill(page, sel, val)` | Uses locator focus/fill and only commits with `commit: true` |
+| `loadSelectors()` | Reads from JSON on first use — no network, no DOM |
 | `discoverSelectors()` | Runs ONCE, then skips forever (`selectorsDiscovered: true`) |
 | `screenshotElement()` | Crops to element only — not `fullPage:true` |
 | `waitForElement()` | Condition-based — never fixed `waitForTimeout()` |
-| `waitForAny()` | `Promise.race()` across multiple selectors — whichever appears first |
+| `waitForAny()` | `Promise.any()` across multiple selectors — only succeeds on the first visible match |
 | URL-based tab detection | `page.url().includes(pattern)` — instant, never fails |
 
 ---
@@ -118,7 +118,7 @@ for automation instead of your everyday Chrome profile.
 
 Import `browser_core.ts` using a relative path from your project:
 ```typescript
-import { connectBrowser, fastClick } from "../../browser-automation-core/browser_core";
+import { connectBrowser, smartClick } from "../../browser-automation-core/browser_core";
 ```
 
 Or add a `tsconfig.json` path alias:
@@ -134,5 +134,15 @@ Or add a `tsconfig.json` path alias:
 
 Then import as:
 ```typescript
-import { connectBrowser, fastClick } from "@bac/browser_core";
+import { connectBrowser, smartClick } from "@bac/browser_core";
 ```
+
+Load environment variables before connecting Stagehand:
+```typescript
+import "dotenv/config";
+```
+
+Required Stagehand env vars:
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (optional override)
+- `OPENROUTER_BASE_URL` (optional override)

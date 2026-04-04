@@ -15,7 +15,17 @@ const setupSchema = z.object({
   selectors_file: z.string().default("selectors.json"),
 });
 
-const setup = setupSchema.parse(JSON.parse(fs.readFileSync(path.join(process.cwd(), "setup.json"), "utf8")));
+type SetupConfig = z.infer<typeof setupSchema>;
+
+let cachedSetup: SetupConfig | null = null;
+let cachedSelectors: FramerSelectorMap | null = null;
+
+function getSetup(): SetupConfig {
+  if (!cachedSetup) {
+    cachedSetup = setupSchema.parse(JSON.parse(fs.readFileSync(path.join(process.cwd(), "setup.json"), "utf8")));
+  }
+  return cachedSetup;
+}
 
 export interface FramerSelectorMap extends SelectorCacheRecord {
   publishButton: string | null;
@@ -47,7 +57,9 @@ const DEFAULT_SELECTORS: FramerSelectorMap = {
   discoveryNote: "Framer selectors have not been discovered yet.",
 };
 
-export const SELECTORS_PATH = path.join(process.cwd(), setup.selectors_file);
+export function getSelectorsPath(): string {
+  return path.join(process.cwd(), getSetup().selectors_file);
+}
 
 export const selectorDescriptions: Record<Exclude<keyof FramerSelectorMap, "selectorsDiscovered" | "discoveryNote">, string> = {
   publishButton: "the Framer Publish button",
@@ -65,12 +77,25 @@ export const selectorDescriptions: Record<Exclude<keyof FramerSelectorMap, "sele
 
 /** Load the current Framer selector cache from disk. */
 export function loadSelectors(): FramerSelectorMap {
-  return loadSelectorCache(DEFAULT_SELECTORS, SELECTORS_PATH);
+  return loadSelectorCache(DEFAULT_SELECTORS, getSelectorsPath());
+}
+
+/** Return the cached Framer selector cache, loading it lazily when needed. */
+export function getSelectors(): FramerSelectorMap {
+  if (!cachedSelectors) {
+    cachedSelectors = loadSelectors();
+  }
+  return cachedSelectors;
+}
+
+export function invalidateSelectorsCache(): void {
+  cachedSelectors = null;
 }
 
 /** Discover initial Framer selectors without using dynamic code evaluation hacks. */
 export async function discoverSelectors(page: Page): Promise<FramerSelectorMap> {
-  const existing = loadSelectors();
+  invalidateSelectorsCache();
+  const existing = getSelectors();
   if (existing.selectorsDiscovered) {
     console.log("[SELECTORS] Using cached Framer selectors.");
     return existing;
@@ -136,16 +161,15 @@ export async function discoverSelectors(page: Page): Promise<FramerSelectorMap> 
     discoveryNote: `Framer selectors discovered from ${page.url()} at ${new Date().toISOString()}`,
   });
 
-  saveSelectorCache(merged, SELECTORS_PATH);
-  console.log(`[SELECTORS] Saved Framer selectors to ${SELECTORS_PATH}`);
+  cachedSelectors = merged;
+  saveSelectorCache(merged, getSelectorsPath());
+  console.log(`[SELECTORS] Saved Framer selectors to ${getSelectorsPath()}`);
   return merged;
 }
 
-export const selectors: FramerSelectorMap = loadSelectors();
-
 if (require.main === module) {
   (async () => {
-    const browser = await connectBrowser(setup.cdp_port);
+    const browser = await connectBrowser(getSetup().cdp_port);
     const page = getFramerPage(browser);
     await page.bringToFront();
     await discoverSelectors(page);

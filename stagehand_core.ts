@@ -10,6 +10,7 @@ export interface StagehandConnection {
 }
 
 let activeStagehand: Stagehand | null = null;
+let activeStagehandPage: StagehandPage | null = null;
 
 async function getCdpWebSocketUrl(port: number): Promise<string> {
   const response = await fetch(`http://localhost:${port}/json/version`, {
@@ -31,14 +32,25 @@ export function getActiveStagehand(): Stagehand | null {
 /** Attach Stagehand to the existing Chrome debug session and active tab. */
 export async function connectStagehand(port: number, urlPattern: string): Promise<StagehandConnection> {
   const cdpUrl = await getCdpWebSocketUrl(port);
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+  if (!openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is required to connect Stagehand through OpenRouter.");
+  }
+
   const stagehand = new Stagehand({
     env: "LOCAL",
     keepAlive: true,
     selfHeal: true,
-    disablePino: true,
-    disableAPI: true,
     verbose: 0,
-    model: "openai/gpt-4o-mini",
+    model: {
+      modelName: process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash-preview:free",
+      apiKey: openRouterApiKey,
+      baseURL: process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+      headers: {
+        "HTTP-Referer": "https://github.com/AbdallahIsDev/browser-automation-core",
+        "X-Title": "Browser Automation Core",
+      },
+    },
     localBrowserLaunchOptions: {
       cdpUrl,
       connectTimeoutMs: 5000,
@@ -53,8 +65,8 @@ export async function connectStagehand(port: number, urlPattern: string): Promis
     throw new Error(`Stagehand connected, but no page matched "${urlPattern}".`);
   }
 
-  stagehand.context.setActivePage(page);
   activeStagehand = stagehand;
+  activeStagehandPage = page;
   return { stagehand, page };
 }
 
@@ -65,41 +77,44 @@ export async function disconnectStagehand(): Promise<void> {
   }
   await activeStagehand.close();
   activeStagehand = null;
+  activeStagehandPage = null;
 }
 
 /** Execute a natural-language action with Stagehand and log it. */
-export async function act(page: AutomationPage, instruction: string): Promise<void> {
-  if (!activeStagehand) {
+export async function act(_page: AutomationPage, instruction: string): Promise<void> {
+  if (!activeStagehand || !activeStagehandPage) {
     throw new Error("Stagehand is not connected.");
   }
   console.log(`[STAGEHAND] act -> ${instruction}`);
-  await activeStagehand.act(instruction, { page });
+  await activeStagehand.act(instruction, { page: activeStagehandPage });
 }
 
 /** Observe the current page state with Stagehand and log it. */
-export async function observe(page: AutomationPage, instruction?: string): Promise<Action[]> {
-  if (!activeStagehand) {
+export async function observe(_page: AutomationPage, instruction?: string): Promise<Action[]> {
+  if (!activeStagehand || !activeStagehandPage) {
     throw new Error("Stagehand is not connected.");
   }
   console.log(`[STAGEHAND] observe -> ${instruction ?? "page state"}`);
   if (instruction) {
-    return activeStagehand.observe(instruction, { page });
+    return activeStagehand.observe(instruction, { page: activeStagehandPage });
   }
-  return activeStagehand.observe({ page });
+  return activeStagehand.observe({ page: activeStagehandPage });
 }
 
 /** Extract structured data from the page with Stagehand and log it. */
 export async function extract<TSchema extends ZodTypeAny>(
-  page: AutomationPage,
+  _page: AutomationPage,
   schema: TSchema,
   instruction: string,
 ): Promise<z.infer<TSchema>> {
-  if (!activeStagehand) {
+  if (!activeStagehand || !activeStagehandPage) {
     throw new Error("Stagehand is not connected.");
   }
   console.log(`[STAGEHAND] extract -> ${instruction}`);
-  const extractStagehand = activeStagehand as unknown as {
-    extract: (value: string, schemaValue: TSchema, options: { page: AutomationPage }) => Promise<unknown>;
-  };
-  return (await extractStagehand.extract(instruction, schema, { page })) as z.infer<TSchema>;
+  const extractWithPage = activeStagehand.extract as (
+    value: string,
+    schemaValue: TSchema,
+    options: { page: AutomationPage },
+  ) => Promise<z.infer<TSchema>>;
+  return extractWithPage(instruction, schema, { page: activeStagehandPage });
 }

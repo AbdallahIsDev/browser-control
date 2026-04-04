@@ -1,9 +1,8 @@
 import type { Page } from "playwright";
-import type { Stagehand } from "@browserbasehq/stagehand";
-import { retryAction, smartClick, waitForAny, waitForElement } from "@bac/browser_core";
+import { retryAction, waitForAny, waitForElement } from "@bac/browser_core";
 import { act } from "@bac/stagehand_core";
 import { resolveSelector } from "@bac/selector_store";
-import { SELECTORS_PATH, selectorDescriptions, selectors } from "@bac/selectors";
+import { getSelectors, getSelectorsPath, selectorDescriptions } from "@bac/selectors";
 
 export interface FramerSkillResult {
   success: boolean;
@@ -11,9 +10,9 @@ export interface FramerSkillResult {
 }
 
 async function clickResolved(page: Page, key: keyof typeof selectorDescriptions): Promise<boolean> {
-  const locator = await resolveSelector(page, key, selectors, {
+  const locator = await resolveSelector(page, key, getSelectors(), {
     descriptions: selectorDescriptions,
-    jsonPath: SELECTORS_PATH,
+    jsonPath: getSelectorsPath(),
   });
 
   if (!locator) {
@@ -28,8 +27,7 @@ async function clickResolved(page: Page, key: keyof typeof selectorDescriptions)
     });
 }
 
-async function runStagehand(stagehand: Stagehand, page: Page, instruction: string): Promise<void> {
-  void stagehand;
+async function runStagehand(page: Page, instruction: string): Promise<void> {
   await act(page, instruction);
 }
 
@@ -40,20 +38,20 @@ function resultFromError(error: unknown): FramerSkillResult {
 }
 
 /** Publish the current Framer project. */
-export async function publishSite(page: Page, stagehand: Stagehand): Promise<FramerSkillResult> {
+export async function publishSite(page: Page): Promise<FramerSkillResult> {
   try {
     await page.bringToFront();
     console.log("[FRAMER] Starting publish workflow.");
 
     if (!(await clickResolved(page, "publishButton"))) {
-      await runStagehand(stagehand, page, "Click the Publish button in the Framer editor.");
+      await runStagehand(page, "Click the Publish button in the Framer editor.");
     }
 
     console.log("[FRAMER] Waiting for publish confirmation.");
     await waitForAny(page, ["[role='dialog']", "button:has-text('Publish Site')", "button:has-text('Publish')"], 5000);
 
     if (!(await clickResolved(page, "publishConfirmButton"))) {
-      await runStagehand(stagehand, page, "Confirm the publish action in the open Framer modal.");
+      await runStagehand(page, "Confirm the publish action in the open Framer modal.");
     }
 
     console.log("[FRAMER] Waiting for publication success.");
@@ -74,16 +72,16 @@ export async function publishSite(page: Page, stagehand: Stagehand): Promise<Fra
 }
 
 /** Open a named CMS collection from the Framer editor. */
-export async function openCmsCollection(page: Page, stagehand: Stagehand, collectionName: string): Promise<FramerSkillResult> {
+export async function openCmsCollection(page: Page, collectionName: string): Promise<FramerSkillResult> {
   try {
     await page.bringToFront();
     console.log(`[FRAMER] Opening CMS collection "${collectionName}".`);
 
     if (!(await clickResolved(page, "cmsPanelButton"))) {
-      await runStagehand(stagehand, page, "Open the CMS panel in the Framer editor.");
+      await runStagehand(page, "Open the CMS panel in the Framer editor.");
     }
 
-    await runStagehand(stagehand, page, `Open the CMS collection named "${collectionName}".`);
+    await runStagehand(page, `Open the CMS collection named "${collectionName}".`);
     return { success: true };
   } catch (error: unknown) {
     return resultFromError(error);
@@ -93,7 +91,6 @@ export async function openCmsCollection(page: Page, stagehand: Stagehand, collec
 /** Switch the Framer preview breakpoint. */
 export async function setResponsiveBreakpoint(
   page: Page,
-  stagehand: Stagehand,
   bp: "desktop" | "tablet" | "mobile",
 ): Promise<FramerSkillResult> {
   const keyMap = {
@@ -107,7 +104,7 @@ export async function setResponsiveBreakpoint(
     console.log(`[FRAMER] Switching breakpoint to ${bp}.`);
 
     if (!(await clickResolved(page, keyMap[bp]))) {
-      await runStagehand(stagehand, page, `Switch the Framer preview to the ${bp} breakpoint.`);
+      await runStagehand(page, `Switch the Framer preview to the ${bp} breakpoint.`);
     }
 
     return { success: true };
@@ -117,16 +114,16 @@ export async function setResponsiveBreakpoint(
 }
 
 /** Open the Framer layer panel. */
-export async function openLayerPanel(page: Page, stagehand: Stagehand): Promise<FramerSkillResult> {
+export async function openLayerPanel(page: Page): Promise<FramerSkillResult> {
   try {
     await page.bringToFront();
     console.log("[FRAMER] Opening the layer panel.");
 
     if (!(await clickResolved(page, "layerPanelButton"))) {
-      await runStagehand(stagehand, page, "Open the Layers panel in the Framer editor.");
+      await runStagehand(page, "Open the Layers panel in the Framer editor.");
     }
 
-    await waitForElement(page, selectors.mainCanvas ?? "canvas", 5000);
+    await waitForElement(page, getSelectors().mainCanvas ?? "canvas", 5000);
     return { success: true };
   } catch (error: unknown) {
     return resultFromError(error);
@@ -134,13 +131,13 @@ export async function openLayerPanel(page: Page, stagehand: Stagehand): Promise<
 }
 
 /** Open the Framer style panel. */
-export async function openStylePanel(page: Page, stagehand: Stagehand): Promise<FramerSkillResult> {
+export async function openStylePanel(page: Page): Promise<FramerSkillResult> {
   try {
     await page.bringToFront();
     console.log("[FRAMER] Opening the style panel.");
 
     if (!(await clickResolved(page, "stylePanelButton"))) {
-      await runStagehand(stagehand, page, "Open the Styles panel in the Framer editor.");
+      await runStagehand(page, "Open the Styles panel in the Framer editor.");
     }
 
     return { success: true };

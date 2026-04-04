@@ -87,11 +87,11 @@ export async function smartFill(
   value: string,
   opts: { timeoutMs?: number; commit?: boolean } = {},
 ): Promise<boolean> {
-  const locator = page.locator(selector).first();
   try {
+    const locator = page.locator(selector).first();
     await locator.click({ timeout: opts.timeoutMs ?? 3000 });
     await locator.fill(value, { timeout: opts.timeoutMs ?? 3000 });
-    if (opts.commit ?? true) {
+    if (opts.commit ?? false) {
       await locator.press("Tab", { timeout: opts.timeoutMs ?? 3000 });
     }
     return true;
@@ -149,16 +149,16 @@ export async function waitForElement(page: Page, selector: string, timeoutMs = 5
 
 /** Return the first selector that becomes visible. */
 export async function waitForAny(page: Page, selectors: string[], timeoutMs = 5000): Promise<string | null> {
-  const attempts = selectors.map(async (selector: string) => {
-    try {
-      await page.locator(selector).first().waitFor({ state: "visible", timeout: timeoutMs });
-      return selector;
-    } catch {
-      return null;
-    }
-  });
-  const result = await Promise.race(attempts);
-  return result ?? null;
+  try {
+    return await Promise.any(
+      selectors.map(async (selector: string) => {
+        await page.locator(selector).first().waitFor({ state: "visible", timeout: timeoutMs });
+        return selector;
+      }),
+    );
+  } catch {
+    return null;
+  }
 }
 
 /** Read the visible text content of the first matching element. */

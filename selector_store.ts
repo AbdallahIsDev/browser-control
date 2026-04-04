@@ -48,34 +48,6 @@ export function mergeSelectorCache<T extends SelectorCacheRecord>(base: T, overr
   } as T;
 }
 
-/** Convert a DOM element into a CSS selector using the framework priority order. */
-export function selectorOf(element: Element | null): string | null {
-  if (!element) {
-    return null;
-  }
-  const dataTest = element.getAttribute("data-test");
-  if (dataTest) {
-    return `[data-test="${dataTest}"]`;
-  }
-  const dataTestId = element.getAttribute("data-testid");
-  if (dataTestId) {
-    return `[data-testid="${dataTestId}"]`;
-  }
-  const ariaLabel = element.getAttribute("aria-label");
-  if (ariaLabel) {
-    return `[aria-label="${ariaLabel}"]`;
-  }
-  if ((element as HTMLElement).id) {
-    return `#${(element as HTMLElement).id}`;
-  }
-  const className = String((element as HTMLElement).className ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(".");
-  return `${element.tagName.toLowerCase()}${className ? `.${className}` : ""}`;
-}
-
 /** Humanize a selector key into a semantic label for Stagehand. */
 export function describeSelectorKey(key: string): string {
   return key
