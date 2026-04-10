@@ -4,6 +4,7 @@
   "private": true,
   "description": "Persistent Chrome browser automation core for Playwright and Stagehand.",
   "scripts": {
+    "test": "node --require ts-node/register --test browser_core.test.ts launch_browser_helper.test.cjs",
     "typecheck": "tsc --noEmit",
     "start": "ts-node main.ts"
   },

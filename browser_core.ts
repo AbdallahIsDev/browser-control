@@ -1,15 +1,181 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
+
+export interface DebugInteropState {
+  port: number;
+  bindAddress: string;
+  windowsLoopbackUrl: string;
+  localhostUrl: string;
+  wslPreferredUrl: string | null;
+  wslHostCandidates: string[];
+  updatedAt: string;
+}
+
+interface DebugEndpointCandidateOptions {
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  metadata?: DebugInteropState | null;
+  resolvConf?: string;
+}
+
+const DEFAULT_DEBUG_HOST = "127.0.0.1";
+const DEFAULT_LOCALHOST = "localhost";
+const DEBUG_INTEROP_PATH = path.join(__dirname, ".interop", "chrome-debug.json");
 
 function logActionError(action: string, selector: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[BROWSER_CORE] ${action} failed for "${selector}": ${message}`);
 }
 
+function isLikelyWsl(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): boolean {
+  if (platform !== "linux") {
+    return false;
+  }
+
+  return Boolean(env.WSL_DISTRO_NAME || env.WSL_INTEROP || os.release().toLowerCase().includes("microsoft"));
+}
+
+function toBaseUrl(hostOrUrl: string, port: number): string {
+  const trimmed = hostOrUrl.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/+$/, "");
+  }
+
+  return `http://${trimmed}:${port}`;
+}
+
+function pushUniqueCandidate(candidates: string[], value: string | null | undefined, port: number): void {
+  if (!value) {
+    return;
+  }
+
+  const normalized = toBaseUrl(value, port);
+  if (!normalized || candidates.includes(normalized)) {
+    return;
+  }
+
+  candidates.push(normalized);
+}
+
+function readDebugInteropState(): DebugInteropState | null {
+  try {
+    if (!fs.existsSync(DEBUG_INTEROP_PATH)) {
+      return null;
+    }
+
+    return JSON.parse(fs.readFileSync(DEBUG_INTEROP_PATH, "utf8")) as DebugInteropState;
+  } catch {
+    return null;
+  }
+}
+
+function readLocalResolvConf(env: NodeJS.ProcessEnv): string {
+  const resolvConfPath = env.BROWSER_DEBUG_RESOLV_CONF?.trim() || "/etc/resolv.conf";
+  try {
+    if (!fs.existsSync(resolvConfPath)) {
+      return "";
+    }
+
+    return fs.readFileSync(resolvConfPath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+export function readNameserverCandidates(resolvConf: string): string[] {
+  const matches = resolvConf.matchAll(/^\s*nameserver\s+([^\s#]+)\s*$/gim);
+  const candidates: string[] = [];
+
+  for (const match of matches) {
+    const host = match[1]?.trim();
+    if (!host || candidates.includes(host)) {
+      continue;
+    }
+
+    candidates.push(host);
+  }
+
+  return candidates;
+}
+
+export function getDebugEndpointCandidates(
+  port = 9222,
+  options: DebugEndpointCandidateOptions = {},
+): string[] {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const metadata = options.metadata === undefined ? readDebugInteropState() : options.metadata;
+  const resolvConf = options.resolvConf ?? readLocalResolvConf(env);
+
+  if (env.BROWSER_DEBUG_URL?.trim()) {
+    return [toBaseUrl(env.BROWSER_DEBUG_URL, port)];
+  }
+
+  const candidates: string[] = [];
+  const isWsl = isLikelyWsl(env, platform);
+
+  pushUniqueCandidate(candidates, env.BROWSER_DEBUG_HOST, port);
+
+  if (isWsl) {
+    pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port);
+    for (const host of metadata?.wslHostCandidates ?? []) {
+      pushUniqueCandidate(candidates, host, port);
+    }
+    for (const host of readNameserverCandidates(resolvConf)) {
+      pushUniqueCandidate(candidates, host, port);
+    }
+    pushUniqueCandidate(candidates, metadata?.localhostUrl ?? DEFAULT_LOCALHOST, port);
+    pushUniqueCandidate(candidates, metadata?.windowsLoopbackUrl ?? DEFAULT_DEBUG_HOST, port);
+    return candidates;
+  }
+
+  pushUniqueCandidate(candidates, metadata?.windowsLoopbackUrl ?? DEFAULT_DEBUG_HOST, port);
+  pushUniqueCandidate(candidates, metadata?.localhostUrl ?? DEFAULT_LOCALHOST, port);
+  pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port);
+  for (const host of metadata?.wslHostCandidates ?? []) {
+    pushUniqueCandidate(candidates, host, port);
+  }
+  for (const host of readNameserverCandidates(resolvConf)) {
+    pushUniqueCandidate(candidates, host, port);
+  }
+
+  return candidates;
+}
+
+async function isDebugEndpointReachable(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl}/json/version`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveDebugEndpointUrl(port = 9222): Promise<string> {
+  const candidates = getDebugEndpointCandidates(port);
+
+  for (const candidate of candidates) {
+    if (await isDebugEndpointReachable(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `CDP port ${port} is not reachable from this environment. Tried: ${candidates.join(", ") || "no candidates"}`,
+  );
+}
+
 /** Connect to an already-running Chrome instance via CDP. */
 export async function connectBrowser(port = 9222): Promise<Browser> {
-  return chromium.connectOverCDP(`http://localhost:${port}`);
+  return chromium.connectOverCDP(await resolveDebugEndpointUrl(port));
 }
 
 /** Return every open page across all browser contexts. */
@@ -187,10 +353,8 @@ export async function screenshotElement(page: Page, selector: string | null, out
 /** Check whether the debug endpoint is currently reachable. */
 export async function isDebugPortReady(port = 9222): Promise<boolean> {
   try {
-    const response = await fetch(`http://localhost:${port}/json`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    return response.ok;
+    await resolveDebugEndpointUrl(port);
+    return true;
   } catch (error: unknown) {
     console.error(`[BROWSER_CORE] Debug port check failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;

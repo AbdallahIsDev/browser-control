@@ -94,14 +94,6 @@ because they are explicitly added for testing and do not change when the UI is r
 
 ---
 
-## Existing Projects Using This Framework
-
-| Project | Folder | Target Site | Selectors File |
-|---|---|---|---|
-| ICT Trading | `C:\Users\11\Downloads\Cron\ICT Trading\scripts\` | my.exness.com/webtrading | mt5_selectors.json |
-
----
-
 ## Global Installation Path
 
 ```

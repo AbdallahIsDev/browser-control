@@ -1,6 +1,7 @@
 import { Stagehand, type Action, type Page as StagehandPage } from "@browserbasehq/stagehand";
 import type { Page as PlaywrightPage } from "playwright";
 import { z, type ZodTypeAny } from "zod";
+import { resolveDebugEndpointUrl } from "./browser_core";
 
 export type AutomationPage = PlaywrightPage | StagehandPage;
 
@@ -13,7 +14,8 @@ let activeStagehand: Stagehand | null = null;
 let activeStagehandPage: StagehandPage | null = null;
 
 async function getCdpWebSocketUrl(port: number): Promise<string> {
-  const response = await fetch(`http://localhost:${port}/json/version`, {
+  const baseUrl = await resolveDebugEndpointUrl(port);
+  const response = await fetch(`${baseUrl}/json/version`, {
     signal: AbortSignal.timeout(3000),
   });
   if (!response.ok) {
