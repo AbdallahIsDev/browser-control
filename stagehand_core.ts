@@ -13,9 +13,15 @@ export interface StagehandConnection {
 let activeStagehand: Stagehand | null = null;
 let activeStagehandPage: StagehandPage | null = null;
 
-async function getCdpWebSocketUrl(port: number): Promise<string> {
-  const baseUrl = await resolveDebugEndpointUrl(port);
-  const response = await fetch(`${baseUrl}/json/version`, {
+export async function getCdpWebSocketUrl(
+  port: number,
+  options: {
+    fetchImpl?: typeof fetch;
+    resolveDebugUrl?: (port: number) => Promise<string>;
+  } = {},
+): Promise<string> {
+  const baseUrl = await (options.resolveDebugUrl ?? resolveDebugEndpointUrl)(port);
+  const response = await (options.fetchImpl ?? fetch)(`${baseUrl}/json/version`, {
     signal: AbortSignal.timeout(3000),
   });
   if (!response.ok) {

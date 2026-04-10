@@ -13,6 +13,7 @@ browser-automation-core/
 │
 ├── launch_browser.ps1       ← Generic Chrome launcher (shared automation profile)
 ├── launch_browser.bat       ← Wrapper bat — starts Chrome on the shared automation profile
+├── .interop/                ← Runtime metadata shared between Windows Chrome and WSL clients
 ├── browser_core.ts          ← Global: connect, smartClick, smartFill, screenshots
 ├── selector_store.ts        ← Global: the selector caching pattern (reference)
 │
@@ -45,6 +46,31 @@ npx ts-node selectors.ts
 # 5. Write your automation in main.ts, then run it
 npx ts-node main.ts
 ```
+
+---
+
+## Windows + WSL Interop
+
+`launch_browser.bat` now defaults to `0.0.0.0` for the Chrome debug bind address so the same
+Windows Chrome session can be attached from Windows and WSL.
+
+Each launch writes `.interop/chrome-debug.json` with the preferred CDP endpoint candidates.
+`browser_core.ts` and `stagehand_core.ts` read that metadata automatically, so Hermes in WSL does
+not need a manual port proxy or a hardcoded host IP anymore.
+
+If you ever need to override discovery manually:
+
+- `BROWSER_DEBUG_URL=http://host:port`
+- `BROWSER_DEBUG_HOST=host`
+
+You can still override the bind address explicitly:
+
+```bat
+launch_browser.bat 9222 0.0.0.0
+```
+
+The launcher validates local CDP access and, when WSL is installed, it also probes the endpoint
+from WSL before reporting success.
 
 ---
 
@@ -94,6 +120,20 @@ because they are explicitly added for testing and do not change when the UI is r
 
 ---
 
+## Windows + WSL
+
+`launch_browser.bat` now does two things on Windows:
+
+- launches the shared Chrome automation profile on the CDP port
+- publishes that same CDP session to WSL through a local bridge on the WSL gateway IP
+
+That means the same visible Windows Chrome session is reachable from both environments:
+
+- Windows tools use `http://127.0.0.1:<port>`
+- WSL tools prefer the bridge URL written to `.interop/chrome-debug.json`
+
+If the launcher finds an existing Chrome debug session that is only bound to loopback, it repairs WSL access by starting the bridge instead of opening a second browser.
+
 ## Global Installation Path
 
 ```
@@ -101,8 +141,9 @@ C:\Users\11\browser-automation-core\
 ```
 
 All automation projects should share the same persistent automation profile so
-logins persist between runs. `launch_browser.bat` only enables the debug port;
-it does not open a URL or create a different profile for each project.
+logins persist between runs. `launch_browser.bat` enables the debug port on the
+shared profile and writes connection metadata to `.interop/chrome-debug.json`;
+it does not create a different profile for each project.
 
 Chrome 136+ no longer allows `--remote-debugging-port` on the default Chrome
 data directory, so the launcher intentionally uses one dedicated shared profile

@@ -8,6 +8,7 @@
   "notes": [
     "Edit target_url and url_pattern to match your site.",
     "Run: launch_browser.bat 9222 to start the shared automation profile.",
+    "launch_browser.bat writes .interop/chrome-debug.json so WSL and Windows can attach to the same Chrome session.",
     "Use the same automation profile for every project so you only sign in once there.",
     "Open the target site yourself in that Chrome window before running automation.",
     "Run: npx ts-node selectors.ts to populate selectors.json",

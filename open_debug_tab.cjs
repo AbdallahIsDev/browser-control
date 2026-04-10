@@ -1,5 +1,5 @@
 const http = require("node:http");
-const WebSocket = require("ws");
+const WebSocketImpl = globalThis.WebSocket || require("ws");
 
 const port = Number(process.argv[2] || "9222");
 const targetUrl = process.argv[3];
@@ -33,7 +33,7 @@ function httpPut(path) {
 
 function cdpNavigate(wsUrl, url) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocketImpl(wsUrl);
     const timer = setTimeout(() => { ws.close(); reject(new Error("CDP timeout")); }, 10000);
     ws.on("open", () => {
       ws.send(JSON.stringify({ id: 1, method: "Page.navigate", params: { url } }));

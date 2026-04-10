@@ -27,6 +27,7 @@ $debugUserDataDir = Join-Path "$env:LOCALAPPDATA\\Google\\Chrome" $profileName
 $lockFile         = Join-Path $debugUserDataDir "lockfile"
 $debugUrl         = "http://127.0.0.1:$Port/json"
 $launcherHelperPath = Join-Path $PSScriptRoot "launch_browser_helper.cjs"
+$bridgeScriptPath = Join-Path $PSScriptRoot "wsl_cdp_bridge.cjs"
 $interopDir       = Join-Path $PSScriptRoot ".interop"
 $interopPath      = Join-Path $interopDir "chrome-debug.json"
 
@@ -87,8 +88,100 @@ function Get-DebugChromeProcess {
     Select-Object -First 1
 }
 
+function Test-DebugChromeBinding {
+  param($Process)
+
+  if (-not $Process) {
+    return $false
+  }
+
+  $listenerLines = @(netstat -ano -p TCP | Select-String -Pattern "LISTENING\s+$($Process.ProcessId)$")
+  if ($listenerLines.Count -eq 0) {
+    return $false
+  }
+
+  $nonLoopbackAddresses = @()
+  foreach ($listener in $listenerLines) {
+    if ($listener.Line -match "TCP\s+(\S+):$Port\s+\S+\s+LISTENING\s+$($Process.ProcessId)$") {
+      $address = $Matches[1]
+      if ($address -and $address -notin @("127.0.0.1", "::1")) {
+        $nonLoopbackAddresses += $address
+      }
+    }
+  }
+
+  return ($nonLoopbackAddresses.Count -gt 0)
+}
+
+function Invoke-WslShell {
+  param([string]$Command)
+
+  $wslCommand = Get-Command wsl.exe -ErrorAction SilentlyContinue
+  if (-not $wslCommand) {
+    return [pscustomobject]@{
+      available = $false
+      exitCode  = $null
+      output    = ""
+    }
+  }
+
+  try {
+    $output = & $wslCommand.Source -e sh -lc $Command 2>&1
+    return [pscustomobject]@{
+      available = $true
+      exitCode  = $LASTEXITCODE
+      output    = (($output | Out-String).Trim())
+    }
+  } catch {
+    return [pscustomobject]@{
+      available = $true
+      exitCode  = 1
+      output    = ($_ | Out-String).Trim()
+    }
+  }
+}
+
+function Get-WslShellLines {
+  param([string]$Command)
+
+  $result = Invoke-WslShell -Command $Command
+  if (-not $result.available -or $result.exitCode -ne 0 -or -not $result.output) {
+    return @()
+  }
+
+  return @(
+    $result.output -split "\r?\n" |
+      ForEach-Object { $_.Trim() } |
+      Where-Object { $_ }
+  )
+}
+
+function Test-PrivateIpv4Address {
+  param([string]$Value)
+
+  if (-not $Value -or $Value -notmatch '^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$') {
+    return $false
+  }
+
+  $octets = @($Matches[1], $Matches[2], $Matches[3], $Matches[4]) | ForEach-Object { [int]$_ }
+  if ($octets | Where-Object { $_ -lt 0 -or $_ -gt 255 }) {
+    return $false
+  }
+
+  return (
+    $octets[0] -eq 10 -or
+    ($octets[0] -eq 172 -and $octets[1] -ge 16 -and $octets[1] -le 31) -or
+    ($octets[0] -eq 192 -and $octets[1] -eq 168)
+  )
+}
+
 function Get-WslHostCandidates {
   $candidates = @()
+
+  $wslGateway = @(Get-WslShellLines -Command "ip route | sed -n 's/^default via //p' | cut -d' ' -f1 | head -n 1")
+  if ($wslGateway.Count -gt 0) {
+    $candidates += @($wslGateway | Where-Object { Test-PrivateIpv4Address -Value $_ })
+  }
 
   try {
     $wslAddresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -101,7 +194,7 @@ function Get-WslHostCandidates {
       Select-Object -ExpandProperty IPAddress
 
     if ($wslAddresses) {
-      $candidates += $wslAddresses
+      $candidates += @($wslAddresses | Where-Object { Test-PrivateIpv4Address -Value $_ })
     }
   } catch {}
 
@@ -115,11 +208,16 @@ function Get-WslHostCandidates {
       Select-Object -ExpandProperty IPAddress
 
     if ($otherAddresses) {
-      $candidates += $otherAddresses
+      $candidates += @($otherAddresses | Where-Object { Test-PrivateIpv4Address -Value $_ })
     }
   } catch {}
 
-  return @($candidates | Where-Object { $_ } | Select-Object -Unique)
+  $wslNameservers = @(Get-WslShellLines -Command "sed -n 's/^nameserver //p' /etc/resolv.conf")
+  if ($wslNameservers.Count -gt 0) {
+    $candidates += @($wslNameservers | Where-Object { Test-PrivateIpv4Address -Value $_ })
+  }
+
+  return @($candidates | Where-Object { $_ -and (Test-PrivateIpv4Address -Value $_) } | Select-Object -Unique)
 }
 
 function Write-DebugInteropState {
@@ -141,6 +239,49 @@ function Write-DebugInteropState {
 
   New-Item -ItemType Directory -Force -Path $interopDir | Out-Null
   $state | ConvertTo-Json -Depth 4 | Set-Content -Path $interopPath -Encoding UTF8
+  return [pscustomobject]$state
+}
+
+function Test-WslDebugEndpointValid {
+  param([object]$InteropState)
+
+  $candidateUrls = @()
+  if ($InteropState -and $InteropState.wslPreferredUrl) {
+    $candidateUrls += [string]$InteropState.wslPreferredUrl
+  }
+
+  foreach ($candidateHost in @($InteropState.wslHostCandidates)) {
+    if ($candidateHost) {
+      $candidateUrls += "http://${candidateHost}:$Port"
+    }
+  }
+
+  $candidateUrls = @($candidateUrls | Where-Object { $_ } | Select-Object -Unique)
+  if ($candidateUrls.Count -eq 0) {
+    return $true
+  }
+
+  foreach ($candidateUrl in $candidateUrls) {
+    $endpointUrl = "$candidateUrl/json"
+    $pythonScript = "import urllib.request; urllib.request.urlopen(""$endpointUrl"", timeout=5).read()"
+    $probeScript = "if command -v curl >/dev/null 2>&1; then curl -fsS '$endpointUrl' >/dev/null; elif command -v python3 >/dev/null 2>&1; then python3 -c '$pythonScript' >/dev/null; else exit 125; fi"
+    $probeResult = Invoke-WslShell -Command $probeScript
+
+    if (-not $probeResult.available) {
+      return $true
+    }
+
+    if ($probeResult.exitCode -eq 0) {
+      return $true
+    }
+
+    if ($probeResult.exitCode -eq 125) {
+      Write-Output "Warning: WSL is available, but neither curl nor python3 is installed to probe the WSL debug endpoint."
+      return $true
+    }
+  }
+
+  return $false
 }
 
 function Stop-DebugChrome {
@@ -156,6 +297,89 @@ function Stop-DebugChrome {
     }
 
   Start-Sleep -Seconds 2
+}
+
+function Get-WslBridgeProcess {
+  param([string]$ListenHost)
+
+  Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+    Where-Object {
+      $_.CommandLine -and
+      $_.CommandLine -like "*$bridgeScriptPath*" -and
+      $_.CommandLine -like "*--listen-host $ListenHost*" -and
+      $_.CommandLine -like "*--listen-port $Port*" -and
+      $_.CommandLine -like "*--target-host 127.0.0.1*" -and
+      $_.CommandLine -like "*--target-port $Port*"
+    } |
+    Select-Object -First 1
+}
+
+function Stop-WslCdpBridge {
+  param([string]$ListenHost)
+
+  Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+    Where-Object {
+      $_.CommandLine -and
+      $_.CommandLine -like "*$bridgeScriptPath*" -and
+      $_.CommandLine -like "*--listen-port $Port*" -and
+      (
+        -not $ListenHost -or
+        $_.CommandLine -like "*--listen-host $ListenHost*"
+      )
+    } |
+    ForEach-Object {
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Start-WslCdpBridge {
+  param([object]$InteropState)
+
+  $listenHost = $null
+  if ($InteropState -and $InteropState.wslPreferredUrl) {
+    try {
+      $listenHost = ([uri]$InteropState.wslPreferredUrl).Host
+    } catch {}
+  }
+
+  if (-not $listenHost) {
+    return $true
+  }
+
+  $bridgeUrl = "http://${listenHost}:$Port/json"
+  if (Test-DebugEndpointValid -Url $bridgeUrl) {
+    return $true
+  }
+
+  $nodePath = Get-NodePath
+  if (-not $nodePath) {
+    Write-Error "Node.js not found. Install Node or add node.exe to PATH."
+    exit 1
+  }
+
+  if (-not (Test-Path $bridgeScriptPath)) {
+    Write-Error "WSL bridge helper not found at $bridgeScriptPath"
+    exit 1
+  }
+
+  Stop-WslCdpBridge -ListenHost $listenHost
+
+  Start-Process -FilePath $nodePath -ArgumentList @(
+    $bridgeScriptPath,
+    "--listen-host", $listenHost,
+    "--listen-port", "$Port",
+    "--target-host", "127.0.0.1",
+    "--target-port", "$Port"
+  ) -WindowStyle Hidden | Out-Null
+
+  for ($i = 0; $i -lt 10; $i++) {
+    if (Test-DebugEndpointValid -Url $bridgeUrl) {
+      return $true
+    }
+    Start-Sleep -Milliseconds 500
+  }
+
+  return $false
 }
 
 function Start-DebugChrome {
@@ -250,14 +474,23 @@ $existingDebugProcess = Get-DebugChromeProcess
 if ($existingDebugProcess) {
   $response = Get-CdpTargets
   if ($response) {
+    if (-not (Test-DebugChromeBinding -Process $existingDebugProcess)) {
+      Write-Output "Existing Chrome debug session is only bound to loopback. Starting WSL bridge repair..."
+    }
+
     Ensure-DebugTabs
     $response = Get-CdpTargets
-    Write-DebugInteropState
-    Write-DebugReadyMessage -Response $response
-    exit 0
+    $interopState = Write-DebugInteropState
+    if ((Start-WslCdpBridge -InteropState $interopState) -and (Test-WslDebugEndpointValid -InteropState $interopState)) {
+      Write-DebugReadyMessage -Response $response
+      exit 0
+    }
+
+    Write-Output "Existing Chrome debug session is not reachable from WSL. Restarting..."
+  } else {
+    Write-Output "Existing Chrome debug session found but debug port is not responding. Restarting..."
   }
-  # Existing process but debug port not responding — kill it and start fresh
-  Write-Output "Existing Chrome debug session found but debug port is not responding. Restarting..."
+
   Stop-DebugChrome
 }
 
@@ -297,6 +530,17 @@ for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
 
   # Validate both endpoints return valid JSON
   if (Test-DebugSessionValid) {
+    $interopState = Write-DebugInteropState
+    if (-not (Start-WslCdpBridge -InteropState $interopState)) {
+      Write-Output "Attempt ${attempt}: WSL bridge validation failed."
+      continue
+    }
+
+    if (-not (Test-WslDebugEndpointValid -InteropState $interopState)) {
+      Write-Output "Attempt ${attempt}: WSL debug endpoint validation failed."
+      continue
+    }
+
     $success = $true
     break
   }
@@ -311,6 +555,6 @@ if (-not $success) {
 }
 
 $response = Get-CdpTargets
-Write-DebugInteropState
+$interopState = Write-DebugInteropState
 Write-DebugReadyMessage -Response $response
 exit 0

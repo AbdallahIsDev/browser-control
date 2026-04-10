@@ -70,7 +70,7 @@ async function main() {
   const userDataDir = resolveUserDataDir(process.argv[3]);
   const initialUrl = process.argv[4] !== undefined ? process.argv[4] : "about:blank";
   const chromePath = process.argv[5] || resolveChromePath();
-  const bindAddress = process.argv[6] || "127.0.0.1";
+  const bindAddress = process.argv[6] || "0.0.0.0";
 
   fs.mkdirSync(userDataDir, { recursive: true });
 

@@ -18,6 +18,7 @@ interface DebugEndpointCandidateOptions {
   platform?: NodeJS.Platform;
   metadata?: DebugInteropState | null;
   resolvConf?: string;
+  routeTable?: string;
 }
 
 const DEFAULT_DEBUG_HOST = "127.0.0.1";
@@ -50,8 +51,43 @@ function toBaseUrl(hostOrUrl: string, port: number): string {
   return `http://${trimmed}:${port}`;
 }
 
-function pushUniqueCandidate(candidates: string[], value: string | null | undefined, port: number): void {
+function extractCandidateHost(hostOrUrl: string): string {
+  const trimmed = hostOrUrl.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).hostname;
+    } catch {
+      return "";
+    }
+  }
+
+  return trimmed;
+}
+
+function isWslReachableHostCandidate(hostOrUrl: string): boolean {
+  const host = extractCandidateHost(hostOrUrl);
+  if (!host) {
+    return false;
+  }
+
+  return host === DEFAULT_LOCALHOST || host.startsWith("127.") || isPrivateIpv4(host);
+}
+
+function pushUniqueCandidate(
+  candidates: string[],
+  value: string | null | undefined,
+  port: number,
+  options: { requireWslReachableHost?: boolean } = {},
+): void {
   if (!value) {
+    return;
+  }
+
+  if (options.requireWslReachableHost && !isWslReachableHostCandidate(value)) {
     return;
   }
 
@@ -88,13 +124,83 @@ function readLocalResolvConf(env: NodeJS.ProcessEnv): string {
   }
 }
 
+function readLocalRouteTable(env: NodeJS.ProcessEnv): string {
+  const routePath = env.BROWSER_DEBUG_ROUTE_TABLE?.trim() || "/proc/net/route";
+  try {
+    if (!fs.existsSync(routePath)) {
+      return "";
+    }
+
+    return fs.readFileSync(routePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function isPrivateIpv4(value: string): boolean {
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(value.trim());
+  if (!match) {
+    return false;
+  }
+
+  const octets = match.slice(1).map((segment: string) => Number(segment));
+  if (octets.some((octet: number) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+
+  return octets[0] === 10
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
+}
+
 export function readNameserverCandidates(resolvConf: string): string[] {
   const matches = resolvConf.matchAll(/^\s*nameserver\s+([^\s#]+)\s*$/gim);
   const candidates: string[] = [];
 
   for (const match of matches) {
     const host = match[1]?.trim();
-    if (!host || candidates.includes(host)) {
+    if (!host || !isPrivateIpv4(host) || candidates.includes(host)) {
+      continue;
+    }
+
+    candidates.push(host);
+  }
+
+  return candidates;
+}
+
+function decodeLittleEndianHexIp(value: string): string | null {
+  if (!/^[0-9a-fA-F]{8}$/.test(value)) {
+    return null;
+  }
+
+  const octets = value.match(/../g);
+  if (!octets) {
+    return null;
+  }
+
+  return octets
+    .reverse()
+    .map((octet) => String(parseInt(octet, 16)))
+    .join(".");
+}
+
+export function readRouteGatewayCandidates(routeTable: string): string[] {
+  const candidates: string[] = [];
+
+  for (const line of routeTable.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("Iface")) {
+      continue;
+    }
+
+    const parts = trimmed.split(/\s+/);
+    if (parts[1] !== "00000000") {
+      continue;
+    }
+
+    const host = decodeLittleEndianHexIp(parts[2] ?? "");
+    if (!host || !isPrivateIpv4(host) || candidates.includes(host)) {
       continue;
     }
 
@@ -112,6 +218,7 @@ export function getDebugEndpointCandidates(
   const platform = options.platform ?? process.platform;
   const metadata = options.metadata === undefined ? readDebugInteropState() : options.metadata;
   const resolvConf = options.resolvConf ?? readLocalResolvConf(env);
+  const routeTable = options.routeTable ?? readLocalRouteTable(env);
 
   if (env.BROWSER_DEBUG_URL?.trim()) {
     return [toBaseUrl(env.BROWSER_DEBUG_URL, port)];
@@ -123,12 +230,15 @@ export function getDebugEndpointCandidates(
   pushUniqueCandidate(candidates, env.BROWSER_DEBUG_HOST, port);
 
   if (isWsl) {
-    pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port);
+    pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port, { requireWslReachableHost: true });
     for (const host of metadata?.wslHostCandidates ?? []) {
-      pushUniqueCandidate(candidates, host, port);
+      pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
+    }
+    for (const host of readRouteGatewayCandidates(routeTable)) {
+      pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
     }
     for (const host of readNameserverCandidates(resolvConf)) {
-      pushUniqueCandidate(candidates, host, port);
+      pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
     }
     pushUniqueCandidate(candidates, metadata?.localhostUrl ?? DEFAULT_LOCALHOST, port);
     pushUniqueCandidate(candidates, metadata?.windowsLoopbackUrl ?? DEFAULT_DEBUG_HOST, port);
@@ -137,12 +247,15 @@ export function getDebugEndpointCandidates(
 
   pushUniqueCandidate(candidates, metadata?.windowsLoopbackUrl ?? DEFAULT_DEBUG_HOST, port);
   pushUniqueCandidate(candidates, metadata?.localhostUrl ?? DEFAULT_LOCALHOST, port);
-  pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port);
+  pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port, { requireWslReachableHost: true });
   for (const host of metadata?.wslHostCandidates ?? []) {
-    pushUniqueCandidate(candidates, host, port);
+    pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
+  }
+  for (const host of readRouteGatewayCandidates(routeTable)) {
+    pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
   }
   for (const host of readNameserverCandidates(resolvConf)) {
-    pushUniqueCandidate(candidates, host, port);
+    pushUniqueCandidate(candidates, host, port, { requireWslReachableHost: true });
   }
 
   return candidates;
