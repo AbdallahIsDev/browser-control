@@ -1,17 +1,8 @@
 import { z } from "zod";
 
-import type { BrokerConfig, BrokerTool } from "./broker_types";
+import { BROKER_TOOLS, type BrokerConfig, type BrokerTool } from "./broker_types";
 
-const defaultAllowedTools: BrokerTool[] = [
-  "tabs.list",
-  "tabs.find",
-  "action.click",
-  "action.fill",
-  "action.read-text",
-  "action.screenshot",
-  "action.press-key",
-  "action.select-option",
-];
+const brokerToolSchema = z.enum(BROKER_TOOLS);
 
 const envSchema = z.object({
   BROKER_PORT: z.string().optional(),
@@ -36,31 +27,66 @@ function splitCsv(value: string): string[] {
     .filter(Boolean);
 }
 
+function parseAllowedTools(value?: string): BrokerTool[] {
+  if (!value) {
+    return [...BROKER_TOOLS];
+  }
+
+  return splitCsv(value).map((toolName) => {
+    const parsed = brokerToolSchema.safeParse(toolName);
+    if (!parsed.success) {
+      throw new Error(
+        `BROKER_ALLOWED_TOOLS contains unsupported tool "${toolName}"`,
+      );
+    }
+
+    return parsed.data;
+  });
+}
+
+function parsePositiveInteger(
+  value: string | undefined,
+  envName: string,
+  defaultValue: number,
+): number {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
 export function loadBrokerConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BrokerConfig {
   const parsed = envSchema.parse(env);
-  const allowedTools = (
-    parsed.BROKER_ALLOWED_TOOLS
-      ? splitCsv(parsed.BROKER_ALLOWED_TOOLS)
-      : defaultAllowedTools
-  ) as BrokerTool[];
 
   return {
-    port: parsed.BROKER_PORT ? Number(parsed.BROKER_PORT) : 7788,
+    port: parsePositiveInteger(parsed.BROKER_PORT, "BROKER_PORT", 7788),
     secret: parsed.BROKER_SECRET,
     allowedDomains: splitCsv(parsed.BROKER_ALLOWED_DOMAINS),
-    allowedTools,
+    allowedTools: parseAllowedTools(parsed.BROKER_ALLOWED_TOOLS),
     logDir: parsed.BROKER_LOG_DIR ?? ".logs/broker",
-    defaultSessionTtlSeconds: parsed.BROKER_DEFAULT_SESSION_TTL_SECONDS
-      ? Number(parsed.BROKER_DEFAULT_SESSION_TTL_SECONDS)
-      : 1800,
-    maxSessionTtlSeconds: parsed.BROKER_MAX_SESSION_TTL_SECONDS
-      ? Number(parsed.BROKER_MAX_SESSION_TTL_SECONDS)
-      : 3600,
-    maxRequestsPerSession: parsed.BROKER_MAX_REQUESTS_PER_SESSION
-      ? Number(parsed.BROKER_MAX_REQUESTS_PER_SESSION)
-      : 250,
+    defaultSessionTtlSeconds: parsePositiveInteger(
+      parsed.BROKER_DEFAULT_SESSION_TTL_SECONDS,
+      "BROKER_DEFAULT_SESSION_TTL_SECONDS",
+      1800,
+    ),
+    maxSessionTtlSeconds: parsePositiveInteger(
+      parsed.BROKER_MAX_SESSION_TTL_SECONDS,
+      "BROKER_MAX_SESSION_TTL_SECONDS",
+      3600,
+    ),
+    maxRequestsPerSession: parsePositiveInteger(
+      parsed.BROKER_MAX_REQUESTS_PER_SESSION,
+      "BROKER_MAX_REQUESTS_PER_SESSION",
+      250,
+    ),
     killSwitchPath: parsed.BROKER_KILL_SWITCH_PATH ?? ".broker-disabled",
   };
 }

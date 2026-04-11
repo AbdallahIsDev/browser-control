@@ -35,3 +35,39 @@ test("loadBrokerConfig rejects missing broker secret", () => {
     /BROKER_SECRET is required/,
   );
 });
+
+test("loadBrokerConfig rejects unknown broker tool names", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_ALLOWED_TOOLS: "tabs.find,action.delete",
+      }),
+    /BROKER_ALLOWED_TOOLS contains unsupported tool "action.delete"/,
+  );
+});
+
+test("loadBrokerConfig rejects non-numeric broker port", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_PORT: "abc",
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+      }),
+    /BROKER_PORT must be a positive integer/,
+  );
+});
+
+test("loadBrokerConfig rejects non-positive numeric env values", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_MAX_REQUESTS_PER_SESSION: "0",
+      }),
+    /BROKER_MAX_REQUESTS_PER_SESSION must be a positive integer/,
+  );
+});
