@@ -102,6 +102,30 @@ test("loadBrokerConfig rejects whitespace-only broker allowed domains", () => {
   );
 });
 
+test("loadBrokerConfig rejects blank broker log dir", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_LOG_DIR: "   ",
+      }),
+    /BROKER_LOG_DIR must not be empty/,
+  );
+});
+
+test("loadBrokerConfig rejects blank broker kill switch path", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_KILL_SWITCH_PATH: "   ",
+      }),
+    /BROKER_KILL_SWITCH_PATH must not be empty/,
+  );
+});
+
 test("loadBrokerConfig rejects non-numeric broker port", () => {
   assert.throws(
     () =>

@@ -97,6 +97,23 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
+function parseOptionalTrimmedValue(
+  value: string | undefined,
+  envName: string,
+  defaultValue: string,
+): string {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    throw new Error(`${envName} must not be empty`);
+  }
+
+  return trimmedValue;
+}
+
 export function loadBrokerConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BrokerConfig {
@@ -123,7 +140,11 @@ export function loadBrokerConfig(
     secret: parsed.BROKER_SECRET,
     allowedDomains: parseAllowedDomains(parsed.BROKER_ALLOWED_DOMAINS),
     allowedTools: parseAllowedTools(parsed.BROKER_ALLOWED_TOOLS),
-    logDir: parsed.BROKER_LOG_DIR ?? ".logs/broker",
+    logDir: parseOptionalTrimmedValue(
+      parsed.BROKER_LOG_DIR,
+      "BROKER_LOG_DIR",
+      ".logs/broker",
+    ),
     defaultSessionTtlSeconds,
     maxSessionTtlSeconds,
     maxRequestsPerSession: parsePositiveInteger(
@@ -131,6 +152,10 @@ export function loadBrokerConfig(
       "BROKER_MAX_REQUESTS_PER_SESSION",
       250,
     ),
-    killSwitchPath: parsed.BROKER_KILL_SWITCH_PATH ?? ".broker-disabled",
+    killSwitchPath: parseOptionalTrimmedValue(
+      parsed.BROKER_KILL_SWITCH_PATH,
+      "BROKER_KILL_SWITCH_PATH",
+      ".broker-disabled",
+    ),
   };
 }
