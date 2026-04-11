@@ -36,6 +36,17 @@ test("loadBrokerConfig rejects missing broker secret", () => {
   );
 });
 
+test("loadBrokerConfig rejects whitespace-only broker secret", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "   ",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+      }),
+    /BROKER_SECRET is required/,
+  );
+});
+
 test("loadBrokerConfig rejects unknown broker tool names", () => {
   assert.throws(
     () =>
@@ -60,6 +71,17 @@ test("loadBrokerConfig rejects blank broker allowed tools", () => {
   );
 });
 
+test("loadBrokerConfig rejects whitespace-only broker allowed domains", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "   ",
+      }),
+    /BROKER_ALLOWED_DOMAINS is required/,
+  );
+});
+
 test("loadBrokerConfig rejects non-numeric broker port", () => {
   assert.throws(
     () =>
@@ -81,6 +103,19 @@ test("loadBrokerConfig rejects out-of-range broker port", () => {
         BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
       }),
     /BROKER_PORT must be an integer between 1 and 65535/,
+  );
+});
+
+test("loadBrokerConfig rejects default session ttl above max session ttl", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_DEFAULT_SESSION_TTL_SECONDS: "3601",
+        BROKER_MAX_SESSION_TTL_SECONDS: "3600",
+      }),
+    /BROKER_DEFAULT_SESSION_TTL_SECONDS must not exceed BROKER_MAX_SESSION_TTL_SECONDS/,
   );
 });
 

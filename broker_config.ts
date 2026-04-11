@@ -8,9 +8,11 @@ const envSchema = z.object({
   BROKER_PORT: z.string().optional(),
   BROKER_SECRET: z
     .string({ required_error: "BROKER_SECRET is required" })
+    .trim()
     .min(1, "BROKER_SECRET is required"),
   BROKER_ALLOWED_DOMAINS: z
     .string({ required_error: "BROKER_ALLOWED_DOMAINS is required" })
+    .trim()
     .min(1, "BROKER_ALLOWED_DOMAINS is required"),
   BROKER_ALLOWED_TOOLS: z.string().optional(),
   BROKER_LOG_DIR: z.string().optional(),
@@ -49,6 +51,15 @@ function parseAllowedTools(value?: string): BrokerTool[] {
   });
 }
 
+function parseAllowedDomains(value: string): string[] {
+  const domains = splitCsv(value);
+  if (domains.length === 0) {
+    throw new Error("BROKER_ALLOWED_DOMAINS is required");
+  }
+
+  return domains;
+}
+
 function parsePositiveInteger(
   value: string | undefined,
   envName: string,
@@ -79,23 +90,31 @@ export function loadBrokerConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BrokerConfig {
   const parsed = envSchema.parse(env);
+  const maxSessionTtlSeconds = parsePositiveInteger(
+    parsed.BROKER_MAX_SESSION_TTL_SECONDS,
+    "BROKER_MAX_SESSION_TTL_SECONDS",
+    3600,
+  );
+  const defaultSessionTtlSeconds = parsePositiveInteger(
+    parsed.BROKER_DEFAULT_SESSION_TTL_SECONDS,
+    "BROKER_DEFAULT_SESSION_TTL_SECONDS",
+    1800,
+  );
+
+  if (defaultSessionTtlSeconds > maxSessionTtlSeconds) {
+    throw new Error(
+      "BROKER_DEFAULT_SESSION_TTL_SECONDS must not exceed BROKER_MAX_SESSION_TTL_SECONDS",
+    );
+  }
 
   return {
     port: parsePort(parsed.BROKER_PORT),
     secret: parsed.BROKER_SECRET,
-    allowedDomains: splitCsv(parsed.BROKER_ALLOWED_DOMAINS),
+    allowedDomains: parseAllowedDomains(parsed.BROKER_ALLOWED_DOMAINS),
     allowedTools: parseAllowedTools(parsed.BROKER_ALLOWED_TOOLS),
     logDir: parsed.BROKER_LOG_DIR ?? ".logs/broker",
-    defaultSessionTtlSeconds: parsePositiveInteger(
-      parsed.BROKER_DEFAULT_SESSION_TTL_SECONDS,
-      "BROKER_DEFAULT_SESSION_TTL_SECONDS",
-      1800,
-    ),
-    maxSessionTtlSeconds: parsePositiveInteger(
-      parsed.BROKER_MAX_SESSION_TTL_SECONDS,
-      "BROKER_MAX_SESSION_TTL_SECONDS",
-      3600,
-    ),
+    defaultSessionTtlSeconds,
+    maxSessionTtlSeconds,
     maxRequestsPerSession: parsePositiveInteger(
       parsed.BROKER_MAX_REQUESTS_PER_SESSION,
       "BROKER_MAX_REQUESTS_PER_SESSION",
