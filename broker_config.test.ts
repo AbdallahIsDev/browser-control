@@ -48,6 +48,18 @@ test("loadBrokerConfig rejects unknown broker tool names", () => {
   );
 });
 
+test("loadBrokerConfig rejects blank broker allowed tools", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+        BROKER_ALLOWED_TOOLS: "",
+      }),
+    /BROKER_ALLOWED_TOOLS must not be empty/,
+  );
+});
+
 test("loadBrokerConfig rejects non-numeric broker port", () => {
   assert.throws(
     () =>
@@ -57,6 +69,18 @@ test("loadBrokerConfig rejects non-numeric broker port", () => {
         BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
       }),
     /BROKER_PORT must be a positive integer/,
+  );
+});
+
+test("loadBrokerConfig rejects out-of-range broker port", () => {
+  assert.throws(
+    () =>
+      loadBrokerConfig({
+        BROKER_PORT: "70000",
+        BROKER_SECRET: "test-secret",
+        BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com",
+      }),
+    /BROKER_PORT must be an integer between 1 and 65535/,
   );
 });
 

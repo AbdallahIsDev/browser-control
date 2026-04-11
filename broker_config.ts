@@ -28,11 +28,16 @@ function splitCsv(value: string): string[] {
 }
 
 function parseAllowedTools(value?: string): BrokerTool[] {
-  if (!value) {
+  if (value === undefined) {
     return [...BROKER_TOOLS];
   }
 
-  return splitCsv(value).map((toolName) => {
+  const toolNames = splitCsv(value);
+  if (toolNames.length === 0) {
+    throw new Error("BROKER_ALLOWED_TOOLS must not be empty");
+  }
+
+  return toolNames.map((toolName) => {
     const parsed = brokerToolSchema.safeParse(toolName);
     if (!parsed.success) {
       throw new Error(
@@ -61,13 +66,22 @@ function parsePositiveInteger(
   return parsed;
 }
 
+function parsePort(value: string | undefined): number {
+  const port = parsePositiveInteger(value, "BROKER_PORT", 7788);
+  if (port > 65535) {
+    throw new Error("BROKER_PORT must be an integer between 1 and 65535");
+  }
+
+  return port;
+}
+
 export function loadBrokerConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BrokerConfig {
   const parsed = envSchema.parse(env);
 
   return {
-    port: parsePositiveInteger(parsed.BROKER_PORT, "BROKER_PORT", 7788),
+    port: parsePort(parsed.BROKER_PORT),
     secret: parsed.BROKER_SECRET,
     allowedDomains: splitCsv(parsed.BROKER_ALLOWED_DOMAINS),
     allowedTools: parseAllowedTools(parsed.BROKER_ALLOWED_TOOLS),
