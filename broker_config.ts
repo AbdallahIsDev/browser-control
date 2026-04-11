@@ -3,6 +3,8 @@ import { z } from "zod";
 import { BROKER_TOOLS, type BrokerConfig, type BrokerTool } from "./broker_types";
 
 const brokerToolSchema = z.enum(BROKER_TOOLS);
+const hostnamePattern =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const envSchema = z.object({
   BROKER_PORT: z.string().optional(),
@@ -57,7 +59,16 @@ function parseAllowedDomains(value: string): string[] {
     throw new Error("BROKER_ALLOWED_DOMAINS is required");
   }
 
-  return domains;
+  return domains.map((domain) => {
+    const normalizedDomain = domain.toLowerCase();
+    if (!hostnamePattern.test(normalizedDomain)) {
+      throw new Error(
+        `BROKER_ALLOWED_DOMAINS contains invalid entry "${domain}"`,
+      );
+    }
+
+    return normalizedDomain;
+  });
 }
 
 function parsePositiveInteger(

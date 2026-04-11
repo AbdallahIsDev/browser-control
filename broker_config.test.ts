@@ -7,7 +7,7 @@ test("loadBrokerConfig parses allowlists and defaults", () => {
   const config = loadBrokerConfig({
     BROKER_PORT: "7788",
     BROKER_SECRET: "test-secret",
-    BROKER_ALLOWED_DOMAINS: "contributor.stock.adobe.com,chat.openai.com",
+    BROKER_ALLOWED_DOMAINS: "Contributor.Stock.Adobe.com,CHAT.OpenAI.COM",
     BROKER_ALLOWED_TOOLS: "tabs.find,action.click,action.fill",
     BROKER_LOG_DIR: ".logs/broker",
   });
@@ -24,6 +24,26 @@ test("loadBrokerConfig parses allowlists and defaults", () => {
   ]);
   assert.equal(config.logDir, ".logs/broker");
   assert.equal(config.defaultSessionTtlSeconds, 1800);
+});
+
+test("loadBrokerConfig rejects invalid broker allowed domain entries", () => {
+  for (const invalidEntry of [
+    "https://chat.openai.com",
+    "chat.openai.com/path",
+    "chat.openai.com?tab=1",
+    "chat.openai.com:443",
+  ]) {
+    assert.throws(
+      () =>
+        loadBrokerConfig({
+          BROKER_SECRET: "test-secret",
+          BROKER_ALLOWED_DOMAINS: invalidEntry,
+        }),
+      new RegExp(
+        `BROKER_ALLOWED_DOMAINS contains invalid entry "${invalidEntry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+      ),
+    );
+  }
 });
 
 test("loadBrokerConfig rejects missing broker secret", () => {

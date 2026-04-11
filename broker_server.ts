@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "node:http";
 
 import { loadBrokerConfig } from "./broker_config";
