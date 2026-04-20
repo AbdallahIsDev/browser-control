@@ -1,0 +1,9 @@
+[
+  "http://127.0.0.1:8001",
+  {
+    "url": "http://proxy.example.com:8080",
+    "username": "proxy-user",
+    "password": "proxy-pass",
+    "status": "active"
+  }
+]

@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Locator, Page } from "playwright";
-import { getActiveStagehand, observe } from "@bac/stagehand_core";
+import { getActiveStagehand, observe } from "@bc/stagehand_core";
+import { logger } from "./logger";
+
+const log = logger.withComponent("selector_store");
 
 export type SelectorCacheRecord = {
   selectorsDiscovered: boolean;
@@ -79,14 +82,14 @@ export async function resolveSelector<T extends SelectorCacheRecord>(
   if (typeof cacheValue === "string" && cacheValue.length > 0) {
     const cacheHit = await getVisibleLocator(page, cacheValue, timeoutMs);
     if (cacheHit) {
-      console.log(`[SELECTOR] CACHE HIT for ${String(key)} -> ${cacheValue}`);
+      log.info(`Cache hit for ${String(key)} -> ${cacheValue}`);
       return cacheHit;
     }
   }
 
   const stagehand = getActiveStagehand();
   if (!stagehand) {
-    console.error(`[SELECTOR] No active Stagehand instance is available to resolve ${String(key)}.`);
+    log.error(`No active Stagehand instance to resolve ${String(key)}.`);
     return null;
   }
 
@@ -100,13 +103,13 @@ export async function resolveSelector<T extends SelectorCacheRecord>(
     const resolvedSelector = actions.find((action) => typeof action.selector === "string" && action.selector.length > 0)?.selector;
 
     if (!resolvedSelector) {
-      console.error(`[SELECTOR] Stagehand could not resolve ${String(key)}.`);
+      log.error(`Stagehand could not resolve ${String(key)}.`);
       return null;
     }
 
     const resolvedLocator = await getVisibleLocator(page, resolvedSelector, timeoutMs);
     if (!resolvedLocator) {
-      console.error(`[SELECTOR] Stagehand returned a selector for ${String(key)}, but it did not become visible: ${resolvedSelector}`);
+      log.error(`Stagehand selector for ${String(key)} not visible: ${resolvedSelector}`);
       return null;
     }
 
@@ -118,12 +121,10 @@ export async function resolveSelector<T extends SelectorCacheRecord>(
 
     Object.assign(cached, nextCached);
     saveSelectorCache(nextCached, options.jsonPath ?? getDefaultSelectorsPath());
-    console.log(`[SELECTOR] STAGEHAND RESOLVED ${String(key)} -> ${resolvedSelector}`);
+    log.info(`Stagehand resolved ${String(key)} -> ${resolvedSelector}`);
     return resolvedLocator;
   } catch (error: unknown) {
-    console.error(
-      `[SELECTOR] Stagehand resolution failed for ${String(key)}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error(`Resolution failed for ${String(key)}: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }

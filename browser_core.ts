@@ -1,7 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Locator, type Page } from "playwright";
+import { restoreContextCookies, saveContextCookies, type MemoryStore } from "./memory_store";
+import { toPlaywrightProxySettings, type ProxyConfig } from "./proxy_manager";
+import { createStealthContext } from "./stealth";
+import type { Telemetry } from "./telemetry";
+import { getChromeDebugPath } from "./paths";
+import { logger } from "./logger";
+
+const log = logger.withComponent("browser_core");
 
 export interface DebugInteropState {
   port: number;
@@ -13,6 +21,22 @@ export interface DebugInteropState {
   updatedAt: string;
 }
 
+export interface AutomationContextOptions {
+  env?: NodeJS.ProcessEnv;
+  enableStealth?: boolean;
+  stealth?: boolean;
+  locale?: string;
+  timezoneId?: string;
+  userAgent?: string;
+  fingerprintSeed?: string;
+  seed?: string;
+  proxy?: ProxyConfig | BrowserContextOptions["proxy"];
+  memoryStore?: MemoryStore;
+  sessionKey?: string;
+  sessionTtlMs?: number;
+  persistSessionCookies?: boolean;
+}
+
 interface DebugEndpointCandidateOptions {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
@@ -21,13 +45,29 @@ interface DebugEndpointCandidateOptions {
   routeTable?: string;
 }
 
+interface CaptchaSolverLike {
+  waitForCaptcha(
+    page: Page,
+    selector?: string,
+    timeoutMs?: number,
+  ): Promise<unknown>;
+}
+
+interface ActionCaptchaOptions {
+  autoSolveCaptcha?: boolean;
+  captchaSolver?: CaptchaSolverLike;
+  captchaSelector?: string;
+  captchaTimeoutMs?: number;
+  telemetry?: Telemetry;
+}
+
 const DEFAULT_DEBUG_HOST = "127.0.0.1";
 const DEFAULT_LOCALHOST = "localhost";
-const DEBUG_INTEROP_PATH = path.join(__dirname, ".interop", "chrome-debug.json");
+const DEBUG_INTEROP_PATH = getChromeDebugPath();
 
 function logActionError(action: string, selector: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[BROWSER_CORE] ${action} failed for "${selector}": ${message}`);
+  log.error(`${action} failed for "${selector}": ${message}`);
 }
 
 function isLikelyWsl(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): boolean {
@@ -286,57 +326,233 @@ export async function resolveDebugEndpointUrl(port = 9222): Promise<string> {
   );
 }
 
+function isStealthEnabled(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function getFirstDefinedString(...values: Array<string | undefined>): string | undefined {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveContextProxy(
+  proxy: ProxyConfig | BrowserContextOptions["proxy"] | undefined,
+): BrowserContextOptions["proxy"] | undefined {
+  if (!proxy) {
+    return undefined;
+  }
+
+  if ("url" in proxy) {
+    return toPlaywrightProxySettings(proxy);
+  }
+
+  return proxy;
+}
+
 /** Connect to an already-running Chrome instance via CDP. */
 export async function connectBrowser(port = 9222): Promise<Browser> {
   return chromium.connectOverCDP(await resolveDebugEndpointUrl(port));
 }
 
+/** Create a new automation-owned context with optional stealth hardening. */
+export async function createAutomationContext(
+  browser: Browser,
+  options: AutomationContextOptions = {},
+): Promise<BrowserContext> {
+  const env = options.env ?? process.env;
+  const contextProxy = resolveContextProxy(options.proxy);
+  const stealthRequested = options.enableStealth
+    ?? options.stealth
+    ?? isStealthEnabled(env.ENABLE_STEALTH);
+  let context: BrowserContext;
+
+  if (stealthRequested) {
+    context = await createStealthContext(browser, {
+      env,
+      locale: getFirstDefinedString(options.locale),
+      timezoneId: getFirstDefinedString(options.timezoneId),
+      userAgent: getFirstDefinedString(options.userAgent),
+      fingerprintSeed: getFirstDefinedString(options.fingerprintSeed, options.seed),
+      proxy: contextProxy,
+    });
+  } else {
+    const contextOptions: Parameters<Browser["newContext"]>[0] = {};
+    if (options.locale) {
+      contextOptions.locale = options.locale;
+    }
+    if (options.timezoneId) {
+      contextOptions.timezoneId = options.timezoneId;
+    }
+    if (options.userAgent) {
+      contextOptions.userAgent = options.userAgent;
+    }
+    if (contextProxy) {
+      contextOptions.proxy = contextProxy;
+    }
+
+    context = await browser.newContext(contextOptions);
+  }
+
+  await maybeRestoreSessionCookies(context, options);
+  attachSessionCookiePersistence(context, options);
+  return context;
+}
+
 /** Return every open page across all browser contexts. */
-export function getAllPages(browser: Browser): Page[] {
-  return browser.contexts().flatMap((context: BrowserContext) => context.pages());
+export function getAllPages(browser: Browser, context?: BrowserContext): Page[] {
+  const contexts = context ? [context] : browser.contexts();
+  return contexts.flatMap((entry: BrowserContext) => entry.pages());
 }
 
 /** Find the first page whose URL contains the provided pattern. */
-export function findPageByUrl(browser: Browser, urlPattern: string): Page | null {
-  return getAllPages(browser).find((page: Page) => page.url().includes(urlPattern)) ?? null;
+export function findPageByUrl(browser: Browser, urlPattern: string, context?: BrowserContext): Page | null {
+  return getAllPages(browser, context).find((page: Page) => page.url().includes(urlPattern)) ?? null;
 }
 
 /** Return a matching page or open a new tab if none exists. */
-export async function getOrOpenPage(browser: Browser, urlPattern: string, openUrl: string): Promise<Page> {
-  const existing = findPageByUrl(browser, urlPattern);
+export async function getOrOpenPage(
+  browser: Browser,
+  urlPattern: string,
+  openUrl: string,
+  context?: BrowserContext,
+): Promise<Page> {
+  const existing = findPageByUrl(browser, urlPattern, context);
   if (existing) {
     await existing.bringToFront();
     return existing;
   }
 
-  const context = browser.contexts()[0] ?? (await browser.newContext());
-  const page = await context.newPage();
+  const targetContext = context ?? browser.contexts()[0] ?? (await browser.newContext());
+  const page = await targetContext.newPage();
   await page.goto(openUrl, { waitUntil: "domcontentloaded" });
   return page;
 }
 
 /** Return the active Framer page or throw when it is missing. */
-export function getFramerPage(browser: Browser): Page {
-  const page = findPageByUrl(browser, "framer.com");
+export function getFramerPage(browser: Browser, context?: BrowserContext): Page {
+  const page = findPageByUrl(browser, "framer.com", context);
   if (!page) {
     throw new Error("No Framer tab was found. Open the Framer editor in the persistent Chrome session first.");
   }
   return page;
 }
 
+async function maybeSolveCaptcha(page: Page, options: ActionCaptchaOptions): Promise<boolean> {
+  if (!options.autoSolveCaptcha || !options.captchaSolver) {
+    return false;
+  }
+
+  const result = await options.captchaSolver.waitForCaptcha(
+    page,
+    options.captchaSelector,
+    options.captchaTimeoutMs,
+  );
+
+  return result !== null && result !== undefined;
+}
+
+async function maybeRestoreSessionCookies(
+  context: BrowserContext,
+  options: AutomationContextOptions,
+): Promise<void> {
+  if (!options.memoryStore || !options.sessionKey) {
+    return;
+  }
+
+  try {
+    await restoreContextCookies(options.memoryStore, options.sessionKey, context);
+  } catch (error: unknown) {
+    log.error(`Failed to restore session cookies for "${options.sessionKey}": ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function attachSessionCookiePersistence(
+  context: BrowserContext,
+  options: AutomationContextOptions,
+): void {
+  if (!options.memoryStore || !options.sessionKey || options.persistSessionCookies === false) {
+    return;
+  }
+
+  const saveCookies = async (): Promise<void> => {
+    try {
+      await saveContextCookies(
+        options.memoryStore as MemoryStore,
+        options.sessionKey as string,
+        context,
+        options.sessionTtlMs,
+      );
+    } catch (error: unknown) {
+      log.error(`Failed to save session cookies for "${options.sessionKey}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const eventTarget = context as BrowserContext & {
+    on?: (event: string, callback: () => void) => void;
+  };
+
+  if (typeof eventTarget.on === "function") {
+    eventTarget.on("close", () => {
+      void saveCookies();
+    });
+  }
+}
+
 /** Click with Playwright actionability checks and retry support. */
 export async function smartClick(
   page: Page,
   selector: string,
-  opts: { timeoutMs?: number; force?: boolean } = {},
+  opts: { timeoutMs?: number; force?: boolean } & ActionCaptchaOptions = {},
 ): Promise<boolean> {
-  try {
+  const startedAt = Date.now();
+  const performClick = async (): Promise<void> => {
     await page.locator(selector).first().click({
       timeout: opts.timeoutMs ?? 5000,
       force: opts.force,
     });
+  };
+
+  try {
+    await performClick();
+    await maybeSolveCaptcha(page, opts);
+    opts.telemetry?.record("smartClick", "success", Date.now() - startedAt, {
+      selector,
+    });
     return true;
   } catch (error: unknown) {
+    const solvedCaptcha = await maybeSolveCaptcha(page, opts);
+    if (solvedCaptcha) {
+      try {
+        await performClick();
+        opts.telemetry?.record("smartClick", "success", Date.now() - startedAt, {
+          selector,
+          recoveredByCaptcha: true,
+        });
+        return true;
+      } catch (retryError: unknown) {
+        opts.telemetry?.record("smartClick", "error", Date.now() - startedAt, {
+          selector,
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+        logActionError("smartClick", selector, retryError);
+        return false;
+      }
+    }
+
+    opts.telemetry?.record("smartClick", "error", Date.now() - startedAt, {
+      selector,
+      error: error instanceof Error ? error.message : String(error),
+    });
     logActionError("smartClick", selector, error);
     return false;
   }
@@ -364,17 +580,49 @@ export async function smartFill(
   page: Page,
   selector: string,
   value: string,
-  opts: { timeoutMs?: number; commit?: boolean } = {},
+  opts: { timeoutMs?: number; commit?: boolean } & ActionCaptchaOptions = {},
 ): Promise<boolean> {
-  try {
+  const startedAt = Date.now();
+  const performFill = async (): Promise<void> => {
     const locator = page.locator(selector).first();
     await locator.click({ timeout: opts.timeoutMs ?? 3000 });
     await locator.fill(value, { timeout: opts.timeoutMs ?? 3000 });
     if (opts.commit ?? false) {
       await locator.press("Tab", { timeout: opts.timeoutMs ?? 3000 });
     }
+  };
+
+  try {
+    await performFill();
+    await maybeSolveCaptcha(page, opts);
+    opts.telemetry?.record("smartFill", "success", Date.now() - startedAt, {
+      selector,
+    });
     return true;
   } catch (error: unknown) {
+    const solvedCaptcha = await maybeSolveCaptcha(page, opts);
+    if (solvedCaptcha) {
+      try {
+        await performFill();
+        opts.telemetry?.record("smartFill", "success", Date.now() - startedAt, {
+          selector,
+          recoveredByCaptcha: true,
+        });
+        return true;
+      } catch (retryError: unknown) {
+        opts.telemetry?.record("smartFill", "error", Date.now() - startedAt, {
+          selector,
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+        logActionError("smartFill", selector, retryError);
+        return false;
+      }
+    }
+
+    opts.telemetry?.record("smartFill", "error", Date.now() - startedAt, {
+      selector,
+      error: error instanceof Error ? error.message : String(error),
+    });
     logActionError("smartFill", selector, error);
     return false;
   }
@@ -469,7 +717,7 @@ export async function isDebugPortReady(port = 9222): Promise<boolean> {
     await resolveDebugEndpointUrl(port);
     return true;
   } catch (error: unknown) {
-    console.error(`[BROWSER_CORE] Debug port check failed: ${error instanceof Error ? error.message : String(error)}`);
+    log.error(`Debug port check failed: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }

@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Browser, BrowserContext, Page } from "playwright";
+import { MemoryStore } from "./memory_store";
 
 import {
+  createAutomationContext,
+  findPageByUrl,
   getDebugEndpointCandidates,
+  getOrOpenPage,
   readRouteGatewayCandidates,
   readNameserverCandidates,
+  smartClick,
+  smartFill,
   type DebugInteropState,
 } from "./browser_core";
 
@@ -40,6 +47,7 @@ test("getDebugEndpointCandidates prefers launcher metadata when running in WSL",
     platform: "linux",
     metadata,
     resolvConf: "nameserver 172.24.240.1\n",
+    routeTable: "",
   });
 
   assert.deepEqual(candidates, [
@@ -115,4 +123,340 @@ test("getDebugEndpointCandidates ignores public DNS resolvers when looking for t
     "http://localhost:9222",
     "http://127.0.0.1:9222",
   ]);
+});
+
+test("createAutomationContext uses a plain automation-owned context by default", async () => {
+  let addInitScriptCalls = 0;
+  const context = {
+    addInitScript: async () => {
+      addInitScriptCalls += 1;
+    },
+  } as unknown as BrowserContext;
+  let newContextCalls = 0;
+
+  const browser = {
+    newContext: async () => {
+      newContextCalls += 1;
+      return context;
+    },
+  } as unknown as Browser;
+
+  const createdContext = await createAutomationContext(browser);
+
+  assert.equal(createdContext, context);
+  assert.equal(newContextCalls, 1);
+  assert.equal(addInitScriptCalls, 0);
+});
+
+test("createAutomationContext enables stealth when requested through env", async () => {
+  let addInitScriptCalls = 0;
+  let lastContextOptions: Record<string, unknown> | undefined;
+  const context = {
+    addInitScript: async () => {
+      addInitScriptCalls += 1;
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async (options?: Record<string, unknown>) => {
+      lastContextOptions = options;
+      return context;
+    },
+  } as unknown as Browser;
+
+  const createdContext = await createAutomationContext(browser, {
+    env: {
+      ENABLE_STEALTH: "true",
+      STEALTH_LOCALE: "en-US",
+      STEALTH_TIMEZONE_ID: "America/New_York",
+    },
+  });
+
+  assert.equal(createdContext, context);
+  assert.equal(addInitScriptCalls, 1);
+  assert.deepEqual(lastContextOptions, {
+    locale: "en-US",
+    timezoneId: "America/New_York",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US",
+    },
+  });
+});
+
+test("createAutomationContext lets explicit stealth false override env true", async () => {
+  let addInitScriptCalls = 0;
+  const context = {
+    addInitScript: async () => {
+      addInitScriptCalls += 1;
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async () => context,
+  } as unknown as Browser;
+
+  const createdContext = await createAutomationContext(browser, {
+    stealth: false,
+    env: {
+      ENABLE_STEALTH: "true",
+    },
+  });
+
+  assert.equal(createdContext, context);
+  assert.equal(addInitScriptCalls, 0);
+});
+
+test("createAutomationContext reads ENABLE_STEALTH from process.env when no env override is provided", async (t) => {
+  const previousEnableStealth = process.env.ENABLE_STEALTH;
+  const previousLocale = process.env.STEALTH_LOCALE;
+  const previousTimezone = process.env.STEALTH_TIMEZONE_ID;
+
+  t.after(() => {
+    if (previousEnableStealth === undefined) {
+      delete process.env.ENABLE_STEALTH;
+    } else {
+      process.env.ENABLE_STEALTH = previousEnableStealth;
+    }
+
+    if (previousLocale === undefined) {
+      delete process.env.STEALTH_LOCALE;
+    } else {
+      process.env.STEALTH_LOCALE = previousLocale;
+    }
+
+    if (previousTimezone === undefined) {
+      delete process.env.STEALTH_TIMEZONE_ID;
+    } else {
+      process.env.STEALTH_TIMEZONE_ID = previousTimezone;
+    }
+  });
+
+  process.env.ENABLE_STEALTH = "true";
+  process.env.STEALTH_LOCALE = "en-US";
+  process.env.STEALTH_TIMEZONE_ID = "America/New_York";
+
+  let addInitScriptCalls = 0;
+  const context = {
+    addInitScript: async () => {
+      addInitScriptCalls += 1;
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async () => context,
+  } as unknown as Browser;
+
+  await createAutomationContext(browser);
+
+  assert.equal(addInitScriptCalls, 1);
+});
+
+test("createAutomationContext forwards proxy settings for plain automation contexts", async () => {
+  let lastContextOptions: Record<string, unknown> | undefined;
+  const context = {} as BrowserContext;
+
+  const browser = {
+    newContext: async (options?: Record<string, unknown>) => {
+      lastContextOptions = options;
+      return context;
+    },
+  } as unknown as Browser;
+
+  const createdContext = await createAutomationContext(browser, {
+    proxy: {
+      url: "http://proxy-user:proxy-pass@proxy.example.com:8080",
+      status: "active",
+    },
+  });
+
+  assert.equal(createdContext, context);
+  assert.deepEqual(lastContextOptions, {
+    proxy: {
+      server: "http://proxy.example.com:8080",
+      username: "proxy-user",
+      password: "proxy-pass",
+    },
+  });
+});
+
+test("findPageByUrl scopes page lookup to the provided context", () => {
+  const sharedPage = {
+    url: () => "https://example.com/shared",
+  };
+  const isolatedPage = {
+    url: () => "https://example.com/isolated",
+  };
+
+  const sharedContext = {
+    pages: () => [sharedPage],
+  } as unknown as BrowserContext;
+  const isolatedContext = {
+    pages: () => [isolatedPage],
+  } as unknown as BrowserContext;
+
+  const browser = {
+    contexts: () => [sharedContext, isolatedContext],
+  } as unknown as Browser;
+
+  assert.equal(findPageByUrl(browser, "/isolated"), isolatedPage);
+  assert.equal(findPageByUrl(browser, "/shared", isolatedContext), null);
+  assert.equal(findPageByUrl(browser, "/isolated", isolatedContext), isolatedPage);
+});
+
+test("getOrOpenPage creates new pages inside the provided context", async () => {
+  let createdInScopedContext = false;
+  const page = {
+    url: () => "https://example.com/new",
+    goto: async () => undefined,
+    bringToFront: async () => undefined,
+  };
+
+  const sharedContext = {
+    pages: () => [],
+  } as unknown as BrowserContext;
+  const isolatedContext = {
+    pages: () => [],
+    newPage: async () => {
+      createdInScopedContext = true;
+      return page;
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    contexts: () => [sharedContext, isolatedContext],
+  } as unknown as Browser;
+
+  const openedPage = await getOrOpenPage(browser, "/new", "https://example.com/new", isolatedContext);
+
+  assert.equal(openedPage, page);
+  assert.equal(createdInScopedContext, true);
+});
+
+test("smartClick retries once after auto-solving a captcha", async () => {
+  let clickAttempts = 0;
+  let captchaSolveCalls = 0;
+
+  const page = {
+    locator: () => ({
+      first: () => ({
+        click: async () => {
+          clickAttempts += 1;
+          if (clickAttempts === 1) {
+            throw new Error("captcha challenge");
+          }
+        },
+      }),
+    }),
+  } as unknown as Page;
+
+  const result = await smartClick(page, "#submit", {
+    autoSolveCaptcha: true,
+    captchaSolver: {
+      waitForCaptcha: async () => {
+        captchaSolveCalls += 1;
+        return { token: "captcha-token" };
+      },
+    },
+  });
+
+  assert.equal(result, true);
+  assert.equal(clickAttempts, 2);
+  assert.equal(captchaSolveCalls, 1);
+});
+
+test("smartFill retries once after auto-solving a captcha", async () => {
+  let clickAttempts = 0;
+  let fillAttempts = 0;
+  let captchaSolveCalls = 0;
+
+  const page = {
+    locator: () => ({
+      first: () => ({
+        click: async () => {
+          clickAttempts += 1;
+          if (clickAttempts === 1) {
+            throw new Error("captcha challenge");
+          }
+        },
+        fill: async () => {
+          fillAttempts += 1;
+        },
+        press: async () => undefined,
+      }),
+    }),
+  } as unknown as Page;
+
+  const result = await smartFill(page, "#email", "user@example.com", {
+    autoSolveCaptcha: true,
+    captchaSolver: {
+      waitForCaptcha: async () => {
+        captchaSolveCalls += 1;
+        return { token: "captcha-token" };
+      },
+    },
+  });
+
+  assert.equal(result, true);
+  assert.equal(clickAttempts, 2);
+  assert.equal(fillAttempts, 1);
+  assert.equal(captchaSolveCalls, 1);
+});
+
+test("createAutomationContext restores and persists cookies for automation-owned sessions", async () => {
+  const store = new MemoryStore({
+    filename: ":memory:",
+  });
+
+  const restoredCookies = [
+    {
+      name: "existing",
+      value: "cookie-a",
+      domain: ".example.com",
+      path: "/",
+    },
+  ];
+  store.set("sessions:site-a", restoredCookies);
+
+  let addedCookies: unknown[] = [];
+  let closeHandler: (() => void) | undefined;
+
+  const context = {
+    addCookies: async (cookies: unknown[]) => {
+      addedCookies = cookies;
+    },
+    cookies: async () => [{
+      name: "fresh",
+      value: "cookie-b",
+      domain: ".example.com",
+      path: "/",
+    }],
+    on: (_event: string, handler: () => void) => {
+      closeHandler = handler;
+    },
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async () => context,
+  } as unknown as Browser;
+
+  await createAutomationContext(browser, {
+    memoryStore: store,
+    sessionKey: "site-a",
+    sessionTtlMs: 60_000,
+  });
+
+  assert.deepEqual(addedCookies, restoredCookies);
+
+  await closeHandler?.();
+
+  assert.deepEqual(store.get("sessions:site-a"), [
+    {
+      name: "fresh",
+      value: "cookie-b",
+      domain: ".example.com",
+      path: "/",
+    },
+  ]);
+
+  store.close();
 });

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./",
+    "declaration": true
+  },
+  "exclude": [
+    "node_modules",
+    "docs",
+    "screenshots",
+    ".omx",
+    "reports",
+    "project-template",
+    "voice_typer",
+    "**/*.test.ts",
+    "dist",
+    "cli.js",
+    "setup.json",
+    "proxies.example.json",
+    "automation-memory.sqlite"
+  ]
+}

@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@bac/*": [
+      "@bc/*": [
         "./*"
       ]
     },
@@ -19,6 +19,12 @@
     ]
   },
   "include": [
-    "*.ts"
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "docs",
+    "screenshots",
+    ".omx"
   ]
 }

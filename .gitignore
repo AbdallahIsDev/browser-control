@@ -5,9 +5,15 @@ node_modules/
 .env
 .env.*
 
+docs/
+reports/
+*.sqlite
+nul
+
 selectors.json
 screenshots/
 output/
 
 *.log
 *.tsbuildinfo
+dist/

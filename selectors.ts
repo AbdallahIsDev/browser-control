@@ -2,13 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { Page } from "playwright";
-import { connectBrowser, getFramerPage } from "@bac/browser_core";
+import { connectBrowser, getFramerPage } from "@bc/browser_core";
 import {
   loadSelectorCache,
   mergeSelectorCache,
   saveSelectorCache,
   type SelectorCacheRecord,
-} from "@bac/selector_store";
+} from "@bc/selector_store";
+import { logger } from "./logger";
+
+const log = logger.withComponent("selectors");
 
 const setupSchema = z.object({
   cdp_port: z.number().default(9222),
@@ -97,7 +100,7 @@ export async function discoverSelectors(page: Page): Promise<FramerSelectorMap> 
   invalidateSelectorsCache();
   const existing = getSelectors();
   if (existing.selectorsDiscovered) {
-    console.log("[SELECTORS] Using cached Framer selectors.");
+    log.info("Using cached Framer selectors.");
     return existing;
   }
 
@@ -163,7 +166,7 @@ export async function discoverSelectors(page: Page): Promise<FramerSelectorMap> 
 
   cachedSelectors = merged;
   saveSelectorCache(merged, getSelectorsPath());
-  console.log(`[SELECTORS] Saved Framer selectors to ${getSelectorsPath()}`);
+  log.info(`Saved Framer selectors to ${getSelectorsPath()}`);
   return merged;
 }
 
@@ -174,7 +177,7 @@ if (require.main === module) {
     await page.bringToFront();
     await discoverSelectors(page);
   })().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+    log.error(error instanceof Error ? error.stack ?? error.message : String(error));
     process.exit(1);
   });
 }
