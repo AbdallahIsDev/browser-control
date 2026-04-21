@@ -37,6 +37,46 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "moderate",
   },
 
+  // ── Terminal path (Section 12) ──────────────────────────────────
+  {
+    matches: (action) => {
+      const terminalActions = [
+        "terminal_open", "terminal_close", "terminal_write",
+        "terminal_read", "terminal_snapshot", "terminal_interrupt",
+        "terminal_exec", "term_open", "term_close", "term_exec",
+      ];
+      return terminalActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
+  // ── Filesystem path (Section 12) ────────────────────────────────
+  {
+    matches: (action) => {
+      const fsReadActions = ["fs_read", "file_read", "read_file", "fs_list", "fs_stat"];
+      return fsReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const fsWriteActions = ["fs_write", "file_write", "write_file"];
+      return fsWriteActions.includes(action);
+    },
+    path: "command",
+    risk: "high",
+  },
+  {
+    matches: (action) => {
+      const fsDestructiveActions = ["fs_delete", "fs_move", "file_delete", "file_move", "delete_file", "move_file"];
+      return fsDestructiveActions.includes(action);
+    },
+    path: "command",
+    risk: "high",
+  },
+
   // Low-level path - raw CDP, JS eval, network interception
   {
     matches: (action, params) => {

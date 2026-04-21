@@ -139,6 +139,20 @@ Commands:
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
+  term open [--shell=<name>] [--cwd=<path>]                          Open a terminal session
+  term exec "<command>" [--session=<id>] [--timeout=<ms>]             Execute a command
+  term type "<text>" --session=<id>                                   Type into a session
+  term read [--session=<id>]                                          Read recent output
+  term snapshot [--session=<id>]                                      Capture terminal state
+  term interrupt --session=<id>                                       Send Ctrl+C
+  term close --session=<id>                                           Close a session
+  term list                                                           List active sessions
+  fs read <path>                                                      Read a file
+  fs write <path> [--content=<text>]                                  Write to a file
+  fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
+  fs move <src> <dst>                                                 Move/rename
+  fs rm <path> [--recursive] [--force]                                Delete file/dir
+  fs stat <path>                                                      File metadata
 
 Flags:
   --json                                                             Raw JSON output
@@ -1356,6 +1370,14 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleKnowledge(args);
       break;
 
+    case "term":
+      await handleTerm(args);
+      break;
+
+    case "fs":
+      await handleFs(args);
+      break;
+
     default:
       console.error(`Unknown command: ${args.command}`);
       printHelp();
@@ -1563,6 +1585,369 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
     default:
       console.error(`Unknown knowledge command: ${subcommand}`);
       console.error("Supported: list, show, validate, prune, delete");
+      process.exit(1);
+  }
+}
+
+// ── Terminal Handlers (Section 12) ─────────────────────────────────
+
+import {
+  TerminalSessionManager,
+  getDefaultSessionManager,
+  execCommand,
+} from "./terminal_session";
+import { exec } from "./terminal_exec";
+import {
+  captureAllSnapshots,
+  formatSnapshotCollection,
+  formatSnapshot,
+} from "./terminal_snapshot";
+import {
+  readFile as fsRead,
+  writeFile as fsWrite,
+  listDir,
+  moveFile,
+  deletePath,
+  statPath,
+} from "./fs_operations";
+
+let _terminalManager: TerminalSessionManager | null = null;
+function getTerminalManager(): TerminalSessionManager {
+  if (!_terminalManager) {
+    _terminalManager = getDefaultSessionManager();
+  }
+  return _terminalManager;
+}
+
+async function handleTerm(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "open": {
+      const config: Record<string, unknown> = {};
+      if (flags.shell) config.shell = flags.shell;
+      if (flags.cwd) config.cwd = flags.cwd;
+      if (flags.name) config.name = flags.name;
+
+      try {
+        const session = await getTerminalManager().create(config as any);
+        const result = {
+          id: session.id,
+          shell: session.shell,
+          cwd: session.cwd,
+          status: session.status,
+        };
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "exec": {
+      const command = positional[0];
+      if (!command) {
+        console.error("Error: Command is required");
+        process.exit(1);
+      }
+
+      const sessionId = flags.session;
+      const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
+
+      try {
+        if (sessionId) {
+          const session = getTerminalManager().get(sessionId);
+          if (!session) {
+            console.error(`Error: Session not found: ${sessionId}`);
+            process.exit(1);
+          }
+          const result = await session.exec(command, { timeoutMs });
+          outputJson(result, !jsonOutput);
+        } else {
+          const result = await exec(command, { timeoutMs });
+          outputJson(result, !jsonOutput);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "type": {
+      const text = positional[0];
+      const sessionId = flags.session;
+      if (!text) {
+        console.error("Error: Text is required");
+        process.exit(1);
+      }
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term type'");
+        process.exit(1);
+      }
+
+      try {
+        const session = getTerminalManager().get(sessionId);
+        if (!session) {
+          console.error(`Error: Session not found: ${sessionId}`);
+          process.exit(1);
+        }
+        await session.write(text);
+        console.log("OK");
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "read": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term read'");
+        process.exit(1);
+      }
+
+      try {
+        const session = getTerminalManager().get(sessionId);
+        if (!session) {
+          console.error(`Error: Session not found: ${sessionId}`);
+          process.exit(1);
+        }
+        const output = await session.read();
+        if (jsonOutput) {
+          outputJson({ output });
+        } else {
+          console.log(output);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "snapshot": {
+      const sessionId = flags.session;
+
+      try {
+        if (sessionId) {
+          const session = getTerminalManager().get(sessionId);
+          if (!session) {
+            console.error(`Error: Session not found: ${sessionId}`);
+            process.exit(1);
+          }
+          const snap = await session.snapshot();
+          if (jsonOutput) {
+            outputJson(snap);
+          } else {
+            console.log(formatSnapshot(snap));
+          }
+        } else {
+          const collection = await captureAllSnapshots();
+          if (jsonOutput) {
+            outputJson(collection);
+          } else {
+            console.log(formatSnapshotCollection(collection));
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "interrupt": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term interrupt'");
+        process.exit(1);
+      }
+
+      try {
+        const session = getTerminalManager().get(sessionId);
+        if (!session) {
+          console.error(`Error: Session not found: ${sessionId}`);
+          process.exit(1);
+        }
+        await session.interrupt();
+        console.log("Interrupted");
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "close": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term close'");
+        process.exit(1);
+      }
+
+      try {
+        await getTerminalManager().close(sessionId);
+        console.log("Closed");
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "list": {
+      const sessions = getTerminalManager().list();
+      const result = sessions.map((s) => ({
+        id: s.id,
+        name: s.name,
+        shell: s.shell,
+        cwd: s.cwd,
+        status: s.status,
+      }));
+      outputJson(result, !jsonOutput);
+      break;
+    }
+
+    default:
+      console.error(`Unknown term command: ${subcommand}`);
+      process.exit(1);
+  }
+}
+
+// ── FS Handlers (Section 12) ────────────────────────────────────────
+
+async function handleFs(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "read": {
+      const filePath = positional[0];
+      if (!filePath) {
+        console.error("Error: File path is required");
+        process.exit(1);
+      }
+
+      try {
+        const result = fsRead(filePath);
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          console.log(result.content);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "write": {
+      const filePath = positional[0];
+      if (!filePath) {
+        console.error("Error: File path is required");
+        process.exit(1);
+      }
+
+      const content = flags.content ?? "";
+      try {
+        const result = fsWrite(filePath, content);
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "ls": {
+      const dirPath = positional[0] ?? ".";
+      const recursive = flags.recursive === "true";
+      const ext = flags.ext;
+
+      try {
+        const result = listDir(dirPath, {
+          recursive,
+          extension: ext,
+        });
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          for (const entry of result.entries) {
+            const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
+            const size = entry.sizeBytes.toString().padStart(10);
+            console.log(`${typeChar} ${size}  ${entry.name}`);
+          }
+          console.log(`\n${result.totalEntries} entries`);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "move": {
+      const src = positional[0];
+      const dst = positional[1];
+      if (!src || !dst) {
+        console.error("Error: Source and destination paths are required");
+        process.exit(1);
+      }
+
+      try {
+        const result = moveFile(src, dst);
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "rm": {
+      const targetPath = positional[0];
+      if (!targetPath) {
+        console.error("Error: Path is required");
+        process.exit(1);
+      }
+
+      const recursive = flags.recursive === "true";
+      const force = flags.force === "true";
+
+      try {
+        const result = deletePath(targetPath, { recursive, force });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "stat": {
+      const targetPath = positional[0];
+      if (!targetPath) {
+        console.error("Error: Path is required");
+        process.exit(1);
+      }
+
+      try {
+        const result = statPath(targetPath);
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown fs command: ${subcommand}`);
       process.exit(1);
   }
 }

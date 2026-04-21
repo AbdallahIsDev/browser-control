@@ -337,3 +337,94 @@ export {
   getInteractionSkillsDir,
   getDomainSkillsDir,
 } from "./paths";
+
+// ── Section 12: Native Terminal Automation Layer ──────────────────────
+
+// Terminal session management
+export {
+  TerminalSessionManager,
+  getDefaultSessionManager,
+  resetDefaultSessionManager,
+  execCommand,
+} from "./terminal_session";
+
+export type {
+  TerminalSession,
+  TerminalSessionConfig,
+  TerminalSessionStatus,
+  ExecOptions,
+  ExecResult,
+  TerminalSnapshot,
+} from "./terminal_types";
+
+// Terminal exec helpers
+export {
+  exec,
+  execStdout,
+  execTest,
+  execSequence,
+  ExecError,
+} from "./terminal_exec";
+
+export type {
+  StructuredExecOptions,
+  StructuredExecResult,
+} from "./terminal_exec";
+
+// Terminal snapshot
+export {
+  captureSessionSnapshot,
+  captureAllSnapshots,
+  formatSnapshot,
+  formatSnapshotCollection,
+} from "./terminal_snapshot";
+
+export type {
+  SessionSnapshotCollection,
+} from "./terminal_snapshot";
+
+// Terminal prompt detection
+export {
+  isPromptDetected,
+  extractCwdFromPrompt,
+  registerCustomPrompt,
+  unregisterCustomPrompt,
+} from "./terminal_prompt";
+
+// Cross-platform shell detection
+export {
+  detectShell,
+  resolveNamedShell,
+  platformShellName,
+  isWindowsPlatform,
+} from "./cross_platform";
+
+export type { ShellInfo } from "./cross_platform";
+
+// Filesystem operations
+export {
+  readFile as fsReadFile,
+  writeFile as fsWriteFile,
+  listDir as fsListDir,
+  moveFile as fsMoveFile,
+  deletePath as fsDeletePath,
+  statPath as fsStatPath,
+  listProcesses,
+  killProcess,
+  FsError,
+} from "./fs_operations";
+
+export type {
+  FileReadResult,
+  FileWriteResult,
+  FileStatResult,
+  ListResult,
+  ListEntry,
+  MoveResult,
+  DeleteResult,
+  ReadFileOptions,
+  WriteFileOptions,
+  ListOptions,
+  DeleteOptions,
+  ProcessInfo,
+} from "./fs_operations";

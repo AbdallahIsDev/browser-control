@@ -192,6 +192,10 @@ export class DefaultPolicyEngine implements PolicyEngine {
     step: RoutedStep,
     context: ExecutionContext,
   ): PolicyEvaluationResult {
+    if (this.isFilesystemAction(step)) {
+      return this.evaluateFilesystemPolicy(step, context);
+    }
+
     const policy = this.profile.commandPolicy;
 
     // Check denied commands
@@ -257,6 +261,83 @@ export class DefaultPolicyEngine implements PolicyEngine {
     return {
       decision: "allow",
       reason: "Command policy allows this action",
+      profile: this.profileName,
+      risk: step.risk,
+      auditRequired: false,
+    };
+  }
+
+  private evaluateFilesystemPolicy(
+    step: RoutedStep,
+    context: ExecutionContext,
+  ): PolicyEvaluationResult {
+    const policy = this.profile.filesystemPolicy;
+    const targetPath = this.getFilesystemTargetPath(step);
+    const isDelete = this.isFilesystemDelete(step);
+    const isWrite = this.isFilesystemWrite(step);
+    const isRead = this.isFilesystemRead(step);
+    const isRecursive = step.params.recursive === true;
+
+    if (typeof targetPath === "string") {
+      if (isRead && policy.allowedReadRoots && policy.allowedReadRoots.length > 0 && !this.isInAllowedRoots(targetPath, policy.allowedReadRoots)) {
+        return {
+          decision: "deny",
+          reason: `Path is outside allowed read roots: ${targetPath}`,
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "allowedReadRoots",
+          auditRequired: false,
+        };
+      }
+
+      if (isWrite && policy.allowedWriteRoots && policy.allowedWriteRoots.length > 0 && !this.isInAllowedRoots(targetPath, policy.allowedWriteRoots)) {
+        return {
+          decision: "deny",
+          reason: `Path is outside allowed write roots: ${targetPath}`,
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "allowedWriteRoots",
+          auditRequired: false,
+        };
+      }
+
+      if (isDelete && policy.allowedDeleteRoots && policy.allowedDeleteRoots.length > 0 && !this.isInAllowedRoots(targetPath, policy.allowedDeleteRoots)) {
+        return {
+          decision: "deny",
+          reason: `Path is outside allowed delete roots: ${targetPath}`,
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "allowedDeleteRoots",
+          auditRequired: false,
+        };
+      }
+    }
+
+    if (isDelete && isRecursive) {
+      if (policy.recursiveDeleteDefaultBehavior === "deny") {
+        return {
+          decision: "deny",
+          reason: "Recursive delete is denied by policy",
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "recursiveDeleteDefaultBehavior",
+          auditRequired: false,
+        };
+      }
+
+      return {
+        decision: "require_confirmation",
+        reason: "Recursive delete requires confirmation",
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "recursiveDeleteDefaultBehavior",
+        auditRequired: true,
+      };
+    }
+
+    return {
+      decision: "allow",
+      reason: "Filesystem policy allows this action",
       profile: this.profileName,
       risk: step.risk,
       auditRequired: false,
@@ -501,6 +582,48 @@ export class DefaultPolicyEngine implements PolicyEngine {
       const normalizedDir = dir.replace(/\\/g, "/");
       return normalized.startsWith(normalizedDir) || normalized.startsWith(normalizedDir + "/");
     });
+  }
+
+  private isInAllowedRoots(targetPath: string, allowedRoots: string[]): boolean {
+    const normalizedPath = targetPath.replace(/\\/g, "/").toLowerCase();
+    return allowedRoots.some((root) => {
+      const normalizedRoot = root.replace(/\\/g, "/").toLowerCase();
+      return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+    });
+  }
+
+  private isFilesystemAction(step: RoutedStep): boolean {
+    return /^fs_/.test(step.action)
+      || ["file_read", "file_write", "file_delete", "file_move", "read_file", "write_file", "delete_file", "move_file"].includes(step.action);
+  }
+
+  private isFilesystemRead(step: RoutedStep): boolean {
+    return ["fs_read", "fs_list", "fs_stat", "file_read", "read_file"].includes(step.action);
+  }
+
+  private isFilesystemWrite(step: RoutedStep): boolean {
+    return ["fs_write", "file_write", "write_file", "fs_move", "file_move", "move_file"].includes(step.action);
+  }
+
+  private isFilesystemDelete(step: RoutedStep): boolean {
+    return ["fs_delete", "file_delete", "delete_file"].includes(step.action);
+  }
+
+  private getFilesystemTargetPath(step: RoutedStep): string | undefined {
+    const directPath = step.params.path;
+    if (typeof directPath === "string") {
+      return directPath;
+    }
+
+    if (typeof step.params.filePath === "string") {
+      return step.params.filePath;
+    }
+
+    if (typeof step.params.src === "string") {
+      return step.params.src;
+    }
+
+    return undefined;
   }
 
   /**

@@ -57,6 +57,8 @@ export interface BrokerServerCallbacks {
   getTaskStatus?: (taskId: string) => MaybePromise<BrokerTaskStatusEntry | null>;
   listTasks?: () => MaybePromise<BrokerTaskStatusEntry[]>;
   listSkills?: () => MaybePromise<SkillManifest[]>;
+  handleTerminal?: (subcommand: string, payload: JsonRecord) => MaybePromise<unknown>;
+  handleFilesystem?: (subcommand: string, payload: JsonRecord) => MaybePromise<unknown>;
 }
 
 export interface BrokerServerOptions {
@@ -87,6 +89,20 @@ export interface BrokerServerOptions {
       getSummary(): TelemetrySummary;
     };
     getStats(): Record<string, unknown>;
+    termOpen?(config?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    termExec?(command: string, options?: Record<string, unknown>): Promise<unknown>;
+    termType?(sessionId: string, text: string): Promise<{ ok: true }>;
+    termRead?(sessionId: string, maxBytes?: number): Promise<{ output: string }>;
+    termSnapshot?(sessionId?: string): Promise<unknown>;
+    termInterrupt?(sessionId: string): Promise<{ ok: true }>;
+    termClose?(sessionId: string): Promise<{ ok: true }>;
+    termList?(): Array<Record<string, unknown>>;
+    fsRead?(pathname: string): unknown;
+    fsWrite?(pathname: string, content: string): unknown;
+    fsList?(pathname: string, recursive?: boolean, extension?: string): unknown;
+    fsMove?(src: string, dst: string): unknown;
+    fsDelete?(pathname: string, recursive?: boolean, force?: boolean): unknown;
+    fsStat?(pathname: string): unknown;
   };
   rateLimit?: {
     windowMs?: number;
@@ -263,6 +279,60 @@ function createCallbacksFromDaemon(
     getSchedulerQueue: async () => daemon.getScheduler().getQueue(),
     getTaskStatus: async () => null,
     listTasks: async () => [],
+    handleTerminal: async (subcommand, payload) => {
+      switch (subcommand) {
+        case "open":
+          if (!daemon.termOpen) throw new Error("Terminal open is not configured.");
+          return daemon.termOpen(payload);
+        case "exec":
+          if (!daemon.termExec) throw new Error("Terminal exec is not configured.");
+          return daemon.termExec(payload.command as string, payload as Record<string, unknown>);
+        case "type":
+          if (!daemon.termType) throw new Error("Terminal type is not configured.");
+          return daemon.termType(payload.sessionId as string, payload.text as string);
+        case "read":
+          if (!daemon.termRead) throw new Error("Terminal read is not configured.");
+          return daemon.termRead(payload.sessionId as string, payload.maxBytes as number | undefined);
+        case "snapshot":
+          if (!daemon.termSnapshot) throw new Error("Terminal snapshot is not configured.");
+          return daemon.termSnapshot(payload.sessionId as string | undefined);
+        case "interrupt":
+          if (!daemon.termInterrupt) throw new Error("Terminal interrupt is not configured.");
+          return daemon.termInterrupt(payload.sessionId as string);
+        case "close":
+          if (!daemon.termClose) throw new Error("Terminal close is not configured.");
+          return daemon.termClose(payload.sessionId as string);
+        case "sessions":
+          if (!daemon.termList) throw new Error("Terminal listing is not configured.");
+          return daemon.termList();
+        default:
+          throw new Error(`Unknown term subcommand: ${subcommand}`);
+      }
+    },
+    handleFilesystem: async (subcommand, payload) => {
+      switch (subcommand) {
+        case "read":
+          if (!daemon.fsRead) throw new Error("Filesystem read is not configured.");
+          return daemon.fsRead(payload.path as string);
+        case "write":
+          if (!daemon.fsWrite) throw new Error("Filesystem write is not configured.");
+          return daemon.fsWrite(payload.path as string, (payload.content as string) ?? "");
+        case "list":
+          if (!daemon.fsList) throw new Error("Filesystem list is not configured.");
+          return daemon.fsList(payload.path as string, payload.recursive === true, payload.extension as string | undefined);
+        case "move":
+          if (!daemon.fsMove) throw new Error("Filesystem move is not configured.");
+          return daemon.fsMove(payload.src as string, payload.dst as string);
+        case "delete":
+          if (!daemon.fsDelete) throw new Error("Filesystem delete is not configured.");
+          return daemon.fsDelete(payload.path as string, payload.recursive === true, payload.force === true);
+        case "stat":
+          if (!daemon.fsStat) throw new Error("Filesystem stat is not configured.");
+          return daemon.fsStat(payload.path as string);
+        default:
+          throw new Error(`Unknown fs subcommand: ${subcommand}`);
+      }
+    },
   };
 }
 
@@ -670,6 +740,36 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
       if (request.method === "GET" && pathname === "/api/v1/skills") {
         const skills = callbacks.listSkills ? await callbacks.listSkills() : [];
         writeJson(response, 200, skills);
+        return;
+      }
+
+      if ((request.method === "GET" || request.method === "POST") && pathname.startsWith("/api/v1/term/")) {
+        if (!callbacks.handleTerminal) {
+          writeJson(response, 503, { error: "Terminal callback is not configured." });
+          return;
+        }
+
+        const subcommand = pathname.slice("/api/v1/term/".length);
+        const payload = request.method === "POST"
+          ? await readJsonBody(request)
+          : Object.fromEntries(requestUrl.searchParams.entries());
+        const result = await callbacks.handleTerminal(subcommand, payload);
+        writeJson(response, 200, result);
+        return;
+      }
+
+      if ((request.method === "GET" || request.method === "POST") && pathname.startsWith("/api/v1/fs/")) {
+        if (!callbacks.handleFilesystem) {
+          writeJson(response, 503, { error: "Filesystem callback is not configured." });
+          return;
+        }
+
+        const subcommand = pathname.slice("/api/v1/fs/".length);
+        const payload = request.method === "POST"
+          ? await readJsonBody(request)
+          : Object.fromEntries(requestUrl.searchParams.entries());
+        const result = await callbacks.handleFilesystem(subcommand, payload);
+        writeJson(response, 200, result);
         return;
       }
 
