@@ -292,3 +292,48 @@ export type {
   ElementDiff,
   StateChange,
 } from "./snapshot_diff";
+
+// ── Section 9: Knowledge System ──────────────────────────────────────
+
+export type {
+  KnowledgeKind,
+  KnowledgeFrontmatter,
+  KnowledgeArtifact,
+  KnowledgeEntry,
+  KnowledgeSummary,
+  KnowledgeQueryFilter,
+  ValidationResult as KnowledgeValidationResult,
+  ValidationIssue as KnowledgeValidationIssue,
+} from "./knowledge_types";
+
+export {
+  loadArtifact,
+  saveArtifact,
+  deleteArtifact,
+  pruneArtifact,
+  listAllKnowledge,
+  listByKind,
+  findByDomain,
+  findByName,
+} from "./knowledge_store";
+
+export { validateArtifact } from "./knowledge_validator";
+
+export {
+  queryKnowledge,
+  searchInteractionSkills,
+  searchDomainKnowledge,
+  getEntriesByType,
+  getDomainSkill,
+  getInteractionSkill,
+  listKnownDomains,
+  listInteractionSkillNames,
+  getKnowledgeStats,
+} from "./knowledge_query";
+
+// Knowledge paths
+export {
+  getKnowledgeDir,
+  getInteractionSkillsDir,
+  getDomainSkillsDir,
+} from "./paths";
