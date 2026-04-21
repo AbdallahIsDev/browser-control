@@ -42,6 +42,12 @@ export interface Task {
     before?: (context: TaskContext) => Promise<boolean>;
     after?: (context: TaskContext) => Promise<boolean>;
   };
+  policyMeta?: {
+    action?: string;
+    path?: import("./policy").ExecutionPath;
+    risk?: import("./policy").RiskLevel;
+    params?: Record<string, unknown>;
+  };
 }
 
 type MemoryStoreLike = Pick<import("./memory_store").MemoryStore, "get" | "set">;

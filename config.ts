@@ -90,6 +90,10 @@ export interface BrowserControlConfig {
   // ── Logging ────────────────────────────────────────────────────
   logLevel: string;
   logFile: boolean;
+
+  // ── Policy ─────────────────────────────────────────────────────
+  /** Default policy profile (safe, balanced, or trusted) */
+  policyProfile: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -213,6 +217,13 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const logLevel = normalizeOptionalString(env.LOG_LEVEL) ?? "info";
   const logFile = parseBoolean(env.LOG_FILE, false);
 
+  // ── Policy ─────────────────────────────────────────────────────
+  const policyProfile = normalizeOptionalString(env.POLICY_PROFILE) ?? "balanced";
+  const validProfiles = ["safe", "balanced", "trusted"];
+  if (validate && !validProfiles.includes(policyProfile)) {
+    throw new Error(`POLICY_PROFILE must be one of: ${validProfiles.join(", ")}, got: ${policyProfile}`);
+  }
+
   return {
     dataHome,
 
@@ -255,5 +266,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
 
     logLevel,
     logFile,
+
+    policyProfile,
   };
 }

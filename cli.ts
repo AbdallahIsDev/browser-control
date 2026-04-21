@@ -121,6 +121,10 @@ Commands:
   report generate                                                    Generate report
   report view                                                        View report
   captcha test                                                       Validate captcha solver configuration
+  policy list                                                        List built-in policy profiles
+  policy inspect <name>                                              Inspect a policy profile
+  policy export <name> [file]                                         Export a policy profile to JSON
+  policy import <file>                                               Import a custom policy profile
 
 Flags:
   --json                                                             Raw JSON output
@@ -810,6 +814,107 @@ async function handleCaptcha(args: ParsedArgs): Promise<void> {
   outputJson(result, !jsonOutput);
 }
 
+async function handlePolicy(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const { 
+    listBuiltInProfiles, 
+    listCustomProfiles, 
+    getAllProfiles,
+    getProfile, 
+    serializeProfile, 
+    deserializeProfile, 
+    validateProfile,
+    saveCustomProfile 
+  } = await import("./policy_profiles");
+
+  switch (subcommand) {
+    case "list": {
+      const builtIn = listBuiltInProfiles();
+      const custom = listCustomProfiles();
+      const result = {
+        builtIn: builtIn.map(p => p.name),
+        custom: custom.map(p => p.name),
+      };
+      outputJson(result, !jsonOutput);
+      break;
+    }
+
+    case "inspect": {
+      const name = positional[0];
+      if (!name) {
+        console.error("Error: Profile name is required");
+        process.exit(1);
+      }
+      const profile = getProfile(name);
+      if (!profile) {
+        console.error(`Error: Profile "${name}" not found`);
+        process.exit(1);
+      }
+      outputJson(profile, !jsonOutput);
+      break;
+    }
+
+    case "export": {
+      const name = positional[0];
+      if (!name) {
+        console.error("Error: Profile name is required");
+        process.exit(1);
+      }
+      const profile = getProfile(name);
+      if (!profile) {
+        console.error(`Error: Profile "${name}" not found`);
+        process.exit(1);
+      }
+
+      const outputPath = positional[1] || `${name}-policy.json`;
+      const serialized = serializeProfile(profile);
+      fs.writeFileSync(outputPath, serialized, "utf-8");
+      console.log(`Profile exported to: ${outputPath}`);
+      break;
+    }
+
+    case "import": {
+      const filePath = positional[0];
+      if (!filePath) {
+        console.error("Error: File path is required");
+        process.exit(1);
+      }
+
+      if (!fs.existsSync(filePath)) {
+        console.error(`Error: File not found: ${filePath}`);
+        process.exit(1);
+      }
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      const profile = deserializeProfile(content);
+      if (!profile) {
+        console.error("Error: Failed to parse profile or validation failed");
+        process.exit(1);
+      }
+
+      const validation = validateProfile(profile);
+      if (!validation.valid) {
+        console.error("Validation failed:");
+        for (const err of validation.errors) {
+          console.error(`  - ${err}`);
+        }
+        process.exit(1);
+      }
+
+      saveCustomProfile(profile);
+      outputJson(profile, !jsonOutput);
+      console.log(`Profile "${profile.name}" imported and saved successfully`);
+      break;
+    }
+
+    default:
+      console.error(`Unknown policy command: ${subcommand}`);
+      process.exit(1);
+  }
+}
+
 export async function runCli(argv = process.argv): Promise<void> {
   const args = parseArgs(argv);
 
@@ -854,6 +959,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 
     case "captcha":
       await handleCaptcha(args);
+      break;
+
+    case "policy":
+      await handlePolicy(args);
       break;
 
     default:

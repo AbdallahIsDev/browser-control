@@ -143,3 +143,51 @@ export { loadConfig, BrowserControlConfig } from "./config";
 
 // CLI
 export { parseArgs, runCli } from "./cli";
+
+// Policy engine
+export type {
+  ExecutionPath,
+  RiskLevel,
+  PolicyDecision,
+  PolicyTaskIntent,
+  RoutedStep,
+  PolicyEvaluationResult,
+  ExecutionContext,
+  CommandPolicy,
+  FilesystemPolicy,
+  BrowserPolicy,
+  LowLevelPolicy,
+  PolicyProfile,
+  ConfirmationHandler,
+  PolicyAuditEntry,
+  PolicyEngine,
+} from "./policy";
+
+export {
+  DefaultPolicyEngine,
+  getDefaultPolicyEngine,
+  resetDefaultPolicyEngine,
+} from "./policy_engine";
+
+export {
+  SAFE_PROFILE,
+  BALANCED_PROFILE,
+  TRUSTED_PROFILE,
+  getBuiltInProfile,
+  listBuiltInProfiles,
+  getRiskDecisionMatrix,
+  validateProfile,
+  serializeProfile,
+  deserializeProfile,
+} from "./policy_profiles";
+
+export {
+  ExecutionRouter,
+  defaultRouter,
+} from "./execution_router";
+
+export {
+  PolicyAuditLogger,
+  getDefaultAuditLogger,
+  resetDefaultAuditLogger,
+} from "./policy_audit";

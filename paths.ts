@@ -25,6 +25,7 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "logs"),
     path.join(home, ".interop"),
     path.join(home, "skills"),
+    path.join(home, "policy-profiles"),
   ];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
@@ -66,4 +67,8 @@ export function getSkillsDataDir(): string {
 
 export function getDaemonStatusPath(): string {
   return path.join(getInteropDir(), "daemon-status.json");
+}
+
+export function getPolicyProfilesDir(): string {
+  return path.join(getDataHome(), "policy-profiles");
 }

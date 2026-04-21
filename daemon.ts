@@ -19,6 +19,10 @@ import { SkillMemoryStore } from "./skill_memory";
 import type { SkillContext } from "./skill";
 import { loadConfig } from "./config";
 import { getSkillsDataDir } from "./paths";
+import { DefaultPolicyEngine } from "./policy_engine";
+import type { PolicyEngine, PolicyTaskIntent } from "./policy";
+import { ExecutionRouter, defaultRouter } from "./execution_router";
+import { PolicyAuditLogger, getDefaultAuditLogger } from "./policy_audit";
 
 // ── Daemon Status Model ─────────────────────────────────────────────
 
@@ -160,6 +164,12 @@ export class Daemon {
   /** Cached app config from loadConfig() — set once during start(). */
   private appConfig: ReturnType<typeof loadConfig> | null = null;
 
+  private policyEngine: DefaultPolicyEngine | null = null;
+
+  private auditLogger: PolicyAuditLogger | null = null;
+
+  private executionRouter: ExecutionRouter = defaultRouter;
+
   constructor(config: DaemonConfig = {}) {
     this.config = config;
     this.log = logger.withComponent("daemon");
@@ -179,6 +189,23 @@ export class Daemon {
     this.healthCheck = this.config.healthCheck ?? new HealthCheck({
       port: this.config.port,
       memoryStore: this.memoryStore,
+    });
+
+    // Initialize policy engine with configured profile
+    this.policyEngine = new DefaultPolicyEngine({
+      profileName: this.appConfig.policyProfile,
+      logger: this.log,
+    });
+
+    // Initialize audit logger
+    this.auditLogger = new PolicyAuditLogger({
+      enabled: true,
+    });
+
+    // Wire audit logger to policy engine
+    this.policyEngine.setAuditEnabled(true);
+    this.policyEngine.setAuditHandler((entry) => {
+      this.auditLogger?.log(entry);
     });
 
     const criticalOkay = await this.healthCheck.runCritical();
@@ -296,6 +323,12 @@ export class Daemon {
     this.telemetry.saveReport("markdown");
     this.telemetry.saveReport("json");
 
+    // Close audit logger
+    if (this.auditLogger) {
+      this.auditLogger.close();
+      this.auditLogger = null;
+    }
+
     if (this.heartbeatHandle) {
       clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
@@ -337,6 +370,93 @@ export class Daemon {
       startedAt,
     });
 
+    // All generic tasks must go through policy evaluation
+    if (this.policyEngine) {
+      // Derive conservative fallback when policyMeta is absent
+      const action = task.policyMeta?.action ?? task.name;
+      const params = task.policyMeta?.params ?? {};
+      
+      const taskIntent: PolicyTaskIntent = {
+        goal: task.name,
+        actor: "agent" as const,
+        sessionId: "default",
+        requestedPath: task.policyMeta?.path,
+        metadata: { taskType: "generic" },
+      };
+      
+      const routedStep = this.executionRouter.buildRoutedStep(taskIntent, action, params, {
+        sessionId: "default",
+        actor: "agent",
+        profileName: this.policyEngine.getActiveProfile(),
+      });
+
+      // Apply explicit overrides from policyMeta if provided
+      let finalStep = routedStep;
+      if (task.policyMeta?.path) {
+        finalStep = this.executionRouter.overridePath(finalStep, task.policyMeta.path);
+      }
+      if (task.policyMeta?.risk) {
+        finalStep = this.executionRouter.overrideRisk(finalStep, task.policyMeta.risk);
+      }
+
+      const evaluation = this.policyEngine.evaluate(finalStep, {
+        sessionId: "default",
+        actor: "agent",
+        internalTask: true,
+      });
+
+      this.log.info("Policy evaluation for generic task", {
+        taskId,
+        taskName: task.name,
+        action,
+        decision: evaluation.decision,
+        risk: evaluation.risk,
+        reason: evaluation.reason,
+      });
+
+      if (evaluation.decision === "deny") {
+        this.log.warn("Generic task denied by policy", {
+          taskId,
+          taskName: task.name,
+          action,
+          reason: evaluation.reason,
+        });
+        this.taskStatuses.set(taskId, {
+          id: taskId,
+          status: "failed",
+          startedAt,
+          error: `Policy denied: ${evaluation.reason}`,
+        });
+        return taskId;
+      }
+
+      if (evaluation.decision === "require_confirmation") {
+        this.log.warn("Generic task requires confirmation but daemon cannot prompt - denying", {
+          taskId,
+          taskName: task.name,
+          action,
+          reason: evaluation.reason,
+        });
+        this.taskStatuses.set(taskId, {
+          id: taskId,
+          status: "failed",
+          startedAt,
+          error: `Policy requires confirmation: ${evaluation.reason}`,
+        });
+        return taskId;
+      }
+
+      if (evaluation.decision === "allow_with_audit") {
+        this.log.info("Generic task allowed with audit logging", {
+          taskId,
+          taskName: task.name,
+          action,
+          risk: evaluation.risk,
+          reason: evaluation.reason,
+        });
+      }
+    }
+
     this.taskQueue.push({ id: taskId, task });
     this.processQueue();
     return taskId;
@@ -352,6 +472,89 @@ export class Daemon {
       this.log.warn("Rejecting skill task — daemon is shutting down", { taskId, skillName });
       return;
     }
+
+    // Build a RoutedStep for policy evaluation
+    const taskIntent: PolicyTaskIntent = {
+      goal: action,
+      actor: "agent" as const,
+      sessionId: (params.sessionId as string) ?? "default",
+      metadata: { skill: skillName },
+    };
+    const routedStep = this.executionRouter.buildRoutedStep(taskIntent, action, params, {
+      sessionId: (params.sessionId as string) ?? "default",
+      actor: "agent",
+      profileName: this.policyEngine?.getActiveProfile(),
+      explicitSession: params.explicitSession === true,
+    });
+
+    // Evaluate against policy
+    if (this.policyEngine) {
+      const evaluation = this.policyEngine.evaluate(routedStep, {
+        sessionId: (params.sessionId as string) ?? "default",
+        actor: "agent",
+        explicitSession: params.explicitSession === true,
+      });
+
+      this.log.info("Policy evaluation for skill task", {
+        taskId,
+        skill: skillName,
+        action,
+        decision: evaluation.decision,
+        risk: evaluation.risk,
+        reason: evaluation.reason,
+      });
+
+      if (evaluation.decision === "deny") {
+        this.log.warn("Skill task denied by policy", {
+          taskId,
+          skill: skillName,
+          action,
+          reason: evaluation.reason,
+        });
+        this.taskStatuses.set(taskId, {
+          id: taskId,
+          status: "failed",
+          skill: skillName,
+          action,
+          params,
+          startedAt: new Date().toISOString(),
+          error: `Policy denied: ${evaluation.reason}`,
+        });
+        return;
+      }
+
+      if (evaluation.decision === "require_confirmation") {
+        // For daemon execution, we can't prompt for confirmation, so we deny
+        this.log.warn("Skill task requires confirmation but daemon cannot prompt - denying", {
+          taskId,
+          skill: skillName,
+          action,
+          reason: evaluation.reason,
+        });
+        this.taskStatuses.set(taskId, {
+          id: taskId,
+          status: "failed",
+          skill: skillName,
+          action,
+          params,
+          startedAt: new Date().toISOString(),
+          error: `Policy requires confirmation: ${evaluation.reason}`,
+        });
+        return;
+      }
+
+      // allow_with_audit and allow both proceed with execution
+      if (evaluation.decision === "allow_with_audit") {
+        this.log.info("Skill task allowed with audit logging", {
+          taskId,
+          skill: skillName,
+          action,
+          risk: evaluation.risk,
+          reason: evaluation.reason,
+        });
+      }
+    }
+
     const startedAt = new Date().toISOString();
     this.taskStatuses.set(taskId, {
       id: taskId,

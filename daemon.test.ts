@@ -46,8 +46,9 @@ function createTestConfig(overrides: Record<string, unknown> = {}) {
 test("Daemon start and stop manage pid lifecycle and daemon-status.json", async () => {
   const { tempDir, pidPath, store, telemetry, config } = createTestConfig();
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     assert.equal(fs.existsSync(pidPath), true);
@@ -69,6 +70,9 @@ test("Daemon start and stop manage pid lifecycle and daemon-status.json", async 
     assert.equal(stoppedRecord.status, "stopped");
     assert.ok(stoppedRecord.stoppedAt);
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -97,8 +101,9 @@ test("Daemon start fails fast when critical health checks fail", async () => {
 test("Daemon stop persists running task state without waiting for completion", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Submit a task that takes a long time
@@ -106,7 +111,7 @@ test("Daemon stop persists running task state without waiting for completion", a
       id: "slow-task",
       name: "Slow Task",
       action: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 30000)); // 30s
+        await new Promise(() => {}); // Never resolves - keeps task running
         return { success: true, data: { done: true } };
       },
     });
@@ -131,6 +136,9 @@ test("Daemon stop persists running task state without waiting for completion", a
     assert.ok(intent, "Task intent should be persisted");
     assert.equal(intent.status, "interrupted");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -142,8 +150,9 @@ test("Daemon stop cancels queued tasks that never started", async () => {
     maxConcurrentTasks: 1,
   });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Submit a blocking task
@@ -151,7 +160,7 @@ test("Daemon stop cancels queued tasks that never started", async () => {
       id: "blocking",
       name: "Blocking",
       action: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 30000));
+        await new Promise(() => {}); // Never resolves - keeps task running
         return { success: true };
       },
     });
@@ -171,6 +180,9 @@ test("Daemon stop cancels queued tasks that never started", async () => {
     const status = daemon.getTaskStatus(queuedId);
     assert.equal(status?.status, "failed");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -179,13 +191,14 @@ test("Daemon stop cancels queued tasks that never started", async () => {
 test("Daemon rejects new tasks after stop is called", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
     await daemon.stop();
 
     await assert.rejects(
-      () => daemon.submitTask({
+      () => daemon!.submitTask({
         id: "rejected",
         name: "Rejected",
         action: async () => ({ success: true }),
@@ -193,6 +206,9 @@ test("Daemon rejects new tasks after stop is called", async () => {
       /shutting down/,
     );
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -203,8 +219,9 @@ test("Daemon rejects new tasks after stop is called", async () => {
 test("Daemon persists task intent on task start, completion, and failure", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Submit a task that succeeds
@@ -238,6 +255,9 @@ test("Daemon persists task intent on task start, completion, and failure", async
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -251,6 +271,7 @@ test("Daemon startup recovery detects interrupted tasks from previous run", asyn
     resumePolicy: "abandon",
   });
 
+  let daemon: Daemon | null = null;
   try {
     // Simulate a previous run that left a running task intent
     store.set("task:old-task-1:intent", {
@@ -262,7 +283,7 @@ test("Daemon startup recovery detects interrupted tasks from previous run", asyn
       startedAt: new Date().toISOString(),
     });
 
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // The interrupted task should have been updated to "interrupted"
@@ -273,6 +294,9 @@ test("Daemon startup recovery detects interrupted tasks from previous run", asyn
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -285,18 +309,19 @@ test("Daemon startup recovery with 'reschedule' policy re-queues skill tasks", a
     // No skill registry needed — skill execution will fail, but that's fine for testing reschedule logic
   });
 
+  let daemon: Daemon | null = null;
   try {
     // Simulate a previous run that left a running skill task intent
     store.set("task:skill-task-1:intent", {
       taskId: "skill-task-1",
       skill: "test-skill",
       action: "doStuff",
-      params: { key: "value" },
+      params: { key: "value", sessionId: "test-session", explicitSession: true },
       status: "running",
       startedAt: new Date().toISOString(),
     });
 
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // The old intent should be marked interrupted
@@ -310,6 +335,9 @@ test("Daemon startup recovery with 'reschedule' policy re-queues skill tasks", a
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -321,6 +349,7 @@ test("Daemon startup recovery with 'abandon' policy leaves tasks as interrupted"
     resumePolicy: "abandon",
   });
 
+  let daemon: Daemon | null = null;
   try {
     store.set("task:abandon-task:intent", {
       taskId: "abandon-task",
@@ -328,7 +357,7 @@ test("Daemon startup recovery with 'abandon' policy leaves tasks as interrupted"
       startedAt: new Date().toISOString(),
     });
 
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     const intent = store.get<TaskIntent>("task:abandon-task:intent");
@@ -341,6 +370,9 @@ test("Daemon startup recovery with 'abandon' policy leaves tasks as interrupted"
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -351,8 +383,9 @@ test("Daemon startup recovery with 'abandon' policy leaves tasks as interrupted"
 test("Daemon status transitions from stopped to running on start", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig();
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     assert.equal(daemon.getDaemonStatus(), "stopped");
 
     await daemon.start();
@@ -361,6 +394,9 @@ test("Daemon status transitions from stopped to running on start", async () => {
     await daemon.stop();
     assert.equal(daemon.getDaemonStatus(), "stopped");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -385,13 +421,17 @@ test("Daemon writes degraded status when Chrome disconnects (simulated)", async 
     }),
   });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
     assert.equal(daemon.getDaemonStatus(), "running");
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -402,8 +442,9 @@ test("Daemon writes degraded status when Chrome disconnects (simulated)", async 
 test("Daemon getStats returns enriched stats with daemon, memory, tasks, and scheduler sections", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     const stats = daemon.getStats() as Record<string, unknown>;
@@ -434,6 +475,9 @@ test("Daemon getStats returns enriched stats with daemon, memory, tasks, and sch
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -445,8 +489,9 @@ test("Daemon getStats tracks running and queued tasks", async () => {
     maxConcurrentTasks: 1,
   });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Submit a blocking task
@@ -454,7 +499,7 @@ test("Daemon getStats tracks running and queued tasks", async () => {
       id: "block",
       name: "Block",
       action: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        await new Promise(() => {}); // Never resolves - keeps task running
         return { success: true };
       },
     });
@@ -475,6 +520,9 @@ test("Daemon getStats tracks running and queued tasks", async () => {
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -485,8 +533,9 @@ test("Daemon getStats tracks running and queued tasks", async () => {
 test("Daemon getUptimeMs returns 0 before start and positive after start", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     assert.equal(daemon.getUptimeMs(), 0);
 
     await daemon.start();
@@ -495,6 +544,9 @@ test("Daemon getUptimeMs returns 0 before start and positive after start", async
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -505,8 +557,9 @@ test("Daemon getUptimeMs returns 0 before start and positive after start", async
 test("Daemon submitTask runs tasks, tracks status, and persists intent", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     const taskId = await daemon.submitTask({
@@ -525,6 +578,9 @@ test("Daemon submitTask runs tasks, tracks status, and persists intent", async (
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -535,14 +591,46 @@ test("Daemon submitTask runs tasks, tracks status, and persists intent", async (
 test("submitSkillTask tracks task in runningTaskIds and persists intent before execution", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
-    // Submit a skill task directly — this is the daemon-managed path
-    // that broker skill tasks now route through
-    const taskId = "skill-framer-123";
-    daemon.submitSkillTask(taskId, "framer", "publish", { siteId: "test" });
+    const registry = daemon.getSkillRegistry();
+    registry.register({
+      manifest: {
+        name: "test-policy-skill",
+        version: "1.0.0",
+        description: "Skill used to verify task tracking",
+        requiredEnv: [],
+        allowedDomains: [],
+      },
+      setup: async () => {},
+      execute: async () => {
+        await new Promise(() => {});
+        return { success: true };
+      },
+      teardown: async () => {},
+      healthCheck: async () => ({ healthy: true }),
+    });
+
+    // Inject a minimal fake Stagehand session so buildSkillContext succeeds.
+    const stagehandManager = daemon.getStagehandManager() as unknown as {
+      sessions: Map<string, unknown>;
+    };
+    stagehandManager.sessions.set("test-session", {
+      stagehand: {
+        context: { newPage: async () => ({}) },
+        close: async () => {},
+      },
+      page: {},
+    });
+
+    const taskId = "skill-test-policy-123";
+    daemon.submitSkillTask(taskId, "test-policy-skill", "doStuff", {
+      sessionId: "test-session",
+      explicitSession: true,
+    });
 
     // Verify it's tracked in runningTaskIds via stats
     const stats = daemon.getStats() as Record<string, unknown>;
@@ -553,8 +641,8 @@ test("submitSkillTask tracks task in runningTaskIds and persists intent before e
     const intent = store.get<TaskIntent>(`task:${taskId}:intent`);
     assert.ok(intent, "Skill task intent should be persisted");
     assert.equal(intent.taskId, taskId);
-    assert.equal(intent.skill, "framer");
-    assert.equal(intent.action, "publish");
+    assert.equal(intent.skill, "test-policy-skill");
+    assert.equal(intent.action, "doStuff");
     assert.equal(intent.status, "running");
     assert.ok(intent.startedAt, "startedAt should be captured on the intent");
 
@@ -565,6 +653,9 @@ test("submitSkillTask tracks task in runningTaskIds and persists intent before e
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -578,8 +669,9 @@ test("shutdown with in-flight skill task does not access closed store", async ()
     memoryStore: undefined, // let daemon create its own store so it closes it
   });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Submit a skill task — it will fail immediately since the skill doesn't exist,
@@ -596,6 +688,9 @@ test("shutdown with in-flight skill task does not access closed store", async ()
     // so any lingering persistTaskIntent calls are no-ops.
     assert.ok(true, "Daemon stopped without unhandled rejection from skill completion");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
@@ -605,13 +700,17 @@ test("shutdown with in-flight skill task does not access closed store", async ()
 test("Daemon stop is idempotent — double stop does not throw", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
     await daemon.stop();
     // Second stop should be a no-op, not throw
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -625,8 +724,9 @@ test("Daemon calls onPause on skills during shutdown and persists saveState", as
   let onPauseCalled = false;
   const savedState = { lastAction: "publish", step: 3 };
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Register a skill with onPause and saveState hooks
@@ -665,6 +765,9 @@ test("Daemon calls onPause on skills during shutdown and persists saveState", as
     const persistedState = store.get<Record<string, unknown>>("skill:hooked-skill:state");
     assert.deepEqual(persistedState, savedState, "saveState should be persisted during shutdown");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -675,6 +778,7 @@ test("Daemon restores skill state on startup via restoreState", async () => {
 
   let restoredState: Record<string, unknown> | null = null;
 
+  let daemon: Daemon | null = null;
   try {
     // Pre-populate the store with saved skill state from a previous run
     store.set("skill:restorable-skill:state", { lastStep: 5, mode: "batch" });
@@ -686,7 +790,7 @@ test("Daemon restores skill state on startup via restoreState", async () => {
     // We need to register the skill in the daemon's registry.
     // The daemon auto-loads from ./skills/, but we can register manually.
 
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Register a skill with restoreState after start — this tests the API
@@ -724,6 +828,9 @@ test("Daemon restores skill state on startup via restoreState", async () => {
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -735,8 +842,9 @@ test("Daemon calls onError hook when skill execution fails", async () => {
   let onErrorCalled = false;
   let capturedError: Error | null = null;
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Register a skill that will fail and has an onError hook
@@ -761,20 +869,28 @@ test("Daemon calls onError hook when skill execution fails", async () => {
       },
     });
 
-    // Submit the skill task — it will fail because there's no page/browser
-    // The error path will still be hit, and onError should be called
-    // if the skill has a context. Since we can't provide a page,
-    // the buildSkillContext will fail first, before execute runs.
-    // So onError won't be called — the buildSkillContext error is caught
-    // but the skill's execute error won't fire.
-    //
-    // Instead, let's verify that the task intent shows failed status.
-    daemon.submitSkillTask("skill-failing-1", "failing-skill", "doStuff", {});
+    // Inject a minimal fake Stagehand session so buildSkillContext succeeds and
+    // the failure occurs inside skill execution, not during policy/context setup.
+    const stagehandManager = daemon.getStagehandManager() as unknown as {
+      sessions: Map<string, unknown>;
+    };
+    stagehandManager.sessions.set("test-session", {
+      stagehand: {
+        context: { newPage: async () => ({}) },
+        close: async () => {},
+      },
+      page: {},
+    });
+
+    daemon.submitSkillTask("skill-failing-1", "failing-skill", "doStuff", {
+      sessionId: "test-session",
+      explicitSession: true,
+    });
 
     // Give the async execution a moment
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // The task should be marked as failed (no page available)
+    // The task should be marked as failed and the hook should have fired.
     const status = daemon.getTaskStatus("skill-failing-1");
     assert.ok(status, "Task status should exist");
     assert.equal(status?.status, "failed");
@@ -783,9 +899,15 @@ test("Daemon calls onError hook when skill execution fails", async () => {
     const intent = store.get<TaskIntent>("task:skill-failing-1:intent");
     assert.ok(intent);
     assert.equal(intent.status, "failed");
+    assert.equal(onErrorCalled, true, "onError hook should be called for execution failures");
+    assert.ok(capturedError);
+    assert.match((capturedError as Error).message, /intentional skill error/i);
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -794,8 +916,9 @@ test("Daemon calls onError hook when skill execution fails", async () => {
 test("Daemon periodic skill state persistence timer is cleaned up on shutdown", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // The daemon should have started the skill state persistence timer
@@ -806,6 +929,9 @@ test("Daemon periodic skill state persistence timer is cleaned up on shutdown", 
     // If we got here, the timer was cleaned up properly
     assert.ok(true, "Daemon stopped cleanly with skill state persistence timer");
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -814,8 +940,9 @@ test("Daemon periodic skill state persistence timer is cleaned up on shutdown", 
 test("Daemon skill context uses scoped memory store", async () => {
   const { tempDir, store, telemetry, config } = createTestConfig({ schedulerEnabled: false });
 
+  let daemon: Daemon | null = null;
   try {
-    const daemon = new Daemon(config);
+    daemon = new Daemon(config);
     await daemon.start();
 
     // Verify that the SkillMemoryStore class is available
@@ -833,6 +960,9 @@ test("Daemon skill context uses scoped memory store", async () => {
 
     await daemon.stop();
   } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
     store.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
