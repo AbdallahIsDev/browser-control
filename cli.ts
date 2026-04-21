@@ -93,6 +93,15 @@ Browser Control CLI
 Usage: bc <command> [subcommand] [options]
 
 Commands:
+  browser attach [--port=9222] [--cdp-url=...]                       Attach to running Chrome/Electron
+  browser launch [--port=9222] [--profile=default]                   Launch managed automation browser
+  browser status                                                     Show browser connection status
+  browser profile list                                                List browser profiles
+  browser profile create <name> [--type=named]                       Create a browser profile
+  browser profile use <name>                                          Activate a browser profile
+  browser profile delete <name>                                       Delete a browser profile
+  browser auth export [--live | --stored] [--profile=default]         Export auth state (cookies/storage)
+  browser auth import <file> [--live | --stored]                      Import auth state from file
   run --skill=<name> --action=<action> [--params='{"key":"value"}']  Run a task
   schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<action> Schedule a task
   schedule list                                                      List scheduled tasks
@@ -915,6 +924,375 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function handleBrowser(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "attach": {
+      const port = flags.port ? Number(flags.port) : undefined;
+      const cdpUrl = flags["cdp-url"] ?? undefined;
+      const targetType = (flags["target-type"] ?? "chrome") as "chrome" | "chromium" | "electron";
+
+      try {
+        const { BrowserConnectionManager } = await import("./browser_connection");
+        const { loadConfig } = await import("./config");
+        const { DefaultPolicyEngine } = await import("./policy_engine");
+        
+        const config = loadConfig({ validate: false });
+        const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+        const manager = new BrowserConnectionManager({ policyEngine });
+
+        const connection = await manager.attach({
+          port,
+          cdpUrl,
+          targetType,
+          actor: "human",
+        });
+        if (jsonOutput) {
+          outputJson(connection);
+        } else {
+          console.log(`Attached to ${connection.targetType} browser`);
+          console.log(`  Mode:     ${connection.mode}`);
+          console.log(`  Endpoint: ${connection.cdpEndpoint}`);
+          console.log(`  Tabs:     ${connection.tabCount}`);
+          console.log(`  Status:   ${connection.status}`);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "launch": {
+      const port = flags.port ? Number(flags.port) : undefined;
+      const profileName = flags.profile ?? "default";
+
+      try {
+        const { BrowserConnectionManager } = await import("./browser_connection");
+        const { loadConfig } = await import("./config");
+        const { DefaultPolicyEngine } = await import("./policy_engine");
+
+        const config = loadConfig({ validate: false });
+        const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+        const manager = new BrowserConnectionManager({ policyEngine });
+
+        const connection = await manager.launchManaged({
+          port,
+          profileName,
+          actor: "human",
+        });
+        if (jsonOutput) {
+          outputJson(connection);
+        } else {
+          console.log(`Managed browser connected`);
+          console.log(`  Mode:     ${connection.mode}`);
+          console.log(`  Profile:  ${connection.profile.name} (${connection.profile.type})`);
+          console.log(`  Endpoint: ${connection.cdpEndpoint}`);
+          console.log(`  Tabs:     ${connection.tabCount}`);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "status": {
+      try {
+        const store = new MemoryStore();
+        const connectionState = store.get("browser_connection:active");
+        store.close();
+        if (!connectionState) {
+          console.log(jsonOutput ? '{"connected":false}' : "No active browser connection.");
+        } else {
+          outputJson(connectionState, !jsonOutput);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "profile": {
+      // Nested subcommand: args.positional[0] = profile action, positional[1+] = args
+      const profileAction = positional[0];
+
+      switch (profileAction) {
+        case "list": {
+          const { BrowserProfileManager } = await import("./browser_profiles");
+          const pm = new BrowserProfileManager();
+          const profiles = pm.listProfiles();
+          if (jsonOutput) {
+            outputJson(profiles, false);
+          } else {
+            if (profiles.length === 0) {
+              console.log("No profiles.");
+            } else {
+              for (const p of profiles) {
+                const marker = p.type === "shared" ? " (shared)" : p.type === "isolated" ? " (isolated)" : "";
+                console.log(`  ${p.name}${marker} — last used: ${p.lastUsedAt}`);
+              }
+            }
+          }
+          break;
+        }
+
+        case "create": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Profile name is required");
+            process.exit(1);
+          }
+          const type = (flags.type ?? "named") as "shared" | "isolated" | "named";
+          const { BrowserProfileManager } = await import("./browser_profiles");
+          const pm = new BrowserProfileManager();
+          const profile = pm.createProfile(name, type);
+          if (jsonOutput) {
+            outputJson(profile, false);
+          } else {
+            console.log(`Profile "${profile.name}" created (type: ${profile.type})`);
+            console.log(`  Data dir: ${profile.dataDir}`);
+          }
+          break;
+        }
+
+        case "use": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Profile name is required");
+            process.exit(1);
+          }
+          const { BrowserProfileManager } = await import("./browser_profiles");
+          const pm = new BrowserProfileManager();
+          const profile = pm.getProfileByName(name);
+          if (!profile) {
+            console.error(`Error: Profile "${name}" not found`);
+            process.exit(1);
+          }
+          pm.touchProfile(profile.id);
+          // Store the active profile preference
+          const store = new MemoryStore();
+          store.set("browser_connection:active_profile", { id: profile.id, name: profile.name });
+          store.close();
+          if (jsonOutput) {
+            outputJson(profile, false);
+          } else {
+            console.log(`Active profile set to "${profile.name}" (${profile.type})`);
+          }
+          break;
+        }
+
+        case "delete": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Profile name is required");
+            process.exit(1);
+          }
+          const { BrowserProfileManager } = await import("./browser_profiles");
+          const pm = new BrowserProfileManager();
+          const deleted = pm.deleteProfileByName(name);
+          if (!deleted) {
+            console.error(`Error: Profile "${name}" not found or cannot be deleted`);
+            process.exit(1);
+          }
+          console.log(`Profile "${name}" deleted.`);
+          break;
+        }
+
+        default:
+          console.error(`Unknown browser profile command: ${profileAction}`);
+          console.error("Available: list, create, use, delete");
+          process.exit(1);
+      }
+      break;
+    }
+
+    case "auth": {
+      const authAction = positional[0];
+
+      switch (authAction) {
+        case "export": {
+          const profileName = flags.profile;
+          const outputFile = positional[1] ?? `${profileName ?? "default"}-auth.json`;
+          const isLive = Boolean(flags.live);
+          const isStored = Boolean(flags.stored);
+
+          if (!isLive && !isStored) {
+             console.error("Error: You must specify either --live (to extract from the active browser) or --stored (to extract from offline memory snapshot).");
+             process.exit(1);
+          }
+          if (isLive && isStored) {
+             console.error("Error: Cannot specify both --live and --stored.");
+             process.exit(1);
+          }
+
+          try {
+            const { BrowserProfileManager } = await import("./browser_profiles");
+            const { BrowserConnectionManager } = await import("./browser_connection");
+            const { loadAuthSnapshot } = await import("./browser_auth_state");
+            const { loadConfig } = await import("./config");
+            const { DefaultPolicyEngine } = await import("./policy_engine");
+
+            const config = loadConfig({ validate: false });
+            const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+            const manager = new BrowserConnectionManager({ policyEngine });
+            const pm = new BrowserProfileManager();
+            const store = new MemoryStore();
+            const activeSession = store.get<Record<string, any>>("browser_connection:active");
+            
+            let snapshot = null;
+
+            if (isLive) {
+              if (!activeSession || activeSession.status !== "connected") {
+                 store.close();
+                 console.error("Error: --live was specified but no active browser is currently connected.");
+                 process.exit(1);
+              }
+              const activeProfileId = activeSession.profileId;
+              const activeProfileName = pm.getProfile(activeProfileId)?.name;
+              
+              if (profileName && profileName !== activeProfileName) {
+                 store.close();
+                 console.error(`Error: Active browser is running profile "${activeProfileName}", but you requested "${profileName}".`);
+                 process.exit(1);
+              }
+
+              let activePort = config.chromeDebugPort;
+              if (activeSession.cdpEndpoint && activeSession.cdpEndpoint.includes(":")) {
+                const url = new URL(activeSession.cdpEndpoint);
+                activePort = parseInt(url.port, 10);
+              }
+
+              console.log(`Connecting to active browser for profile "${activeProfileName}" on port ${activePort}...`);
+              await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
+              snapshot = await manager.exportAuth();
+              await manager.disconnect();
+              console.log(`Successfully extracted live auth state from running browser.`);
+            } else {
+              const targetProfileName = profileName ?? "default";
+              const profile = pm.getProfileByName(targetProfileName);
+              if (!profile) {
+                store.close();
+                console.error(`Error: Profile "${targetProfileName}" not found`);
+                process.exit(1);
+              }
+              snapshot = loadAuthSnapshot(store, profile.id);
+              if (!snapshot) {
+                store.close();
+                console.error(`No saved auth state for profile "${targetProfileName}".`);
+                console.error("Connect to a browser first and let cookies persist, then try again.");
+                process.exit(1);
+              }
+              console.log(`Successfully loaded stored auth snapshot for profile "${targetProfileName}".`);
+            }
+
+            store.close();
+            fs.writeFileSync(outputFile, JSON.stringify(snapshot, null, 2));
+            console.log(`Auth state saved to: ${outputFile}`);
+            console.log(`  Cookies: ${snapshot.cookies.length}`);
+            console.log(`  localStorage domains: ${Object.keys(snapshot.localStorage).length}`);
+          } catch (error) {
+            console.error("Error:", (error as Error).message);
+            process.exit(1);
+          }
+          break;
+        }
+
+        case "import": {
+          const filePath = positional[1];
+          const isLive = Boolean(flags.live);
+          const isStored = Boolean(flags.stored);
+
+          if (!filePath) {
+             console.error("Error: File path is required");
+             process.exit(1);
+          }
+          if (!fs.existsSync(filePath)) {
+             console.error(`Error: File not found: ${filePath}`);
+             process.exit(1);
+          }
+          if (!isLive && !isStored) {
+             console.error("Error: You must specify either --live (to inject into the active browser) or --stored (to update offline memory snapshot).");
+             process.exit(1);
+          }
+          if (isLive && isStored) {
+             console.error("Error: Cannot specify both --live and --stored.");
+             process.exit(1);
+          }
+
+          try {
+            const content = fs.readFileSync(filePath, "utf-8");
+            const snapshot = JSON.parse(content);
+            const { BrowserConnectionManager } = await import("./browser_connection");
+            const { saveAuthSnapshotToStore } = await import("./browser_auth_state");
+            const { loadConfig } = await import("./config");
+            const { DefaultPolicyEngine } = await import("./policy_engine");
+
+            const config = loadConfig({ validate: false });
+            const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+            const manager = new BrowserConnectionManager({ policyEngine });
+            const profileId = snapshot.profileId ?? "default";
+            
+            const store = new MemoryStore();
+
+            if (isLive) {
+              const activeSession = store.get<Record<string, any>>("browser_connection:active");
+              if (!activeSession || activeSession.status !== "connected") {
+                 store.close();
+                 console.error("Error: --live was specified but no active browser is currently connected.");
+                 process.exit(1);
+              }
+              if (activeSession.profileId !== profileId) {
+                 store.close();
+                 console.error(`Error: Active browser is running profile "${activeSession.profileId}", but snapshot is for "${profileId}".`);
+                 process.exit(1);
+              }
+
+              let activePort = config.chromeDebugPort;
+              if (activeSession.cdpEndpoint && activeSession.cdpEndpoint.includes(":")) {
+                const url = new URL(activeSession.cdpEndpoint);
+                activePort = parseInt(url.port, 10);
+              }
+
+              console.log(`Connecting to active browser for profile "${profileId}" on port ${activePort}...`);
+              await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
+              await manager.importAuth(snapshot);
+              await manager.disconnect();
+              console.log(`Successfully injected auth state directly into live running browser context.`);
+            } else {
+              // Store only
+              saveAuthSnapshotToStore(store, profileId, snapshot);
+              console.log(`Stored offline auth snapshot updated for profile "${profileId}".`);
+              console.log(`  (Note: The browser was not affected. This will apply next time the profile is launched as a restored session.)`);
+            }
+
+            store.close();
+            console.log(`  Cookies: ${snapshot.cookies?.length ?? 0}`);
+          } catch (error) {
+            console.error("Error:", (error as Error).message);
+            process.exit(1);
+          }
+          break;
+        }
+
+        default:
+          console.error(`Unknown browser auth command: ${authAction}`);
+          console.error("Available: export, import");
+          process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown browser command: ${subcommand}`);
+      console.error("Available: attach, launch, status, profile, auth");
+      process.exit(1);
+  }
+}
+
 export async function runCli(argv = process.argv): Promise<void> {
   const args = parseArgs(argv);
 
@@ -963,6 +1341,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 
     case "policy":
       await handlePolicy(args);
+      break;
+
+    case "browser":
+      await handleBrowser(args);
       break;
 
     default:

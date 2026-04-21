@@ -34,6 +34,51 @@ export type {
   AutomationContextOptions,
 } from "./browser_core";
 
+// Browser connection / profiles / auth (Section 8)
+export {
+  BrowserConnectionManager,
+  createConnectionManager,
+} from "./browser_connection";
+
+export type {
+  BrowserConnectionMode,
+  BrowserTargetType,
+  BrowserConnectionStatus,
+  BrowserConnection,
+  ConnectOptions,
+} from "./browser_connection";
+
+export {
+  BrowserProfileManager,
+  getProfilesDir,
+  getProfileDataDir,
+  getProfileRegistryPath,
+} from "./browser_profiles";
+
+export type {
+  ProfileType,
+  BrowserProfile,
+  ProfileMetadata,
+} from "./browser_profiles";
+
+export {
+  exportAuthSnapshot,
+  importAuthSnapshot,
+  saveAuthSnapshotToStore,
+  loadAuthSnapshot,
+  deleteAuthSnapshot,
+  listAuthSnapshots,
+  saveAuthSnapshot,
+  restoreAuthSnapshot,
+} from "./browser_auth_state";
+
+export type {
+  AuthSnapshot,
+  CookieRecord,
+  ExportOptions as AuthExportOptions,
+  ImportOptions as AuthImportOptions,
+} from "./browser_auth_state";
+
 // Stagehand multi-session manager
 export {
   StagehandManager,
@@ -136,6 +181,7 @@ export {
   getLogsDir,
   getSkillsDataDir,
   getDaemonStatusPath,
+  getProfilesDir as getProfilesDirPath,
 } from "./paths";
 
 // Config
