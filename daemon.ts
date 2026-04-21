@@ -23,6 +23,16 @@ import { DefaultPolicyEngine } from "./policy_engine";
 import type { PolicyEngine, PolicyTaskIntent } from "./policy";
 import { ExecutionRouter, defaultRouter } from "./execution_router";
 import { PolicyAuditLogger, getDefaultAuditLogger } from "./policy_audit";
+import { TerminalSessionManager, execCommand } from "./terminal_session";
+import type { TerminalSessionConfig, ExecOptions } from "./terminal_types";
+import {
+  readFile as fsReadFile,
+  writeFile as fsWriteFile,
+  listDir as fsListDir,
+  moveFile as fsMoveFile,
+  deletePath as fsDeletePath,
+  statPath as fsStatPath,
+} from "./fs_operations";
 
 // ── Daemon Status Model ─────────────────────────────────────────────
 
@@ -120,6 +130,8 @@ export class Daemon {
   private broker!: BrokerServerLike;
 
   private readonly stagehandManager = new StagehandManager();
+
+  private readonly terminalManager = new TerminalSessionManager();
 
   private readonly skillRegistry = new SkillRegistry();
 
@@ -317,6 +329,7 @@ export class Daemon {
     // Stop subsystems
     await this.scheduler.stop();
     await this.broker.stop();
+    await this.terminalManager.closeAll();
     await this.stagehandManager.closeAll();
 
     // Save telemetry reports
@@ -612,6 +625,144 @@ export class Daemon {
     return this.skillRegistry;
   }
 
+  async termOpen(config: TerminalSessionConfig = {}): Promise<Record<string, unknown>> {
+    this.assertOperationAllowed("terminal_open", {
+      shell: config.shell,
+      cwd: config.cwd,
+      name: config.name,
+    });
+
+    const session = await this.terminalManager.create(config);
+    return {
+      id: session.id,
+      name: session.name,
+      shell: session.shell,
+      cwd: session.cwd,
+      status: session.status,
+      createdAt: session.createdAt,
+    };
+  }
+
+  async termExec(command: string, options: ExecOptions & TerminalSessionConfig & { sessionId?: string } = {}): Promise<unknown> {
+    this.assertOperationAllowed("execute_command", {
+      command,
+      cwd: options.cwd,
+      sessionId: options.sessionId,
+    });
+
+    if (options.sessionId) {
+      const session = this.terminalManager.get(options.sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${options.sessionId}`);
+      }
+      return session.exec(command, options);
+    }
+
+    return execCommand(command, {
+      shell: options.shell,
+      cwd: options.cwd,
+      env: options.env,
+      timeoutMs: options.timeoutMs,
+      maxOutputBytes: options.maxOutputBytes,
+    });
+  }
+
+  async termType(sessionId: string, text: string): Promise<{ ok: true }> {
+    this.assertOperationAllowed("terminal_write", { sessionId, text });
+    const session = this.terminalManager.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    await session.write(text);
+    return { ok: true };
+  }
+
+  async termRead(sessionId: string, maxBytes?: number): Promise<{ output: string }> {
+    this.assertOperationAllowed("terminal_read", { sessionId });
+    const session = this.terminalManager.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const output = await session.read(maxBytes);
+    return { output };
+  }
+
+  async termSnapshot(sessionId?: string): Promise<unknown> {
+    this.assertOperationAllowed("terminal_snapshot", sessionId ? { sessionId } : {});
+    if (sessionId) {
+      const session = this.terminalManager.get(sessionId);
+      if (!session) {
+        throw new Error(`Session not found: ${sessionId}`);
+      }
+      return session.snapshot();
+    }
+
+    const sessions = await Promise.all(this.terminalManager.list().map((session) => session.snapshot()));
+    return {
+      timestamp: new Date().toISOString(),
+      totalSessions: sessions.length,
+      sessions,
+    };
+  }
+
+  async termInterrupt(sessionId: string): Promise<{ ok: true }> {
+    this.assertOperationAllowed("terminal_interrupt", { sessionId });
+    const session = this.terminalManager.get(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    await session.interrupt();
+    return { ok: true };
+  }
+
+  async termClose(sessionId: string): Promise<{ ok: true }> {
+    this.assertOperationAllowed("terminal_close", { sessionId });
+    await this.terminalManager.close(sessionId);
+    return { ok: true };
+  }
+
+  termList(): Array<Record<string, unknown>> {
+    this.assertOperationAllowed("terminal_read", {});
+    return this.terminalManager.list().map((session) => ({
+      id: session.id,
+      name: session.name,
+      shell: session.shell,
+      cwd: session.cwd,
+      status: session.status,
+      createdAt: session.createdAt,
+    }));
+  }
+
+  fsRead(pathname: string): unknown {
+    this.assertOperationAllowed("fs_read", { path: pathname });
+    return fsReadFile(pathname);
+  }
+
+  fsWrite(pathname: string, content: string): unknown {
+    this.assertOperationAllowed("fs_write", { path: pathname });
+    return fsWriteFile(pathname, content);
+  }
+
+  fsList(pathname: string, recursive = false, extension?: string): unknown {
+    this.assertOperationAllowed("fs_list", { path: pathname });
+    return fsListDir(pathname, { recursive, extension });
+  }
+
+  fsMove(src: string, dst: string): unknown {
+    this.assertOperationAllowed("fs_move", { src, dst, path: src });
+    return fsMoveFile(src, dst);
+  }
+
+  fsDelete(pathname: string, recursive = false, force = false): unknown {
+    this.assertOperationAllowed("fs_delete", { path: pathname, recursive });
+    return fsDeletePath(pathname, { recursive, force });
+  }
+
+  fsStat(pathname: string): unknown {
+    this.assertOperationAllowed("fs_stat", { path: pathname });
+    return fsStatPath(pathname);
+  }
+
   getRecentTasks(): Array<{ id: string; status: "pending" | "running" | "completed" | "failed"; result?: unknown }> {
     return Array.from(this.taskStatuses.values()).map((record) => ({
       id: record.id,
@@ -672,6 +823,7 @@ export class Daemon {
   async emergencyKill(): Promise<void> {
     this.acceptNewTasks = false;
     await this.scheduler.stop();
+    await this.terminalManager.closeAll();
     for (const queued of this.taskQueue.splice(0)) {
       const record = this.taskStatuses.get(queued.id);
       if (record) {
@@ -682,6 +834,42 @@ export class Daemon {
   }
 
   // ── Daemon Status Persistence ──────────────────────────────────────
+
+  private assertOperationAllowed(action: string, params: Record<string, unknown>): void {
+    if (!this.policyEngine) {
+      return;
+    }
+
+    const taskIntent: PolicyTaskIntent = {
+      goal: action,
+      actor: "human",
+      sessionId: typeof params.sessionId === "string" ? params.sessionId : "cli",
+      metadata: { source: "cli-daemon" },
+    };
+
+    const routed = this.executionRouter.buildRoutedStep(taskIntent, action, params, {
+      sessionId: taskIntent.sessionId,
+      actor: "human",
+      cwd: typeof params.cwd === "string" ? params.cwd : undefined,
+      profileName: this.policyEngine.getActiveProfile(),
+      explicitSession: typeof params.sessionId === "string",
+    });
+
+    const evaluation = this.policyEngine.evaluate(routed, {
+      sessionId: taskIntent.sessionId,
+      actor: "human",
+      cwd: typeof params.cwd === "string" ? params.cwd : undefined,
+      explicitSession: typeof params.sessionId === "string",
+    });
+
+    if (evaluation.decision === "deny") {
+      throw new Error(`Policy denied: ${evaluation.reason}`);
+    }
+
+    if (evaluation.decision === "require_confirmation") {
+      throw new Error(`Policy requires confirmation: ${evaluation.reason}`);
+    }
+  }
 
   private writeDaemonStatus(status: DaemonStatus, reason?: string): void {
     try {
@@ -988,6 +1176,46 @@ export class Daemon {
         getTaskStatus: async (taskId) => this.getTaskStatus(taskId),
         listTasks: async () => this.getRecentTasks(),
         listSkills: async () => this.skillRegistry.list(),
+        handleTerminal: async (subcommand, payload) => {
+          switch (subcommand) {
+            case "open":
+              return this.termOpen(payload as TerminalSessionConfig);
+            case "exec":
+              return this.termExec(payload.command as string, payload as ExecOptions & TerminalSessionConfig & { sessionId?: string });
+            case "type":
+              return this.termType(payload.sessionId as string, payload.text as string);
+            case "read":
+              return this.termRead(payload.sessionId as string, payload.maxBytes as number | undefined);
+            case "snapshot":
+              return this.termSnapshot(payload.sessionId as string | undefined);
+            case "interrupt":
+              return this.termInterrupt(payload.sessionId as string);
+            case "close":
+              return this.termClose(payload.sessionId as string);
+            case "sessions":
+              return this.termList();
+            default:
+              throw new Error(`Unknown term subcommand: ${subcommand}`);
+          }
+        },
+        handleFilesystem: async (subcommand, payload) => {
+          switch (subcommand) {
+            case "read":
+              return this.fsRead(payload.path as string);
+            case "write":
+              return this.fsWrite(payload.path as string, (payload.content as string) ?? "");
+            case "list":
+              return this.fsList((payload.path as string) ?? ".", payload.recursive === true, payload.extension as string | undefined);
+            case "move":
+              return this.fsMove(payload.src as string, payload.dst as string);
+            case "delete":
+              return this.fsDelete(payload.path as string, payload.recursive === true, payload.force === true);
+            case "stat":
+              return this.fsStat(payload.path as string);
+            default:
+              throw new Error(`Unknown fs subcommand: ${subcommand}`);
+          }
+        },
       },
     });
     return {

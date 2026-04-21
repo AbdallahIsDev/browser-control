@@ -94,6 +94,16 @@ export interface BrowserControlConfig {
   // ── Policy ─────────────────────────────────────────────────────
   /** Default policy profile (safe, balanced, or trusted) */
   policyProfile: string;
+
+  // ── Terminal (Section 12) ────────────────────────────────────────
+  /** Default shell for terminal sessions (auto-detected if omitted) */
+  terminalShell: string | undefined;
+  /** Default terminal columns (default: 80) */
+  terminalCols: number;
+  /** Default terminal rows (default: 24) */
+  terminalRows: number;
+  /** Max output bytes per command (default: 1MB) */
+  terminalMaxOutputBytes: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -224,6 +234,12 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     throw new Error(`POLICY_PROFILE must be one of: ${validProfiles.join(", ")}, got: ${policyProfile}`);
   }
 
+  // ── Terminal (Section 12) ────────────────────────────────────────
+  const terminalShell = normalizeOptionalString(env.TERMINAL_SHELL);
+  const terminalCols = parsePositiveInt(env.TERMINAL_COLS, 80);
+  const terminalRows = parsePositiveInt(env.TERMINAL_ROWS, 24);
+  const terminalMaxOutputBytes = parsePositiveInt(env.TERMINAL_MAX_OUTPUT_BYTES, 1024 * 1024);
+
   return {
     dataHome,
 
@@ -268,5 +284,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     logFile,
 
     policyProfile,
+
+    terminalShell,
+    terminalCols,
+    terminalRows,
+    terminalMaxOutputBytes,
   };
 }

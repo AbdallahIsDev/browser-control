@@ -125,6 +125,20 @@ Commands:
   policy inspect <name>                                              Inspect a policy profile
   policy export <name> [file]                                         Export a policy profile to JSON
   policy import <file>                                               Import a custom policy profile
+  term open [--shell=<name>] [--cwd=<path>]                          Open a terminal session
+  term exec "<command>" [--session=<id>] [--timeout=<ms>]             Execute a command
+  term type "<text>" --session=<id>                                   Type into a session
+  term read [--session=<id>]                                          Read recent output
+  term snapshot [--session=<id>]                                      Capture terminal state
+  term interrupt --session=<id>                                       Send Ctrl+C
+  term close --session=<id>                                           Close a session
+  term list                                                           List active sessions
+  fs read <path>                                                      Read a file
+  fs write <path> [--content=<text>]                                  Write to a file
+  fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
+  fs move <src> <dst>                                                 Move/rename
+  fs rm <path> [--recursive] [--force]                                Delete file/dir
+  fs stat <path>                                                      File metadata
 
 Flags:
   --json                                                             Raw JSON output
@@ -965,9 +979,336 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handlePolicy(args);
       break;
 
+    case "term":
+      await handleTerm(args);
+      break;
+
+    case "fs":
+      await handleFs(args);
+      break;
+
     default:
       console.error(`Unknown command: ${args.command}`);
       printHelp();
+      process.exit(1);
+  }
+}
+
+// ── Terminal Handlers (Section 12) ─────────────────────────────────
+
+import {
+  TerminalSessionManager,
+  getDefaultSessionManager,
+  execCommand,
+} from "./terminal_session";
+import { exec } from "./terminal_exec";
+import {
+  captureAllSnapshots,
+  formatSnapshotCollection,
+  formatSnapshot,
+} from "./terminal_snapshot";
+import {
+  readFile as fsRead,
+  writeFile as fsWrite,
+  listDir,
+  moveFile,
+  deletePath,
+  statPath,
+} from "./fs_operations";
+
+let _terminalManager: TerminalSessionManager | null = null;
+function getTerminalManager(): TerminalSessionManager {
+  if (!_terminalManager) {
+    _terminalManager = getDefaultSessionManager();
+  }
+  return _terminalManager;
+}
+
+async function handleTerm(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "open": {
+      try {
+        const result = await apiRequest("/term/open", "POST", {
+          ...(flags.shell ? { shell: flags.shell } : {}),
+          ...(flags.cwd ? { cwd: flags.cwd } : {}),
+          ...(flags.name ? { name: flags.name } : {}),
+        });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "exec": {
+      const command = positional[0];
+      if (!command) {
+        console.error("Error: Command is required");
+        process.exit(1);
+      }
+
+      const sessionId = flags.session;
+      const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
+
+      try {
+        const result = await apiRequest("/term/exec", "POST", {
+          command,
+          ...(sessionId ? { sessionId } : {}),
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "type": {
+      const text = positional[0];
+      const sessionId = flags.session;
+      if (!text) {
+        console.error("Error: Text is required");
+        process.exit(1);
+      }
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term type'");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/term/type", "POST", { sessionId, text });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "read": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term read'");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/term/read", "POST", { sessionId });
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          console.log((result as { output?: string }).output ?? "");
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "snapshot": {
+      const sessionId = flags.session;
+
+      try {
+        const result = await apiRequest("/term/snapshot", "POST", sessionId ? { sessionId } : {});
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          console.log(
+            sessionId
+              ? formatSnapshot(result as Parameters<typeof formatSnapshot>[0])
+              : formatSnapshotCollection(result as Parameters<typeof formatSnapshotCollection>[0]),
+          );
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "interrupt": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term interrupt'");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/term/interrupt", "POST", { sessionId });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "close": {
+      const sessionId = flags.session;
+      if (!sessionId) {
+        console.error("Error: --session is required for 'term close'");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/term/close", "POST", { sessionId });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "list": {
+      const result = await apiRequest("/term/sessions");
+      outputJson(result, !jsonOutput);
+      break;
+    }
+
+    default:
+      console.error(`Unknown term command: ${subcommand}`);
+      process.exit(1);
+  }
+}
+
+// ── FS Handlers (Section 12) ────────────────────────────────────────
+
+async function handleFs(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "read": {
+      const filePath = positional[0];
+      if (!filePath) {
+        console.error("Error: File path is required");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/fs/read", "POST", { path: filePath });
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          console.log((result as { content?: string }).content ?? "");
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "write": {
+      const filePath = positional[0];
+      if (!filePath) {
+        console.error("Error: File path is required");
+        process.exit(1);
+      }
+
+      const content = flags.content ?? "";
+      try {
+        const result = await apiRequest("/fs/write", "POST", { path: filePath, content });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "ls": {
+      const dirPath = positional[0] ?? ".";
+      const recursive = flags.recursive === "true";
+      const ext = flags.ext;
+
+      try {
+        const result = await apiRequest("/fs/list", "POST", {
+          path: dirPath,
+          recursive,
+          ...(ext ? { extension: ext } : {}),
+        });
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          for (const entry of (result as { entries: Array<{ type: string; sizeBytes: number; name: string }> }).entries) {
+            const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
+            const size = entry.sizeBytes.toString().padStart(10);
+            console.log(`${typeChar} ${size}  ${entry.name}`);
+          }
+          console.log(`\n${(result as { totalEntries: number }).totalEntries} entries`);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "move": {
+      const src = positional[0];
+      const dst = positional[1];
+      if (!src || !dst) {
+        console.error("Error: Source and destination paths are required");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/fs/move", "POST", { src, dst });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "rm": {
+      const targetPath = positional[0];
+      if (!targetPath) {
+        console.error("Error: Path is required");
+        process.exit(1);
+      }
+
+      const recursive = flags.recursive === "true";
+      const force = flags.force === "true";
+
+      try {
+        const result = await apiRequest("/fs/delete", "POST", { path: targetPath, recursive, force });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "stat": {
+      const targetPath = positional[0];
+      if (!targetPath) {
+        console.error("Error: Path is required");
+        process.exit(1);
+      }
+
+      try {
+        const result = await apiRequest("/fs/stat", "POST", { path: targetPath });
+        outputJson(result, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown fs command: ${subcommand}`);
       process.exit(1);
   }
 }
