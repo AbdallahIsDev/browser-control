@@ -189,18 +189,24 @@ async function isPortListening(port: number, host: string, timeoutMs = 5000): Pr
 
 async function waitForCdp(port: number, timeoutMs = 10000): Promise<boolean> {
   const start = Date.now();
+  let lastError: Error | undefined;
   while (Date.now() - start < timeoutMs) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json`, { signal: AbortSignal.timeout(2000) });
       if (response.ok) {
         const text = await response.text();
         if (text && text.trim().startsWith("[")) return true;
+        console.error(`[waitForCdp] Port ${port} response ok, but invalid text:`, text.substring(0, 100));
+      } else {
+        console.error(`[waitForCdp] Port ${port} response not ok:`, response.status, response.statusText);
       }
-    } catch {
+    } catch (e: any) {
+      lastError = e;
       // not ready yet
     }
     await new Promise((r) => setTimeout(r, 500));
   }
+  console.error(`[waitForCdp] Port ${port} timed out after ${timeoutMs}ms. Last error:`, lastError?.message);
   return false;
 }
 
@@ -278,18 +284,8 @@ function writeDebugState(opts: {
   return state;
 }
 
-function isChromeAlive(port: number): boolean {
-  try {
-    const response = execSync(
-      process.platform === "win32"
-        ? `powershell -Command "Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*--remote-debugging-port=${port}*' } | Select-Object -First 1"`
-        : `pgrep -f "remote-debugging-port=${port}"`,
-      { encoding: "utf8", timeout: 3000 },
-    ).trim();
-    return response.length > 0;
-  } catch {
-    return false;
-  }
+async function isChromeAlive(port: number): Promise<boolean> {
+  return waitForCdp(port, 2000);
 }
 
 async function startWslBridgeIfNeeded(
@@ -379,7 +375,7 @@ async function main(): Promise<void> {
   const needsBridge = wslHostCandidates.length > 0;
 
   // Check for existing Chrome on this port
-  if (isChromeAlive(port)) {
+  if (await isChromeAlive(port)) {
     console.log(`Chrome already running on port ${port}.`);
     const ready = await waitForCdp(port, 5000);
     if (ready) {
@@ -442,6 +438,8 @@ export {
   getWslHostCandidates,
   getWslHostCandidatesFromWsl,
   getWslHostCandidatesFromWindows,
+  isChromeAlive,
+  startWslBridgeIfNeeded,
   waitForCdp,
   buildChromeArgs,
   writeDebugState,
