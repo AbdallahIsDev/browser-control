@@ -27,6 +27,9 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "skills"),
     path.join(home, "policy-profiles"),
     path.join(home, "profiles"),
+    path.join(home, "knowledge"),
+    path.join(home, "knowledge", "interaction-skills"),
+    path.join(home, "knowledge", "domain-skills"),
   ];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
