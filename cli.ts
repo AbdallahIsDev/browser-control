@@ -125,6 +125,11 @@ Commands:
   policy inspect <name>                                              Inspect a policy profile
   policy export <name> [file]                                         Export a policy profile to JSON
   policy import <file>                                               Import a custom policy profile
+  knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
+  knowledge show <name-or-domain>                                    Show knowledge for a domain or skill
+  knowledge validate [--all]                                         Validate knowledge files
+  knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
+  knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
 
 Flags:
   --json                                                             Raw JSON output
@@ -965,9 +970,217 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handlePolicy(args);
       break;
 
+    case "knowledge":
+      await handleKnowledge(args);
+      break;
+
     default:
       console.error(`Unknown command: ${args.command}`);
       printHelp();
+      process.exit(1);
+  }
+}
+
+// ── Knowledge Handler (Section 9) ──────────────────────────────────
+
+async function handleKnowledge(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const {
+    listAllKnowledge,
+    listByKind,
+    findByDomain,
+    findByName,
+    deleteArtifact,
+    pruneArtifact,
+    loadArtifact,
+  } = await import("./knowledge_store");
+  const {
+    getKnowledgeStats,
+  } = await import("./knowledge_query");
+  const { validateArtifact } = await import("./knowledge_validator");
+
+  switch (subcommand) {
+    case "list": {
+      const kindFilter = flags.kind as string | undefined;
+      let summaries = kindFilter
+        ? listByKind(kindFilter as any)
+        : listAllKnowledge();
+
+      if (jsonOutput) {
+        outputJson(summaries, false);
+      } else {
+        if (summaries.length === 0) {
+          console.log("No knowledge artifacts found.");
+          break;
+        }
+        console.log(`Knowledge artifacts (${summaries.length}):\n`);
+        for (const s of summaries) {
+          const verified = s.verified ? " [verified]" : "";
+          const tags = s.tags.length > 0 ? ` tags=[${s.tags.join(", ")}]` : "";
+          console.log(`  ${s.kind.padEnd(18)} ${s.identifier.padEnd(30)} ${s.entryCount} entries${verified}${tags}`);
+        }
+        const stats = getKnowledgeStats();
+        console.log(`\nTotal: ${stats.totalFiles} files, ${stats.totalEntries} entries (${stats.verifiedEntries} verified)`);
+      }
+      break;
+    }
+
+    case "show": {
+      const nameOrDomain = positional[0];
+      if (!nameOrDomain) {
+        console.error("Error: Name or domain is required");
+        process.exit(1);
+      }
+
+      let artifact = findByDomain(nameOrDomain);
+      if (!artifact) artifact = findByName(nameOrDomain);
+
+      if (!artifact) {
+        console.error(`Error: No knowledge found for "${nameOrDomain}"`);
+        process.exit(1);
+      }
+
+      if (jsonOutput) {
+        outputJson({
+          frontmatter: artifact.frontmatter,
+          entries: artifact.entries,
+          sections: Object.keys(artifact.sections),
+        }, true);
+      } else {
+        console.log(`Kind:       ${artifact.frontmatter.kind}`);
+        if (artifact.frontmatter.domain) console.log(`Domain:     ${artifact.frontmatter.domain}`);
+        if (artifact.frontmatter.name) console.log(`Name:       ${artifact.frontmatter.name}`);
+        console.log(`Captured:   ${artifact.frontmatter.capturedAt}`);
+        if (artifact.frontmatter.updatedAt) console.log(`Updated:    ${artifact.frontmatter.updatedAt}`);
+        console.log(`Verified:   ${artifact.frontmatter.verified ?? false}`);
+        console.log(`Entries:    ${artifact.entries.length}`);
+        console.log(`File:       ${artifact.filePath}`);
+
+        if (artifact.entries.length > 0) {
+          console.log(`\nEntries:`);
+          for (const entry of artifact.entries) {
+            const verifiedTag = entry.verified ? " [verified]" : "";
+            console.log(`  [${entry.type}] ${entry.description}${verifiedTag}`);
+            if (entry.selector) console.log(`    selector: ${entry.selector}`);
+            if (entry.waitCondition) console.log(`    waitCondition: ${entry.waitCondition} (${entry.waitMs ?? "?"}ms)`);
+          }
+        }
+
+        console.log(`\nBody preview:`);
+        const preview = artifact.body.split("\n").slice(0, 20).join("\n");
+        console.log(preview);
+        if (artifact.body.split("\n").length > 20) {
+          console.log("... (truncated)");
+        }
+      }
+      break;
+    }
+
+    case "validate": {
+      const all = listAllKnowledge();
+      if (all.length === 0) {
+        console.log("No knowledge artifacts to validate.");
+        break;
+      }
+
+      let allValid = true;
+      const results: any[] = [];
+
+      for (const summary of all) {
+        const artifact = loadArtifact(summary.filePath);
+        if (!artifact) continue;
+
+        const result = validateArtifact(artifact);
+        results.push(result);
+
+        if (!result.valid) allValid = false;
+
+        if (!jsonOutput) {
+          const status = result.valid ? "VALID" : "INVALID";
+          const issueCount = result.issues.length;
+          console.log(`  ${status.padEnd(8)} ${summary.identifier.padEnd(30)} ${issueCount} issue(s)`);
+          for (const issue of result.issues) {
+            const prefix = issue.severity === "error" ? "  ERROR" : "  WARN ";
+            const line = issue.line ? ` (line ${issue.line})` : "";
+            console.log(`    ${prefix}: ${issue.message}${line}`);
+          }
+        }
+      }
+
+      if (jsonOutput) {
+        outputJson(results, true);
+      } else {
+        console.log(`\n${allValid ? "All valid." : "Some files have issues."}`);
+      }
+
+      if (!allValid) process.exit(1);
+      break;
+    }
+
+    case "prune": {
+      // Prune removes stale entries (not full delete)
+      const nameOrDomain = positional[0];
+      if (!nameOrDomain) {
+        console.error("Error: Name or domain is required");
+        process.exit(1);
+      }
+
+      let artifact = findByDomain(nameOrDomain);
+      if (!artifact) artifact = findByName(nameOrDomain);
+
+      if (!artifact) {
+        console.error(`Error: No knowledge found for "${nameOrDomain}"`);
+        process.exit(1);
+      }
+
+      const result = pruneArtifact(artifact.filePath, {
+        maxAgeDays: 90,
+        removeUnverified: false,
+        removeFailed: true,
+      });
+
+      if (jsonOutput) {
+        outputJson(result);
+      } else {
+        console.log(`Pruned ${result.removed} entries from ${result.kept} retained.`);
+        if (result.removed > 0) {
+          console.log(`Updated: ${artifact.filePath}`);
+        }
+      }
+      break;
+    }
+
+    case "delete": {
+      // Full file delete (separate from prune)
+      const nameOrDomain = positional[0];
+      if (!nameOrDomain) {
+        console.error("Error: Name or domain is required");
+        process.exit(1);
+      }
+
+      let artifact = findByDomain(nameOrDomain);
+      if (!artifact) artifact = findByName(nameOrDomain);
+
+      if (!artifact) {
+        console.error(`Error: No knowledge found for "${nameOrDomain}"`);
+        process.exit(1);
+      }
+
+      const deleted = deleteArtifact(artifact.filePath);
+      if (deleted) {
+        console.log(`Deleted: ${artifact.filePath}`);
+      } else {
+        console.error(`Error: Failed to delete ${artifact.filePath}`);
+        process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown knowledge command: ${subcommand}`);
+      console.error("Supported: list, show, validate, prune, delete");
       process.exit(1);
   }
 }

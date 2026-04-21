@@ -72,3 +72,20 @@ export function getDaemonStatusPath(): string {
 export function getPolicyProfilesDir(): string {
   return path.join(getDataHome(), "policy-profiles");
 }
+
+// ── Knowledge Directories (Section 9) ────────────────────────────────
+
+/** Top-level knowledge directory */
+export function getKnowledgeDir(): string {
+  return path.join(getDataHome(), "knowledge");
+}
+
+/** Interaction skills stored under <data-home>/knowledge/interaction-skills/ */
+export function getInteractionSkillsDir(): string {
+  return path.join(getKnowledgeDir(), "interaction-skills");
+}
+
+/** Domain skills stored under <data-home>/knowledge/domain-skills/ */
+export function getDomainSkillsDir(): string {
+  return path.join(getKnowledgeDir(), "domain-skills");
+}
