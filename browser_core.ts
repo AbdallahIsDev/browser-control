@@ -721,3 +721,58 @@ export async function isDebugPortReady(port = 9222): Promise<boolean> {
     return false;
   }
 }
+
+// ── A11y Snapshot Integration ──────────────────────────────────────
+// These re-exports and helpers bridge the a11y snapshot layer into
+// browser_core for convenience. The actual implementation lives in
+// a11y_snapshot.ts, ref_store.ts, semantic_query.ts, and snapshot_diff.ts.
+
+export {
+  snapshot,
+  formatSnapshotAsText,
+  getInteractiveCount,
+} from "./a11y_snapshot";
+
+export type {
+  A11yElement,
+  A11ySnapshot,
+} from "./a11y_snapshot";
+
+export {
+  RefStore,
+  getPageId,
+} from "./ref_store";
+
+/**
+ * Global ref store instance shared across the browser core.
+ * Use this for simple single-session use. For multi-session,
+ * create separate RefStore instances.
+ */
+import { RefStore as _RefStore } from "./ref_store";
+export const globalRefStore = new _RefStore();
+
+export {
+  queryAll,
+  queryFirst,
+  queryByRole,
+  queryByRoleAndName,
+  queryByName,
+  findButton,
+  findTextbox,
+  findLink,
+  findHeading,
+  findByDescription,
+} from "./semantic_query";
+
+export type { SemanticQueryOptions } from "./semantic_query";
+
+export {
+  diffSnapshots,
+  formatDiffSummary,
+} from "./snapshot_diff";
+
+export type {
+  SnapshotDiffResult,
+  ElementDiff,
+  StateChange,
+} from "./snapshot_diff";

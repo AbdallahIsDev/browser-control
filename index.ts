@@ -191,3 +191,58 @@ export {
   getDefaultAuditLogger,
   resetDefaultAuditLogger,
 } from "./policy_audit";
+
+// Section 6: A11y Snapshot + Ref Layer
+export {
+  snapshot,
+  formatSnapshotAsText,
+  getInteractiveCount,
+} from "./a11y_snapshot";
+
+export type {
+  A11yElement,
+  A11ySnapshot,
+} from "./a11y_snapshot";
+
+export {
+  RefStore,
+  getPageId,
+  globalRefStore,
+} from "./browser_core";
+
+export {
+  resolveRefTarget,
+  resolveRefLocator,
+  resolveRefBounds,
+} from "./ref_store";
+
+export type {
+  RefResolutionResult,
+  ResolveRefOptions,
+} from "./ref_store";
+
+export {
+  queryAll,
+  queryFirst,
+  queryByRole,
+  queryByRoleAndName,
+  queryByName,
+  findButton,
+  findTextbox,
+  findLink,
+  findHeading,
+  findByDescription,
+} from "./semantic_query";
+
+export type { SemanticQueryOptions } from "./semantic_query";
+
+export {
+  diffSnapshots,
+  formatDiffSummary,
+} from "./snapshot_diff";
+
+export type {
+  SnapshotDiffResult,
+  ElementDiff,
+  StateChange,
+} from "./snapshot_diff";
