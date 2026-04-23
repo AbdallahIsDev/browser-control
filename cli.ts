@@ -8,6 +8,7 @@ import { loadProxyConfigs } from "./proxy_manager";
 import { Telemetry } from "./telemetry";
 import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./paths";
 import { loadConfig } from "./config";
+import { spawnDaemonProcess } from "./daemon_launch";
 
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
@@ -128,7 +129,7 @@ Browser Lifecycle:
   schedule pause <id>                                                Pause a scheduled task
   schedule resume <id>                                               Resume a scheduled task
   schedule remove <id>                                               Remove a scheduled task
-  daemon start                                                       Start the daemon
+  daemon start [--visible]                                           Start the daemon
   daemon stop                                                        Stop the daemon
   daemon status                                                      Check daemon status
   daemon health                                                      Run health checks
@@ -333,10 +334,9 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 
   switch (subcommand) {
     case "start": {
-      const daemonProcess = spawn("npx", ["ts-node", "daemon.ts"], {
+      const daemonProcess = spawnDaemonProcess({
+        visible: flags.visible === "true",
         detached: true,
-        stdio: ["ignore", "ignore", "pipe"],
-        shell: true,
       });
 
       const errorChunks: Buffer[] = [];
@@ -1556,6 +1556,11 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleFs(args);
       break;
 
+    // ── MCP Server (Section 7) ──────────────────────────────────────
+    case "mcp":
+      await handleMcp(args);
+      break;
+
     default:
       console.error(`Unknown command: ${args.command}`);
       printHelp();
@@ -1772,6 +1777,25 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
     default:
       console.error(`Unknown knowledge command: ${subcommand}`);
       console.error("Supported: list, show, validate, prune, delete");
+      process.exit(1);
+  }
+}
+
+// ── MCP Handler (Section 7) ───────────────────────────────────────────
+
+async function handleMcp(args: ParsedArgs): Promise<void> {
+  const { subcommand } = args;
+
+  switch (subcommand) {
+    case "serve": {
+      const { startMcpServer } = await import("./mcp/server");
+      await startMcpServer();
+      break;
+    }
+
+    default:
+      console.error(`Unknown MCP command: ${subcommand}`);
+      console.error("Available: serve");
       process.exit(1);
   }
 }

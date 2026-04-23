@@ -530,3 +530,23 @@ export type {
   SessionNamespace,
   BrowserControlAPI,
 } from "./browser_control";
+
+// ── Section 7: MCP Integration Layer ───────────────────────────────────
+
+export { createMcpServer, startMcpServer } from "./mcp/server";
+export { buildToolRegistry, getToolCategories } from "./mcp/tool_registry";
+export {
+  actionResultToMcpContent,
+  actionResultToMcpResult,
+  buildSchema,
+  sessionIdSchema,
+  normalizeError,
+  mcpErrorResult,
+} from "./mcp/types";
+export type { McpTool, McpToolCategory, JSONSchema } from "./mcp/types";
+
+export { buildSessionTools } from "./mcp/tools/session";
+export { buildBrowserTools } from "./mcp/tools/browser";
+export { buildTerminalTools } from "./mcp/tools/terminal";
+export { buildFsTools } from "./mcp/tools/fs";
+export { buildDebugTools } from "./mcp/tools/debug";

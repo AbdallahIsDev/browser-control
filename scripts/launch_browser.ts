@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { ensureDataHome, getChromeDebugPath, getInteropDir } from "../paths";
+import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../paths";
 
 interface LaunchOptions {
   port: number;
@@ -297,6 +297,7 @@ async function startWslBridgeIfNeeded(
 
   const listenHost = wslHostCandidates[0];
   const bridgeUrl = `http://${listenHost}:${port}/json`;
+  const bridgePidPath = getWslBridgePidPath(port);
 
   // Check if bridge is already working
   try {
@@ -304,6 +305,22 @@ async function startWslBridgeIfNeeded(
     if (response.ok) return; // bridge already working
   } catch {
     // bridge not running
+  }
+
+  if (fs.existsSync(bridgePidPath)) {
+    try {
+      const stalePid = Number(fs.readFileSync(bridgePidPath, "utf8").trim());
+      if (stalePid > 0) {
+        if (process.platform === "win32") {
+          try { execSync(`taskkill /T /F /PID ${stalePid}`, { stdio: "ignore" }); } catch { /* best effort */ }
+        } else {
+          try { process.kill(stalePid, "SIGTERM"); } catch { /* best effort */ }
+        }
+      }
+    } catch {
+      // ignore stale pid parsing issues
+    }
+    try { fs.unlinkSync(bridgePidPath); } catch { /* best effort */ }
   }
 
   const bridgePath = path.resolve(bridgeScriptPath);
@@ -322,9 +339,14 @@ async function startWslBridgeIfNeeded(
       "--target-host", "127.0.0.1",
       "--target-port", String(port),
     ],
-    { detached: true, stdio: "ignore" },
+    { detached: true, stdio: "ignore", ...(process.platform === "win32" ? { windowsHide: true } : {}) },
   );
   bridgeProcess.unref();
+  try {
+    fs.writeFileSync(bridgePidPath, String(bridgeProcess.pid));
+  } catch {
+    // best effort
+  }
 
   // Wait for bridge to be ready
   for (let i = 0; i < 10; i++) {
@@ -341,6 +363,28 @@ async function startWslBridgeIfNeeded(
   }
 
   console.warn("WSL CDP bridge did not become ready in time.");
+}
+
+function stopWslBridge(port: number): void {
+  const bridgePidPath = getWslBridgePidPath(port);
+  if (!fs.existsSync(bridgePidPath)) {
+    return;
+  }
+
+  try {
+    const pid = Number(fs.readFileSync(bridgePidPath, "utf8").trim());
+    if (pid > 0) {
+      if (process.platform === "win32") {
+        try { execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" }); } catch { /* best effort */ }
+      } else {
+        try { process.kill(pid, "SIGTERM"); } catch { /* best effort */ }
+      }
+    }
+  } catch {
+    // ignore malformed pid files
+  }
+
+  try { fs.unlinkSync(bridgePidPath); } catch { /* best effort */ }
 }
 
 async function main(): Promise<void> {
@@ -440,6 +484,7 @@ export {
   getWslHostCandidatesFromWindows,
   isChromeAlive,
   startWslBridgeIfNeeded,
+  stopWslBridge,
   waitForCdp,
   buildChromeArgs,
   writeDebugState,

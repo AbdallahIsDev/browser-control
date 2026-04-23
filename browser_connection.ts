@@ -26,6 +26,7 @@ import {
   getWslHostCandidates,
   isChromeAlive,
   startWslBridgeIfNeeded,
+  stopWslBridge,
 } from "./scripts/launch_browser";
 import {
   connectBrowser,
@@ -475,6 +476,9 @@ export class BrowserConnectionManager {
     if (this.managedProcess && this.connection.mode !== "attached") {
       try {
         const pid = this.managedProcess.pid;
+        const port = this.connection.cdpEndpoint
+          ? Number(new URL(this.connection.cdpEndpoint).port)
+          : undefined;
         log.info("Terminating managed browser process", { pid });
         
         // Try graceful kill first
@@ -483,6 +487,10 @@ export class BrowserConnectionManager {
         // On Windows, detached processes often need taskkill to clean up the tree
         if (process.platform === "win32" && pid) {
           spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" });
+        }
+
+        if (port) {
+          stopWslBridge(port);
         }
       } catch (error: unknown) {
         log.warn(`Failed to kill managed browser process: ${error instanceof Error ? error.message : String(error)}`);

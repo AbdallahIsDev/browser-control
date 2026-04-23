@@ -20,6 +20,10 @@ function parseLevel(value: string | undefined): LogLevel {
   return "info";
 }
 
+function isProtocolStdoutReserved(): boolean {
+  return process.env.BROWSER_CONTROL_STDIO_MODE === "mcp";
+}
+
 export interface LogRecord {
   timestamp: string;
   level: LogLevel;
@@ -73,8 +77,10 @@ export class Logger {
 
     const line = this.formatRecord(record);
 
-    // Always write to stdout
-    if (level === "error" || level === "critical") {
+    // In stdio MCP mode, stdout is reserved for protocol frames only.
+    // Route all logs to stderr so MCP clients never see plain log lines
+    // interleaved with the protocol stream.
+    if (isProtocolStdoutReserved() || level === "error" || level === "critical") {
       process.stderr.write(`${line}\n`);
     } else {
       process.stdout.write(`${line}\n`);

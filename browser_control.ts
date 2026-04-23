@@ -88,7 +88,7 @@ export interface SessionNamespace {
   create(name: string, options?: { policyProfile?: string; workingDirectory?: string }): Promise<ActionResult<SessionState>>;
   list(): ActionResult<SessionListEntry[]>;
   use(nameOrId: string): ActionResult<SessionState>;
-  status(): ActionResult<SessionState>;
+  status(nameOrId?: string): ActionResult<SessionState>;
 }
 
 // ── Unified API Object ────────────────────────────────────────────────
@@ -201,7 +201,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       create: (name, o) => sessionManager.create(name, o),
       list: () => sessionManager.list(),
       use: (nameOrId) => sessionManager.use(nameOrId),
-      status: () => sessionManager.status(),
+      status: (nameOrId) => sessionManager.status(nameOrId),
     },
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },
