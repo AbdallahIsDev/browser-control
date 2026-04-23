@@ -180,6 +180,7 @@ function runCliCommand(
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
+      ...(process.platform === "win32" ? { windowsHide: true } : {}),
     });
 
     const chunks: Buffer[] = [];

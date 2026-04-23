@@ -86,6 +86,8 @@ export interface BrowserControlConfig {
   memoryAlertMb: number;
   /** Chrome session limit (default: 20) */
   chromeTabLimit: number;
+  /** Whether daemon launches should use a visible console window on Windows */
+  daemonVisible: boolean;
 
   // ── Logging ────────────────────────────────────────────────────
   logLevel: string;
@@ -222,6 +224,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const resumePolicy = parseResumePolicy(env.RESUME_POLICY);
   const memoryAlertMb = parsePositiveInt(env.MEMORY_ALERT_MB, 1024);
   const chromeTabLimit = parsePositiveInt(env.CHROME_TAB_LIMIT, 20);
+  const daemonVisible = parseBoolean(env.DAEMON_VISIBLE, false);
 
   // ── Logging ────────────────────────────────────────────────────
   const logLevel = normalizeOptionalString(env.LOG_LEVEL) ?? "info";
@@ -279,6 +282,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     resumePolicy,
     memoryAlertMb,
     chromeTabLimit,
+    daemonVisible,
 
     logLevel,
     logFile,

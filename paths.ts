@@ -57,6 +57,10 @@ export function getChromeDebugPath(): string {
   return path.join(getInteropDir(), "chrome-debug.json");
 }
 
+export function getWslBridgePidPath(port: number): string {
+  return path.join(getInteropDir(), `wsl-cdp-bridge-${port}.pid`);
+}
+
 export function getPidFilePath(): string {
   return path.join(getInteropDir(), "daemon.pid");
 }

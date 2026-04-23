@@ -28,6 +28,7 @@ import type {
 } from "./policy";
 import { loadConfig } from "./config";
 import { logger } from "./logger";
+import { spawnDaemonProcess } from "./daemon_launch";
 import {
   successResult,
   failureResult,
@@ -858,15 +859,12 @@ export class SessionManager {
     // If autoStart is requested, try to spawn the daemon
     if (options.autoStart) {
       try {
-        const { spawn } = await import("node:child_process");
         const path = await import("node:path");
         const { getPidFilePath } = await import("./paths");
         const fs = await import("node:fs");
 
-        const daemonProcess = spawn("npx", ["ts-node", "daemon.ts"], {
+        const daemonProcess = spawnDaemonProcess({
           detached: true,
-          stdio: ["ignore", "ignore", "pipe"],
-          shell: true,
         });
 
         // Wait to detect immediate crashes. On Windows with ts-node

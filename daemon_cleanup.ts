@@ -224,6 +224,7 @@ export async function stopDaemon(options: {
   port?: number;
 } = {}): Promise<void> {
   const { loadConfig } = await import("./config");
+  const { stopWslBridge } = await import("./scripts/launch_browser");
   const config = loadConfig({ validate: false });
   const homeDir = options.homeDir ?? getDataHome();
   const port = options.port ?? config.brokerPort;
@@ -254,6 +255,9 @@ export async function stopDaemon(options: {
   // Step 2: Kill the automation browser if Browser Control launched one
   try {
     killAutomationBrowser(homeDir);
+  } catch { /* best-effort */ }
+  try {
+    stopWslBridge(config.chromeDebugPort);
   } catch { /* best-effort */ }
 
   // Step 3: Kill the daemon process tree via PID file

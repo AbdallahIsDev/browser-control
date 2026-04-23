@@ -6,6 +6,7 @@
  * interactive persistent sessions.
  */
 
+import "./node_pty_windows_patch";
 import * as pty from "node-pty";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";

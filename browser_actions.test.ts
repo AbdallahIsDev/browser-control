@@ -3,6 +3,31 @@ import assert from "node:assert/strict";
 import { BrowserActions, type BrowserActionContext } from "./browser_actions";
 import { SessionManager, isPolicyAllowed } from "./session_manager";
 import { MemoryStore } from "./memory_store";
+import type { BrowserConnectionManager } from "./browser_connection";
+
+function createUnavailableBrowserManager() {
+  const attempts = {
+    attach: 0,
+    launchManaged: 0,
+  };
+
+  const manager = {
+    getContext: () => null,
+    getBrowser: () => null,
+    isConnected: () => false,
+    getConnection: () => null,
+    attach: async () => {
+      attempts.attach += 1;
+      throw new Error("attach unavailable in test");
+    },
+    launchManaged: async () => {
+      attempts.launchManaged += 1;
+      throw new Error("launch unavailable in test");
+    },
+  } as unknown as BrowserConnectionManager;
+
+  return { manager, attempts };
+}
 
 describe("BrowserActions", () => {
   let sessionManager: SessionManager;
@@ -40,13 +65,28 @@ describe("BrowserActions", () => {
   });
 
   describe("open", () => {
-    it("returns failure when no browser is connected", async () => {
-      // Without a running browser, open should fail gracefully
-      const result = await browserActions.open({ url: "https://example.com" });
+    it("returns failure when no browser is connected and auto-connect cannot recover", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const { manager, attempts } = createUnavailableBrowserManager();
 
-      assert.equal(result.success, false);
-      assert.ok(result.error?.includes("No browser available") || result.error?.includes("No active browser page"));
-      assert.equal(result.path, "a11y");
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.open({ url: "https://example.com" });
+
+        assert.equal(attempts.attach, 1);
+        assert.equal(attempts.launchManaged, 1);
+        assert.equal(result.success, false);
+        assert.ok(result.error?.includes("No browser available and auto-launch failed"));
+        assert.equal(result.path, "a11y");
+      } finally {
+        isolatedStore.close();
+      }
     });
   });
 

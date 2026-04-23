@@ -143,6 +143,13 @@ test("loadConfig reads LOG_LEVEL and LOG_FILE", () => {
   assert.equal(config.logFile, true);
 });
 
+test("loadConfig reads DAEMON_VISIBLE", () => {
+  const hidden = loadConfig({ env: { DAEMON_VISIBLE: "false" }, validate: false });
+  const visible = loadConfig({ env: { DAEMON_VISIBLE: "true" }, validate: false });
+  assert.equal(hidden.daemonVisible, false);
+  assert.equal(visible.daemonVisible, true);
+});
+
 // ── Config Loader: Validation ────────────────────────────────────────
 
 test("loadConfig validates BROKER_PORT range", () => {
@@ -227,6 +234,7 @@ test(".env.example exists and documents key env vars", () => {
     "RESUME_POLICY",
     "MEMORY_ALERT_MB",
     "CHROME_TAB_LIMIT",
+    "DAEMON_VISIBLE",
     "LOG_LEVEL",
     "LOG_FILE",
   ];
