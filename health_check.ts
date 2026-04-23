@@ -84,11 +84,27 @@ export class HealthCheck {
       return { status: "warn", details: "No MemoryStore instance configured." };
     }
 
+    // Clean up stale health check keys from previous daemon runs.
+    // If the daemon crashed or was killed, health_check:memory:* keys
+    // may persist. These stale keys cause the leftover check below
+    // to falsely report failure, blocking daemon startup even though
+    // the MemoryStore itself is perfectly functional.
+    try {
+      const staleKeys = this.memoryStore.keys("health_check:memory:");
+      for (const k of staleKeys) {
+        this.memoryStore.delete(k);
+      }
+    } catch {
+      // Best-effort cleanup — don't block the actual check
+    }
+
     const key = `health_check:memory:${Date.now()}`;
     try {
       this.memoryStore.set(key, { ok: true });
       const value = this.memoryStore.get<{ ok: boolean }>(key);
       this.memoryStore.delete(key);
+      // Only check for OUR key as leftover — stale keys from previous
+      // runs are already cleaned up above.
       const leftovers = this.memoryStore.keys("health_check:");
       if (!value?.ok || leftovers.length > 0) {
         return { status: "fail", details: "MemoryStore read/write/delete verification failed." };
@@ -205,7 +221,10 @@ export class HealthCheck {
       }
 
       const result = await check.run();
-      if (result.status !== "pass") {
+      // Only "fail" blocks startup. "warn" is advisory — e.g., disk space
+      // check may return "warn" on platforms where statfs is unavailable,
+      // which should not prevent the daemon from starting.
+      if (result.status === "fail") {
         return false;
       }
     }
@@ -219,9 +238,12 @@ export class HealthCheck {
     }
 
     return [
+      // CDP connection is non-critical: the daemon can start without Chrome.
+      // Terminal and FS features work independently of Chrome. The Chrome
+      // watchdog in daemon.ts handles degraded state when Chrome is absent.
       {
         name: "cdpConnection",
-        critical: true,
+        critical: false,
         run: async () => this.checkCdpConnection(),
       },
       {

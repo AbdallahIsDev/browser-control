@@ -220,21 +220,50 @@ export class Daemon {
       this.auditLogger?.log(entry);
     });
 
+    // Run critical health checks — CDP is non-critical (terminal/FS work
+    // without Chrome), so only MemoryStore and other truly essential checks
+    // can block startup.
     const criticalOkay = await this.healthCheck.runCritical();
     if (!criticalOkay) {
       const report = await this.healthCheck.runAll();
-      throw new Error(`Daemon start blocked because critical health checks failed: ${JSON.stringify(report.checks)}`);
+      // Filter to only critical failures for the error message
+      const criticalFails = report.checks.filter(c => c.status === "fail");
+      if (criticalFails.length > 0) {
+        throw new Error(`Daemon start blocked because critical health checks failed: ${JSON.stringify(criticalFails)}`);
+      }
+      // If only warnings/non-critical failures, proceed
+    }
+
+    // Determine initial Chrome connection state from health check results.
+    // The daemon status is set to "running" later in start(), regardless of
+    // Chrome availability — terminal/FS features are fully functional without
+    // Chrome.  The chromeConnected flag is used by the watchdog and stats.
+    const fullReport = await this.healthCheck.runAll();
+    const cdpCheck = fullReport.checks.find(c => c.name === "cdpConnection");
+    this.chromeConnected = cdpCheck?.status === "pass";
+    if (!this.chromeConnected) {
+      this.log.info("Chrome CDP not available — daemon starting in terminal/FS-only mode (terminal sessions will work)");
     }
 
     this.scheduler = new Scheduler({
       store: this.memoryStore,
     });
 
-    // Auto-discover skills from the skills/ directory
-    const skillsDir = path.join(__dirname, "skills");
-    const loadedSkills = await this.skillRegistry.loadFromDirectory(skillsDir);
-    if (loadedSkills.length > 0) {
-      this.log.info(`Loaded ${loadedSkills.length} skill(s) from ${skillsDir}`);
+    // Auto-discover skills from the skills/ directory.
+    // Skill loading is non-fatal: broken skills (e.g., importing
+    // unresolvable path aliases like @bc/browser_core) are skipped
+    // with a warning. Terminal and FS features work independently
+    // of any specific skill.
+    try {
+      const skillsDir = path.join(__dirname, "skills");
+      const loadedSkills = await this.skillRegistry.loadFromDirectory(skillsDir);
+      if (loadedSkills.length > 0) {
+        this.log.info(`Loaded ${loadedSkills.length} skill(s) from ${skillsDir}`);
+      }
+    } catch (error: unknown) {
+      this.log.warn("Skill auto-discovery failed — continuing without skills", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     this.scheduler.onTaskDue(async (scheduledTask) => {
@@ -987,7 +1016,8 @@ export class Daemon {
 
   private startChromeWatchdog(): void {
     const intervalMs = this.config.chromeWatchdogIntervalMs ?? 30_000;
-    this.chromeConnected = true;
+    // chromeConnected is already set accurately during start()
+    // based on the initial health check. Don't override it here.
 
     this.chromeWatchdogHandle = setInterval(() => {
       void this.checkChromeLiveness();

@@ -194,3 +194,169 @@ test("parseArgs handles skill remove with skill name", () => {
   assert.equal(result.subcommand, "remove");
   assert.deepEqual(result.positional, ["my-skill"]);
 });
+
+// ── CLI-level term/fs command tests (Issue 2) ───────────────────────
+
+test("parseArgs handles term exec command", () => {
+  const result = parseArgs(["node", "cli.ts", "term", "exec", "echo hello", "--json"]);
+  assert.equal(result.command, "term");
+  assert.equal(result.subcommand, "exec");
+  assert.deepEqual(result.positional, ["echo hello"]);
+  assert.equal(result.flags.json, "true");
+});
+
+test("parseArgs handles term list command", () => {
+  const result = parseArgs(["node", "cli.ts", "term", "list", "--json"]);
+  assert.equal(result.command, "term");
+  assert.equal(result.subcommand, "list");
+  assert.equal(result.flags.json, "true");
+});
+
+test("parseArgs handles fs read command", () => {
+  const result = parseArgs(["node", "cli.ts", "fs", "read", "/tmp/test.txt", "--json"]);
+  assert.equal(result.command, "fs");
+  assert.equal(result.subcommand, "read");
+  assert.deepEqual(result.positional, ["/tmp/test.txt"]);
+  assert.equal(result.flags.json, "true");
+});
+
+test("parseArgs handles fs ls command", () => {
+  const result = parseArgs(["node", "cli.ts", "fs", "ls", ".", "--json"]);
+  assert.equal(result.command, "fs");
+  assert.equal(result.subcommand, "ls");
+  assert.deepEqual(result.positional, ["."]);
+  assert.equal(result.flags.json, "true");
+});
+
+test("parseArgs handles fs write command with --content", () => {
+  const result = parseArgs(["node", "cli.ts", "fs", "write", "/tmp/out.txt", "--content=hello"]);
+  assert.equal(result.command, "fs");
+  assert.equal(result.subcommand, "write");
+  assert.deepEqual(result.positional, ["/tmp/out.txt"]);
+  assert.equal(result.flags.content, "hello");
+});
+
+// ── CLI ActionResult JSON shape verification ───────────────────────
+// These tests verify the full chain: action classes return ActionResult,
+// formatActionResult() produces valid JSON with the required fields.
+// The CLI handlers (handleTerm/handleFs) call these exact functions
+// internally, so this verifies the --json output shape.
+
+test("formatActionResult produces correct JSON shape for term exec", async () => {
+  const { formatActionResult } = await import("./action_result");
+  const { SessionManager } = await import("./session_manager");
+  const { TerminalActions } = await import("./terminal_actions");
+  const { MemoryStore } = await import("./memory_store");
+
+  const store = new MemoryStore({ filename: ":memory:" });
+  const sm = new SessionManager({ memoryStore: store });
+  await sm.create("fmt-test", { policyProfile: "trusted" });
+  const actions = new TerminalActions({ sessionManager: sm });
+
+  const result = await actions.exec({ command: "echo format-test", timeoutMs: 5000 });
+  const formatted = formatActionResult(result);
+
+  // Verify JSON serialization works and has the required fields
+  const json = JSON.stringify(formatted);
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.success, true, `ActionResult.success must be true`);
+  assert.ok(parsed.path, "ActionResult must have path");
+  assert.ok(parsed.sessionId, "ActionResult must have sessionId");
+  assert.ok(parsed.policyDecision, "ActionResult must have policyDecision");
+  assert.ok(parsed.risk, "ActionResult must have risk");
+  assert.ok(parsed.completedAt, "ActionResult must have completedAt");
+
+  store.close();
+});
+
+test("formatActionResult produces correct JSON shape for fs read", async () => {
+  const { formatActionResult } = await import("./action_result");
+  const { SessionManager } = await import("./session_manager");
+  const { FsActions } = await import("./fs_actions");
+  const { MemoryStore } = await import("./memory_store");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const os = await import("node:os");
+
+  const store = new MemoryStore({ filename: ":memory:" });
+  const sm = new SessionManager({ memoryStore: store });
+  await sm.create("fmt-fs-test", { policyProfile: "trusted" });
+  const actions = new FsActions({ sessionManager: sm });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fmt-fs-test-"));
+  const filePath = path.join(tmpDir, "test.txt");
+  fs.writeFileSync(filePath, "format test");
+
+  const result = await actions.read({ path: filePath });
+  const formatted = formatActionResult(result);
+
+  const json = JSON.stringify(formatted);
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.success, true, `ActionResult.success must be true`);
+  assert.ok(parsed.path, "ActionResult must have path");
+  assert.ok(parsed.sessionId, "ActionResult must have sessionId");
+  assert.ok(parsed.policyDecision, "ActionResult must have policyDecision");
+  assert.ok(parsed.risk, "ActionResult must have risk");
+  assert.ok(parsed.completedAt, "ActionResult must have completedAt");
+
+  store.close();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test("formatActionResult produces correct JSON shape for term list", async () => {
+  const { formatActionResult } = await import("./action_result");
+  const { SessionManager } = await import("./session_manager");
+  const { TerminalActions } = await import("./terminal_actions");
+  const { MemoryStore } = await import("./memory_store");
+
+  const store = new MemoryStore({ filename: ":memory:" });
+  const sm = new SessionManager({ memoryStore: store });
+  await sm.create("fmt-list-test", { policyProfile: "trusted" });
+  const actions = new TerminalActions({ sessionManager: sm });
+
+  const result = await actions.list();
+  const formatted = formatActionResult(result);
+
+  const json = JSON.stringify(formatted);
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.success, true, `ActionResult.success must be true`);
+  assert.ok(parsed.path, "ActionResult must have path");
+  assert.ok(parsed.sessionId, "ActionResult must have sessionId");
+  assert.ok(parsed.policyDecision, "ActionResult must have policyDecision");
+  assert.ok(Array.isArray(parsed.data), "list data must be an array");
+
+  store.close();
+});
+
+test("formatActionResult includes policy metadata for denied actions", async () => {
+  const { formatActionResult, policyDeniedResult } = await import("./action_result");
+
+  const denied = policyDeniedResult("High-risk action under safe profile", {
+    path: "command",
+    sessionId: "test-session",
+    risk: "high" as const,
+  });
+  const formatted = formatActionResult(denied);
+
+  assert.equal(formatted.success, false);
+  assert.equal(formatted.policyDecision, "deny");
+  assert.equal(formatted.risk, "high");
+  assert.ok(formatted.error);
+  assert.ok(formatted.completedAt);
+});
+
+test("formatActionResult includes policy metadata for confirmation-required", async () => {
+  const { formatActionResult, confirmationRequiredResult } = await import("./action_result");
+
+  const confirm = confirmationRequiredResult("Needs human approval", {
+    path: "a11y",
+    sessionId: "test-session",
+    risk: "moderate" as const,
+  });
+  const formatted = formatActionResult(confirm);
+
+  assert.equal(formatted.success, false);
+  assert.equal(formatted.policyDecision, "require_confirmation");
+  assert.equal(formatted.risk, "moderate");
+  assert.ok(formatted.completedAt);
+});

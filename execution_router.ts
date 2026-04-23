@@ -37,13 +37,25 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "moderate",
   },
 
+  // ── Terminal path — read-only queries (low risk) ─────────────────
+  {
+    matches: (action) => {
+      const terminalReadActions = [
+        "terminal_list", "terminal_read", "terminal_snapshot",
+      ];
+      return terminalReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+
   // ── Terminal path (Section 12) ──────────────────────────────────
   {
     matches: (action) => {
       const terminalActions = [
         "terminal_open", "terminal_close", "terminal_write",
-        "terminal_read", "terminal_snapshot", "terminal_interrupt",
-        "terminal_exec", "term_open", "term_close", "term_exec",
+        "terminal_interrupt", "terminal_exec",
+        "term_open", "term_close", "term_exec",
       ];
       return terminalActions.includes(action);
     },
@@ -75,6 +87,28 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     },
     path: "command",
     risk: "high",
+  },
+
+  // ── Browser Action path (Section 5) ────────────────────────────
+  // Screenshot is moderate risk (may contain sensitive data) — must come
+  // before the broad browser action rule so it takes priority.
+  {
+    matches: (action) => action === "screenshot",
+    path: "a11y",
+    risk: "moderate",
+  },
+  {
+    matches: (action) => {
+      const browserActions = [
+        "browser_navigate", "browser_click", "browser_fill",
+        "browser_hover", "browser_type", "browser_press",
+        "browser_scroll", "browser_close", "browser_snapshot",
+        "browser_tab_list", "browser_tab_switch",
+      ];
+      return browserActions.includes(action);
+    },
+    path: "a11y",
+    risk: "low",
   },
 
   // Low-level path - raw CDP, JS eval, network interception

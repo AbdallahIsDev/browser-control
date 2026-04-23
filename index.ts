@@ -428,3 +428,105 @@ export type {
   DeleteOptions,
   ProcessInfo,
 } from "./fs_operations";
+
+// ── Section 5: Agent Action Surface ────────────────────────────────────
+
+// ActionResult — canonical result model
+export {
+  successResult,
+  failureResult,
+  policyDeniedResult,
+  confirmationRequiredResult,
+  formatActionResult,
+} from "./action_result";
+
+export type { ActionResult } from "./action_result";
+
+// Session manager — unified session surface
+export {
+  SessionManager,
+  getDefaultSessionManager as getDefaultActionSessionManager,
+  resetDefaultSessionManager as resetDefaultActionSessionManager,
+} from "./session_manager";
+
+export type {
+  SessionState,
+  SessionListEntry,
+  PolicyAllowResult,
+  PolicyEvalResult,
+  TerminalRuntime,
+} from "./session_manager";
+
+export {
+  isPolicyAllowed,
+  probeDaemonHealth,
+  LocalTerminalRuntime,
+  DaemonTerminalRuntime,
+  BrokerTerminalRuntime,
+} from "./session_manager";
+
+// Browser actions — canonical browser action surface
+export { BrowserActions } from "./browser_actions";
+
+export type {
+  BrowserActionContext,
+  OpenOptions,
+  SnapshotOptions,
+  ClickOptions,
+  FillOptions,
+  HoverOptions,
+  TypeOptions as BrowserTypeOptions,
+  PressOptions,
+  ScrollOptions,
+  ScreenshotOptions,
+} from "./browser_actions";
+
+// Terminal actions — canonical terminal action surface
+export { TerminalActions } from "./terminal_actions";
+
+export type {
+  TerminalActionContext,
+  TermOpenOptions,
+  TermExecOptions,
+  TermTypeOptions,
+  TermReadOptions,
+  TermSnapshotOptions,
+  TermInterruptOptions,
+  TermCloseOptions,
+} from "./terminal_actions";
+
+// FS actions — canonical filesystem action surface
+export { FsActions } from "./fs_actions";
+
+export type {
+  FsActionContext,
+  FsReadOptions,
+  FsWriteOptions,
+  FsListOptions,
+  FsMoveOptions,
+  FsRmOptions,
+  FsStatOptions,
+} from "./fs_actions";
+
+// Daemon cleanup helpers (shared between CLI and tests)
+export {
+  isPidAlive,
+  killProcessTree,
+  killAutomationBrowser,
+  cleanupStaleDaemonFiles,
+  stopDaemon,
+} from "./daemon_cleanup";
+
+// Top-level API facade
+export {
+  createBrowserControl,
+} from "./browser_control";
+
+export type {
+  BrowserControlOptions,
+  BrowserNamespace,
+  TerminalNamespace,
+  FsNamespace,
+  SessionNamespace,
+  BrowserControlAPI,
+} from "./browser_control";

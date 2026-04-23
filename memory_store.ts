@@ -60,6 +60,15 @@ export class MemoryStore {
     }
 
     this.db = new DatabaseSync(this.filename);
+
+    // Enable WAL mode for better concurrent access — the daemon and CLI
+    // both access the same database file, and the default journal mode
+    // (rollback journal) causes "database is locked" errors under
+    // concurrent readers/writers.
+    if (this.filename !== ":memory:") {
+      this.db.exec("PRAGMA journal_mode=WAL");
+    }
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memory_store (
         key TEXT PRIMARY KEY,

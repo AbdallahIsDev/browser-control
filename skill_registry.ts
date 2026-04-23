@@ -289,11 +289,29 @@ export class SkillRegistry {
     if (this.loadedFiles.has(absolutePath)) {
       return [];
     }
+
+    // Use require() instead of import() so ts-node path aliases resolve.
+    // Individual skill load failures are non-fatal: a broken skill
+    // (e.g., importing unresolvable path aliases like @bc/browser_core)
+    // should not prevent the daemon from starting. Terminal and FS
+    // features work independently of any specific skill.
+    let mod: Record<string, unknown>;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      mod = require(absolutePath) as Record<string, unknown>;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      registryLog.warn(
+        `Skipping skill file "${filePath}" — load failed`,
+        { error: message },
+      );
+      return [];
+    }
+
+    // Mark as loaded only after successful require() so broken files
+    // are not permanently cached (they could be fixed and re-loaded).
     this.loadedFiles.add(absolutePath);
 
-    // Use require() instead of import() so ts-node path aliases resolve
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require(absolutePath) as Record<string, unknown>;
     const skills: Skill[] = [];
 
     // Try default export first

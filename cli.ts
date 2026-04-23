@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { MemoryStore } from "./memory_store";
@@ -92,7 +92,27 @@ Browser Control CLI
 
 Usage: bc <command> [subcommand] [options]
 
-Commands:
+Browser Actions:
+  open <url>                                                         Open a URL in the browser
+  snapshot                                                           Take an accessibility snapshot
+  click <ref-or-target>                                              Click an element (ref, selector, or text)
+  fill <ref-or-target> <text>                                        Fill an element with text
+  hover <ref-or-target>                                             Hover over an element
+  type <text>                                                        Type text into focused element
+  press <key>                                                        Press a keyboard key
+  scroll <direction>                                                 Scroll (up/down/left/right)
+  screenshot [--full-page] [--target=<ref>]                          Take a screenshot
+  tab list                                                           List browser tabs
+  tab switch <id>                                                    Switch to a browser tab
+  close                                                              Close the current browser tab
+
+Session:
+  session list                                                       List sessions
+  session create <name> [--policy=balanced]                         Create a new session
+  session use <name-or-id>                                          Set the active session
+  session status                                                     Show active session status
+
+Browser Lifecycle:
   browser attach [--port=9222] [--cdp-url=...]                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default]                   Launch managed automation browser
   browser status                                                     Show browser connection status
@@ -153,6 +173,13 @@ Commands:
   fs move <src> <dst>                                                 Move/rename
   fs rm <path> [--recursive] [--force]                                Delete file/dir
   fs stat <path>                                                      File metadata
+
+Knowledge:
+  knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
+  knowledge show <name-or-domain>                                    Show knowledge for a domain or skill
+  knowledge validate [--all]                                         Validate knowledge files
+  knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
+  knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
 
 Flags:
   --json                                                             Raw JSON output
@@ -285,15 +312,31 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
   }
 }
 
+// ── Daemon Cleanup Helpers (imported from shared module) ─────────────
+
+import {
+  killAutomationBrowser,
+  cleanupStaleDaemonFiles,
+} from "./daemon_cleanup";
+
+/**
+ * CLI-specific wrapper: clean up stale daemon-status.json for the
+ * default (non-isolated) home directory.
+ */
+function cleanupStaleDaemonStatus(): void {
+  cleanupStaleDaemonFiles();
+}
+
 async function handleDaemon(args: ParsedArgs): Promise<void> {
   const { subcommand, flags } = args;
   const jsonOutput = flags.json === "true";
 
   switch (subcommand) {
     case "start": {
-      const daemonProcess = spawn("ts-node", ["daemon.ts"], {
+      const daemonProcess = spawn("npx", ["ts-node", "daemon.ts"], {
         detached: true,
         stdio: ["ignore", "ignore", "pipe"],
+        shell: true,
       });
 
       const errorChunks: Buffer[] = [];
@@ -301,8 +344,10 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
         errorChunks.push(chunk);
       });
 
-      // Wait briefly to detect immediate crashes
-      const startupTimeout = 2000;
+      // Wait to detect immediate crashes. On Windows with ts-node,
+      // the daemon can take several seconds to compile before the
+      // broker starts listening, so we use a generous timeout.
+      const startupTimeout = 8000;
       const exited = await new Promise<boolean>((resolve) => {
         daemonProcess.on("exit", () => resolve(true));
         setTimeout(() => resolve(false), startupTimeout);
@@ -311,41 +356,117 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       if (exited) {
         const errorOutput = Buffer.concat(errorChunks).toString("utf8");
         console.error("Daemon failed to start:", errorOutput || "Process exited immediately");
+        // Clean up the child process handle — daemon is already dead,
+        // but the stderr pipe and listeners still hold references.
+        daemonProcess.stderr?.destroy();
+        daemonProcess.removeAllListeners();
         process.exit(1);
       }
 
-      // Process is still running after timeout — it started successfully
-      daemonProcess.stderr?.removeAllListeners();
-
-      // Ensure .interop directory exists
+      // Process is still running after timeout — ensure data dir and persist PID.
+      // CRITICAL: destroy() the stderr stream to close the underlying pipe FD.
+      // Without this, the open pipe handle keeps the Node.js event loop alive,
+      // preventing the CLI process from exiting (the cold-start hang bug).
+      daemonProcess.stderr?.destroy();
+      daemonProcess.removeAllListeners();
       const interopDir = path.dirname(getPidFilePath());
       if (!fs.existsSync(interopDir)) {
         fs.mkdirSync(interopDir, { recursive: true });
       }
-
       fs.writeFileSync(getPidFilePath(), String(daemonProcess.pid));
       daemonProcess.unref();
 
-      console.log(`Daemon started with PID: ${daemonProcess.pid}`);
+      // Probe the daemon with retries to confirm it's ready.
+      // Two-stage probe: first /health (broker is listening), then
+      // /api/v1/term/sessions (terminal endpoints are wired up).
+      // This prevents the race where the broker responds to /health
+      // before terminal action endpoints are ready.
+      const { probeDaemonHealth, probeTerminalReadiness } = await import("./session_manager");
+      let daemonReady = false;
+      let daemonBrokerUrl = "";
+      // On Windows with ts-node, the daemon can take 10-20 seconds
+      // to compile and initialize before the broker starts listening.
+      const maxRetries = 30;
+      const retryDelayMs = 1000;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const healthResult = await probeDaemonHealth();
+        if (healthResult.running) {
+          // Health OK — verify terminal readiness too
+          const termReady = await probeTerminalReadiness(healthResult.brokerUrl);
+          if (termReady) {
+            daemonReady = true;
+            daemonBrokerUrl = healthResult.brokerUrl;
+            break;
+          }
+          // Health OK but terminal not ready — keep retrying
+        }
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      }
+
+      if (daemonReady) {
+        console.log(`Daemon started with PID: ${daemonProcess.pid} (ready at ${daemonBrokerUrl})`);
+      } else {
+        console.log(`Daemon started with PID: ${daemonProcess.pid} (health endpoint not yet reachable — may still be initializing)`);
+      }
       break;
     }
 
     case "stop": {
       if (!fs.existsSync(getPidFilePath())) {
         console.log("Daemon is not running (no PID file)");
+        // Still clean up stale status file if daemon is gone
+        cleanupStaleDaemonStatus();
         process.exit(1);
       }
 
       const pid = Number(fs.readFileSync(getPidFilePath(), "utf8").trim());
       try {
-        process.kill(pid, "SIGTERM");
+        // Kill the automation browser (Chrome) before stopping the daemon.
+        // When the daemon is force-killed, it never runs its stop() method,
+        // so the managed Chrome process may be left running.
+        killAutomationBrowser();
+
+        if (process.platform === "win32") {
+          // On Windows, process.kill(pid, "SIGTERM") does NOT kill child
+          // processes (orphaned pwsh.exe shells). Use taskkill /T /F
+          // instead, which kills the entire process tree.
+          try {
+            execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" });
+          } catch (tkErr) {
+            // taskkill returns non-zero exit code when the process is
+            // already gone (like ESRCH). But it can also fail for
+            // real reasons like "access denied." Verify the PID is
+            // actually dead before silently swallowing the error.
+            let processStillAlive = false;
+            try {
+              const checkOutput = execSync(
+                `tasklist /FI "PID eq ${pid}" /FO CSV /NH 2>nul`,
+                { encoding: "utf8", timeout: 5000 },
+              );
+              if (checkOutput.includes(`"${pid}"`)) {
+                processStillAlive = true;
+              }
+            } catch { /* tasklist failed — assume process is gone */ }
+            if (processStillAlive) throw tkErr;
+          }
+        } else {
+          process.kill(pid, "SIGTERM");
+        }
         fs.unlinkSync(getPidFilePath());
+        // When the daemon is force-killed (taskkill /T /F), it never runs
+        // its stop() method, so daemon-status.json may remain on disk
+        // with stale "running" status. Remove it.
+        cleanupStaleDaemonStatus();
         console.log(`Daemon stopped (PID: ${pid})`);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ESRCH") {
           fs.unlinkSync(getPidFilePath());
+          cleanupStaleDaemonStatus();
           console.log("Daemon was not running (stale PID file removed)");
         } else {
+          // Do NOT delete the PID file on real errors (e.g., access denied).
+          // The user may need to retry `bc daemon stop` after fixing
+          // permissions, and the PID file is essential for that.
           console.error("Error:", (error as Error).message);
           process.exit(1);
         }
@@ -355,6 +476,10 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 
     case "status": {
       if (!fs.existsSync(getPidFilePath())) {
+        // No PID file — daemon is not running. Also clean up stale
+        // daemon-status.json that may claim "running" from a previous
+        // crash/force-kill.
+        cleanupStaleDaemonStatus();
         console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
         break;
       }
@@ -365,7 +490,10 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
         const status = { running: true, pid };
         outputJson(status, !jsonOutput);
       } catch {
+        // PID file exists but process is dead — stale state.
+        // Remove both the PID file and the stale daemon-status.json.
         fs.unlinkSync(getPidFilePath());
+        cleanupStaleDaemonStatus();
         console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
       }
       break;
@@ -1362,6 +1490,56 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handlePolicy(args);
       break;
 
+    // ── Top-level browser actions (Section 5) ─────────────────────
+    case "open":
+      await handleBrowserAction("open", args);
+      break;
+
+    case "snapshot":
+      await handleBrowserAction("snapshot", args);
+      break;
+
+    case "click":
+      await handleBrowserAction("click", args);
+      break;
+
+    case "fill":
+      await handleBrowserAction("fill", args);
+      break;
+
+    case "hover":
+      await handleBrowserAction("hover", args);
+      break;
+
+    case "type":
+      await handleBrowserAction("type", args);
+      break;
+
+    case "press":
+      await handleBrowserAction("press", args);
+      break;
+
+    case "scroll":
+      await handleBrowserAction("scroll", args);
+      break;
+
+    case "screenshot":
+      await handleBrowserAction("screenshot", args);
+      break;
+
+    case "tab":
+      await handleBrowserAction("tab", args);
+      break;
+
+    case "close":
+      await handleBrowserAction("close", args);
+      break;
+
+    // ── Session commands (Section 5) ────────────────────────────────
+    case "session":
+      await handleSession(args);
+      break;
+
     case "browser":
       await handleBrowser(args);
       break;
@@ -1382,6 +1560,15 @@ export async function runCli(argv = process.argv): Promise<void> {
       console.error(`Unknown command: ${args.command}`);
       printHelp();
       process.exit(1);
+  }
+
+  // ── Clean exit ──────────────────────────────────────────────────
+  // Close the shared SessionManager to release all held resources
+  // (MemoryStore's SQLite handle, terminal manager, etc.). Without
+  // this, the Node.js event loop stays alive and the CLI process
+  // never exits after commands like `bc term open --json`.
+  if (_sessionManager) {
+    _sessionManager.close();
   }
 }
 
@@ -1589,366 +1776,635 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
   }
 }
 
-// ── Terminal Handlers (Section 12) ─────────────────────────────────
+// ── Section 5 shared session manager singleton ────────────────────────
 
-import {
-  TerminalSessionManager,
-  getDefaultSessionManager,
-  execCommand,
-} from "./terminal_session";
-import { exec } from "./terminal_exec";
-import {
-  captureAllSnapshots,
-  formatSnapshotCollection,
-  formatSnapshot,
-} from "./terminal_snapshot";
-import {
-  readFile as fsRead,
-  writeFile as fsWrite,
-  listDir,
-  moveFile,
-  deletePath,
-  statPath,
-} from "./fs_operations";
+let _sessionManager: import("./session_manager").SessionManager | null = null;
 
-let _terminalManager: TerminalSessionManager | null = null;
-function getTerminalManager(): TerminalSessionManager {
-  if (!_terminalManager) {
-    _terminalManager = getDefaultSessionManager();
+/**
+ * Ensure the daemon is running and reachable for terminal session commands.
+ *
+ * Delegates to SessionManager.ensureDaemonRuntime({ autoStart: true }), which
+ * probes the daemon health endpoint and, if it's not running, auto-starts it
+ * with retries.  This is the unified path used by both CLI and API.
+ *
+ * On success, returns the broker URL.  On failure, throws an error.
+ */
+async function ensureDaemonRunning(): Promise<string> {
+  // Use or create the session manager singleton
+  if (!_sessionManager) {
+    const { SessionManager } = await import("./session_manager");
+    _sessionManager = new SessionManager();
   }
-  return _terminalManager;
+
+  const established = await _sessionManager.ensureDaemonRuntime({ autoStart: true });
+  if (!established) {
+    throw new Error(
+      `Failed to start or connect to the daemon for terminal session commands. ` +
+      `Try manually: bc daemon start`,
+    );
+  }
+
+  // Return the broker URL from the cached runtime
+  const config = loadConfig({ validate: false });
+  return `http://127.0.0.1:${config.brokerPort}`;
 }
 
-async function handleTerm(args: ParsedArgs): Promise<void> {
+// ── Terminal Handlers (Section 5 — routed through action surface) ────
+
+/**
+ * Terminal subcommands that require a running daemon because they
+ * manage persistent terminal sessions that must survive across
+ * separate CLI invocations.
+ */
+const DAEMON_REQUIRED_TERM_COMMANDS = new Set([
+  "open", "type", "read", "snapshot", "interrupt", "close", "list",
+]);
+
+export async function handleTerm(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
 
-  switch (subcommand) {
-    case "open": {
-      const config: Record<string, unknown> = {};
-      if (flags.shell) config.shell = flags.shell;
-      if (flags.cwd) config.cwd = flags.cwd;
-      if (flags.name) config.name = flags.name;
+  const { SessionManager } = await import("./session_manager");
+  const { TerminalActions } = await import("./terminal_actions");
+  const { formatActionResult } = await import("./action_result");
 
-      try {
-        const session = await getTerminalManager().create(config as any);
-        const result = {
-          id: session.id,
-          shell: session.shell,
-          cwd: session.cwd,
-          status: session.status,
-        };
-        outputJson(result, !jsonOutput);
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
+  // ── Terminal ownership model ──────────────────────────────────────
+  // Terminal sessions must be owned by the long-lived daemon, NOT by
+  // the short-lived CLI process.  This is the fix for the Section 5
+  // terminal ownership defect:
+  //
+  //   - When the daemon is running, CLI term commands route through
+  //     BrokerTerminalRuntime (HTTP to daemon's broker API).
+  //     The PTY lives in the daemon process, so the CLI exits cleanly.
+  //
+  //   - When the daemon is NOT running, session-dependent commands
+  //     (open, type, read, etc.) return an error telling the user to
+  //     start the daemon first.  One-shot "term exec" (no --session)
+  //     still works locally because it doesn't create persistent PTYs.
+
+  const needsDaemon = DAEMON_REQUIRED_TERM_COMMANDS.has(subcommand ?? "")
+    || (subcommand === "exec" && Boolean(flags.session));
+
+  if (needsDaemon) {
+    // ── Terminal ownership model (Section 5 fix) ─────────────────
+    // Terminal sessions must be owned by the long-lived daemon, NOT
+    // by the short-lived CLI process.  If the daemon isn't running,
+    // auto-start it transparently so `bc term open` works without
+    // the user needing to know about `bc daemon start`.
+    //
+    // The PTY lives in the daemon process; the CLI routes through
+    // the SessionManager's broker-backed runtime (HTTP to daemon's
+    // broker API), so the CLI exits cleanly after printing the result.
+    //
+    // ensureDaemonRunning() calls SessionManager.ensureDaemonRuntime({ autoStart: true }),
+    // which probes the daemon health endpoint, auto-starts the daemon
+    // if needed, and caches a BrokerTerminalRuntime on the SessionManager.
+    // After this, _sessionManager.getTerminalRuntime() returns the
+    // BrokerTerminalRuntime automatically.
+
+    try {
+      await ensureDaemonRunning();
+    } catch (error) {
+      const message = (error as Error).message ??
+        `Failed to start the daemon for terminal session commands.`;
+      if (jsonOutput) {
+        outputJson({
+          success: false,
+          error: message,
+          completedAt: new Date().toISOString(),
+        }, false);
+      } else {
+        console.error(`Error: ${message}`);
       }
-      break;
-    }
-
-    case "exec": {
-      const command = positional[0];
-      if (!command) {
-        console.error("Error: Command is required");
-        process.exit(1);
-      }
-
-      const sessionId = flags.session;
-      const timeoutMs = flags.timeout ? Number(flags.timeout) : undefined;
-
-      try {
-        if (sessionId) {
-          const session = getTerminalManager().get(sessionId);
-          if (!session) {
-            console.error(`Error: Session not found: ${sessionId}`);
-            process.exit(1);
-          }
-          const result = await session.exec(command, { timeoutMs });
-          outputJson(result, !jsonOutput);
-        } else {
-          const result = await exec(command, { timeoutMs });
-          outputJson(result, !jsonOutput);
-        }
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "type": {
-      const text = positional[0];
-      const sessionId = flags.session;
-      if (!text) {
-        console.error("Error: Text is required");
-        process.exit(1);
-      }
-      if (!sessionId) {
-        console.error("Error: --session is required for 'term type'");
-        process.exit(1);
-      }
-
-      try {
-        const session = getTerminalManager().get(sessionId);
-        if (!session) {
-          console.error(`Error: Session not found: ${sessionId}`);
-          process.exit(1);
-        }
-        await session.write(text);
-        console.log("OK");
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "read": {
-      const sessionId = flags.session;
-      if (!sessionId) {
-        console.error("Error: --session is required for 'term read'");
-        process.exit(1);
-      }
-
-      try {
-        const session = getTerminalManager().get(sessionId);
-        if (!session) {
-          console.error(`Error: Session not found: ${sessionId}`);
-          process.exit(1);
-        }
-        const output = await session.read();
-        if (jsonOutput) {
-          outputJson({ output });
-        } else {
-          console.log(output);
-        }
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "snapshot": {
-      const sessionId = flags.session;
-
-      try {
-        if (sessionId) {
-          const session = getTerminalManager().get(sessionId);
-          if (!session) {
-            console.error(`Error: Session not found: ${sessionId}`);
-            process.exit(1);
-          }
-          const snap = await session.snapshot();
-          if (jsonOutput) {
-            outputJson(snap);
-          } else {
-            console.log(formatSnapshot(snap));
-          }
-        } else {
-          const collection = await captureAllSnapshots();
-          if (jsonOutput) {
-            outputJson(collection);
-          } else {
-            console.log(formatSnapshotCollection(collection));
-          }
-        }
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "interrupt": {
-      const sessionId = flags.session;
-      if (!sessionId) {
-        console.error("Error: --session is required for 'term interrupt'");
-        process.exit(1);
-      }
-
-      try {
-        const session = getTerminalManager().get(sessionId);
-        if (!session) {
-          console.error(`Error: Session not found: ${sessionId}`);
-          process.exit(1);
-        }
-        await session.interrupt();
-        console.log("Interrupted");
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "close": {
-      const sessionId = flags.session;
-      if (!sessionId) {
-        console.error("Error: --session is required for 'term close'");
-        process.exit(1);
-      }
-
-      try {
-        await getTerminalManager().close(sessionId);
-        console.log("Closed");
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "list": {
-      const sessions = getTerminalManager().list();
-      const result = sessions.map((s) => ({
-        id: s.id,
-        name: s.name,
-        shell: s.shell,
-        cwd: s.cwd,
-        status: s.status,
-      }));
-      outputJson(result, !jsonOutput);
-      break;
-    }
-
-    default:
-      console.error(`Unknown term command: ${subcommand}`);
       process.exit(1);
+      return; // unreachable but helps type inference
+    }
   }
-}
 
-// ── FS Handlers (Section 12) ────────────────────────────────────────
+  // Use or create a session manager singleton (same as browser actions).
+  // After ensureDaemonRunning(), getTerminalRuntime() will return
+  // the cached BrokerTerminalRuntime for daemon-backed sessions.
+  if (!_sessionManager) {
+    _sessionManager = new SessionManager();
+  }
 
-async function handleFs(args: ParsedArgs): Promise<void> {
-  const { subcommand, positional, flags } = args;
-  const jsonOutput = flags.json === "true";
+  const terminalActions = new TerminalActions({
+    sessionManager: _sessionManager,
+    // No explicit terminalRuntime needed — TerminalActions uses
+    // sessionManager.getTerminalRuntime() which returns the correct
+    // runtime (BrokerTerminalRuntime when daemon is running, or
+    // LocalTerminalRuntime for one-shot exec).
+  });
 
-  switch (subcommand) {
-    case "read": {
-      const filePath = positional[0];
-      if (!filePath) {
-        console.error("Error: File path is required");
-        process.exit(1);
-      }
+  try {
+    let result: import("./action_result").ActionResult | undefined;
 
-      try {
-        const result = fsRead(filePath);
-        if (jsonOutput) {
-          outputJson(result);
-        } else {
-          console.log(result.content);
-        }
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "write": {
-      const filePath = positional[0];
-      if (!filePath) {
-        console.error("Error: File path is required");
-        process.exit(1);
-      }
-
-      const content = flags.content ?? "";
-      try {
-        const result = fsWrite(filePath, content);
-        outputJson(result, !jsonOutput);
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "ls": {
-      const dirPath = positional[0] ?? ".";
-      const recursive = flags.recursive === "true";
-      const ext = flags.ext;
-
-      try {
-        const result = listDir(dirPath, {
-          recursive,
-          extension: ext,
+    switch (subcommand) {
+      case "open": {
+        result = await terminalActions.open({
+          shell: flags.shell,
+          cwd: flags.cwd,
+          name: flags.name,
         });
-        if (jsonOutput) {
-          outputJson(result);
-        } else {
-          for (const entry of result.entries) {
-            const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
-            const size = entry.sizeBytes.toString().padStart(10);
-            console.log(`${typeChar} ${size}  ${entry.name}`);
-          }
-          console.log(`\n${result.totalEntries} entries`);
+        break;
+      }
+
+      case "exec": {
+        const command = positional[0];
+        if (!command) {
+          console.error("Error: Command is required");
+          process.exit(1);
         }
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
+        result = await terminalActions.exec({
+          command,
+          sessionId: flags.session,
+          timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+        });
+        break;
       }
-      break;
+
+      case "type": {
+        const text = positional[0];
+        const sessionId = flags.session;
+        if (!text) {
+          console.error("Error: Text is required");
+          process.exit(1);
+        }
+        if (!sessionId) {
+          console.error("Error: --session is required for 'term type'");
+          process.exit(1);
+        }
+        result = await terminalActions.type({ text, sessionId });
+        break;
+      }
+
+      case "read": {
+        const sessionId = flags.session;
+        if (!sessionId) {
+          console.error("Error: --session is required for 'term read'");
+          process.exit(1);
+        }
+        result = await terminalActions.read({ sessionId, maxBytes: flags["max-bytes"] ? Number(flags["max-bytes"]) : undefined });
+        break;
+      }
+
+      case "snapshot": {
+        const sessionId = flags.session;
+        result = await terminalActions.snapshot({ sessionId });
+        break;
+      }
+
+      case "interrupt": {
+        const sessionId = flags.session;
+        if (!sessionId) {
+          console.error("Error: --session is required for 'term interrupt'");
+          process.exit(1);
+        }
+        result = await terminalActions.interrupt({ sessionId });
+        break;
+      }
+
+      case "close": {
+        const sessionId = flags.session;
+        if (!sessionId) {
+          console.error("Error: --session is required for 'term close'");
+          process.exit(1);
+        }
+        result = await terminalActions.close({ sessionId });
+        break;
+      }
+
+      case "list": {
+        result = await terminalActions.list();
+        break;
+      }
+
+      default:
+        console.error(`Unknown term command: ${subcommand}`);
+        process.exit(1);
     }
 
-    case "move": {
-      const src = positional[0];
-      const dst = positional[1];
-      if (!src || !dst) {
-        console.error("Error: Source and destination paths are required");
-        process.exit(1);
+    if (result) {
+      if (jsonOutput) {
+        outputJson(formatActionResult(result), false);
+      } else {
+        if (result.success) {
+          // Human-friendly output per action type
+          if (subcommand === "exec" && result.data) {
+            const execData = result.data as import("./terminal_types").ExecResult;
+            console.log(execData.stdout ?? "");
+            if (execData.exitCode !== 0 && execData.stderr) {
+              console.error(execData.stderr);
+            }
+          } else if (subcommand === "read" && result.data) {
+            const readData = result.data as { output: string };
+            console.log(readData.output);
+          } else if (subcommand === "list" && result.data) {
+            const sessions = result.data as Array<{ id: string; name?: string; shell: string; cwd: string; status: string }>;
+            for (const s of sessions) {
+              console.log(`  ${s.id}  ${s.shell}  ${s.cwd}  ${s.status}`);
+            }
+            console.log(`\n${sessions.length} session(s)`);
+          } else {
+            outputJson(result.data, true);
+          }
+          if (result.warning) console.warn(`Warning: ${result.warning}`);
+        } else {
+          console.error(`Error: ${result.error}`);
+          if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
+          process.exit(1);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+// ── FS Handlers (Section 5 — routed through action surface) ──────────
+
+export async function handleFs(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const { SessionManager } = await import("./session_manager");
+  const { FsActions } = await import("./fs_actions");
+  const { formatActionResult } = await import("./action_result");
+
+  // Use or create a session manager singleton (same as browser/term actions)
+  if (!_sessionManager) {
+    _sessionManager = new SessionManager();
+  }
+
+  const fsActions = new FsActions({ sessionManager: _sessionManager });
+
+  try {
+    let result: import("./action_result").ActionResult | undefined;
+
+    switch (subcommand) {
+      case "read": {
+        const filePath = positional[0];
+        if (!filePath) {
+          console.error("Error: File path is required");
+          process.exit(1);
+        }
+        result = await fsActions.read({
+          path: filePath,
+          maxBytes: flags["max-bytes"] ? Number(flags["max-bytes"]) : undefined,
+        });
+        break;
       }
 
-      try {
-        const result = moveFile(src, dst);
-        outputJson(result, !jsonOutput);
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
+      case "write": {
+        const filePath = positional[0];
+        if (!filePath) {
+          console.error("Error: File path is required");
+          process.exit(1);
+        }
+        result = await fsActions.write({
+          path: filePath,
+          content: flags.content ?? "",
+          createDirs: flags["create-dirs"] !== "false",
+        });
+        break;
       }
-      break;
+
+      case "ls": {
+        const dirPath = positional[0] ?? ".";
+        result = await fsActions.ls({
+          path: dirPath,
+          recursive: flags.recursive === "true",
+          extension: flags.ext,
+        });
+        break;
+      }
+
+      case "move": {
+        const src = positional[0];
+        const dst = positional[1];
+        if (!src || !dst) {
+          console.error("Error: Source and destination paths are required");
+          process.exit(1);
+        }
+        result = await fsActions.move({ src, dst });
+        break;
+      }
+
+      case "rm": {
+        const targetPath = positional[0];
+        if (!targetPath) {
+          console.error("Error: Path is required");
+          process.exit(1);
+        }
+        result = await fsActions.rm({
+          path: targetPath,
+          recursive: flags.recursive === "true",
+          force: flags.force === "true",
+        });
+        break;
+      }
+
+      case "stat": {
+        const targetPath = positional[0];
+        if (!targetPath) {
+          console.error("Error: Path is required");
+          process.exit(1);
+        }
+        result = await fsActions.stat({ path: targetPath });
+        break;
+      }
+
+      default:
+        console.error(`Unknown fs command: ${subcommand}`);
+        process.exit(1);
     }
 
-    case "rm": {
-      const targetPath = positional[0];
-      if (!targetPath) {
-        console.error("Error: Path is required");
-        process.exit(1);
+    if (result) {
+      if (jsonOutput) {
+        outputJson(formatActionResult(result), false);
+      } else {
+        if (result.success) {
+          // Human-friendly output per action type
+          if (subcommand === "read" && result.data) {
+            const readData = result.data as import("./fs_operations").FileReadResult;
+            console.log(readData.content);
+          } else if (subcommand === "ls" && result.data) {
+            const listData = result.data as import("./fs_operations").ListResult;
+            for (const entry of listData.entries) {
+              const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
+              const size = entry.sizeBytes.toString().padStart(10);
+              console.log(`${typeChar} ${size}  ${entry.name}`);
+            }
+            console.log(`\n${listData.totalEntries} entries`);
+          } else {
+            outputJson(result.data, true);
+          }
+          if (result.warning) console.warn(`Warning: ${result.warning}`);
+        } else {
+          console.error(`Error: ${result.error}`);
+          if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
+          process.exit(1);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+// ── Top-level Browser Action Handler (Section 5) ────────────────────
+
+async function handleBrowserAction(action: string, args: ParsedArgs): Promise<void> {
+  const { positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const { SessionManager } = await import("./session_manager");
+  const { BrowserActions } = await import("./browser_actions");
+  const { formatActionResult } = await import("./action_result");
+
+  // Use or create a session manager singleton
+  if (!_sessionManager) {
+    _sessionManager = new SessionManager();
+  }
+
+  const browserActions = new BrowserActions({ sessionManager: _sessionManager });
+
+  try {
+    let result: import("./action_result").ActionResult | undefined;
+
+    switch (action) {
+      case "open": {
+        const url = positional[0];
+        if (!url) {
+          console.error("Error: URL is required");
+          process.exit(1);
+        }
+        result = await browserActions.open({
+          url,
+          waitUntil: flags["wait-until"] as any ?? "domcontentloaded",
+        });
+        break;
       }
 
-      const recursive = flags.recursive === "true";
-      const force = flags.force === "true";
-
-      try {
-        const result = deletePath(targetPath, { recursive, force });
-        outputJson(result, !jsonOutput);
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
+      case "snapshot": {
+        result = await browserActions.takeSnapshot({
+          rootSelector: flags["root-selector"],
+        });
+        break;
       }
-      break;
+
+      case "click": {
+        const target = positional[0];
+        if (!target) {
+          console.error("Error: Target (ref, selector, or text) is required");
+          process.exit(1);
+        }
+        result = await browserActions.click({
+          target,
+          timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+          force: flags.force === "true",
+        });
+        break;
+      }
+
+      case "fill": {
+        const target = positional[0];
+        const text = positional[1];
+        if (!target || !text) {
+          console.error("Error: Target and text are required");
+          process.exit(1);
+        }
+        result = await browserActions.fill({
+          target,
+          text,
+          timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+          commit: flags.commit === "true",
+        });
+        break;
+      }
+
+      case "hover": {
+        const target = positional[0];
+        if (!target) {
+          console.error("Error: Target is required");
+          process.exit(1);
+        }
+        result = await browserActions.hover({
+          target,
+          timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+        });
+        break;
+      }
+
+      case "type": {
+        const text = positional[0];
+        if (!text) {
+          console.error("Error: Text is required");
+          process.exit(1);
+        }
+        result = await browserActions.type({
+          text,
+          delayMs: flags.delay ? Number(flags.delay) : undefined,
+        });
+        break;
+      }
+
+      case "press": {
+        const key = positional[0];
+        if (!key) {
+          console.error("Error: Key is required (e.g., Enter, Tab, ArrowDown)");
+          process.exit(1);
+        }
+        result = await browserActions.press({ key });
+        break;
+      }
+
+      case "scroll": {
+        const direction = positional[0] ?? "down";
+        if (!["up", "down", "left", "right"].includes(direction)) {
+          console.error("Error: Direction must be up, down, left, or right");
+          process.exit(1);
+        }
+        result = await browserActions.scroll({
+          direction: direction as "up" | "down" | "left" | "right",
+          amount: flags.amount ? Number(flags.amount) : undefined,
+        });
+        break;
+      }
+
+      case "screenshot": {
+        result = await browserActions.screenshot({
+          outputPath: flags.output,
+          fullPage: flags["full-page"] === "true",
+          target: flags.target,
+        });
+        break;
+      }
+
+      case "tab": {
+        const tabAction = args.subcommand;
+        if (tabAction === "list") {
+          result = await browserActions.tabList();
+        } else if (tabAction === "switch") {
+          const tabId = positional[0];
+          if (!tabId) {
+            console.error("Error: Tab ID is required");
+            process.exit(1);
+          }
+          result = await browserActions.tabSwitch(tabId);
+        } else {
+          console.error("Error: Unknown tab command. Use 'tab list' or 'tab switch <id>'");
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "close": {
+        result = await browserActions.close();
+        break;
+      }
+
+      default:
+        console.error(`Unknown browser action: ${action}`);
+        process.exit(1);
     }
 
-    case "stat": {
-      const targetPath = positional[0];
-      if (!targetPath) {
-        console.error("Error: Path is required");
-        process.exit(1);
+    if (result) {
+      if (jsonOutput) {
+        outputJson(formatActionResult(result), false);
+      } else {
+        if (result.success) {
+          // Human-friendly output
+          if (result.data) outputJson(result.data, true);
+          else console.log("OK");
+          if (result.warning) console.warn(`Warning: ${result.warning}`);
+        } else {
+          console.error(`Error: ${result.error}`);
+          if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
+          process.exit(1);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+// ── Session Handler (Section 5) ────────────────────────────────────────
+
+async function handleSession(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const { SessionManager } = await import("./session_manager");
+  const { formatActionResult } = await import("./action_result");
+
+  if (!_sessionManager) {
+    _sessionManager = new SessionManager();
+  }
+
+  try {
+    let result: import("./action_result").ActionResult | undefined;
+
+    switch (subcommand) {
+      case "list": {
+        result = _sessionManager.list();
+        break;
       }
 
-      try {
-        const result = statPath(targetPath);
-        outputJson(result, !jsonOutput);
-      } catch (error) {
-        console.error("Error:", (error as Error).message);
-        process.exit(1);
+      case "create": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: Session name is required");
+          process.exit(1);
+        }
+        result = await _sessionManager.create(name, {
+          policyProfile: flags.policy,
+          workingDirectory: flags.cwd,
+        });
+        break;
       }
-      break;
+
+      case "use": {
+        const nameOrId = positional[0];
+        if (!nameOrId) {
+          console.error("Error: Session name or ID is required");
+          process.exit(1);
+        }
+        result = _sessionManager.use(nameOrId);
+        break;
+      }
+
+      case "status": {
+        result = _sessionManager.status();
+        break;
+      }
+
+      default:
+        console.error(`Unknown session command: ${subcommand}`);
+        console.error("Available: list, create, use, status");
+        process.exit(1);
     }
 
-    default:
-      console.error(`Unknown fs command: ${subcommand}`);
-      process.exit(1);
+    if (result) {
+      if (jsonOutput) {
+        outputJson(formatActionResult(result), false);
+      } else {
+        if (result.success) {
+          outputJson(result.data, true);
+          if (result.warning) console.warn(`Warning: ${result.warning}`);
+        } else {
+          console.error(`Error: ${result.error}`);
+          process.exit(1);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
   }
 }
 
