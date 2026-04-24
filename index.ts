@@ -517,6 +517,34 @@ export {
   stopDaemon,
 } from "./daemon_cleanup";
 
+// ── Section 14: Stable Local URLs ────────────────────────────────────
+
+export { ServiceRegistry } from "./services/registry";
+export type {
+  ServiceEntry,
+  ServiceRegistryData,
+} from "./services/registry";
+
+export {
+  resolveServiceUrl,
+  isServiceRef,
+  mightBeServiceRef,
+} from "./services/resolver";
+export type { ResolveResult } from "./services/resolver";
+
+export {
+  detectDevServer,
+  tryDetectDefaultPort,
+} from "./services/detector";
+
+export { ServiceActions } from "./service_actions";
+export type {
+  ServiceActionContext,
+  ServiceRegisterOptions,
+  ServiceResolveOptions,
+  ServiceRemoveOptions,
+} from "./service_actions";
+
 // Top-level API facade
 export {
   createBrowserControl,
@@ -550,3 +578,11 @@ export { buildBrowserTools } from "./mcp/tools/browser";
 export { buildTerminalTools } from "./mcp/tools/terminal";
 export { buildFsTools } from "./mcp/tools/fs";
 export { buildDebugTools } from "./mcp/tools/debug";
+export { buildServiceTools } from "./mcp/tools/service";
+
+// ── Paths (additional Section 14 helpers) ────────────────────────────
+
+export {
+  getServicesDir,
+  getServiceRegistryPath,
+} from "./paths";

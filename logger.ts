@@ -21,7 +21,7 @@ function parseLevel(value: string | undefined): LogLevel {
 }
 
 function isProtocolStdoutReserved(): boolean {
-  return process.env.BROWSER_CONTROL_STDIO_MODE === "mcp";
+  return process.env.BROWSER_CONTROL_STDIO_MODE === "mcp" || process.env.BROWSER_CONTROL_JSON_OUTPUT === "true";
 }
 
 export interface LogRecord {

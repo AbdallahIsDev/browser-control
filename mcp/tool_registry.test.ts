@@ -70,6 +70,10 @@ describe("MCP Tool Registry", () => {
 
       // Debug tools
       assert.ok(names.includes("bc_debug_health"));
+
+      // Service tools (Section 14)
+      assert.ok(names.includes("bc_service_list"));
+      assert.ok(names.includes("bc_service_resolve"));
     });
 
     it("has no duplicate tool names", () => {
@@ -104,6 +108,7 @@ describe("MCP Tool Registry", () => {
       assert.ok(categories.terminal.length > 0);
       assert.ok(categories.fs.length > 0);
       assert.ok(categories.debug.length > 0);
+      assert.ok(categories.service.length > 0);
     });
   });
 
@@ -154,6 +159,38 @@ describe("MCP Tool Registry", () => {
       assert.equal(result.success, true);
       assert.ok(result.data);
       assert.ok(["healthy", "degraded", "unhealthy"].includes((result.data as Record<string, unknown>).overall as string));
+    });
+
+    it("bc_service_list returns registered services", async () => {
+      // Register a service via the API first
+      await api.service.register({ name: "mcp-service", port: 5555 });
+
+      const tools = buildToolRegistry(api);
+      const listTool = tools.find((t) => t.name === "bc_service_list")!;
+      const result = await listTool.handler({});
+
+      assert.equal(result.success, true);
+      assert.ok(Array.isArray(result.data));
+      assert.ok((result.data as unknown[]).length >= 1);
+      const names = (result.data as Array<{ name: string }>).map((s) => s.name);
+      assert.ok(names.includes("mcp-service"));
+    });
+
+    it("bc_service_resolve returns URL for registered service", async () => {
+      await api.service.register({ name: "resolve-test", port: 6666 });
+
+      const tools = buildToolRegistry(api);
+      const resolveTool = tools.find((t) => t.name === "bc_service_resolve")!;
+      const result = await resolveTool.handler({ name: "resolve-test" });
+
+      // Port 6666 is not actually running, so the health check should fail
+      assert.equal(result.success, false);
+      assert.ok(result.error);
+      assert.ok(
+        (result.error as string).includes("not responding") ||
+        (result.error as string).includes("not reachable") ||
+        (result.error as string).includes("unhealthy")
+      );
     });
 
     it("bc_session_status honors explicit sessionId", async () => {
