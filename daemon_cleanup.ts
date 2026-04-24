@@ -8,7 +8,7 @@
  * which kills the entire process tree.
  *
  * Cleanup order:
- *   1. Close terminal sessions via broker API
+ *   1. Ask the daemon to serialize terminal state via broker API
  *   2. Kill the automation browser (Chrome) if Browser Control launched one
  *   3. Kill the daemon process tree
  *   4. Remove stale PID and status files
@@ -208,7 +208,7 @@ export function cleanupStaleDaemonFiles(homeDir?: string): void {
  * Stop a Browser Control daemon and clean up all associated resources.
  *
  * Steps:
- *   1. Close all terminal sessions via the broker API
+ *   1. Ask the daemon to serialize terminal sessions via the broker API
  *   2. Kill the automation browser (Chrome) if Browser Control launched one
  *   3. Kill the daemon process tree via `taskkill /T /F` (Windows) or
  *      SIGTERM (POSIX)
@@ -230,26 +230,14 @@ export async function stopDaemon(options: {
   const port = options.port ?? config.brokerPort;
   const brokerUrl = `http://127.0.0.1:${port}`;
 
-  // Step 1: Close all terminal sessions via the broker API
+  // Step 1: Let the daemon run its terminal serialization path before
+  // the process tree is force-killed. Do not close sessions here: closing
+  // first would erase the state Section 13 needs to persist.
   try {
-    const listResp = await fetch(`${brokerUrl}/api/v1/term/sessions`, {
-      signal: AbortSignal.timeout(3000),
+    await fetch(`${brokerUrl}/api/v1/kill`, {
+      method: "POST",
+      signal: AbortSignal.timeout(5000),
     });
-    if (listResp.ok) {
-      const sessions = await listResp.json() as Array<Record<string, unknown>>;
-      for (const session of sessions) {
-        const id = session.id as string;
-        if (!id) continue;
-        try {
-          await fetch(`${brokerUrl}/api/v1/term/close`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: id }),
-            signal: AbortSignal.timeout(3000),
-          });
-        } catch { /* best-effort */ }
-      }
-    }
   } catch { /* daemon not reachable — fine */ }
 
   // Step 2: Kill the automation browser if Browser Control launched one

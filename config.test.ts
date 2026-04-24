@@ -18,6 +18,8 @@ test("loadConfig returns sensible defaults with empty env", () => {
   assert.equal(config.captchaApiKey, undefined);
   assert.equal(config.captchaTimeoutMs, 120_000);
   assert.equal(config.resumePolicy, "abandon");
+  assert.equal(config.terminalResumePolicy, "resume");
+  assert.equal(config.terminalAutoResume, true);
   assert.equal(config.memoryAlertMb, 1024);
   assert.equal(config.chromeTabLimit, 20);
   assert.equal(config.logLevel, "info");
@@ -132,6 +134,20 @@ test("loadConfig reads RESUME_POLICY", () => {
 
   const config3 = loadConfig({ env: { RESUME_POLICY: "invalid" }, validate: false });
   assert.equal(config3.resumePolicy, "abandon");
+});
+
+test("loadConfig reads TERMINAL_RESUME_POLICY and TERMINAL_AUTO_RESUME", () => {
+  const config1 = loadConfig({ env: { TERMINAL_RESUME_POLICY: "metadata_only" }, validate: false });
+  assert.equal(config1.terminalResumePolicy, "metadata_only");
+
+  const config2 = loadConfig({ env: { TERMINAL_RESUME_POLICY: "abandon", TERMINAL_AUTO_RESUME: "false" }, validate: false });
+  assert.equal(config2.terminalResumePolicy, "abandon");
+  assert.equal(config2.terminalAutoResume, false);
+
+  assert.throws(
+    () => loadConfig({ env: { TERMINAL_RESUME_POLICY: "invalid" }, validate: true }),
+    /TERMINAL_RESUME_POLICY/,
+  );
 });
 
 test("loadConfig reads LOG_LEVEL and LOG_FILE", () => {

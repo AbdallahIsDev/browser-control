@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { spawn, execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { MemoryStore } from "./memory_store";
@@ -168,6 +168,8 @@ Browser Lifecycle:
   term interrupt --session=<id>                                       Send Ctrl+C
   term close --session=<id>                                           Close a session
   term list                                                           List active sessions
+  term resume <sessionId>                                             Resume a session from persisted state
+  term status <sessionId>                                             Show resume status for a session
   fs read <path>                                                      Read a file
   fs write <path> [--content=<text>]                                  Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
@@ -316,8 +318,8 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 // ── Daemon Cleanup Helpers (imported from shared module) ─────────────
 
 import {
-  killAutomationBrowser,
   cleanupStaleDaemonFiles,
+  stopDaemon,
 } from "./daemon_cleanup";
 
 /**
@@ -421,42 +423,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 
       const pid = Number(fs.readFileSync(getPidFilePath(), "utf8").trim());
       try {
-        // Kill the automation browser (Chrome) before stopping the daemon.
-        // When the daemon is force-killed, it never runs its stop() method,
-        // so the managed Chrome process may be left running.
-        killAutomationBrowser();
-
-        if (process.platform === "win32") {
-          // On Windows, process.kill(pid, "SIGTERM") does NOT kill child
-          // processes (orphaned pwsh.exe shells). Use taskkill /T /F
-          // instead, which kills the entire process tree.
-          try {
-            execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" });
-          } catch (tkErr) {
-            // taskkill returns non-zero exit code when the process is
-            // already gone (like ESRCH). But it can also fail for
-            // real reasons like "access denied." Verify the PID is
-            // actually dead before silently swallowing the error.
-            let processStillAlive = false;
-            try {
-              const checkOutput = execSync(
-                `tasklist /FI "PID eq ${pid}" /FO CSV /NH 2>nul`,
-                { encoding: "utf8", timeout: 5000 },
-              );
-              if (checkOutput.includes(`"${pid}"`)) {
-                processStillAlive = true;
-              }
-            } catch { /* tasklist failed — assume process is gone */ }
-            if (processStillAlive) throw tkErr;
-          }
-        } else {
-          process.kill(pid, "SIGTERM");
-        }
-        fs.unlinkSync(getPidFilePath());
-        // When the daemon is force-killed (taskkill /T /F), it never runs
-        // its stop() method, so daemon-status.json may remain on disk
-        // with stale "running" status. Remove it.
-        cleanupStaleDaemonStatus();
+        await stopDaemon();
         console.log(`Daemon stopped (PID: ${pid})`);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ESRCH") {
@@ -1841,7 +1808,7 @@ async function ensureDaemonRunning(): Promise<string> {
  * separate CLI invocations.
  */
 const DAEMON_REQUIRED_TERM_COMMANDS = new Set([
-  "open", "type", "read", "snapshot", "interrupt", "close", "list",
+  "open", "type", "read", "snapshot", "interrupt", "close", "list", "resume", "status",
 ]);
 
 export async function handleTerm(args: ParsedArgs): Promise<void> {
@@ -2003,6 +1970,26 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
         break;
       }
 
+      case "resume": {
+        const sessionId = positional[0] || flags.session;
+        if (!sessionId) {
+          console.error("Error: session ID is required for 'term resume'");
+          process.exit(1);
+        }
+        result = await terminalActions.resume({ sessionId });
+        break;
+      }
+
+      case "status": {
+        const sessionId = positional[0] || flags.session;
+        if (!sessionId) {
+          console.error("Error: session ID is required for 'term status'");
+          process.exit(1);
+        }
+        result = await terminalActions.status({ sessionId });
+        break;
+      }
+
       default:
         console.error(`Unknown term command: ${subcommand}`);
         process.exit(1);
@@ -2024,11 +2011,23 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
             const readData = result.data as { output: string };
             console.log(readData.output);
           } else if (subcommand === "list" && result.data) {
-            const sessions = result.data as Array<{ id: string; name?: string; shell: string; cwd: string; status: string }>;
+            const sessions = result.data as Array<{ id: string; name?: string; shell: string; cwd: string; status: string; resumeMetadata?: { restored?: boolean; resumeLevel?: number; status?: string } }>;
             for (const s of sessions) {
-              console.log(`  ${s.id}  ${s.shell}  ${s.cwd}  ${s.status}`);
+              const resumeTag = s.resumeMetadata?.restored
+                ? ` [${s.resumeMetadata.status ?? "resumed"} L${s.resumeMetadata.resumeLevel ?? 1}]`
+                : "";
+              console.log(`  ${s.id}  ${s.shell}  ${s.cwd}  ${s.status}${resumeTag}`);
             }
             console.log(`\n${sessions.length} session(s)`);
+          } else if ((subcommand === "resume" || subcommand === "status") && result.data) {
+            const resumeData = result.data as { sessionId: string; status: string; resumeLevel: number; preserved: { metadata: boolean; buffer: boolean }; lost: string[] };
+            console.log(`Session: ${resumeData.sessionId}`);
+            console.log(`Status:  ${resumeData.status}`);
+            console.log(`Level:   ${resumeData.resumeLevel}`);
+            console.log(`Preserved: metadata=${resumeData.preserved.metadata}, buffer=${resumeData.preserved.buffer}`);
+            if (resumeData.lost.length > 0) {
+              console.log(`Lost:    ${resumeData.lost.join(", ")}`);
+            }
           } else {
             outputJson(result.data, true);
           }

@@ -170,6 +170,14 @@ describe("TerminalActions", () => {
           calls.push("list");
           return [];
         },
+        resume: async (sessionId) => {
+          calls.push(`resume:${sessionId}`);
+          return { sessionId, status: "fresh" };
+        },
+        status: async (sessionId) => {
+          calls.push(`status:${sessionId}`);
+          return { sessionId, status: "fresh" };
+        },
       };
 
       const customActions = new TerminalActions({
@@ -199,6 +207,8 @@ describe("TerminalActions", () => {
         interrupt: async () => {},
         close: async () => {},
         list: async () => [],
+        resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+        status: async (sessionId) => ({ sessionId, status: "fresh" }),
       };
 
       const customActions = new TerminalActions({
@@ -224,6 +234,8 @@ describe("TerminalActions", () => {
         interrupt: async () => {},
         close: async () => {},
         list: async () => [],
+        resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+        status: async (sessionId) => ({ sessionId, status: "fresh" }),
       };
 
       const customActions = new TerminalActions({
@@ -253,6 +265,8 @@ describe("TerminalActions", () => {
         interrupt: async () => {},
         close: async () => {},
         list: async () => [],
+        resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+        status: async (sessionId) => ({ sessionId, status: "fresh" }),
       };
 
       const customActions = new TerminalActions({

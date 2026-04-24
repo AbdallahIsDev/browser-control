@@ -23,8 +23,12 @@ import { DefaultPolicyEngine } from "./policy_engine";
 import type { PolicyEngine, PolicyTaskIntent } from "./policy";
 import { ExecutionRouter, defaultRouter } from "./execution_router";
 import { PolicyAuditLogger, getDefaultAuditLogger } from "./policy_audit";
-import { TerminalSessionManager, execCommand } from "./terminal_session";
+import { TerminalSessionManager, execCommand, PtyTerminalSession } from "./terminal_session";
 import type { TerminalSessionConfig, ExecOptions } from "./terminal_types";
+import { TerminalBufferStore } from "./terminal_buffer_store";
+import { serializeTerminalSession, captureTerminalBuffer } from "./terminal_serialize";
+import { decideResume, loadPersistedState, buildResumeResult, rebuildOutputBuffer } from "./terminal_resume";
+import type { SerializedTerminalSession, TerminalResumeResult } from "./terminal_resume_types";
 import {
   readFile as fsReadFile,
   writeFile as fsWriteFile,
@@ -296,6 +300,9 @@ export class Daemon {
     // Startup recovery: scan for interrupted tasks
     await this.recoverInterruptedTasks();
 
+    // Startup recovery: restore terminal sessions from persisted state
+    await this.restoreTerminals();
+
     // Restore skill state for registered skills that implement restoreState
     await this.restoreSkillStates();
 
@@ -358,6 +365,9 @@ export class Daemon {
     // Stop subsystems
     await this.scheduler.stop();
     await this.broker.stop();
+
+    // Serialize terminal sessions BEFORE closing PTYs
+    await this.serializeTerminals();
     await this.terminalManager.closeAll();
     await this.stagehandManager.closeAll();
 
@@ -752,14 +762,157 @@ export class Daemon {
 
   termList(): Array<Record<string, unknown>> {
     this.assertOperationAllowed("terminal_read", {});
-    return this.terminalManager.list().map((session) => ({
+    const live = this.terminalManager.list().map((session) => ({
       id: session.id,
       name: session.name,
       shell: session.shell,
       cwd: session.cwd,
       status: session.status,
       createdAt: session.createdAt,
+      resumeMetadata: session.resumeMetadata,
     }));
+    const liveIds = new Set(live.map((session) => session.id as string));
+    const store = this.getTerminalBufferStore();
+    const pending = store.listPending()
+      .filter((sessionId) => !liveIds.has(sessionId))
+      .map((sessionId) => {
+        const { metadata, buffer } = loadPersistedState(store, sessionId);
+        const effectiveBuffer = this.getTerminalResumePolicy() === "metadata_only" ? null : buffer;
+        const decision = this.applyMetadataLosses(
+          decideResume(sessionId, metadata as SerializedTerminalSession | null, effectiveBuffer),
+          metadata,
+        );
+        return {
+          id: sessionId,
+          name: metadata?.name,
+          shell: metadata?.shell ?? "",
+          cwd: metadata?.cwd ?? "",
+          status: "pending_resume",
+          createdAt: metadata?.createdAt,
+          resumeMetadata: {
+            restored: false,
+            resumeLevel: decision.resumeLevel,
+            status: decision.status,
+            preserved: decision.preserved,
+            lost: decision.lost,
+            priorStatus: metadata?.status,
+            priorRunningCommand: metadata?.runningCommand,
+            originalCreatedAt: metadata?.createdAt,
+          },
+        };
+      });
+    return [...live, ...pending];
+  }
+
+  async termResume(sessionId: string): Promise<TerminalResumeResult> {
+    this.assertOperationAllowed("terminal_resume", { sessionId });
+    const store = this.getTerminalBufferStore();
+    const { metadata, buffer } = loadPersistedState(store, sessionId);
+    if (this.getTerminalResumePolicy() === "abandon") {
+      throw new Error("Terminal resume is disabled by TERMINAL_RESUME_POLICY=abandon.");
+    }
+    const effectiveBuffer = this.getTerminalResumePolicy() === "metadata_only" ? null : buffer;
+    const decision = this.applyMetadataLosses(
+      decideResume(sessionId, metadata as SerializedTerminalSession | null, effectiveBuffer),
+      metadata,
+    );
+
+    if (decision.status === "fresh") {
+      throw new Error(`No persisted state found for terminal session: ${sessionId}`);
+    }
+
+    // Check if session already exists
+    const existing = this.terminalManager.get(sessionId);
+    if (existing) {
+      return buildResumeResult(decision, {
+        id: existing.id,
+        shell: existing.shell,
+        cwd: existing.cwd,
+        status: existing.status,
+      });
+    }
+
+    if (!metadata || typeof metadata !== "object") {
+      throw new Error(`Corrupted persisted state for terminal session: ${sessionId}`);
+    }
+
+    const meta = metadata as SerializedTerminalSession;
+
+    // Verify cwd still exists
+    const cwdExists = await this.statPath(meta.cwd).then(() => true).catch(() => false);
+    const cwd = cwdExists ? meta.cwd : process.cwd();
+
+    const session = await this.terminalManager.create({
+      id: meta.sessionId,
+      shell: meta.shell,
+      cwd,
+      env: this.buildResumeEnv(meta).env,
+      name: meta.name,
+    });
+
+    const result = buildResumeResult(decision);
+    (session as PtyTerminalSession).resumeMetadata = {
+      restored: true,
+      resumeLevel: result.resumeLevel,
+      status: result.status,
+      preserved: result.preserved,
+      lost: result.lost,
+      priorStatus: meta.status,
+      priorRunningCommand: meta.runningCommand,
+      originalCreatedAt: meta.createdAt,
+      reconstructedAt: new Date().toISOString(),
+    };
+
+    if (effectiveBuffer && decision.preserved.buffer) {
+      const reconstructed = rebuildOutputBuffer(effectiveBuffer);
+      if (reconstructed) {
+        (session as PtyTerminalSession).injectOutput(reconstructed);
+      }
+    }
+
+    this.log.info(`Explicitly resumed terminal session ${sessionId}`, {
+      status: decision.status,
+      resumeLevel: decision.resumeLevel,
+    });
+
+    return buildResumeResult(decision, {
+      id: session.id,
+      shell: session.shell,
+      cwd: session.cwd,
+      status: session.status,
+    });
+  }
+
+  async termStatus(sessionId: string): Promise<TerminalResumeResult & { session?: Record<string, unknown> }> {
+    this.assertOperationAllowed("terminal_status", { sessionId });
+    const session = this.terminalManager.get(sessionId);
+    const store = this.getTerminalBufferStore();
+    const { metadata, buffer } = loadPersistedState(store, sessionId);
+
+    if (session) {
+      return {
+        sessionId,
+        resumeLevel: session.resumeMetadata?.resumeLevel ?? 1,
+        status: session.resumeMetadata?.status ?? "fresh",
+        preserved: session.resumeMetadata?.preserved ?? { metadata: true, buffer: false },
+        lost: session.resumeMetadata?.lost ?? [],
+        session: {
+          id: session.id,
+          name: session.name,
+          shell: session.shell,
+          cwd: session.cwd,
+          status: session.status,
+          createdAt: session.createdAt,
+        },
+      };
+    }
+
+    const effectiveBuffer = this.getTerminalResumePolicy() === "metadata_only" ? null : buffer;
+    const decision = this.applyMetadataLosses(
+      decideResume(sessionId, metadata as SerializedTerminalSession | null, effectiveBuffer),
+      metadata,
+    );
+    return buildResumeResult(decision);
   }
 
   fsRead(pathname: string): unknown {
@@ -852,6 +1005,7 @@ export class Daemon {
   async emergencyKill(): Promise<void> {
     this.acceptNewTasks = false;
     await this.scheduler.stop();
+    await this.serializeTerminals();
     await this.terminalManager.closeAll();
     for (const queued of this.taskQueue.splice(0)) {
       const record = this.taskStatuses.get(queued.id);
@@ -1013,6 +1167,190 @@ export class Daemon {
   }
 
   // ── Chrome Reconnection Watchdog ───────────────────────────────────
+
+  // ── Terminal Resume (Section 13) ───────────────────────────────────
+
+  private getTerminalBufferStore(): TerminalBufferStore {
+    const maxScrollbackLines = this.appConfig?.terminalMaxScrollbackLines ?? 10_000;
+    return new TerminalBufferStore(this.memoryStore, { maxScrollbackLines });
+  }
+
+  private getTerminalResumePolicy(): "resume" | "metadata_only" | "abandon" {
+    if (this.appConfig?.terminalAutoResume === false) return "abandon";
+    return this.appConfig?.terminalResumePolicy ?? "resume";
+  }
+
+  private buildResumeEnv(metadata: SerializedTerminalSession): { env: Record<string, string>; lost: string[] } {
+    const env: Record<string, string> = {};
+    const lost: string[] = [];
+    for (const [key, value] of Object.entries(metadata.env)) {
+      if (value === "<redacted>") {
+        lost.push(`redacted env var omitted: ${key}`);
+        continue;
+      }
+      env[key] = value;
+    }
+    return { env, lost };
+  }
+
+  private applyMetadataLosses(
+    decision: ReturnType<typeof decideResume>,
+    metadata: SerializedTerminalSession | null,
+  ): ReturnType<typeof decideResume> {
+    if (!metadata) return decision;
+    const envLosses = this.buildResumeEnv(metadata).lost;
+    if (envLosses.length === 0) return decision;
+    return {
+      ...decision,
+      lost: [...decision.lost, ...envLosses],
+    };
+  }
+
+  /** Serialize all active terminal sessions before shutdown. */
+  private async serializeTerminals(): Promise<void> {
+    const store = this.getTerminalBufferStore();
+    const sessions = this.terminalManager.list();
+
+    if (sessions.length === 0) {
+      return;
+    }
+
+    this.log.info(`Serializing ${sessions.length} active terminal session(s) before shutdown`);
+
+    for (const session of sessions) {
+      try {
+        const ptySession = session as PtyTerminalSession & {
+          getSerializeableState: () => ReturnType<typeof serializeTerminalSession>;
+        };
+        const state = ptySession.getSerializeableState?.();
+        if (!state) continue;
+
+        const serialized = serializeTerminalSession(state, {
+          maxScrollbackLines: this.appConfig?.terminalMaxScrollbackLines,
+        });
+        if (!serialized) continue;
+
+        store.saveSession(serialized.sessionId, serialized);
+        store.saveBuffer(
+          serialized.sessionId,
+          captureTerminalBuffer(serialized.sessionId, state._outputBuffer, this.appConfig?.terminalMaxScrollbackLines),
+        );
+        store.markPending(serialized.sessionId);
+
+        this.log.info(`Serialized terminal session ${serialized.sessionId}`, {
+          resumeLevel: serialized.resumeLevel,
+          status: serialized.status,
+        });
+      } catch (error: unknown) {
+        this.log.warn(`Failed to serialize terminal session ${session.id}`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const evicted = store.enforceMaxSerializedSessions(this.appConfig?.terminalMaxSerializedSessions ?? 50);
+    if (evicted.length > 0) {
+      this.log.info(`Evicted ${evicted.length} old serialized terminal session(s)`, {
+        sessionIds: evicted,
+      });
+    }
+  }
+
+  /** Restore terminal sessions from persisted state on startup. */
+  private async restoreTerminals(): Promise<void> {
+    const resumePolicy = this.getTerminalResumePolicy();
+    if (resumePolicy === "abandon") {
+      this.log.info("Terminal auto-resume is disabled by policy — skipping restoration");
+      return;
+    }
+
+    const store = this.getTerminalBufferStore();
+    const pendingIds = store.listPending();
+
+    if (pendingIds.length === 0) {
+      return;
+    }
+
+    this.log.info(`Restoring ${pendingIds.length} terminal session(s) from previous run`);
+
+    for (const sessionId of pendingIds) {
+      try {
+        const { metadata, buffer } = loadPersistedState(store, sessionId);
+        const effectiveBuffer = resumePolicy === "metadata_only" ? null : buffer;
+        const decision = this.applyMetadataLosses(
+          decideResume(sessionId, metadata as SerializedTerminalSession | null, effectiveBuffer),
+          metadata,
+        );
+
+        if (decision.status === "fresh") {
+          store.unmarkPending(sessionId);
+          store.deleteSession(sessionId);
+          store.deleteBuffer(sessionId);
+          continue;
+        }
+
+        if (!metadata || typeof metadata !== "object") {
+          store.unmarkPending(sessionId);
+          continue;
+        }
+
+        const meta = metadata as SerializedTerminalSession;
+
+        // Verify cwd still exists
+        const cwdExists = await this.statPath(meta.cwd).then(() => true).catch(() => false);
+        const cwd = cwdExists ? meta.cwd : process.cwd();
+
+        // Reconstruct the session with the same logical id
+        const session = await this.terminalManager.create({
+          id: meta.sessionId,
+          shell: meta.shell,
+          cwd,
+          env: this.buildResumeEnv(meta).env,
+          name: meta.name,
+        });
+
+        // Attach resume metadata
+        const result = buildResumeResult(decision);
+        (session as PtyTerminalSession).resumeMetadata = {
+          restored: true,
+          resumeLevel: result.resumeLevel,
+          status: result.status,
+          preserved: result.preserved,
+          lost: result.lost,
+          priorStatus: meta.status,
+          priorRunningCommand: meta.runningCommand,
+          originalCreatedAt: meta.createdAt,
+          reconstructedAt: new Date().toISOString(),
+        };
+
+        // If we have buffer content, inject it into the output buffer so read() returns it
+        if (effectiveBuffer && decision.preserved.buffer) {
+          const reconstructed = rebuildOutputBuffer(effectiveBuffer);
+          if (reconstructed) {
+            (session as PtyTerminalSession).injectOutput?.(reconstructed);
+          }
+        }
+
+        this.log.info(`Restored terminal session ${sessionId}`, {
+          status: decision.status,
+          resumeLevel: decision.resumeLevel,
+          preserved: decision.preserved,
+        });
+      } catch (error: unknown) {
+        this.log.warn(`Failed to restore terminal session ${sessionId}`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        store.unmarkPending(sessionId);
+      }
+    }
+
+    // Clean up old stale records
+    store.cleanup(7 * 24 * 60 * 60 * 1000); // 7 days
+  }
+
+  private async statPath(p: string): Promise<unknown> {
+    return fs.promises.stat(p);
+  }
 
   private startChromeWatchdog(): void {
     const intervalMs = this.config.chromeWatchdogIntervalMs ?? 30_000;
@@ -1224,6 +1562,10 @@ export class Daemon {
               return this.termClose(payload.sessionId as string);
             case "sessions":
               return this.termList();
+            case "resume":
+              return this.termResume(payload.sessionId as string);
+            case "status":
+              return this.termStatus(payload.sessionId as string);
             default:
               throw new Error(`Unknown term subcommand: ${subcommand}`);
           }

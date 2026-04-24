@@ -47,6 +47,12 @@ export interface TerminalSessionConfig {
   rows?: number;
   /** Human-readable session name for listing. */
   name?: string;
+  /**
+   * Optional explicit logical session id.
+   * Used during resume to preserve the same session identity across
+   * daemon restarts. If omitted, a new UUID is generated.
+   */
+  id?: string;
 }
 
 // ── Terminal Snapshot ────────────────────────────────────────────────
@@ -64,6 +70,18 @@ export interface TerminalSnapshot {
   runningCommand?: string;
   createdAt: string;
   lastActivityAt: string;
+  /** Resume metadata if this session was restored from persisted state. */
+  resumeMetadata?: {
+    restored: boolean;
+    resumeLevel?: 1 | 2;
+    status?: "fresh" | "resumed" | "reconstructed";
+    preserved?: { metadata: boolean; buffer: boolean };
+    lost?: string[];
+    priorStatus?: "idle" | "running" | "interrupted" | "closed";
+    priorRunningCommand?: string;
+    originalCreatedAt?: string;
+    reconstructedAt?: string;
+  };
 }
 
 // ── Terminal Session Status ──────────────────────────────────────────
@@ -98,6 +116,9 @@ export interface TerminalSession {
 
   /** Close the session and kill the PTY process. */
   close(): Promise<void>;
+
+  /** Resume metadata if this session was reconstructed from persisted state. */
+  resumeMetadata?: TerminalSnapshot["resumeMetadata"];
 }
 
 // ── Session Manager (public interface) ───────────────────────────────

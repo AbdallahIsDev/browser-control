@@ -36,7 +36,7 @@ const OUTPUT_POLL_INTERVAL = 50; // ms between output reads during exec
 
 // ── PTY Session Implementation ───────────────────────────────────────
 
-class PtyTerminalSession implements ITerminalSession {
+export class PtyTerminalSession implements ITerminalSession {
   readonly id: string;
   readonly name: string | undefined;
   readonly shell: string;
@@ -52,6 +52,10 @@ class PtyTerminalSession implements ITerminalSession {
   private _outputResolve: ((data: string) => void) | null = null;
   private _runningCommand: string | undefined;
   private _lastActivityAt: string;
+  /** Command history for this session. */
+  private _commandHistory: string[] = [];
+  /** Resume metadata if this session was reconstructed. */
+  resumeMetadata?: import("./terminal_types").TerminalSnapshot["resumeMetadata"];
   /** Set when the PTY process has exited (via natural exit or kill). */
   private _processExited = false;
   private _shellInfo: ShellInfo;
@@ -207,6 +211,7 @@ class PtyTerminalSession implements ITerminalSession {
 
     this._status = "running";
     this._runningCommand = command;
+    this._commandHistory.push(command);
     const startMs = Date.now();
 
     // Clear the output buffer
@@ -325,6 +330,7 @@ class PtyTerminalSession implements ITerminalSession {
       runningCommand: this._runningCommand,
       createdAt: this.createdAt,
       lastActivityAt: this._lastActivityAt,
+      resumeMetadata: this.resumeMetadata,
     };
   }
 
@@ -406,8 +412,46 @@ class PtyTerminalSession implements ITerminalSession {
   }
 
   /**
+   * Return raw internal state for serialization (Section 13).
+   * This is intentionally not part of the public TerminalSession interface.
+   */
+  getSerializeableState(): {
+    id: string;
+    name: string | undefined;
+    shell: string;
+    cwd: string;
+    env: Record<string, string>;
+    status: string;
+    createdAt: string;
+    lastActivityAt: string;
+    _outputBuffer: string;
+    _runningCommand: string | undefined;
+    _history: string[];
+    pid: number | undefined;
+  } {
+    return {
+      id: this.id,
+      name: this.name,
+      shell: this.shell,
+      cwd: this._cwd,
+      env: { ...this.env },
+      status: this._status,
+      createdAt: this.createdAt,
+      lastActivityAt: this._lastActivityAt,
+      _outputBuffer: this._outputBuffer,
+      _runningCommand: this._runningCommand,
+      _history: [...this._commandHistory],
+      pid: this.pid,
+    };
+  }
+
+  /** Inject output into the buffer (used for buffer restoration on resume). */
+  injectOutput(output: string): void {
+    this._outputBuffer = output;
+  }
+
+  /**
    * Dispose node-pty event listeners (onData, onExit).
-   *
    * node-pty on Windows creates internal ConPTY IPC channels (Sockets + MessagePort)
    * that are held open by the listener references. If we do not dispose these,
    * the handles persist after close() and keep the Node.js event loop alive,
@@ -492,7 +536,7 @@ export class TerminalSessionManager implements ITerminalSessionManager {
   private readonly sessions = new Map<string, PtyTerminalSession>();
 
   async create(config: TerminalSessionConfig = {}): Promise<ITerminalSession> {
-    const id = crypto.randomUUID();
+    const id = config.id ?? crypto.randomUUID();
     const shellInfo = config.shell
       ? resolveNamedShell(config.shell)
       : detectShell();

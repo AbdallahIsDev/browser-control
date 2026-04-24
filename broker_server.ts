@@ -97,6 +97,8 @@ export interface BrokerServerOptions {
     termInterrupt?(sessionId: string): Promise<{ ok: true }>;
     termClose?(sessionId: string): Promise<{ ok: true }>;
     termList?(): Array<Record<string, unknown>>;
+    termResume?(sessionId: string): Promise<unknown>;
+    termStatus?(sessionId: string): Promise<unknown>;
     fsRead?(pathname: string): unknown;
     fsWrite?(pathname: string, content: string): unknown;
     fsList?(pathname: string, recursive?: boolean, extension?: string): unknown;
@@ -305,6 +307,12 @@ function createCallbacksFromDaemon(
         case "sessions":
           if (!daemon.termList) throw new Error("Terminal listing is not configured.");
           return daemon.termList();
+        case "resume":
+          if (!daemon.termResume) throw new Error("Terminal resume is not configured.");
+          return daemon.termResume(payload.sessionId as string);
+        case "status":
+          if (!daemon.termStatus) throw new Error("Terminal status is not configured.");
+          return daemon.termStatus(payload.sessionId as string);
         default:
           throw new Error(`Unknown term subcommand: ${subcommand}`);
       }
