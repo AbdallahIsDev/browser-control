@@ -96,6 +96,16 @@ export interface TermCloseOptions {
   sessionId: string;
 }
 
+export interface TermResumeOptions {
+  /** Terminal session ID to resume. */
+  sessionId: string;
+}
+
+export interface TermStatusOptions {
+  /** Terminal session ID to check status. */
+  sessionId: string;
+}
+
 // ── Terminal Action Implementation ────────────────────────────────────
 
 export class TerminalActions {
@@ -469,6 +479,54 @@ export class TerminalActions {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
       return failureResult(`Close failed: ${message}`, { path: policyEval.path, sessionId });
+    }
+  }
+
+  /**
+   * Resume a terminal session from persisted state.
+   */
+  async resume(options: TermResumeOptions): Promise<ActionResult<unknown>> {
+    const sessionId = this.getSessionId();
+
+    const policyEval = this.context.sessionManager.evaluateAction("terminal_resume", { sessionId: options.sessionId });
+    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<unknown>;
+
+    try {
+      await this.ensureDaemonRuntimeReady();
+      const runtime = this.getTerminalRuntime();
+      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      if (daemonGuard) return daemonGuard as ActionResult<unknown>;
+      const result = await runtime.resume(options.sessionId);
+
+      return successResult(result, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+    } catch (error: unknown) {
+      this.invalidateBrokerRuntimeOnError(error);
+      const message = error instanceof Error ? error.message : String(error);
+      return failureResult(`Resume failed: ${message}`, { path: policyEval.path, sessionId });
+    }
+  }
+
+  /**
+   * Get resume status for a terminal session.
+   */
+  async status(options: TermStatusOptions): Promise<ActionResult<unknown>> {
+    const sessionId = this.getSessionId();
+
+    const policyEval = this.context.sessionManager.evaluateAction("terminal_status", { sessionId: options.sessionId });
+    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<unknown>;
+
+    try {
+      await this.ensureDaemonRuntimeReady();
+      const runtime = this.getTerminalRuntime();
+      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      if (daemonGuard) return daemonGuard as ActionResult<unknown>;
+      const result = await runtime.status(options.sessionId);
+
+      return successResult(result, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+    } catch (error: unknown) {
+      this.invalidateBrokerRuntimeOnError(error);
+      const message = error instanceof Error ? error.message : String(error);
+      return failureResult(`Status failed: ${message}`, { path: policyEval.path, sessionId });
     }
   }
 }

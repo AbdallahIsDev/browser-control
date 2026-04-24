@@ -69,6 +69,10 @@ export interface TerminalNamespace {
   snapshot(options?: { sessionId?: string }): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>;
   interrupt(options: { sessionId: string }): Promise<ActionResult<{ interrupted: boolean }>>;
   close(options: { sessionId: string }): Promise<ActionResult<{ closed: boolean }>>;
+  /** Resume a terminal session from persisted state (Section 13). */
+  resume(options: { sessionId: string }): Promise<ActionResult<unknown>>;
+  /** Get resume status for a terminal session (Section 13). */
+  status(options: { sessionId: string }): Promise<ActionResult<unknown>>;
 }
 
 // ── FS Namespace ─────────────────────────────────────────────────────
@@ -188,6 +192,8 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       snapshot: (o) => terminalActions.snapshot(o),
       interrupt: (o) => terminalActions.interrupt(o),
       close: (o) => terminalActions.close(o),
+      resume: (o) => terminalActions.resume(o),
+      status: (o) => terminalActions.status(o),
     },
     fs: {
       read: (o) => fsActions.read(o),

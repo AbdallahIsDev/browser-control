@@ -46,6 +46,23 @@ test("infers command path for command execution", () => {
   assert.strictEqual(step.risk, "moderate");
 });
 
+test("infers command path for terminal resume/status actions", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "terminal recovery",
+    actor: "agent",
+    sessionId: "test-session",
+  };
+
+  const statusStep = router.buildRoutedStep(intent, "terminal_status", { sessionId: "term-1" });
+  assert.strictEqual(statusStep.path, "command");
+  assert.strictEqual(statusStep.risk, "low");
+
+  const resumeStep = router.buildRoutedStep(intent, "terminal_resume", { sessionId: "term-1" });
+  assert.strictEqual(resumeStep.path, "command");
+  assert.strictEqual(resumeStep.risk, "moderate");
+});
+
 test("infers low_level path for CDP actions", () => {
   const router = new ExecutionRouter();
   const intent: PolicyTaskIntent = {

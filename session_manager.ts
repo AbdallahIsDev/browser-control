@@ -142,6 +142,10 @@ export interface TerminalRuntime {
   interrupt(sessionId: string): Promise<void>;
   close(sessionId: string): Promise<void>;
   list(): Promise<Array<{ id: string; name?: string; shell: string; cwd: string; status: string }>>;
+  /** Resume a terminal session from persisted state (Section 13). */
+  resume(sessionId: string): Promise<unknown>;
+  /** Get resume status for a terminal session (Section 13). */
+  status(sessionId: string): Promise<unknown>;
 }
 
 /**
@@ -208,6 +212,32 @@ export class LocalTerminalRuntime implements TerminalRuntime {
       status: s.status,
     }));
   }
+
+  async resume(sessionId: string): Promise<unknown> {
+    throw new Error("LocalTerminalRuntime does not support resume. Use daemon-backed runtime.");
+  }
+
+  async status(sessionId: string): Promise<unknown> {
+    const session = this.tm.get(sessionId);
+    if (!session) {
+      throw new Error(`Terminal session not found: ${sessionId}`);
+    }
+    return {
+      sessionId,
+      resumeLevel: session.resumeMetadata?.resumeLevel ?? 1,
+      status: session.resumeMetadata?.status ?? "fresh",
+      preserved: session.resumeMetadata?.preserved ?? { metadata: true, buffer: false },
+      lost: session.resumeMetadata?.lost ?? [],
+      session: {
+        id: session.id,
+        name: session.name,
+        shell: session.shell,
+        cwd: session.cwd,
+        status: session.status,
+        createdAt: session.createdAt,
+      },
+    };
+  }
 }
 
 /**
@@ -271,6 +301,14 @@ export class DaemonTerminalRuntime implements TerminalRuntime {
       cwd: (s.cwd as string) ?? "",
       status: (s.status as string) ?? "running",
     }));
+  }
+
+  async resume(sessionId: string): Promise<unknown> {
+    return this.daemon.termResume(sessionId);
+  }
+
+  async status(sessionId: string): Promise<unknown> {
+    return this.daemon.termStatus(sessionId);
   }
 }
 
@@ -494,6 +532,14 @@ export class BrokerTerminalRuntime implements TerminalRuntime {
       cwd: (s.cwd as string) ?? "",
       status: (s.status as string) ?? "idle",
     }));
+  }
+
+  async resume(sessionId: string): Promise<unknown> {
+    return this.request("resume", { sessionId }, "POST");
+  }
+
+  async status(sessionId: string): Promise<unknown> {
+    return this.request("status", { sessionId });
   }
 }
 

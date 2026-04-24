@@ -41,7 +41,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   {
     matches: (action) => {
       const terminalReadActions = [
-        "terminal_list", "terminal_read", "terminal_snapshot",
+        "terminal_list", "terminal_read", "terminal_snapshot", "terminal_status",
       ];
       return terminalReadActions.includes(action);
     },
@@ -54,8 +54,8 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     matches: (action) => {
       const terminalActions = [
         "terminal_open", "terminal_close", "terminal_write",
-        "terminal_interrupt", "terminal_exec",
-        "term_open", "term_close", "term_exec",
+        "terminal_interrupt", "terminal_exec", "terminal_resume",
+        "term_open", "term_close", "term_exec", "term_resume",
       ];
       return terminalActions.includes(action);
     },

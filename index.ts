@@ -401,6 +401,39 @@ export {
 
 export type { ShellInfo } from "./cross_platform";
 
+// ── Section 13: Terminal Resume and State Serialization ────────────────
+
+export type {
+  SerializedTerminalSession,
+  TerminalBufferRecord,
+  TerminalResumeLevel,
+  TerminalResumeStatus,
+  TerminalResumeMetadata,
+  TerminalResumeResult,
+  TerminalResumeConfig,
+} from "./terminal_resume_types";
+
+export type { ResumeDecision } from "./terminal_resume";
+
+export {
+  serializeTerminalSession,
+  validateSerializedSession,
+} from "./terminal_serialize";
+
+export {
+  TerminalBufferStore,
+  TERMINAL_BUFFER_KEY,
+  TERMINAL_METADATA_KEY,
+  TERMINAL_PENDING_KEY,
+} from "./terminal_buffer_store";
+
+export {
+  decideResume,
+  buildResumeResult,
+  loadPersistedState,
+  rebuildOutputBuffer,
+} from "./terminal_resume";
+
 // Filesystem operations
 export {
   readFile as fsReadFile,
@@ -493,6 +526,8 @@ export type {
   TermSnapshotOptions,
   TermInterruptOptions,
   TermCloseOptions,
+  TermResumeOptions,
+  TermStatusOptions,
 } from "./terminal_actions";
 
 // FS actions — canonical filesystem action surface

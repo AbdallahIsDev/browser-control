@@ -59,6 +59,8 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_terminal_snapshot"));
       assert.ok(names.includes("bc_terminal_list"));
       assert.ok(names.includes("bc_terminal_close"));
+      assert.ok(names.includes("bc_terminal_resume"));
+      assert.ok(names.includes("bc_terminal_status"));
 
       // Filesystem tools
       assert.ok(names.includes("bc_fs_read"));
@@ -169,6 +171,42 @@ describe("MCP Tool Registry", () => {
       assert.equal(result.success, true);
       assert.equal((result.data as Record<string, unknown>).id, otherId);
       assert.equal((result.data as Record<string, unknown>).name, "other-session");
+    });
+
+    it("terminal resume/status MCP tools forward sessionId", async () => {
+      const calls: { resume?: string; status?: string } = {};
+      api.terminal.resume = async (options) => {
+        calls.resume = options.sessionId;
+        return {
+          success: true,
+          path: "command",
+          sessionId: "test-session",
+          data: { id: options.sessionId, status: "resumed" },
+          completedAt: new Date().toISOString(),
+        };
+      };
+      api.terminal.status = async (options) => {
+        calls.status = options.sessionId;
+        return {
+          success: true,
+          path: "command",
+          sessionId: "test-session",
+          data: { id: options.sessionId, status: "pending_resume" },
+          completedAt: new Date().toISOString(),
+        };
+      };
+
+      const tools = buildToolRegistry(api);
+      const resumeTool = tools.find((t) => t.name === "bc_terminal_resume")!;
+      const statusTool = tools.find((t) => t.name === "bc_terminal_status")!;
+
+      const resume = await resumeTool.handler({ sessionId: "term-1" });
+      const status = await statusTool.handler({ sessionId: "term-1" });
+
+      assert.equal(resume.success, true);
+      assert.equal(status.success, true);
+      assert.equal(calls.resume, "term-1");
+      assert.equal(calls.status, "term-1");
     });
   });
 

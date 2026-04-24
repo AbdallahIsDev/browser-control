@@ -10,6 +10,8 @@
  *   - bc_terminal_snapshot
  *   - bc_terminal_list
  *   - bc_terminal_close
+ *   - bc_terminal_resume
+ *   - bc_terminal_status
  *
  * All tools use the daemon-backed / session-aware terminal path.
  * Session-bound tools (read, write, interrupt, snapshot, close) require
@@ -149,6 +151,36 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         if (params.browserControlSessionId) api.session.use(params.browserControlSessionId as string);
         return api.terminal.close({
+          sessionId: params.sessionId as string,
+        });
+      },
+    },
+
+    {
+      name: "bc_terminal_resume",
+      description: "Resume a terminal session from persisted daemon state after daemon restart or shutdown recovery.",
+      inputSchema: buildSchema({
+        sessionId: { type: "string", description: "Terminal session ID to resume from persisted state." },
+        browserControlSessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["sessionId"]),
+      handler: async (params) => {
+        if (params.browserControlSessionId) api.session.use(params.browserControlSessionId as string);
+        return api.terminal.resume({
+          sessionId: params.sessionId as string,
+        });
+      },
+    },
+
+    {
+      name: "bc_terminal_status",
+      description: "Get resume status and metadata for a terminal session.",
+      inputSchema: buildSchema({
+        sessionId: { type: "string", description: "Terminal session ID to inspect." },
+        browserControlSessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["sessionId"]),
+      handler: async (params) => {
+        if (params.browserControlSessionId) api.session.use(params.browserControlSessionId as string);
+        return api.terminal.status({
           sessionId: params.sessionId as string,
         });
       },

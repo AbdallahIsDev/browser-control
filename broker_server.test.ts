@@ -40,6 +40,7 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
   let broker!: BrokerServer;
   let scheduledBody: Record<string, unknown> | undefined;
   let killCalls = 0;
+  const terminalCalls: Array<{ subcommand: string; payload: Record<string, unknown> }> = [];
 
   broker = createBrokerServer({
     env: {
@@ -120,6 +121,10 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
           enabled: true,
         },
       ],
+      handleTerminal: async (subcommand, payload) => {
+        terminalCalls.push({ subcommand, payload });
+        return { subcommand, sessionId: payload.sessionId };
+      },
     },
   });
 
@@ -250,6 +255,32 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
       enabled: true,
     },
   ]);
+
+  const resumeResponse = await fetch(`${baseUrl}/api/v1/term/resume`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "runtime-key",
+    },
+    body: JSON.stringify({ sessionId: "term-1" }),
+  });
+  assert.equal(resumeResponse.status, 200);
+  assert.deepEqual(await resumeResponse.json(), {
+    subcommand: "resume",
+    sessionId: "term-1",
+  });
+
+  const statusResponseForTerminal = await fetch(`${baseUrl}/api/v1/term/status?sessionId=term-1`, {
+    headers: {
+      "x-api-key": "runtime-key",
+    },
+  });
+  assert.equal(statusResponseForTerminal.status, 200);
+  assert.deepEqual(await statusResponseForTerminal.json(), {
+    subcommand: "status",
+    sessionId: "term-1",
+  });
+  assert.deepEqual(terminalCalls.map((call) => call.subcommand), ["resume", "status"]);
 
   const killResponse = await fetch(`${baseUrl}/api/v1/kill`, {
     method: "POST",

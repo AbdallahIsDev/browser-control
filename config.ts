@@ -97,7 +97,7 @@ export interface BrowserControlConfig {
   /** Default policy profile (safe, balanced, or trusted) */
   policyProfile: string;
 
-  // ── Terminal (Section 12) ────────────────────────────────────────
+  // ── Terminal (Section 12 + 13) ────────────────────────────────────
   /** Default shell for terminal sessions (auto-detected if omitted) */
   terminalShell: string | undefined;
   /** Default terminal columns (default: 80) */
@@ -106,6 +106,14 @@ export interface BrowserControlConfig {
   terminalRows: number;
   /** Max output bytes per command (default: 1MB) */
   terminalMaxOutputBytes: number;
+  /** Max scrollback lines to persist across daemon restarts (default: 10_000) */
+  terminalMaxScrollbackLines: number;
+  /** Max serialized terminal sessions to keep (default: 50) */
+  terminalMaxSerializedSessions: number;
+  /** Terminal recovery policy on daemon startup (default: "resume") */
+  terminalResumePolicy: "resume" | "metadata_only" | "abandon";
+  /** Auto-resume terminal sessions on daemon startup (default: true) */
+  terminalAutoResume: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -237,11 +245,19 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     throw new Error(`POLICY_PROFILE must be one of: ${validProfiles.join(", ")}, got: ${policyProfile}`);
   }
 
-  // ── Terminal (Section 12) ────────────────────────────────────────
+  // ── Terminal (Section 12 + 13) ────────────────────────────────────
   const terminalShell = normalizeOptionalString(env.TERMINAL_SHELL);
   const terminalCols = parsePositiveInt(env.TERMINAL_COLS, 80);
   const terminalRows = parsePositiveInt(env.TERMINAL_ROWS, 24);
   const terminalMaxOutputBytes = parsePositiveInt(env.TERMINAL_MAX_OUTPUT_BYTES, 1024 * 1024);
+  const terminalMaxScrollbackLines = parsePositiveInt(env.TERMINAL_MAX_SCROLLBACK_LINES, 10_000);
+  const terminalMaxSerializedSessions = parsePositiveInt(env.TERMINAL_MAX_SERIALIZED_SESSIONS, 50);
+  const terminalResumePolicy = normalizeOptionalString(env.TERMINAL_RESUME_POLICY) ?? "resume";
+  const validTerminalResumePolicies = ["resume", "metadata_only", "abandon"];
+  if (validate && !validTerminalResumePolicies.includes(terminalResumePolicy)) {
+    throw new Error(`TERMINAL_RESUME_POLICY must be one of: ${validTerminalResumePolicies.join(", ")}, got: ${terminalResumePolicy}`);
+  }
+  const terminalAutoResume = parseBoolean(env.TERMINAL_AUTO_RESUME, true);
 
   return {
     dataHome,
@@ -293,5 +309,9 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     terminalCols,
     terminalRows,
     terminalMaxOutputBytes,
+    terminalMaxScrollbackLines,
+    terminalMaxSerializedSessions,
+    terminalResumePolicy: terminalResumePolicy as "resume" | "metadata_only" | "abandon",
+    terminalAutoResume,
   };
 }
