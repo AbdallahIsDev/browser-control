@@ -30,6 +30,7 @@ import type {
   DeleteResult,
   FileStatResult,
 } from "./fs_operations";
+import type { ProviderListResult, ProviderSelectionResult } from "./providers/types";
 
 // ── Options ──────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export interface BrowserNamespace {
   tabList(): Promise<ActionResult<Array<{ id: string; url: string; title: string }>>>;
   tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
   close(): Promise<ActionResult<{ closed: boolean }>>;
+  provider: ProviderNamespace;
 }
 
 // ── Terminal Namespace ───────────────────────────────────────────────
@@ -91,6 +93,14 @@ export interface SessionNamespace {
   status(nameOrId?: string): ActionResult<SessionState>;
 }
 
+// ── Provider Namespace ────────────────────────────────────────────────
+
+export interface ProviderNamespace {
+  list(): ProviderListResult;
+  use(name: string): ProviderSelectionResult;
+  getActive(): string;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -98,6 +108,7 @@ export interface BrowserControlAPI {
   terminal: TerminalNamespace;
   fs: FsNamespace;
   session: SessionNamespace;
+  provider: ProviderNamespace;
   /** Access the underlying session manager for advanced use. */
   readonly sessionManager: SessionManager;
   /** Access the underlying browser actions instance. */
@@ -164,6 +175,11 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
   const browserActions = new BrowserActions(browserCtx);
   const terminalActions = new TerminalActions(terminalCtx);
   const fsActions = new FsActions(fsCtx);
+  const providerNamespace: ProviderNamespace = {
+    list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
+    use: (name) => sessionManager.getBrowserManager().getProviderRegistry().select(name),
+    getActive: () => sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
+  };
 
   return {
     browser: {
@@ -179,6 +195,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       tabList: () => browserActions.tabList(),
       tabSwitch: (id) => browserActions.tabSwitch(id),
       close: () => browserActions.close(),
+      provider: providerNamespace,
     },
     terminal: {
       open: (o) => terminalActions.open(o),
@@ -203,6 +220,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       use: (nameOrId) => sessionManager.use(nameOrId),
       status: (nameOrId) => sessionManager.status(nameOrId),
     },
+    provider: providerNamespace,
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },
     get terminalActions() { return terminalActions; },

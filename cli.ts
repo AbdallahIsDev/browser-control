@@ -19,6 +19,41 @@ interface ParsedArgs {
   positional: string[];
 }
 
+const VALUE_FLAGS = new Set([
+  "action",
+  "amount",
+  "api-key",
+  "cdp-url",
+  "content",
+  "cron",
+  "cwd",
+  "delay",
+  "endpoint",
+  "ext",
+  "kind",
+  "max-bytes",
+  "name",
+  "output",
+  "params",
+  "path",
+  "policy",
+  "port",
+  "priority",
+  "profile",
+  "protocol",
+  "provider",
+  "root-selector",
+  "session",
+  "shell",
+  "skill",
+  "target",
+  "target-type",
+  "timeout",
+  "timeoutMs",
+  "type",
+  "wait-until",
+]);
+
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = argv.slice(2);
   const result: ParsedArgs = {
@@ -39,6 +74,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
         const key = flagPart.slice(0, eqIndex);
         const value = flagPart.slice(eqIndex + 1);
         result.flags[key] = value;
+      } else if (VALUE_FLAGS.has(flagPart) && args[i + 1] && !args[i + 1].startsWith("-")) {
+        result.flags[flagPart] = args[i + 1];
+        i++;
       } else {
         result.flags[flagPart] = "true";
       }
@@ -114,9 +152,13 @@ Session:
   session status                                                     Show active session status
 
 Browser Lifecycle:
-  browser attach [--port=9222] [--cdp-url=...]                       Attach to running Chrome/Electron
-  browser launch [--port=9222] [--profile=default]                   Launch managed automation browser
+  browser attach [--port=9222] [--cdp-url=...] [--provider=<name>]      Attach to running Chrome/Electron
+  browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
+  browser provider list                                              List browser providers
+  browser provider use <name>                                        Set active browser provider
+  browser provider add <name> --type=<type> --endpoint=<url>         Add or configure a browser provider
+  browser provider remove <name>                                     Remove a configured browser provider
   browser profile list                                                List browser profiles
   browser profile create <name> [--type=named]                       Create a browser profile
   browser profile use <name>                                          Activate a browser profile
@@ -1080,6 +1122,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const port = flags.port ? Number(flags.port) : undefined;
       const cdpUrl = flags["cdp-url"] ?? undefined;
       const targetType = (flags["target-type"] ?? "chrome") as "chrome" | "chromium" | "electron";
+      const provider = flags.provider ?? undefined;
 
       try {
         const { BrowserConnectionManager } = await import("./browser_connection");
@@ -1095,6 +1138,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           cdpUrl,
           targetType,
           actor: "human",
+          provider,
         });
         if (jsonOutput) {
           outputJson(connection);
@@ -1115,6 +1159,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
     case "launch": {
       const port = flags.port ? Number(flags.port) : undefined;
       const profileName = flags.profile ?? "default";
+      const provider = flags.provider ?? undefined;
 
       try {
         const { BrowserConnectionManager } = await import("./browser_connection");
@@ -1129,6 +1174,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           port,
           profileName,
           actor: "human",
+          provider,
         });
         if (jsonOutput) {
           outputJson(connection);
@@ -1159,6 +1205,124 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       } catch (error) {
         console.error("Error:", (error as Error).message);
         process.exit(1);
+      }
+      break;
+    }
+
+    case "provider": {
+      const providerAction = positional[0];
+      switch (providerAction) {
+        case "list": {
+          const { ProviderRegistry } = await import("./providers/registry");
+          const registry = new ProviderRegistry();
+          const result = registry.list();
+          if (jsonOutput) {
+            outputJson(result);
+          } else {
+            console.log(`Active provider: ${result.activeProvider}`);
+            console.log("Built-in providers:");
+            for (const name of result.builtIn) {
+              const marker = name === result.activeProvider ? " (active)" : "";
+              console.log(`  ${name}${marker}`);
+            }
+            if (result.providers.length > 0) {
+              console.log("Custom providers:");
+              for (const p of result.providers) {
+                const marker = p.name === result.activeProvider ? " (active)" : "";
+                console.log(`  ${p.name} (${p.type})${marker}`);
+              }
+            }
+          }
+          break;
+        }
+        case "use": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Provider name is required");
+            process.exit(1);
+          }
+          const { ProviderRegistry } = await import("./providers/registry");
+          const registry = new ProviderRegistry();
+          const result = registry.select(name);
+          if (jsonOutput) {
+            outputJson(result);
+          } else {
+            if (result.success) {
+              console.log(`Active provider set to "${name}"`);
+              if (result.previousProvider && result.previousProvider !== name) {
+                console.log(`  (was: ${result.previousProvider})`);
+              }
+            } else {
+              console.error(`Error: ${result.error}`);
+              process.exit(1);
+            }
+          }
+          break;
+        }
+        case "add": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Provider name is required");
+            process.exit(1);
+          }
+          const providerType = flags.type as string | undefined;
+          const endpoint = flags.endpoint as string | undefined;
+          const apiKey = flags["api-key"] as string | undefined;
+          if (!providerType) {
+            console.error("Error: --type is required (browserless, custom)");
+            process.exit(1);
+          }
+          if (providerType !== "browserless" && providerType !== "custom") {
+            console.error(`Error: Invalid provider type "${providerType}". Must be browserless or custom.`);
+            process.exit(1);
+          }
+          if (!endpoint) {
+            console.error("Error: --endpoint is required");
+            process.exit(1);
+          }
+          const { ProviderRegistry } = await import("./providers/registry");
+          const registry = new ProviderRegistry();
+          const config: Record<string, unknown> = { name, type: providerType, endpoint };
+          if (apiKey) config.apiKey = apiKey;
+          const result = registry.add(config as any);
+          if (jsonOutput) {
+            outputJson(result);
+          } else {
+            if (result.success) {
+              console.log(`Provider "${name}" added (${providerType})`);
+              if (apiKey) console.log("  API key stored (not shown)");
+            } else {
+              console.error(`Error: ${result.error}`);
+              process.exit(1);
+            }
+          }
+          break;
+        }
+        case "remove": {
+          const name = positional[1];
+          if (!name) {
+            console.error("Error: Provider name is required");
+            process.exit(1);
+          }
+          const { ProviderRegistry } = await import("./providers/registry");
+          const registry = new ProviderRegistry();
+          const result = registry.remove(name);
+          if (jsonOutput) {
+            outputJson(result);
+          } else {
+            if (result.success) {
+              console.log(`Provider "${name}" removed`);
+            } else {
+              console.error(`Error: ${result.error}`);
+              process.exit(1);
+            }
+          }
+          break;
+        }
+        default:
+          console.error(`Unknown browser provider command: ${providerAction}`);
+          console.error("Available: list, use, add, remove");
+          process.exit(1);
       }
       break;
     }
@@ -1453,6 +1617,11 @@ export async function runCli(argv = process.argv): Promise<void> {
     return;
   }
 
+  const previousJsonOutputMode = process.env.BROWSER_CONTROL_JSON_OUTPUT;
+  if (args.flags.json === "true") {
+    process.env.BROWSER_CONTROL_JSON_OUTPUT = "true";
+  }
+
   switch (args.command) {
     case "run":
       await handleRun(args);
@@ -1574,6 +1743,12 @@ export async function runCli(argv = process.argv): Promise<void> {
   // never exits after commands like `bc term open --json`.
   if (_sessionManager) {
     _sessionManager.close();
+  }
+
+  if (previousJsonOutputMode === undefined) {
+    delete process.env.BROWSER_CONTROL_JSON_OUTPUT;
+  } else {
+    process.env.BROWSER_CONTROL_JSON_OUTPUT = previousJsonOutputMode;
   }
 }
 

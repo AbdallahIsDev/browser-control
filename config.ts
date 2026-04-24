@@ -97,6 +97,10 @@ export interface BrowserControlConfig {
   /** Default policy profile (safe, balanced, or trusted) */
   policyProfile: string;
 
+  // ── Provider ─────────────────────────────────────────────────────
+  browserlessEndpoint: string | undefined;
+  browserlessApiKey: string | undefined;
+
   // ── Terminal (Section 12) ────────────────────────────────────────
   /** Default shell for terminal sessions (auto-detected if omitted) */
   terminalShell: string | undefined;
@@ -237,6 +241,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     throw new Error(`POLICY_PROFILE must be one of: ${validProfiles.join(", ")}, got: ${policyProfile}`);
   }
 
+  // ── Provider ─────────────────────────────────────────────────────
+  const browserlessEndpoint = normalizeOptionalString(env.BROWSERLESS_ENDPOINT);
+  const browserlessApiKey = normalizeOptionalString(env.BROWSERLESS_API_KEY);
+
   // ── Terminal (Section 12) ────────────────────────────────────────
   const terminalShell = normalizeOptionalString(env.TERMINAL_SHELL);
   const terminalCols = parsePositiveInt(env.TERMINAL_COLS, 80);
@@ -288,6 +296,9 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     logFile,
 
     policyProfile,
+
+    browserlessEndpoint,
+    browserlessApiKey,
 
     terminalShell,
     terminalCols,

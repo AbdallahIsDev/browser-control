@@ -52,6 +52,29 @@ test("parseArgs handles boolean flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("parseArgs handles space-separated long flag values", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "provider",
+    "add",
+    "browserless",
+    "--type",
+    "browserless",
+    "--endpoint",
+    "wss://browserless.example.test",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "provider");
+  assert.deepEqual(result.positional, ["add", "browserless"]);
+  assert.equal(result.flags.type, "browserless");
+  assert.equal(result.flags.endpoint, "wss://browserless.example.test");
+  assert.equal(result.flags.json, "true");
+});
+
 test("parseArgs handles empty args", () => {
   const result = parseArgs(["node", "cli.ts"]);
   assert.equal(result.command, "");

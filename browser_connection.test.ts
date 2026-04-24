@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
+import { chromium } from "playwright";
 
 // Set up test data home before imports
 const testHome = path.join(os.tmpdir(), `bc-test-conn-${Date.now()}`);
@@ -19,6 +20,7 @@ import {
   type BrowserConnectionStatus,
 } from "./browser_connection";
 import { BrowserProfileManager } from "./browser_profiles";
+import { ProviderRegistry } from "./providers/registry";
 
 describe("BrowserConnectionManager", () => {
   let store: MemoryStore;
@@ -222,6 +224,117 @@ describe("BrowserConnectionManager", () => {
           return true;
         },
       );
+    });
+  });
+
+  describe("provider integration", () => {
+    it("should default to local provider on launch", async () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const port = 19999 + Math.floor(Math.random() * 1000);
+      try {
+        const conn = await manager.launchManaged({ port });
+        assert.equal(conn.provider, "local");
+      } finally {
+        await manager.disconnect();
+      }
+    });
+
+    it("should default to local provider on attach", async () => {
+      const manager1 = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const manager2 = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const port = 19999 + Math.floor(Math.random() * 1000);
+      try {
+        await manager1.launchManaged({ port });
+        const conn = await manager2.attach({ port });
+        assert.equal(conn.provider, "local");
+      } finally {
+        await manager1.disconnect();
+        await manager2.disconnect();
+      }
+    });
+
+    it("should reflect provider in status summary", async () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const port = 19999 + Math.floor(Math.random() * 1000);
+      try {
+        await manager.launchManaged({ port });
+        const status = manager.getStatusSummary();
+        assert.equal(status.provider, "local");
+      } finally {
+        await manager.disconnect();
+      }
+    });
+
+    it("should expose provider registry via getProviderRegistry", () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const registry = manager.getProviderRegistry();
+      assert.ok(registry);
+      const names = registry.list().builtIn;
+      assert.ok(names.includes("local"));
+      assert.ok(names.includes("custom"));
+      assert.ok(names.includes("browserless"));
+    });
+
+    it("should reject remote provider launch when capability missing", async () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      // custom provider does not support launch
+      await assert.rejects(
+        () => manager.launchManaged({ provider: "custom" }),
+        (err: Error) => {
+          assert.ok(err.message.includes("does not support managed launch"));
+          return true;
+        },
+      );
+    });
+
+    it("should attach through a configured custom provider and disconnect it", async () => {
+      const registry = new ProviderRegistry(testHome);
+      const addResult = registry.add({
+        name: "my-remote",
+        type: "custom",
+        endpoint: "ws://remote.example.test?token=secret",
+      });
+      assert.equal(addResult.success, true);
+
+      let connectedEndpoint = "";
+      let contextClosed = false;
+      let browserClosed = false;
+      const fakeContext = {
+        pages: () => [],
+        close: async () => { contextClosed = true; },
+      };
+      const fakeBrowser = {
+        contexts: () => [fakeContext],
+        close: async () => { browserClosed = true; },
+      };
+      const originalConnect = chromium.connect;
+      (chromium as unknown as { connect: (endpoint: string) => Promise<unknown> }).connect = async (endpoint: string) => {
+        connectedEndpoint = endpoint;
+        return fakeBrowser;
+      };
+
+      const manager = new BrowserConnectionManager({
+        memoryStore: store,
+        policyEngine: trustedEngine,
+        providerRegistry: registry,
+      });
+
+      try {
+        const conn = await manager.attach({ provider: "my-remote" });
+        assert.equal(connectedEndpoint, "ws://remote.example.test?token=secret");
+        assert.equal(conn.provider, "my-remote");
+        assert.equal(conn.providerMetadata?.type, "custom");
+        assert.equal(conn.cdpEndpoint, "ws://remote.example.test/");
+        assert.equal(manager.isConnected(), true);
+
+        await manager.disconnect();
+        assert.equal(contextClosed, true);
+        assert.equal(browserClosed, true);
+        assert.equal(manager.isConnected(), false);
+      } finally {
+        (chromium as unknown as { connect: typeof originalConnect }).connect = originalConnect;
+        await manager.disconnect();
+      }
     });
   });
 

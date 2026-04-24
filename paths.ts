@@ -101,3 +101,7 @@ export function getInteractionSkillsDir(): string {
 export function getDomainSkillsDir(): string {
   return path.join(getKnowledgeDir(), "domain-skills");
 }
+
+export function getProviderRegistryPath(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "providers", "registry.json");
+}

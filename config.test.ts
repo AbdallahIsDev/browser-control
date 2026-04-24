@@ -13,6 +13,8 @@ test("loadConfig returns sensible defaults with empty env", () => {
   assert.equal(config.brokerPort, 7788);
   assert.equal(config.chromeDebugPort, 9222);
   assert.equal(config.chromeBindAddress, "0.0.0.0");
+  assert.equal(config.browserlessEndpoint, undefined);
+  assert.equal(config.browserlessApiKey, undefined);
   assert.equal(config.stealthEnabled, false);
   assert.equal(config.captchaProvider, undefined);
   assert.equal(config.captchaApiKey, undefined);
@@ -65,6 +67,18 @@ test("loadConfig reads BROKER_ALLOWED_DOMAINS as CSV", () => {
     validate: false,
   });
   assert.deepEqual(config.brokerAllowedDomains, ["example.com", "test.com"]);
+});
+
+test("loadConfig reads Browserless provider env vars", () => {
+  const config = loadConfig({
+    env: {
+      BROWSERLESS_ENDPOINT: "https://browserless.example.com",
+      BROWSERLESS_API_KEY: "secret-key",
+    },
+    validate: false,
+  });
+  assert.equal(config.browserlessEndpoint, "https://browserless.example.com");
+  assert.equal(config.browserlessApiKey, "secret-key");
 });
 
 test("loadConfig reads ENABLE_STEALTH", () => {
@@ -213,6 +227,8 @@ test(".env.example exists and documents key env vars", () => {
     "BROWSER_BIND_ADDRESS",
     "BROWSER_CHROME_PATH",
     "BROWSER_DEBUG_URL",
+    "BROWSERLESS_ENDPOINT",
+    "BROWSERLESS_API_KEY",
     "ENABLE_STEALTH",
     "STEALTH_LOCALE",
     "STEALTH_TIMEZONE_ID",
