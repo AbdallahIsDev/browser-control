@@ -18,6 +18,7 @@ import { buildTerminalTools } from "./tools/terminal";
 import { buildFsTools } from "./tools/fs";
 import { buildSessionTools } from "./tools/session";
 import { buildDebugTools } from "./tools/debug";
+import { buildServiceTools } from "./tools/service";
 
 /**
  * Build the complete MCP tool registry for a Browser Control instance.
@@ -31,6 +32,7 @@ export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
     ...buildTerminalTools(api),
     ...buildFsTools(api),
     ...buildDebugTools(api),
+    ...buildServiceTools(api),
   ];
 }
 
@@ -44,5 +46,6 @@ export function getToolCategories(api: BrowserControlAPI): Record<string, string
     terminal: buildTerminalTools(api).map((t) => t.name),
     fs: buildFsTools(api).map((t) => t.name),
     debug: buildDebugTools(api).map((t) => t.name),
+    service: buildServiceTools(api).map((t) => t.name),
   };
 }

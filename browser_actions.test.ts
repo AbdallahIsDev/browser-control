@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { BrowserActions, type BrowserActionContext } from "./browser_actions";
 import { SessionManager, isPolicyAllowed } from "./session_manager";
 import { MemoryStore } from "./memory_store";
+import { ServiceRegistry } from "./services/registry";
 import type { BrowserConnectionManager } from "./browser_connection";
 
 function createUnavailableBrowserManager() {
@@ -194,6 +195,76 @@ describe("BrowserActions", () => {
 
       assert.equal(result.success, false);
       assert.ok(result.error);
+    });
+  });
+
+  // ── Finding 1: API-registered services visible to browser open ──────
+
+  describe("shared registry between service and browser actions", () => {
+    it("browser open resolves service refs using the same registry as service actions", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const { manager } = createUnavailableBrowserManager();
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+
+        const sharedRegistry = new ServiceRegistry();
+        sharedRegistry.register({ name: "my-app", port: 3000 });
+
+        const isolatedActions = new BrowserActions({
+          sessionManager: isolatedSessionManager,
+          serviceRegistry: sharedRegistry,
+        });
+
+        const result = await isolatedActions.open({ url: "bc://my-app" });
+
+        // Resolution should succeed (service is known in the shared registry).
+        // The open will then fail either because the service is not actually
+        // running (unhealthy_service) or because no browser is available.
+        // The important thing is that it does NOT say "Unknown service".
+        assert.equal(result.success, false);
+        assert.ok(
+          !result.error?.includes("Unknown service"),
+          `Expected resolution to find the service, but got: ${result.error}`,
+        );
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
+    it("browser open returns unknown_service when service is not in the shared registry", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const { manager } = createUnavailableBrowserManager();
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+
+        const sharedRegistry = new ServiceRegistry();
+        // Do NOT register "missing-app"
+
+        const isolatedActions = new BrowserActions({
+          sessionManager: isolatedSessionManager,
+          serviceRegistry: sharedRegistry,
+        });
+
+        const result = await isolatedActions.open({ url: "bc://missing-app" });
+
+        assert.equal(result.success, false);
+        assert.ok(
+          result.error?.includes("Unknown service"),
+          `Expected "Unknown service" error, got: ${result.error}`,
+        );
+      } finally {
+        isolatedStore.close();
+      }
     });
   });
 

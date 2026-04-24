@@ -19,6 +19,41 @@ interface ParsedArgs {
   positional: string[];
 }
 
+const VALUE_FLAGS = new Set([
+  "action",
+  "amount",
+  "api-key",
+  "cdp-url",
+  "content",
+  "cron",
+  "cwd",
+  "delay",
+  "endpoint",
+  "ext",
+  "kind",
+  "max-bytes",
+  "name",
+  "output",
+  "params",
+  "path",
+  "policy",
+  "port",
+  "priority",
+  "profile",
+  "protocol",
+  "provider",
+  "root-selector",
+  "session",
+  "shell",
+  "skill",
+  "target",
+  "target-type",
+  "timeout",
+  "timeoutMs",
+  "type",
+  "wait-until",
+]);
+
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = argv.slice(2);
   const result: ParsedArgs = {
@@ -39,6 +74,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
         const key = flagPart.slice(0, eqIndex);
         const value = flagPart.slice(eqIndex + 1);
         result.flags[key] = value;
+      } else if (VALUE_FLAGS.has(flagPart) && args[i + 1] && !args[i + 1].startsWith("-")) {
+        result.flags[flagPart] = args[i + 1];
+        i++;
       } else {
         result.flags[flagPart] = "true";
       }
@@ -176,6 +214,12 @@ Browser Lifecycle:
   fs move <src> <dst>                                                 Move/rename
   fs rm <path> [--recursive] [--force]                                Delete file/dir
   fs stat <path>                                                      File metadata
+
+Service Management:
+  service register <name> --port <port> [--protocol=http|https] [--path=/...]
+  service list                                                        List registered services
+  service resolve <name>                                              Resolve service to URL
+  service remove <name>                                               Remove a service
 
 Knowledge:
   knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
@@ -1420,6 +1464,11 @@ export async function runCli(argv = process.argv): Promise<void> {
     return;
   }
 
+  const previousJsonOutputMode = process.env.BROWSER_CONTROL_JSON_OUTPUT;
+  if (args.flags.json === "true") {
+    process.env.BROWSER_CONTROL_JSON_OUTPUT = "true";
+  }
+
   switch (args.command) {
     case "run":
       await handleRun(args);
@@ -1523,6 +1572,10 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleFs(args);
       break;
 
+    case "service":
+      await handleService(args);
+      break;
+
     // ── MCP Server (Section 7) ──────────────────────────────────────
     case "mcp":
       await handleMcp(args);
@@ -1541,6 +1594,12 @@ export async function runCli(argv = process.argv): Promise<void> {
   // never exits after commands like `bc term open --json`.
   if (_sessionManager) {
     _sessionManager.close();
+  }
+
+  if (previousJsonOutputMode === undefined) {
+    delete process.env.BROWSER_CONTROL_JSON_OUTPUT;
+  } else {
+    process.env.BROWSER_CONTROL_JSON_OUTPUT = previousJsonOutputMode;
   }
 }
 
@@ -2418,6 +2477,113 @@ async function handleSession(args: ParsedArgs): Promise<void> {
       } else {
         if (result.success) {
           outputJson(result.data, true);
+          if (result.warning) console.warn(`Warning: ${result.warning}`);
+        } else {
+          console.error(`Error: ${result.error}`);
+          process.exit(1);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+// ── Service Handler (Section 14) ─────────────────────────────────────
+
+async function handleService(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const { SessionManager } = await import("./session_manager");
+  const { ServiceActions } = await import("./service_actions");
+  const { formatActionResult } = await import("./action_result");
+
+  if (!_sessionManager) {
+    _sessionManager = new SessionManager();
+  }
+
+  const serviceActions = new ServiceActions({ sessionManager: _sessionManager });
+
+  try {
+    let result: import("./action_result").ActionResult | undefined;
+
+    switch (subcommand) {
+      case "register": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: Service name is required");
+          process.exit(1);
+        }
+        const rawPort = flags.port ? Number(flags.port) : undefined;
+        const detect = flags.detect === "true";
+        const cwd = flags.cwd;
+
+        let port = rawPort;
+
+        if (detect && cwd) {
+          const { detectDevServer } = await import("./services/detector");
+          const detected = detectDevServer(cwd);
+          if (detected) {
+            port = detected.port;
+          }
+        }
+
+        if (port === undefined || Number.isNaN(port)) {
+          console.error("Error: --port is required when detection is not used or detection fails");
+          process.exit(1);
+        }
+
+        result = await serviceActions.register({
+          name,
+          port,
+          protocol: flags.protocol as "http" | "https" | undefined,
+          path: flags.path,
+          detect,
+          cwd,
+        });
+        break;
+      }
+
+      case "list": {
+        result = serviceActions.list();
+        break;
+      }
+
+      case "resolve": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: Service name is required");
+          process.exit(1);
+        }
+        result = await serviceActions.resolve({ name });
+        break;
+      }
+
+      case "remove": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: Service name is required");
+          process.exit(1);
+        }
+        result = serviceActions.remove({ name });
+        break;
+      }
+
+      default:
+        console.error(`Unknown service command: ${subcommand}`);
+        console.error("Available: register, list, resolve, remove");
+        process.exit(1);
+    }
+
+    if (result) {
+      if (jsonOutput) {
+        outputJson(formatActionResult(result), false);
+      } else {
+        if (result.success) {
+          if (result.data) outputJson(result.data, true);
+          else console.log("OK");
           if (result.warning) console.warn(`Warning: ${result.warning}`);
         } else {
           console.error(`Error: ${result.error}`);

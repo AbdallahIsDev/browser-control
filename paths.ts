@@ -30,6 +30,7 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "knowledge"),
     path.join(home, "knowledge", "interaction-skills"),
     path.join(home, "knowledge", "domain-skills"),
+    path.join(home, "services"),
   ];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
@@ -100,4 +101,16 @@ export function getInteractionSkillsDir(): string {
 /** Domain skills stored under <data-home>/knowledge/domain-skills/ */
 export function getDomainSkillsDir(): string {
   return path.join(getKnowledgeDir(), "domain-skills");
+}
+
+// ── Service Registry (Section 14) ────────────────────────────────────
+
+/** Directory for the global service registry */
+export function getServicesDir(): string {
+  return path.join(getDataHome(), "services");
+}
+
+/** Path to the service registry JSON file */
+export function getServiceRegistryPath(): string {
+  return path.join(getServicesDir(), "registry.json");
 }

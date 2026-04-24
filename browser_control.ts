@@ -19,6 +19,7 @@ import { DefaultPolicyEngine } from "./policy_engine";
 import { BrowserActions, type BrowserActionContext } from "./browser_actions";
 import { TerminalActions, type TerminalActionContext } from "./terminal_actions";
 import { FsActions, type FsActionContext } from "./fs_actions";
+import { ServiceActions, type ServiceActionContext } from "./service_actions";
 import type { ActionResult } from "./action_result";
 import type { A11ySnapshot } from "./a11y_snapshot";
 import type { ExecResult, TerminalSnapshot } from "./terminal_types";
@@ -30,6 +31,8 @@ import type {
   DeleteResult,
   FileStatResult,
 } from "./fs_operations";
+import type { ServiceEntry } from "./services/registry";
+import { ServiceRegistry } from "./services/registry";
 
 // ── Options ──────────────────────────────────────────────────────────
 
@@ -86,6 +89,15 @@ export interface FsNamespace {
   stat(options: { path: string }): Promise<ActionResult<FileStatResult>>;
 }
 
+// ── Service Namespace ─────────────────────────────────────────────────
+
+export interface ServiceNamespace {
+  register(options: { name: string; port: number; protocol?: "http" | "https"; path?: string }): Promise<ActionResult<ServiceEntry>>;
+  list(): ActionResult<ServiceEntry[]>;
+  resolve(options: { name: string }): Promise<ActionResult<{ url: string; service?: ServiceEntry }>>;
+  remove(options: { name: string }): ActionResult<{ removed: boolean }>;
+}
+
 // ── Session Namespace ─────────────────────────────────────────────────
 
 export interface SessionNamespace {
@@ -102,6 +114,7 @@ export interface BrowserControlAPI {
   terminal: TerminalNamespace;
   fs: FsNamespace;
   session: SessionNamespace;
+  service: ServiceNamespace;
   /** Access the underlying session manager for advanced use. */
   readonly sessionManager: SessionManager;
   /** Access the underlying browser actions instance. */
@@ -110,6 +123,8 @@ export interface BrowserControlAPI {
   readonly terminalActions: TerminalActions;
   /** Access the underlying fs actions instance. */
   readonly fsActions: FsActions;
+  /** Access the underlying service actions instance. */
+  readonly serviceActions: ServiceActions;
   /**
    * Close the BrowserControl instance and release all held resources.
    *
@@ -157,17 +172,21 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     // Ignore — pre-warm failed, ensureDaemonRuntimeReady() will retry
   });
 
-  const browserCtx: BrowserActionContext = { sessionManager };
+  const sharedRegistry = new ServiceRegistry();
+
+  const browserCtx: BrowserActionContext = { sessionManager, serviceRegistry: sharedRegistry };
   // Terminal actions use autoStartDaemon: true so that persistent terminal
   // sessions (open, read, type, etc.) are daemon-backed, aligning the API
   // with the CLI ownership model. This prevents the API process from
   // hanging after terminal.open() due to an in-process PTY.
   const terminalCtx: TerminalActionContext = { sessionManager, autoStartDaemon: true };
   const fsCtx: FsActionContext = { sessionManager };
+  const serviceCtx: ServiceActionContext = { sessionManager, registry: sharedRegistry };
 
   const browserActions = new BrowserActions(browserCtx);
   const terminalActions = new TerminalActions(terminalCtx);
   const fsActions = new FsActions(fsCtx);
+  const serviceActions = new ServiceActions(serviceCtx);
 
   return {
     browser: {
@@ -209,10 +228,17 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       use: (nameOrId) => sessionManager.use(nameOrId),
       status: (nameOrId) => sessionManager.status(nameOrId),
     },
+    service: {
+      register: (o) => serviceActions.register(o),
+      list: () => serviceActions.list(),
+      resolve: (o) => serviceActions.resolve(o),
+      remove: (o) => serviceActions.remove(o),
+    },
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },
     get terminalActions() { return terminalActions; },
     get fsActions() { return fsActions; },
+    get serviceActions() { return serviceActions; },
     close() { sessionManager.close(); },
   };
 }

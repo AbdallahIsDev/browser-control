@@ -52,6 +52,28 @@ test("parseArgs handles boolean flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("parseArgs handles space-separated long flag values", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "service",
+    "register",
+    "app",
+    "--port",
+    "5173",
+    "--cwd",
+    "C:\\project",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "service");
+  assert.equal(result.subcommand, "register");
+  assert.deepEqual(result.positional, ["app"]);
+  assert.equal(result.flags.port, "5173");
+  assert.equal(result.flags.cwd, "C:\\project");
+  assert.equal(result.flags.json, "true");
+});
+
 test("parseArgs handles empty args", () => {
   const result = parseArgs(["node", "cli.ts"]);
   assert.equal(result.command, "");

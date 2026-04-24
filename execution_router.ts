@@ -63,6 +63,16 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "moderate",
   },
 
+  // ── Service path (Section 14) ───────────────────────────────────
+  {
+    matches: (action) => {
+      const serviceActions = ["service_register", "service_list", "service_resolve", "service_remove"];
+      return serviceActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+
   // ── Filesystem path (Section 12) ────────────────────────────────
   {
     matches: (action) => {

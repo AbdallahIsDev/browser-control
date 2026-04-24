@@ -25,6 +25,8 @@ import {
   type ActionResult,
 } from "./action_result";
 import { logger } from "./logger";
+import { resolveServiceUrl, mightBeServiceRef } from "./services/resolver";
+import { ServiceRegistry, globalServiceRegistry } from "./services/registry";
 
 const log = logger.withComponent("browser_actions");
 
@@ -35,6 +37,8 @@ export interface BrowserActionContext {
   sessionManager: SessionManager;
   /** Ref store to use (defaults to global). */
   refStore?: RefStore;
+  /** Service registry to use for URL resolution (defaults to global). */
+  serviceRegistry?: ServiceRegistry;
 }
 
 export interface OpenOptions {
@@ -249,8 +253,22 @@ export class BrowserActions {
   async open(options: OpenOptions): Promise<ActionResult<{ url: string; title: string }>> {
     const sessionId = this.getSessionId();
 
+    // Section 14: resolve stable local URLs before navigation
+    let resolvedUrl = options.url;
+    const registry = this.context.serviceRegistry ?? globalServiceRegistry;
+    if (mightBeServiceRef(options.url, registry)) {
+      const resolveResult = await resolveServiceUrl(options.url, registry);
+      if ("error" in resolveResult) {
+        return failureResult(resolveResult.error, { path: "a11y", sessionId });
+      }
+      resolvedUrl = resolveResult.url;
+      if (resolveResult.service) {
+        log.info("Resolved service ref", { input: options.url, resolvedUrl, service: resolveResult.service.name });
+      }
+    }
+
     // Policy check — returns PolicyAllowResult on allow
-    const policyEval = this.context.sessionManager.evaluateAction("browser_navigate", { url: options.url });
+    const policyEval = this.context.sessionManager.evaluateAction("browser_navigate", { url: resolvedUrl });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ url: string; title: string }>;
 
     try {
@@ -259,10 +277,10 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr as ActionResult<{ url: string; title: string }>;
       const page = pageOrErr as Page;
 
-      await page.goto(options.url, { waitUntil: options.waitUntil ?? "domcontentloaded" });
+      await page.goto(resolvedUrl, { waitUntil: options.waitUntil ?? "domcontentloaded" });
       const title = await page.title();
 
-      log.info("Opened URL", { url: options.url, title });
+      log.info("Opened URL", { url: resolvedUrl, title, originalInput: options.url });
 
       return successResult({ url: page.url(), title }, {
         path: policyEval.path,
