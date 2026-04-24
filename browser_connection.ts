@@ -48,6 +48,12 @@ import { ExecutionRouter, defaultRouter } from "./execution_router";
 import type { PolicyTaskIntent, RoutedStep, RiskLevel } from "./policy";
 import { loadConfig } from "./config";
 import { logger } from "./logger";
+import { ProviderRegistry } from "./providers/registry";
+import { LocalBrowserProvider } from "./providers/local";
+import { CustomBrowserProvider } from "./providers/custom";
+import { BrowserlessProvider } from "./providers/browserless";
+import { ProviderConfigError } from "./providers/errors";
+import type { BrowserProvider, ActiveConnection } from "./providers/interface";
 
 const log = logger.withComponent("browser_connection");
 
@@ -83,6 +89,10 @@ export interface BrowserConnection {
   targetType: BrowserTargetType;
   /** Whether this is a real user browser (attached) or automation-owned */
   isRealBrowser: boolean;
+  /** Provider that established this connection */
+  provider: string;
+  /** Provider-specific metadata */
+  providerMetadata?: Record<string, unknown>;
 }
 
 export interface ConnectOptions {
@@ -108,6 +118,8 @@ export interface ConnectOptions {
   actor?: "human" | "agent";
   /** Session ID for policy */
   sessionId?: string;
+  /** Provider to use for this connection */
+  provider?: string;
 }
 
 // ── Policy Action Definitions ───────────────────────────────────────
@@ -173,18 +185,22 @@ export class BrowserConnectionManager {
   private policyEngine: DefaultPolicyEngine;
   private executionRouter: ExecutionRouter;
   private connectionCounter = 0;
+  private readonly providerRegistry: ProviderRegistry;
+  private currentProvider: BrowserProvider | null = null;
 
   constructor(options: {
     memoryStore?: MemoryStore;
     policyEngine?: DefaultPolicyEngine;
     executionRouter?: ExecutionRouter;
     profileManager?: BrowserProfileManager;
+    providerRegistry?: ProviderRegistry;
   } = {}) {
     const config = loadConfig({ validate: false });
     this.memoryStore = options.memoryStore ?? new MemoryStore();
     this.policyEngine = options.policyEngine ?? new DefaultPolicyEngine({ profileName: config.policyProfile });
     this.executionRouter = options.executionRouter ?? defaultRouter;
     this.profileManager = options.profileManager ?? new BrowserProfileManager();
+    this.providerRegistry = options.providerRegistry ?? new ProviderRegistry();
   }
 
   // ── Connection Operations ───────────────────────────────────────
@@ -197,6 +213,31 @@ export class BrowserConnectionManager {
    */
   async launchManaged(options: ConnectOptions = {}): Promise<BrowserConnection> {
     await this.evaluatePolicy("browser_launch", options);
+
+    const providerName = options.provider ?? this.providerRegistry.getActiveName();
+    const provider = this.resolveProvider(providerName);
+    this.currentProvider = provider;
+
+    // Delegate to remote provider if not local
+    if (provider.name !== "local") {
+      if (!provider.capabilities.supportsLaunch) {
+        throw new Error(`Provider "${provider.name}" does not support managed launch.`);
+      }
+      const result = await provider.launch({
+        port: options.port,
+        cdpUrl: options.cdpUrl,
+        profile: this.resolveProfile(options),
+        contextOptions: options.contextOptions,
+        targetType: options.targetType,
+        config: this.providerRegistry.get(providerName),
+      });
+      this.browser = result.browser;
+      this.context = result.context;
+      this.connection = result.connection;
+      this.managedProcess = result.managedProcess ?? null;
+      this.persistConnectionState();
+      return result.connection;
+    }
 
     const config = loadConfig({ validate: false });
     const port = options.port ?? config.chromeDebugPort;
@@ -279,6 +320,7 @@ export class BrowserConnectionManager {
         tabCount,
         targetType: options.targetType ?? "chrome",
         isRealBrowser: false,
+        provider: "local",
       };
 
       // Update profile last-used timestamp
@@ -311,6 +353,29 @@ export class BrowserConnectionManager {
    */
   async attach(options: ConnectOptions = {}): Promise<BrowserConnection> {
     await this.evaluatePolicy("browser_attach", options);
+
+    const providerName = options.provider ?? this.providerRegistry.getActiveName();
+    const provider = this.resolveProvider(providerName);
+    this.currentProvider = provider;
+
+    // Delegate to remote provider if not local
+    if (provider.name !== "local") {
+      if (!provider.capabilities.supportsAttach) {
+        throw new Error(`Provider "${provider.name}" does not support attach.`);
+      }
+      const result = await provider.attach({
+        port: options.port,
+        cdpUrl: options.cdpUrl,
+        targetType: options.targetType,
+        config: this.providerRegistry.get(providerName),
+      });
+      this.browser = result.browser;
+      this.context = result.context;
+      this.connection = result.connection;
+      this.managedProcess = result.managedProcess ?? null;
+      this.persistConnectionState();
+      return result.connection;
+    }
 
     const config = loadConfig({ validate: false });
     const port = options.port ?? config.chromeDebugPort;
@@ -361,6 +426,7 @@ export class BrowserConnectionManager {
         tabCount,
         targetType: options.targetType ?? this.detectTargetType(cdpEndpoint),
         isRealBrowser: true,
+        provider: "local",
       };
 
       this.persistConnectionState();
@@ -447,7 +513,30 @@ export class BrowserConnectionManager {
     log.info("Disconnecting browser", {
       connectionId: this.connection.id,
       mode: this.connection.mode,
+      provider: this.connection.provider,
     });
+
+    // If we have a current provider and it's not local, use provider disconnect
+    if (this.currentProvider && this.currentProvider.name !== "local") {
+      try {
+        await this.currentProvider.disconnect({
+          browser: this.browser!,
+          context: this.context,
+          connection: this.connection,
+          managedProcess: this.managedProcess,
+        });
+      } catch (error: unknown) {
+        log.warn(`Provider disconnect error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      this.browser = null;
+      this.context = null;
+      this.managedProcess = null;
+      this.connection.status = "disconnected";
+      this.persistConnectionState();
+      this.connection = null;
+      this.currentProvider = null;
+      return;
+    }
 
     // Save auth state before disconnecting if this is a managed/restored session
     if (this.context && this.connection.mode !== "attached") {
@@ -504,6 +593,7 @@ export class BrowserConnectionManager {
     this.connection.status = "disconnected";
     this.persistConnectionState();
     this.connection = null;
+    this.currentProvider = null;
   }
 
   // ── Accessors ─────────────────────────────────────────────────────
@@ -538,6 +628,37 @@ export class BrowserConnectionManager {
     return this.connection?.status === "connected";
   }
 
+  // ── Provider Integration ──────────────────────────────────────────
+
+  /** Resolve a provider by name using the registry config.type. */
+  private resolveProvider(name: string): BrowserProvider {
+    const config = this.providerRegistry.get(name);
+    if (!config) {
+      throw new ProviderConfigError(
+        name,
+        `Unknown provider "${name}". Use 'bc browser provider list' to see available providers.`,
+      );
+    }
+    switch (config.type) {
+      case "local":
+        return new LocalBrowserProvider();
+      case "custom":
+        return new CustomBrowserProvider();
+      case "browserless":
+        return new BrowserlessProvider();
+      default:
+        throw new ProviderConfigError(
+          name,
+          `Unsupported provider type "${(config as { type: string }).type}".`,
+        );
+    }
+  }
+
+  /** Get the provider registry for external management. */
+  getProviderRegistry(): ProviderRegistry {
+    return this.providerRegistry;
+  }
+
   /** Get a human-readable status summary. */
   getStatusSummary(): Record<string, unknown> {
     if (!this.connection) {
@@ -553,6 +674,7 @@ export class BrowserConnectionManager {
       connected: true,
       connectionId: this.connection.id,
       mode: this.connection.mode,
+      provider: this.connection.provider,
       profile: {
         name: this.connection.profile.name,
         type: this.connection.profile.type,
@@ -713,6 +835,7 @@ export class BrowserConnectionManager {
         connectedAt: this.connection.connectedAt,
         targetType: this.connection.targetType,
         isRealBrowser: this.connection.isRealBrowser,
+        provider: this.connection.provider,
       });
     } catch (error: unknown) {
       log.warn(`Failed to persist connection state: ${error instanceof Error ? error.message : String(error)}`);

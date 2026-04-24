@@ -31,6 +31,7 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "knowledge", "interaction-skills"),
     path.join(home, "knowledge", "domain-skills"),
     path.join(home, "services"),
+    path.join(home, "providers"),
   ];
   for (const dir of dirs) {
     fs.mkdirSync(dir, { recursive: true });
@@ -113,4 +114,11 @@ export function getServicesDir(): string {
 /** Path to the service registry JSON file */
 export function getServiceRegistryPath(): string {
   return path.join(getServicesDir(), "registry.json");
+}
+
+// ── Provider Registry (Section 15) ───────────────────────────────────
+
+/** Path to the provider registry JSON file */
+export function getProviderRegistryPath(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "providers", "registry.json");
 }

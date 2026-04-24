@@ -52,7 +52,7 @@ test("parseArgs handles boolean flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
-test("parseArgs handles space-separated long flag values", () => {
+test("parseArgs handles space-separated service flag values", () => {
   const result = parseArgs([
     "node",
     "cli.ts",
@@ -71,6 +71,29 @@ test("parseArgs handles space-separated long flag values", () => {
   assert.deepEqual(result.positional, ["app"]);
   assert.equal(result.flags.port, "5173");
   assert.equal(result.flags.cwd, "C:\\project");
+  assert.equal(result.flags.json, "true");
+});
+
+test("parseArgs handles space-separated provider flag values", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "provider",
+    "add",
+    "browserless",
+    "--type",
+    "browserless",
+    "--endpoint",
+    "wss://browserless.example.test",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "provider");
+  assert.deepEqual(result.positional, ["add", "browserless"]);
+  assert.equal(result.flags.type, "browserless");
+  assert.equal(result.flags.endpoint, "wss://browserless.example.test");
   assert.equal(result.flags.json, "true");
 });
 

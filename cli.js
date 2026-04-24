@@ -10,8 +10,9 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const distCli = path.join(__dirname, "dist", "cli.js");
+const hasTsRuntime = Boolean(require.extensions[".ts"]);
 
-if (fs.existsSync(distCli)) {
+if (!hasTsRuntime && fs.existsSync(distCli)) {
   // Compiled build exists — delegate to it
   const cli = require(distCli);
   module.exports = cli;

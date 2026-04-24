@@ -591,6 +591,7 @@ export type {
   TerminalNamespace,
   FsNamespace,
   SessionNamespace,
+  ServiceNamespace,
   BrowserControlAPI,
 } from "./browser_control";
 
@@ -614,10 +615,56 @@ export { buildTerminalTools } from "./mcp/tools/terminal";
 export { buildFsTools } from "./mcp/tools/fs";
 export { buildDebugTools } from "./mcp/tools/debug";
 export { buildServiceTools } from "./mcp/tools/service";
+export { buildProviderTools } from "./mcp/tools/provider";
 
 // ── Paths (additional Section 14 helpers) ────────────────────────────
 
 export {
   getServicesDir,
   getServiceRegistryPath,
+  getProviderRegistryPath,
 } from "./paths";
+
+// ── Section 15: Remote Browser Provider Layer ──────────────────────────
+
+export {
+  ProviderRegistry,
+} from "./providers/registry";
+
+export type {
+  ProviderConfig,
+  ProviderRegistryData,
+  ProviderSelectionResult,
+  ProviderListResult,
+} from "./providers/types";
+
+export type {
+  BrowserProvider,
+  ProviderCapabilities,
+  ProviderLaunchOptions,
+  ProviderAttachOptions,
+  ActiveConnection,
+} from "./providers/interface";
+
+export {
+  LocalBrowserProvider,
+} from "./providers/local";
+
+export {
+  CustomBrowserProvider,
+} from "./providers/custom";
+
+export {
+  BrowserlessProvider,
+} from "./providers/browserless";
+
+export {
+  ProviderError,
+  ProviderConfigError,
+  ProviderConnectionError,
+  ProviderNotSupportedError,
+} from "./providers/errors";
+
+export type {
+  ProviderNamespace,
+} from "./browser_control";

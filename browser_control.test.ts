@@ -40,6 +40,15 @@ describe("createBrowserControl", () => {
     }
   });
 
+  it("browser namespace exposes provider management per Section 15", () => {
+    const bc = createBrowserControl({ memoryStore: store });
+
+    assert.ok(bc.browser.provider, "browser.provider namespace missing");
+    assert.equal(typeof bc.browser.provider.list, "function");
+    assert.equal(typeof bc.browser.provider.use, "function");
+    assert.equal(typeof bc.browser.provider.getActive, "function");
+  });
+
   it("terminal namespace has all action methods", () => {
     const bc = createBrowserControl({ memoryStore: store });
 
