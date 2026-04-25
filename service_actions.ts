@@ -11,11 +11,11 @@ import {
   successResult,
   failureResult,
   type ActionResult,
-} from "./action_result";
+} from "./shared/action_result";
 import { ServiceRegistry, type ServiceEntry } from "./services/registry";
 import { resolveServiceUrl, mightBeServiceRef } from "./services/resolver";
 import { detectDevServer } from "./services/detector";
-import { logger } from "./logger";
+import { logger } from "./shared/logger";
 
 const log = logger.withComponent("service_actions");
 

@@ -6,8 +6,8 @@
  * original user-facing error.
  */
 
-import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy";
-import type { MemoryStore } from "../memory_store";
+import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
+import type { MemoryStore } from "../runtime/memory_store";
 import { buildDebugBundle, saveDebugBundle, type BundleBuilderOptions } from "./debug_bundle";
 import { generateRecoveryGuidance } from "./recovery";
 import type { RecoveryGuidance } from "./types";

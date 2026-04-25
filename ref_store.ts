@@ -8,7 +8,7 @@
  */
 
 import type { Page } from "playwright";
-import { logger } from "./logger";
+import { logger } from "./shared/logger";
 import type { A11yElement, A11ySnapshot } from "./a11y_snapshot";
 
 const log = logger.withComponent("ref_store");

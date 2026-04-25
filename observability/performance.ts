@@ -8,7 +8,7 @@
  */
 
 import type { PerformanceTrace } from "./types";
-import type { ExecutionPath } from "../policy";
+import type { ExecutionPath } from "../policy/types";
 
 export interface TraceOptions {
   taskId: string;

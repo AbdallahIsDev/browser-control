@@ -15,7 +15,7 @@
  */
 
 import type { RecoveryGuidance } from "./types";
-import type { ExecutionPath, ExecutionPath as PolicyExecutionPath } from "../policy";
+import type { ExecutionPath, ExecutionPath as PolicyExecutionPath } from "../policy/types";
 
 // ── Error Classification ───────────────────────────────────────────────
 

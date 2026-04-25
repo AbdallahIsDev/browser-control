@@ -3,13 +3,13 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { MemoryStore } from "./memory_store";
+import { MemoryStore } from "./runtime/memory_store";
 import { loadProxyConfigs } from "./proxy_manager";
-import { Telemetry } from "./telemetry";
-import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./paths";
-import { loadConfig } from "./config";
-import { spawnDaemonProcess } from "./daemon_launch";
-import { getConfigEntries, getConfigValue, setUserConfigValue } from "./config";
+import { Telemetry } from "./runtime/telemetry";
+import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./shared/paths";
+import { loadConfig } from "./shared/config";
+import { spawnDaemonProcess } from "./runtime/daemon_launch";
+import { getConfigEntries, getConfigValue, setUserConfigValue } from "./shared/config";
 import { runDoctor } from "./operator/doctor";
 import { runSetup } from "./operator/setup";
 import { collectStatus } from "./operator/status";
@@ -476,7 +476,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 import {
   cleanupStaleDaemonFiles,
   stopDaemon,
-} from "./daemon_cleanup";
+} from "./runtime/daemon_cleanup";
 
 /**
  * CLI-specific wrapper: clean up stale daemon-status.json for the
@@ -1106,7 +1106,7 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
     deserializeProfile, 
     validateProfile,
     saveCustomProfile 
-  } = await import("./policy_profiles");
+  } = await import("./policy/profiles");
 
   switch (subcommand) {
     case "list": {
@@ -1206,9 +1206,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const provider = flags.provider ?? undefined;
 
       try {
-        const { BrowserConnectionManager } = await import("./browser_connection");
-        const { loadConfig } = await import("./config");
-        const { DefaultPolicyEngine } = await import("./policy_engine");
+        const { BrowserConnectionManager } = await import("./browser/connection");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
         
         const config = loadConfig({ validate: false });
         const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1243,9 +1243,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const provider = flags.provider ?? undefined;
 
       try {
-        const { BrowserConnectionManager } = await import("./browser_connection");
-        const { loadConfig } = await import("./config");
-        const { DefaultPolicyEngine } = await import("./policy_engine");
+        const { BrowserConnectionManager } = await import("./browser/connection");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
 
         const config = loadConfig({ validate: false });
         const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1414,7 +1414,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
       switch (profileAction) {
         case "list": {
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profiles = pm.listProfiles();
           if (jsonOutput) {
@@ -1439,7 +1439,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             process.exit(1);
           }
           const type = (flags.type ?? "named") as "shared" | "isolated" | "named";
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profile = pm.createProfile(name, type);
           if (jsonOutput) {
@@ -1457,7 +1457,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Profile name is required");
             process.exit(1);
           }
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profile = pm.getProfileByName(name);
           if (!profile) {
@@ -1483,7 +1483,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Profile name is required");
             process.exit(1);
           }
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const deleted = pm.deleteProfileByName(name);
           if (!deleted) {
@@ -1522,11 +1522,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           }
 
           try {
-            const { BrowserProfileManager } = await import("./browser_profiles");
-            const { BrowserConnectionManager } = await import("./browser_connection");
-            const { loadAuthSnapshot } = await import("./browser_auth_state");
-            const { loadConfig } = await import("./config");
-            const { DefaultPolicyEngine } = await import("./policy_engine");
+            const { BrowserProfileManager } = await import("./browser/profiles");
+            const { BrowserConnectionManager } = await import("./browser/connection");
+            const { loadAuthSnapshot } = await import("./browser/auth_state");
+            const { loadConfig } = await import("./shared/config");
+            const { DefaultPolicyEngine } = await import("./policy/engine");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1618,10 +1618,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           try {
             const content = fs.readFileSync(filePath, "utf-8");
             const snapshot = JSON.parse(content);
-            const { BrowserConnectionManager } = await import("./browser_connection");
-            const { saveAuthSnapshotToStore } = await import("./browser_auth_state");
-            const { loadConfig } = await import("./config");
-            const { DefaultPolicyEngine } = await import("./policy_engine");
+            const { BrowserConnectionManager } = await import("./browser/connection");
+            const { saveAuthSnapshotToStore } = await import("./browser/auth_state");
+            const { loadConfig } = await import("./shared/config");
+            const { DefaultPolicyEngine } = await import("./policy/engine");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1871,11 +1871,11 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
     deleteArtifact,
     pruneArtifact,
     loadArtifact,
-  } = await import("./knowledge_store");
+  } = await import("./knowledge/store");
   const {
     getKnowledgeStats,
-  } = await import("./knowledge_query");
-  const { validateArtifact } = await import("./knowledge_validator");
+  } = await import("./knowledge/query");
+  const { validateArtifact } = await import("./knowledge/validator");
 
   switch (subcommand) {
     case "list": {
@@ -2129,8 +2129,8 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { TerminalActions } = await import("./terminal_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { TerminalActions } = await import("./terminal/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // ── Terminal ownership model ──────────────────────────────────────
   // Terminal sessions must be owned by the long-lived daemon, NOT by
@@ -2201,7 +2201,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
   });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "open": {
@@ -2315,7 +2315,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
         if (result.success) {
           // Human-friendly output per action type
           if (subcommand === "exec" && result.data) {
-            const execData = result.data as import("./terminal_types").ExecResult;
+            const execData = result.data as import("./terminal/types").ExecResult;
             console.log(execData.stdout ?? "");
             if (execData.exitCode !== 0 && execData.stderr) {
               console.error(execData.stderr);
@@ -2365,8 +2365,8 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { FsActions } = await import("./fs_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { FsActions } = await import("./filesystem/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // Use or create a session manager singleton (same as browser/term actions)
   if (!_sessionManager) {
@@ -2376,7 +2376,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
   const fsActions = new FsActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "read": {
@@ -2463,10 +2463,10 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
         if (result.success) {
           // Human-friendly output per action type
           if (subcommand === "read" && result.data) {
-            const readData = result.data as import("./fs_operations").FileReadResult;
+            const readData = result.data as import("./filesystem/operations").FileReadResult;
             console.log(readData.content);
           } else if (subcommand === "ls" && result.data) {
-            const listData = result.data as import("./fs_operations").ListResult;
+            const listData = result.data as import("./filesystem/operations").ListResult;
             for (const entry of listData.entries) {
               const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
               const size = entry.sizeBytes.toString().padStart(10);
@@ -2497,8 +2497,8 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { BrowserActions } = await import("./browser_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { BrowserActions } = await import("./browser/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // Use or create a session manager singleton
   if (!_sessionManager) {
@@ -2508,7 +2508,7 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
   const browserActions = new BrowserActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (action) {
       case "open": {
@@ -2676,14 +2676,14 @@ async function handleSession(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { formatActionResult } = await import("./action_result");
+  const { formatActionResult } = await import("./shared/action_result");
 
   if (!_sessionManager) {
     _sessionManager = new SessionManager();
   }
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "list": {
@@ -2752,7 +2752,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 
   const { SessionManager } = await import("./session_manager");
   const { ServiceActions } = await import("./service_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { formatActionResult } = await import("./shared/action_result");
 
   if (!_sessionManager) {
     _sessionManager = new SessionManager();
@@ -2761,7 +2761,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
   const serviceActions = new ServiceActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "register": {

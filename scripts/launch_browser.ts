@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../paths";
+import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../shared/paths";
 
 interface LaunchOptions {
   port: number;

@@ -17,9 +17,9 @@ export {
   killAutomationBrowser,
   cleanupStaleDaemonFiles,
   stopDaemon,
-} from "./daemon_cleanup";
+} from "./runtime/daemon_cleanup";
 
-import { stopDaemon } from "./daemon_cleanup";
+import { stopDaemon } from "./runtime/daemon_cleanup";
 
 /**
  * Stop the daemon running on the default port.

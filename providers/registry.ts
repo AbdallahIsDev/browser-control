@@ -10,7 +10,7 @@ import {
   PROVIDER_REGISTRY_VERSION,
   DEFAULT_PROVIDER_NAME,
 } from "./types";
-import { getProviderRegistryPath } from "../paths";
+import { getProviderRegistryPath } from "../shared/paths";
 import { redactUrl } from "./utils";
 
 const BUILT_IN_PROVIDERS: ProviderConfig[] = [

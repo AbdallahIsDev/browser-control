@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { isDebugPortReady } from "../browser_core";
-import { getConfigValue, loadConfig, loadUserConfig } from "../config";
-import { MemoryStore } from "../memory_store";
+import { isDebugPortReady } from "../browser/core";
+import { getConfigValue, loadConfig, loadUserConfig } from "../shared/config";
+import { MemoryStore } from "../runtime/memory_store";
 import { ProviderRegistry } from "../providers/registry";
 import { loadProxyConfigs } from "../proxy_manager";
-import { detectShell, resolveNamedShell } from "../cross_platform";
+import { detectShell, resolveNamedShell } from "../terminal/cross_platform";
 import { probeDaemonHealth } from "../session_manager";
 import { resolveChromePath } from "../scripts/launch_browser";
 import type { DoctorCheckResult, DoctorReport, DoctorRunResult } from "./types";

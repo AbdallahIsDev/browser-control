@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, BrowserContextOptions } from "playwright";
-import { logger } from "./logger";
+import { logger } from "./shared/logger";
 
 const log = logger.withComponent("stealth");
 

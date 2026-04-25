@@ -15,14 +15,14 @@
  */
 
 import { SessionManager, type SessionState, type SessionListEntry } from "./session_manager";
-import { DefaultPolicyEngine } from "./policy_engine";
-import { BrowserActions, type BrowserActionContext } from "./browser_actions";
-import { TerminalActions, type TerminalActionContext } from "./terminal_actions";
-import { FsActions, type FsActionContext } from "./fs_actions";
+import { DefaultPolicyEngine } from "./policy/engine";
+import { BrowserActions, type BrowserActionContext } from "./browser/actions";
+import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
+import { FsActions, type FsActionContext } from "./filesystem/actions";
 import { ServiceActions, type ServiceActionContext } from "./service_actions";
-import type { ActionResult } from "./action_result";
+import type { ActionResult } from "./shared/action_result";
 import type { A11ySnapshot } from "./a11y_snapshot";
-import type { ExecResult, TerminalSnapshot } from "./terminal_types";
+import type { ExecResult, TerminalSnapshot } from "./terminal/types";
 import type {
   FileReadResult,
   FileWriteResult,
@@ -30,7 +30,7 @@ import type {
   MoveResult,
   DeleteResult,
   FileStatResult,
-} from "./fs_operations";
+} from "./filesystem/operations";
 import type { ServiceEntry } from "./services/registry";
 import { ServiceRegistry } from "./services/registry";
 import type { ProviderListResult, ProviderSelectionResult } from "./providers/types";
@@ -40,7 +40,7 @@ import {
   setUserConfigValue,
   type ConfigEntry,
   type ConfigSetResult,
-} from "./config";
+} from "./shared/config";
 import { collectStatus } from "./operator/status";
 import type { SystemStatus } from "./operator/types";
 
@@ -52,7 +52,7 @@ export interface BrowserControlOptions {
   /** Working directory for filesystem context. */
   workingDirectory?: string;
   /** Memory store instance (for testing / dependency injection). */
-  memoryStore?: import("./memory_store").MemoryStore;
+  memoryStore?: import("./runtime/memory_store").MemoryStore;
 }
 
 // ── Browser Namespace ────────────────────────────────────────────────
@@ -130,7 +130,7 @@ export interface ProviderNamespace {
 
 export interface DebugNamespace {
   /** Run health checks across all components. */
-  health(options?: { port?: number }): Promise<import("./health_check").HealthReport>;
+  health(options?: { port?: number }): Promise<import("./runtime/health_check").HealthReport>;
   /** Get a debug bundle by ID. */
   bundle(bundleId: string): import("./observability/debug_bundle").DebugBundle | null;
   /** Get captured console entries for a session. */
@@ -249,7 +249,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
 
   const debugNamespace: DebugNamespace = {
     health: async (options = {}) => {
-      const { HealthCheck } = await import("./health_check");
+      const { HealthCheck } = await import("./runtime/health_check");
       const healthCheck = new HealthCheck({
         port: options.port,
         memoryStore: sessionManager.getMemoryStore(),

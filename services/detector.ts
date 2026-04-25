@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { logger } from "../logger";
+import { logger } from "../shared/logger";
 
 const log = logger.withComponent("service_detector");
 

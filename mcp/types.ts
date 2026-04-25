@@ -11,7 +11,7 @@
  * Browser Control's ActionResult metadata in the MCP response.
  */
 
-import type { ActionResult } from "../action_result";
+import type { ActionResult } from "../shared/action_result";
 
 // ── MCP Tool Definition ────────────────────────────────────────────────
 

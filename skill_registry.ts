@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { Logger, logger } from "./logger";
+import { Logger, logger } from "./shared/logger";
 import type {
   Skill,
   SkillContext,

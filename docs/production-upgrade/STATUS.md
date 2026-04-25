@@ -8,7 +8,7 @@ Last synchronized: 2026-04-25 premium-readiness planning update
 
 - Sections 4 through 15 are implemented and merged into `main`.
 - Section 16 is not implemented yet.
-- Sections 17 through 23 define the premium-readiness hardening phase and are not implemented yet.
+- Section 17 is implemented on its branch and pending orchestrator review; Sections 18 through 23 are not implemented yet.
 - The branch `codex/remote-browser-tool-api` is not merged into `main`, but it is not one of the numbered production-upgrade roadmap sections.
 - Section-specific `implementation-checklist.md` files are execution artifacts. This status file is the source of truth when checklist history and merge status disagree.
 
@@ -29,7 +29,7 @@ Last synchronized: 2026-04-25 premium-readiness planning update
 | 14 | Stable Local URLs | Implemented and merged | `f0e0e84` | Branch `codex/section-14-stable-local-urls` is merged into `main`. |
 | 15 | Remote Browser Provider Layer | Implemented and merged | `f353124` | Branch `codex/section-15-remote-browser-provider-layer` is merged into `main`. |
 | 16 | Benchmarks and Examples | Not implemented | None | This is the next remaining numbered roadmap section. |
-| 17 | Repository Architecture and Codebase Cleanup | Not implemented | None | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
+| 17 | Repository Architecture and Codebase Cleanup | Implemented on branch, pending orchestrator review | `codex/section-17-repository-architecture-codebase-cleanup` | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
 | 18 | Security, Privacy, and Policy Hardening | Not implemented | None | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
 | 19 | Install, Packaging, and First-Run Experience | Not implemented | None | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
 | 20 | CI, Release Gates, and Cross-Platform Verification | Not implemented | None | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |

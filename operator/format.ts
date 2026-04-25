@@ -1,4 +1,4 @@
-import type { ConfigEntry, ConfigSetResult } from "../config";
+import type { ConfigEntry, ConfigSetResult } from "../shared/config";
 import type { DoctorReport, SetupResult, SystemStatus } from "./types";
 
 export function formatConfigList(entries: ConfigEntry[]): string {

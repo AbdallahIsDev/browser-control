@@ -2,11 +2,11 @@ import fs from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
-import { getConfigValue, loadConfig, loadUserConfig, setUserConfigValue } from "../config";
-import { ensureDataHomeAtPath } from "../paths";
-import { isDebugPortReady } from "../browser_core";
-import { detectShell } from "../cross_platform";
-import { execCommand } from "../terminal_session";
+import { getConfigValue, loadConfig, loadUserConfig, setUserConfigValue } from "../shared/config";
+import { ensureDataHomeAtPath } from "../shared/paths";
+import { isDebugPortReady } from "../browser/core";
+import { detectShell } from "../terminal/cross_platform";
+import { execCommand } from "../terminal/session";
 import type { SetupResult } from "./types";
 
 export interface SetupOptions {

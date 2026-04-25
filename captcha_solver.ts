@@ -1,5 +1,5 @@
 import type { Page } from "playwright";
-import type { Telemetry } from "./telemetry";
+import type { Telemetry } from "./runtime/telemetry";
 
 export type CaptchaProvider = "2captcha" | "anticaptcha" | "capsolver";
 export type CaptchaKind = "recaptcha" | "hcaptcha" | "turnstile";

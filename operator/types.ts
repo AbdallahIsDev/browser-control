@@ -1,5 +1,5 @@
-import type { ConfigEntry, ConfigSetResult } from "../config";
-import type { HealthReport } from "../health_check";
+import type { ConfigEntry, ConfigSetResult } from "../shared/config";
+import type { HealthReport } from "../runtime/health_check";
 
 export type OperatorCheckStatus = "pass" | "warn" | "fail";
 
