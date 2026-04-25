@@ -117,6 +117,21 @@ export interface ProviderNamespace {
   getActive(): string;
 }
 
+// ── Debug Namespace (Section 10) ──────────────────────────────────────
+
+export interface DebugNamespace {
+  /** Run health checks across all components. */
+  health(options?: { port?: number }): Promise<import("./health_check").HealthReport>;
+  /** Get a debug bundle by ID. */
+  bundle(bundleId: string): import("./observability/debug_bundle").DebugBundle | null;
+  /** Get captured console entries for a session. */
+  console(options?: { sessionId?: string }): import("./observability/types").ConsoleEntry[];
+  /** Get captured network entries for a session. */
+  network(options?: { sessionId?: string }): import("./observability/types").NetworkEntry[];
+  /** List available debug bundles. */
+  listBundles(): Array<{ bundleId: string; taskId: string; assembledAt: string; partial: boolean }>;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -126,6 +141,8 @@ export interface BrowserControlAPI {
   session: SessionNamespace;
   service: ServiceNamespace;
   provider: ProviderNamespace;
+  /** Debug and observability namespace (Section 10). */
+  debug: DebugNamespace;
   /** Access the underlying session manager for advanced use. */
   readonly sessionManager: SessionManager;
   /** Access the underlying browser actions instance. */
@@ -204,6 +221,35 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     getActive: () => sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
   };
 
+  const debugNamespace: DebugNamespace = {
+    health: async (options = {}) => {
+      const { HealthCheck } = await import("./health_check");
+      const healthCheck = new HealthCheck({
+        port: options.port,
+        memoryStore: sessionManager.getMemoryStore(),
+      });
+      return healthCheck.runExtended();
+    },
+    bundle: (bundleId) => {
+      const { loadDebugBundle } = require("./observability/debug_bundle");
+      return loadDebugBundle(bundleId, sessionManager.getMemoryStore());
+    },
+    console: (options = {}) => {
+      const { getGlobalConsoleCapture } = require("./observability/console_capture");
+      const capture = getGlobalConsoleCapture();
+      return capture.getEntries(options.sessionId ?? "default");
+    },
+    network: (options = {}) => {
+      const { getGlobalNetworkCapture } = require("./observability/network_capture");
+      const capture = getGlobalNetworkCapture();
+      return capture.getEntries(options.sessionId ?? "default");
+    },
+    listBundles: () => {
+      const { listDebugBundles } = require("./observability/debug_bundle");
+      return listDebugBundles(sessionManager.getMemoryStore());
+    },
+  };
+
   return {
     browser: {
       open: (o) => browserActions.open(o),
@@ -252,6 +298,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       remove: (o) => serviceActions.remove(o),
     },
     provider: providerNamespace,
+    debug: debugNamespace,
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },
     get terminalActions() { return terminalActions; },

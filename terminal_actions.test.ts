@@ -1,23 +1,48 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { TerminalActions, type TerminalActionContext } from "./terminal_actions";
 import { SessionManager, type TerminalRuntime, LocalTerminalRuntime } from "./session_manager";
 import { MemoryStore } from "./memory_store";
+import { loadDebugBundle } from "./observability/debug_bundle";
+import type { BrowserConnectionManager } from "./browser_connection";
+
+function createUnavailableBrowserManager() {
+  return {
+    getContext: () => null,
+    getBrowser: () => null,
+    isConnected: () => false,
+    getConnection: () => null,
+  } as unknown as BrowserConnectionManager;
+}
 
 describe("TerminalActions", () => {
   let sessionManager: SessionManager;
   let terminalActions: TerminalActions;
   let store: MemoryStore;
+  let dataHome: string;
+  let originalHome: string | undefined;
 
   beforeEach(async () => {
+    originalHome = process.env.BROWSER_CONTROL_HOME;
+    dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-terminal-actions-test-"));
+    process.env.BROWSER_CONTROL_HOME = dataHome;
     store = new MemoryStore({ filename: ":memory:" });
-    sessionManager = new SessionManager({ memoryStore: store });
+    sessionManager = new SessionManager({ memoryStore: store, browserManager: createUnavailableBrowserManager() });
     await sessionManager.create("term-test", { policyProfile: "balanced" });
     terminalActions = new TerminalActions({ sessionManager });
   });
 
   afterEach(() => {
-    store.close();
+    sessionManager.close();
+    if (originalHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = originalHome;
+    }
+    fs.rmSync(dataHome, { recursive: true, force: true });
   });
 
   describe("constructor", () => {
@@ -54,6 +79,9 @@ describe("TerminalActions", () => {
         result.error?.includes("session not found") || result.error?.includes("Session not found"),
         `Error should mention session not found, got: ${result.error}`,
       );
+      assert.ok(result.debugBundleId);
+      assert.ok(result.recoveryGuidance);
+      assert.ok(loadDebugBundle(result.debugBundleId, store));
     });
   });
 
@@ -324,7 +352,10 @@ describe("TerminalActions", () => {
     it("policy-denied term action returns ActionResult with policyDecision", async () => {
       // Create a safe session — terminal_exec is moderate risk, safe requires confirmation
       const safeStore = new MemoryStore({ filename: ":memory:" });
-      const safeManager = new SessionManager({ memoryStore: safeStore });
+      const safeManager = new SessionManager({
+        memoryStore: safeStore,
+        browserManager: createUnavailableBrowserManager(),
+      });
       await safeManager.create("safe-term", { policyProfile: "safe" });
       const safeActions = new TerminalActions({ sessionManager: safeManager });
 
@@ -336,7 +367,7 @@ describe("TerminalActions", () => {
       assert.ok(result.sessionId, "ActionResult must have sessionId");
       assert.ok(result.policyDecision !== undefined, "ActionResult must have policyDecision");
 
-      safeStore.close();
+      safeManager.close();
     });
   });
 

@@ -73,6 +73,24 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "low",
   },
 
+  // ── Debug/observability path (Section 10) ──────────────────────────
+  {
+    matches: (action) => {
+      const debugReadActions = ["debug_health", "debug_console_read"];
+      return debugReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const debugEvidenceActions = ["debug_bundle_export", "debug_network_read"];
+      return debugEvidenceActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
   // ── Filesystem path (Section 12) ────────────────────────────────
   {
     matches: (action) => {

@@ -122,3 +122,29 @@ export function getServiceRegistryPath(): string {
 export function getProviderRegistryPath(dataHome?: string): string {
   return path.join(dataHome ?? getDataHome(), "providers", "registry.json");
 }
+
+// ── Debug Bundles and Observability (Section 10) ─────────────────────
+
+/** Directory for debug bundles */
+export function getDebugBundleDir(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "debug-bundles");
+}
+
+/** Ensure debug bundle directory exists */
+export function ensureDebugBundleDir(dataHome?: string): string {
+  const dir = getDebugBundleDir(dataHome);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Directory for observability reports */
+export function getObservabilityDir(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "observability");
+}
+
+/** Ensure observability directory exists */
+export function ensureObservabilityDir(dataHome?: string): string {
+  const dir = getObservabilityDir(dataHome);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}

@@ -34,6 +34,8 @@ import {
   type ActionResult,
 } from "./action_result";
 import { logger } from "./logger";
+import { collectFailureDebugMetadata } from "./observability/action_debug";
+import type { ExecutionPath, PolicyDecision, RiskLevel } from "./policy";
 
 const log = logger.withComponent("fs_actions");
 
@@ -104,6 +106,44 @@ export class FsActions {
     return session?.id ?? "default";
   }
 
+  private async failureWithDebug<T>(
+    message: string,
+    error: unknown,
+    options: {
+      action: string;
+      path: ExecutionPath;
+      sessionId: string;
+      policyDecision?: PolicyDecision;
+      risk?: RiskLevel;
+      auditId?: string;
+      fsPath: string;
+      operation: string;
+    },
+  ): Promise<ActionResult<T>> {
+    const debug = await collectFailureDebugMetadata({
+      action: options.action,
+      sessionId: options.sessionId,
+      executionPath: options.path,
+      error,
+      fsOperation: {
+        path: options.fsPath,
+        operation: options.operation,
+        errorCode: (error as { code?: string } | null)?.code,
+      },
+      store: this.context.sessionManager.getMemoryStore(),
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+    });
+    return failureResult<T>(message, {
+      path: options.path,
+      sessionId: options.sessionId,
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+      auditId: options.auditId,
+      ...debug,
+    });
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────
 
   /**
@@ -130,7 +170,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`File read failed: ${message}`);
-      return failureResult(`Read failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Read failed: ${message}`, error, {
+        action: "fs_read",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.path,
+        operation: "read",
+      });
     }
   }
 
@@ -160,7 +209,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`File write failed: ${message}`);
-      return failureResult(`Write failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Write failed: ${message}`, error, {
+        action: "fs_write",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.path,
+        operation: "write",
+      });
     }
   }
 
@@ -192,7 +250,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Directory list failed: ${message}`);
-      return failureResult(`List failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`List failed: ${message}`, error, {
+        action: "fs_list",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.path,
+        operation: "list",
+      });
     }
   }
 
@@ -220,7 +287,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Move failed: ${message}`);
-      return failureResult(`Move failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Move failed: ${message}`, error, {
+        action: "fs_move",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.src,
+        operation: "move",
+      });
     }
   }
 
@@ -252,7 +328,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Delete failed: ${message}`);
-      return failureResult(`Delete failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Delete failed: ${message}`, error, {
+        action: "fs_delete",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.path,
+        operation: "delete",
+      });
     }
   }
 
@@ -280,7 +365,16 @@ export class FsActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Stat failed: ${message}`);
-      return failureResult(`Stat failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Stat failed: ${message}`, error, {
+        action: "fs_stat",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: options.path,
+        operation: "stat",
+      });
     }
   }
 }

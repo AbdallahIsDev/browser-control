@@ -163,6 +163,63 @@ describe("MCP Tool Registry", () => {
       assert.ok(["healthy", "degraded", "unhealthy"].includes((result.data as Record<string, unknown>).overall as string));
     });
 
+    it("debug evidence tools route through policy", async () => {
+      const calls: string[] = [];
+      const originalEvaluate = api.sessionManager.evaluateAction.bind(api.sessionManager);
+      api.sessionManager.evaluateAction = ((action: string, params: Record<string, unknown>, sessionId?: string) => {
+        calls.push(action);
+        return {
+          allowed: true,
+          policyDecision: "allow",
+          risk: action === "debug_console_read" ? "low" : "moderate",
+          path: "command",
+        };
+      }) as typeof api.sessionManager.evaluateAction;
+
+      try {
+        const tools = buildToolRegistry(api);
+        const bundleTool = tools.find((t) => t.name === "bc_debug_failure_bundle")!;
+        const consoleTool = tools.find((t) => t.name === "bc_debug_get_console")!;
+        const networkTool = tools.find((t) => t.name === "bc_debug_get_network")!;
+
+        const missingBundle = await bundleTool.handler({ bundleId: "bundle-missing" });
+        const consoleResult = await consoleTool.handler({ sessionId: "test-session" });
+        const networkResult = await networkTool.handler({ sessionId: "test-session" });
+
+        assert.equal(missingBundle.policyDecision, "allow");
+        assert.equal(consoleResult.policyDecision, "allow");
+        assert.equal(networkResult.policyDecision, "allow");
+        assert.deepEqual(calls, ["debug_bundle_export", "debug_console_read", "debug_network_read"]);
+      } finally {
+        api.sessionManager.evaluateAction = originalEvaluate as typeof api.sessionManager.evaluateAction;
+      }
+    });
+
+    it("debug evidence tools honor policy denial", async () => {
+      const originalEvaluate = api.sessionManager.evaluateAction.bind(api.sessionManager);
+      api.sessionManager.evaluateAction = (() => ({
+        success: false,
+        path: "command",
+        sessionId: "test-session",
+        error: "Policy denied: debug evidence access blocked",
+        policyDecision: "deny",
+        risk: "moderate",
+        completedAt: new Date().toISOString(),
+      })) as typeof api.sessionManager.evaluateAction;
+
+      try {
+        const tools = buildToolRegistry(api);
+        const networkTool = tools.find((t) => t.name === "bc_debug_get_network")!;
+        const result = await networkTool.handler({ sessionId: "test-session" });
+
+        assert.equal(result.success, false);
+        assert.equal(result.policyDecision, "deny");
+        assert.equal(result.error, "Policy denied: debug evidence access blocked");
+      } finally {
+        api.sessionManager.evaluateAction = originalEvaluate as typeof api.sessionManager.evaluateAction;
+      }
+    });
+
     it("bc_service_list returns registered services", async () => {
       // Register a service via the API first
       await api.service.register({ name: "mcp-service", port: 5555 });
