@@ -77,6 +77,12 @@ describe("redactString", () => {
     assert(!result.includes("supersecrettoken1234567890"));
     assert(result.includes("session=abc"));
   });
+
+  it("redacts Browser Control fake test secret values wherever they appear", () => {
+    const input = "C:/tmp/bc_secret_test_token_12345/missing.txt";
+    const result = redactString(input);
+    assert.strictEqual(result, "C:/tmp/[REDACTED]/missing.txt");
+  });
 });
 
 describe("redactHeaders", () => {

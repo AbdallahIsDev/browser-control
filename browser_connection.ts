@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import {
   resolveChromePath,
@@ -338,6 +338,39 @@ export class BrowserConnectionManager {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Failed to launch managed browser: ${message}`);
+      if (this.context) {
+        try {
+          await this.context.close();
+        } catch {
+          // best effort
+        }
+      }
+      if (this.browser) {
+        try {
+          await this.browser.close();
+        } catch {
+          // best effort
+        }
+      }
+      if (this.managedProcess) {
+        const pid = this.managedProcess.pid;
+        try {
+          this.managedProcess.kill();
+          if (process.platform === "win32" && pid) {
+            spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
+              stdio: "ignore",
+              timeout: 5000,
+            });
+          }
+          stopWslBridge(port);
+        } catch (cleanupError: unknown) {
+          log.warn(`Failed to clean partial managed browser launch: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+        }
+      }
+      this.browser = null;
+      this.context = null;
+      this.connection = null;
+      this.managedProcess = null;
       throw new Error(
         `Failed to launch managed automation browser on port ${port}. ` +
         `Ensure Chrome can start or use 'bc browser launch' / 'launch_browser.bat ${port}'.`,
