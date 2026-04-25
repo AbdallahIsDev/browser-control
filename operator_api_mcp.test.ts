@@ -28,7 +28,7 @@ test("BrowserControl API exposes config and status namespaces", async () => {
     assert.equal(typeof bc.status, "function");
 
     const setResult = bc.config.set("logLevel", "debug");
-    assert.equal(setResult.value, "debug");
+    assert.equal(setResult.data?.value, "debug");
 
     const getResult = bc.config.get("logLevel");
     assert.equal(getResult.value, "debug");

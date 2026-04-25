@@ -535,6 +535,24 @@ describe("SessionManager", () => {
 
       leakStore.close();
     });
+
+    it("use() syncs the policy engine profile used by fallback action evaluation", async () => {
+      const syncStore = new MemoryStore({ filename: ":memory:" });
+      const syncManager = new SessionManager({ memoryStore: syncStore });
+
+      await syncManager.create("trusted-first", { policyProfile: "trusted" });
+      await syncManager.create("safe-second", { policyProfile: "safe" });
+      syncManager.use("safe-second");
+
+      const result = syncManager.evaluateAction("browser_provider_use", { name: "browserless" }, "mcp");
+
+      assert.ok(!isPolicyAllowed(result),
+        `missing MCP session override should use active safe profile, got: ${
+          isPolicyAllowed(result) ? "allowed" : (result as any).policyDecision
+        }`);
+
+      syncStore.close();
+    });
   });
 
   // ── Issue 3: Default terminal runtime alignment ───────────────────

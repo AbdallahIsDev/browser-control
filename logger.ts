@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getLogsDir } from "./paths";
+import { redactObject, redactString } from "./observability/redaction";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "critical";
 
@@ -55,9 +56,9 @@ export class Logger {
   }
 
   private formatRecord(record: LogRecord): string {
-    const base = `${record.timestamp} [${record.level.toUpperCase()}] [${record.component}] ${record.message}`;
+    const base = `${record.timestamp} [${record.level.toUpperCase()}] [${record.component}] ${redactString(record.message)}`;
     if (record.data && Object.keys(record.data).length > 0) {
-      return `${base} ${JSON.stringify(record.data)}`;
+      return `${base} ${JSON.stringify(redactObject(record.data))}`;
     }
     return base;
   }

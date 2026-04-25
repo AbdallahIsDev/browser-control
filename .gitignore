@@ -14,6 +14,7 @@ docs/*
 !docs/skills.md
 !docs/mcp.md
 !docs/policy.md
+!docs/security.md
 !docs/api.md
 !docs/cli.md
 !docs/troubleshooting.md

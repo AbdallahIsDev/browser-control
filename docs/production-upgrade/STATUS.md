@@ -30,7 +30,7 @@ Last synchronized: 2026-04-25 premium-readiness planning update
 | 15 | Remote Browser Provider Layer | Implemented and merged | `f353124` | Branch `codex/section-15-remote-browser-provider-layer` is merged into `main`. |
 | 16 | Benchmarks and Examples | Not implemented | None | This is the next remaining numbered roadmap section. |
 | 17 | Repository Architecture and Codebase Cleanup | Not implemented | None | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
-| 18 | Security, Privacy, and Policy Hardening | Not implemented | None | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
+| 18 | Security, Privacy, and Policy Hardening | Implemented on branch, pending orchestrator review | Branch `codex/section-18-security-privacy-policy-hardening` | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
 | 19 | Install, Packaging, and First-Run Experience | Not implemented | None | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
 | 20 | CI, Release Gates, and Cross-Platform Verification | Not implemented | None | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
 | 21 | End-to-End Reliability and Golden Workflows | Not implemented | None | Premium-readiness phase: real workflow proof across browser, terminal, fs, MCP, and recovery. |

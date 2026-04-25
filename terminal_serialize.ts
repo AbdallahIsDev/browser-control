@@ -10,6 +10,7 @@ import type {
   TerminalBufferRecord,
   TerminalResumeLevel,
 } from "./terminal_resume_types";
+import { redactString } from "./observability/redaction";
 
 const DEFAULT_MAX_SCROLLBACK_LINES = 10_000;
 
@@ -24,6 +25,7 @@ const SECRET_KEY_PATTERNS = [
   /token/i,
   /api[_-]?key/i,
   /auth/i,
+  /cookie/i,
   /credential/i,
   /private[_-]?key/i,
   /passphrase/i,
@@ -118,7 +120,7 @@ export function serializeTerminalSession(
   const resumeLevel: TerminalResumeLevel = hasBuffer ? 2 : 1;
 
   const scrollbackBuffer = hasBuffer
-    ? truncateLines(outputBuffer.split(/\r?\n/), options.maxScrollbackLines)
+    ? truncateLines(outputBuffer.split(/\r?\n/), options.maxScrollbackLines).map(redactString)
     : [];
 
   return {
@@ -181,11 +183,13 @@ export function captureTerminalBuffer(
   const scrollback = maxLines && lines.length > maxLines
     ? lines.slice(lines.length - maxLines)
     : lines;
+  const redactedScrollback = scrollback.map(redactString);
+  const redactedVisibleContent = redactString(outputBuffer).slice(-4096);
 
   return {
     sessionId,
-    scrollback,
-    visibleContent: outputBuffer.slice(-4096),
+    scrollback: redactedScrollback,
+    visibleContent: redactedVisibleContent,
     capturedAt: new Date().toISOString(),
   };
 }

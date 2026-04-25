@@ -21,6 +21,7 @@ import type {
   BrowserPolicy,
   LowLevelPolicy,
 } from "./policy";
+import path from "node:path";
 import { getBuiltInProfile, getRiskDecisionMatrix } from "./policy_profiles";
 import { Logger } from "./logger";
 
@@ -273,7 +274,9 @@ export class DefaultPolicyEngine implements PolicyEngine {
   ): PolicyEvaluationResult {
     const policy = this.profile.filesystemPolicy;
     const targetPath = this.getFilesystemTargetPath(step);
+    const destinationPath = this.getFilesystemDestinationPath(step);
     const isDelete = this.isFilesystemDelete(step);
+    const isMove = this.isFilesystemMove(step);
     const isWrite = this.isFilesystemWrite(step);
     const isRead = this.isFilesystemRead(step);
     const isRecursive = step.params.recursive === true;
@@ -311,6 +314,17 @@ export class DefaultPolicyEngine implements PolicyEngine {
           auditRequired: false,
         };
       }
+    }
+
+    if (isMove && typeof destinationPath === "string" && policy.allowedWriteRoots && policy.allowedWriteRoots.length > 0 && !this.isInAllowedRoots(destinationPath, policy.allowedWriteRoots)) {
+      return {
+        decision: "deny",
+        reason: `Destination path is outside allowed write roots: ${destinationPath}`,
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "allowedWriteRoots",
+        auditRequired: false,
+      };
     }
 
     if (isDelete && isRecursive) {
@@ -585,11 +599,15 @@ export class DefaultPolicyEngine implements PolicyEngine {
   }
 
   private isInAllowedRoots(targetPath: string, allowedRoots: string[]): boolean {
-    const normalizedPath = targetPath.replace(/\\/g, "/").toLowerCase();
+    const normalizedPath = this.normalizeFilesystemPath(targetPath);
     return allowedRoots.some((root) => {
-      const normalizedRoot = root.replace(/\\/g, "/").toLowerCase();
+      const normalizedRoot = this.normalizeFilesystemPath(root);
       return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
     });
+  }
+
+  private normalizeFilesystemPath(inputPath: string): string {
+    return path.resolve(inputPath).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
   }
 
   private isFilesystemAction(step: RoutedStep): boolean {
@@ -603,6 +621,10 @@ export class DefaultPolicyEngine implements PolicyEngine {
 
   private isFilesystemWrite(step: RoutedStep): boolean {
     return ["fs_write", "file_write", "write_file", "fs_move", "file_move", "move_file"].includes(step.action);
+  }
+
+  private isFilesystemMove(step: RoutedStep): boolean {
+    return ["fs_move", "file_move", "move_file"].includes(step.action);
   }
 
   private isFilesystemDelete(step: RoutedStep): boolean {
@@ -624,6 +646,11 @@ export class DefaultPolicyEngine implements PolicyEngine {
     }
 
     return undefined;
+  }
+
+  private getFilesystemDestinationPath(step: RoutedStep): string | undefined {
+    const dst = step.params.dst ?? step.params.destination ?? step.params.to;
+    return typeof dst === "string" ? dst : undefined;
   }
 
   /**

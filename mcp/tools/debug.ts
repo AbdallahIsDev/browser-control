@@ -14,6 +14,9 @@ import { buildSchema } from "../types";
 import { HealthCheck } from "../../health_check";
 import { isPolicyAllowed, type PolicyAllowResult } from "../../session_manager";
 import type { ActionResult } from "../../action_result";
+import { loadDebugBundle } from "../../observability/debug_bundle";
+import { getGlobalConsoleCapture } from "../../observability/console_capture";
+import { getGlobalNetworkCapture } from "../../observability/network_capture";
 
 function evaluateDebugPolicy(
   api: BrowserControlAPI,
@@ -79,7 +82,7 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
         const policyEval = evaluateDebugPolicy(api, "debug_bundle_export", { bundleId }, "system");
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
-        const bundle = api.debug.bundle(bundleId);
+        const bundle = loadDebugBundle(bundleId, api.sessionManager.getMemoryStore());
         if (!bundle) {
           return {
             success: false,
@@ -115,7 +118,7 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
         const sessionId = (params.sessionId as string) ?? "default";
         const policyEval = evaluateDebugPolicy(api, "debug_console_read", { sessionId }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
-        const entries = api.debug.console({ sessionId });
+        const entries = getGlobalConsoleCapture().getEntries(sessionId);
 
         return {
           success: true,
@@ -139,7 +142,7 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
         const sessionId = (params.sessionId as string) ?? "default";
         const policyEval = evaluateDebugPolicy(api, "debug_network_read", { sessionId }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
-        const entries = api.debug.network({ sessionId });
+        const entries = getGlobalNetworkCapture().getEntries(sessionId);
 
         return {
           success: true,

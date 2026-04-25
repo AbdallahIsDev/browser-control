@@ -253,7 +253,7 @@ export class BrowserConnectionManager {
     });
 
     try {
-      const bindAddress = "0.0.0.0";
+      const bindAddress = config.chromeBindAddress;
       const wslHostCandidates = getWslHostCandidates();
       const needsBridge = wslHostCandidates.length > 0;
       let shouldLaunch = true;

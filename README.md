@@ -38,6 +38,10 @@ Runtime data lives in `~/.browser-control/` (override with `BROWSER_CONTROL_HOME
 └── skills/                  ← Installed skills
 ```
 
+## Security
+
+Browser Control is a local automation framework with real authority over browsers, terminals, files, auth state, MCP tools, and the daemon broker. It is policy-governed and redacts known secrets, but it is not a sandbox. Read [docs/security.md](docs/security.md) before exposing MCP, broker, provider, auth, terminal, or filesystem features beyond trusted local development.
+
 ---
 
 ## Quick Start — New Project

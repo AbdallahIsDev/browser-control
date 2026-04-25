@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { MemoryStore } from "./memory_store";
+import { isPolicyAllowed, SessionManager } from "./session_manager";
 import { loadProxyConfigs } from "./proxy_manager";
 import { Telemetry } from "./telemetry";
 import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./paths";
@@ -141,6 +142,21 @@ async function apiRequest(endpoint: string, method = "GET", body?: unknown): Pro
 
 function outputJson(data: unknown, pretty = true): void {
   console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
+}
+
+function requireCliPolicy(action: string, params: Record<string, unknown>, jsonOutput: boolean): void {
+  const store = new MemoryStore({ filename: ":memory:" });
+  try {
+    const manager = new SessionManager({ memoryStore: store });
+    const policyEval = manager.evaluateAction(action, params);
+    if (!isPolicyAllowed(policyEval)) {
+      if (jsonOutput) outputJson(policyEval, false);
+      else console.error(policyEval.error ?? "Policy denied.");
+      process.exit(1);
+    }
+  } finally {
+    store.close();
+  }
 }
 
 function printHelp(): void {
@@ -330,6 +346,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
         console.error("Error: config set requires <key> <value>");
         process.exit(1);
       }
+      requireCliPolicy("config_set", { key, value }, jsonOutput);
       const result = setUserConfigValue(key, value);
       if (jsonOutput) outputJson(result, false);
       else console.log(formatConfigSet(result));
@@ -1322,6 +1339,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_use", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.select(name);
@@ -1361,6 +1379,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: --endpoint is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_add", { name, type: providerType, endpoint }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const config: Record<string, unknown> = { name, type: providerType, endpoint };
@@ -1385,6 +1404,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_remove", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.remove(name);
@@ -1517,12 +1537,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              process.exit(1);
           }
           if (isLive && isStored) {
-             console.error("Error: Cannot specify both --live and --stored.");
-             process.exit(1);
-          }
+              console.error("Error: Cannot specify both --live and --stored.");
+              process.exit(1);
+           }
 
-          try {
-            const { BrowserProfileManager } = await import("./browser_profiles");
+           requireCliPolicy("browser_auth_export", {
+             profileName: profileName ?? "default",
+             outputFile,
+             live: isLive,
+             stored: isStored,
+           }, jsonOutput);
+
+           try {
+             const { BrowserProfileManager } = await import("./browser_profiles");
             const { BrowserConnectionManager } = await import("./browser_connection");
             const { loadAuthSnapshot } = await import("./browser_auth_state");
             const { loadConfig } = await import("./config");
@@ -1610,13 +1637,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              console.error("Error: You must specify either --live (to inject into the active browser) or --stored (to update offline memory snapshot).");
              process.exit(1);
           }
-          if (isLive && isStored) {
-             console.error("Error: Cannot specify both --live and --stored.");
-             process.exit(1);
-          }
+           if (isLive && isStored) {
+              console.error("Error: Cannot specify both --live and --stored.");
+              process.exit(1);
+           }
 
-          try {
-            const content = fs.readFileSync(filePath, "utf-8");
+           requireCliPolicy("browser_auth_import", {
+             filePath,
+             live: isLive,
+             stored: isStored,
+           }, jsonOutput);
+
+           try {
+             const content = fs.readFileSync(filePath, "utf-8");
             const snapshot = JSON.parse(content);
             const { BrowserConnectionManager } = await import("./browser_connection");
             const { saveAuthSnapshotToStore } = await import("./browser_auth_state");
@@ -2862,6 +2895,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         console.error("Error: Bundle ID is required");
         process.exit(1);
       }
+      requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput);
 
       try {
         const { loadDebugBundle } = await import("./observability/debug_bundle");
@@ -2893,6 +2927,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalConsoleCapture } = await import("./observability/console_capture");
         const capture = getGlobalConsoleCapture();
         const sessionId = flags.session ?? "default";
+        requireCliPolicy("debug_console_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {
@@ -2919,6 +2954,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalNetworkCapture } = await import("./observability/network_capture");
         const capture = getGlobalNetworkCapture();
         const sessionId = flags.session ?? "default";
+        requireCliPolicy("debug_network_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {

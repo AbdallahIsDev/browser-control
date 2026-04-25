@@ -82,7 +82,7 @@ describe("BrowserlessProvider", () => {
   it("should redact sensitive query params from arbitrary error text", () => {
     const text = sanitizeString("connect failed for wss://x.example?token=super-secret&region=us");
     assert.ok(!text.includes("super-secret"));
-    assert.ok(text.includes("token=***REDACTED***"));
+    assert.match(text, /token=(?:%5B)?\[?REDACTED\]?(?:%5D)?/);
   });
 
   it("should use sanitized endpoint in providerMetadata and cdpEndpoint", async () => {
