@@ -564,7 +564,11 @@ export class SessionManager {
     this.memoryStore = options.memoryStore ?? new MemoryStore();
     this.policyEngine = options.policyEngine ?? new DefaultPolicyEngine({ profileName: config.policyProfile });
     this.executionRouter = defaultRouter;
-    this.browserManager = options.browserManager ?? new BrowserConnectionManager();
+    this.browserManager = options.browserManager ?? new BrowserConnectionManager({
+      memoryStore: this.memoryStore,
+      policyEngine: this.policyEngine,
+      executionRouter: this.executionRouter,
+    });
     this.terminalManager = options.terminalManager ?? new TerminalSessionManager();
 
     // Reload persisted sessions from MemoryStore so that

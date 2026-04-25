@@ -15,6 +15,9 @@ import type {
 import type { SkillManifest } from "./skill";
 import { Logger } from "./logger";
 import type { TelemetrySummary } from "./telemetry";
+import { getConfigEntries, getConfigValue, setUserConfigValue, type ConfigEntry, type ConfigSetResult } from "./config";
+import { collectStatus } from "./operator/status";
+import type { SystemStatus } from "./operator/types";
 
 const brokerLog = new Logger({ component: "broker" });
 
@@ -57,6 +60,10 @@ export interface BrokerServerCallbacks {
   getTaskStatus?: (taskId: string) => MaybePromise<BrokerTaskStatusEntry | null>;
   listTasks?: () => MaybePromise<BrokerTaskStatusEntry[]>;
   listSkills?: () => MaybePromise<SkillManifest[]>;
+  getStatus?: () => MaybePromise<SystemStatus | Record<string, unknown>>;
+  listConfig?: () => MaybePromise<ConfigEntry[]>;
+  getConfig?: (key: string) => MaybePromise<ConfigEntry>;
+  setConfig?: (key: string, value: unknown) => MaybePromise<ConfigSetResult | Record<string, unknown>>;
   handleTerminal?: (subcommand: string, payload: JsonRecord) => MaybePromise<unknown>;
   handleFilesystem?: (subcommand: string, payload: JsonRecord) => MaybePromise<unknown>;
 }
@@ -748,6 +755,44 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
       if (request.method === "GET" && pathname === "/api/v1/skills") {
         const skills = callbacks.listSkills ? await callbacks.listSkills() : [];
         writeJson(response, 200, skills);
+        return;
+      }
+
+      if (request.method === "GET" && pathname === "/api/v1/status") {
+        writeJson(response, 200, callbacks.getStatus ? await callbacks.getStatus() : await collectStatus());
+        return;
+      }
+
+      if (request.method === "GET" && pathname === "/api/v1/config") {
+        writeJson(response, 200, callbacks.listConfig ? await callbacks.listConfig() : getConfigEntries({ validate: false }));
+        return;
+      }
+
+      if ((request.method === "GET" || request.method === "POST") && pathname.startsWith("/api/v1/config/")) {
+        const key = decodeURIComponent(pathname.slice("/api/v1/config/".length));
+        if (!key) {
+          writeJson(response, 400, { error: "Config key is required." });
+          return;
+        }
+
+        if (request.method === "GET") {
+          writeJson(response, 200, callbacks.getConfig ? await callbacks.getConfig(key) : getConfigValue(key, { validate: false }));
+          return;
+        }
+
+        if (request.method === "POST" && !config.authKey) {
+          writeJson(response, 403, {
+            error: "Broker config mutation requires BROKER_API_KEY or BROKER_SECRET to be configured.",
+          });
+          return;
+        }
+
+        const body = await readJsonBody(request);
+        if (!Object.prototype.hasOwnProperty.call(body, "value")) {
+          writeJson(response, 400, { error: "Config set requires a JSON body with value." });
+          return;
+        }
+        writeJson(response, 200, callbacks.setConfig ? await callbacks.setConfig(key, body.value) : setUserConfigValue(key, body.value));
         return;
       }
 

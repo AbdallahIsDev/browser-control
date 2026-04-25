@@ -24,6 +24,7 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "reports"),
     path.join(home, "logs"),
     path.join(home, ".interop"),
+    path.join(home, "config"),
     path.join(home, "skills"),
     path.join(home, "policy-profiles"),
     path.join(home, "profiles"),
@@ -69,6 +70,14 @@ export function getPidFilePath(): string {
 
 export function getLogsDir(): string {
   return path.join(getDataHome(), "logs");
+}
+
+export function getConfigDir(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "config");
+}
+
+export function getUserConfigPath(dataHome?: string): string {
+  return path.join(getConfigDir(dataHome), "config.json");
 }
 
 export function getSkillsDataDir(): string {

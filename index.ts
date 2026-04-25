@@ -181,11 +181,29 @@ export {
   getLogsDir,
   getSkillsDataDir,
   getDaemonStatusPath,
+  getConfigDir,
+  getUserConfigPath,
   getProfilesDir as getProfilesDirPath,
 } from "./paths";
 
 // Config
-export { loadConfig, BrowserControlConfig } from "./config";
+export {
+  loadConfig,
+  loadUserConfig,
+  saveUserConfig,
+  getConfigEntries,
+  getConfigValue,
+  setUserConfigValue,
+  validateConfigValue,
+} from "./config";
+export type {
+  BrowserControlConfig,
+  ConfigEntry,
+  ConfigSetResult,
+  ConfigKey,
+  ConfigSource,
+  UserConfig,
+} from "./config";
 
 // CLI
 export { parseArgs, runCli } from "./cli";
@@ -592,6 +610,7 @@ export type {
   FsNamespace,
   SessionNamespace,
   ServiceNamespace,
+  ConfigNamespace,
   BrowserControlAPI,
 } from "./browser_control";
 
@@ -616,6 +635,20 @@ export { buildFsTools } from "./mcp/tools/fs";
 export { buildDebugTools } from "./mcp/tools/debug";
 export { buildServiceTools } from "./mcp/tools/service";
 export { buildProviderTools } from "./mcp/tools/provider";
+export { buildStatusTools } from "./mcp/tools/status";
+
+// ── Section 11: Operator UX ───────────────────────────────────────────
+
+export { runDoctor, buildDoctorChecks } from "./operator/doctor";
+export { runSetup } from "./operator/setup";
+export { collectStatus, defaultBrokerProbe } from "./operator/status";
+export type {
+  DoctorCheckResult,
+  DoctorReport,
+  DoctorRunResult,
+  SetupResult,
+  SystemStatus,
+} from "./operator/types";
 
 // ── Paths (additional Section 14 helpers) ────────────────────────────
 

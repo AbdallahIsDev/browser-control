@@ -524,6 +524,119 @@ test("createBrokerServer /api/v1/stats returns enriched format when getStats cal
   assert.equal(stats.successRate, 0.8);
 });
 
+test("createBrokerServer exposes operator status and config endpoints", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "operator-key",
+    },
+    callbacks: {
+      getStatus: async () => ({
+        daemon: { state: "running", pid: 4321 },
+        broker: { reachable: true, url: "http://127.0.0.1:7788" },
+        browser: { provider: "local", activeSessions: 0 },
+        terminal: { activeSessions: 0, sessions: [] },
+        tasks: { queued: 0, running: 0 },
+        services: { count: 0 },
+        provider: { active: "local" },
+        policyProfile: "balanced",
+        dataHome: "/tmp/browser-control",
+        health: { overall: "healthy", pass: 1, warn: 0, fail: 0 },
+      }),
+      listConfig: async () => [
+        {
+          key: "logLevel",
+          category: "logging",
+          value: "info",
+          defaultValue: "info",
+          source: "default",
+          sensitive: false,
+          envVars: ["LOG_LEVEL"],
+          description: "Minimum log level.",
+        },
+      ],
+      getConfig: async (key) => ({
+        key: key as "logLevel",
+        category: "logging",
+        value: "info",
+        defaultValue: "info",
+        source: "default",
+        sensitive: false,
+        envVars: ["LOG_LEVEL"],
+        description: "Minimum log level.",
+      }),
+      setConfig: async (key, value) => ({
+        key,
+        value,
+        source: "user",
+      }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const statusResponse = await fetch(`${baseUrl}/api/v1/status`, {
+    headers: { "x-api-key": "operator-key" },
+  });
+  assert.equal(statusResponse.status, 200);
+  assert.equal((await statusResponse.json() as { daemon: { state: string } }).daemon.state, "running");
+
+  const configListResponse = await fetch(`${baseUrl}/api/v1/config`, {
+    headers: { "x-api-key": "operator-key" },
+  });
+  assert.equal(configListResponse.status, 200);
+  const configList = await configListResponse.json() as Array<{ key: string }>;
+  assert.equal(configList[0].key, "logLevel");
+
+  const configGetResponse = await fetch(`${baseUrl}/api/v1/config/logLevel`, {
+    headers: { "x-api-key": "operator-key" },
+  });
+  assert.equal(configGetResponse.status, 200);
+  assert.equal((await configGetResponse.json() as { key: string }).key, "logLevel");
+
+  const configSetResponse = await fetch(`${baseUrl}/api/v1/config/logLevel`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "operator-key",
+    },
+    body: JSON.stringify({ value: "debug" }),
+  });
+  assert.equal(configSetResponse.status, 200);
+  assert.deepEqual(await configSetResponse.json(), {
+    key: "logLevel",
+    value: "debug",
+    source: "user",
+  });
+});
+
+test("createBrokerServer rejects config mutation when broker auth is not configured", async (t) => {
+  const broker = createBrokerServer();
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const response = await fetch(`${baseUrl}/api/v1/config/logLevel`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ value: "debug" }),
+  });
+
+  assert.equal(response.status, 403);
+  const body = await response.json() as { error?: string };
+  assert.match(body.error ?? "", /requires BROKER_API_KEY/i);
+});
+
 test("createBrokerServer routes skill tasks through daemon.submitSkillTask when daemon is provided", async (t) => {
   const submittedSkillTasks: Array<{ taskId: string; skillName: string; action: string; params: Record<string, unknown> }> = [];
   const submittedTasks: Array<{ id: string; name: string }> = [];

@@ -7,7 +7,21 @@ node_modules/
 .env.*
 !.env.example
 
-docs/
+docs/*
+!docs/getting-started.md
+!docs/browser.md
+!docs/terminal.md
+!docs/skills.md
+!docs/mcp.md
+!docs/policy.md
+!docs/api.md
+!docs/cli.md
+!docs/troubleshooting.md
+!docs/production-upgrade/
+docs/production-upgrade/*
+!docs/production-upgrade/section-11-operator-ux/
+docs/production-upgrade/section-11-operator-ux/*
+!docs/production-upgrade/section-11-operator-ux/implementation-checklist.md
 reports/
 *.sqlite
 nul
