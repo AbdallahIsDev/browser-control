@@ -668,3 +668,81 @@ export {
 export type {
   ProviderNamespace,
 } from "./browser_control";
+
+// ── Section 10: Self-Debugging and Observability ───────────────────────
+
+export type {
+  ConsoleEntry,
+  ConsoleLevel,
+  NetworkEntry,
+  DebugBundle,
+  DebugBundleBrowserEvidence,
+  DebugBundleTerminalEvidence,
+  DebugBundleFsEvidence,
+  DebugBundleException,
+  RetrySummary,
+  RecoveryGuidance,
+  HealthStatus,
+  HealthCheckDetail,
+  PerformanceTrace,
+} from "./observability/types";
+
+export { OBSERVABILITY_KEYS } from "./observability/types";
+
+export {
+  redactUrl,
+  redactString,
+  redactHeaders,
+  redactConsoleEntry,
+  redactNetworkEntry,
+  redactObject,
+} from "./observability/redaction";
+
+export {
+  ConsoleCapture,
+  getGlobalConsoleCapture,
+  resetGlobalConsoleCapture,
+} from "./observability/console_capture";
+
+export {
+  NetworkCapture,
+  getGlobalNetworkCapture,
+  resetGlobalNetworkCapture,
+} from "./observability/network_capture";
+
+export {
+  buildDebugBundle,
+  saveDebugBundle,
+  loadDebugBundle,
+  listDebugBundles,
+  deleteDebugBundle,
+  pruneDebugBundles,
+  isValidDebugBundleId,
+} from "./observability/debug_bundle";
+
+export {
+  collectFailureDebugMetadata,
+} from "./observability/action_debug";
+
+export type {
+  FailureDebugMetadata,
+  FailureDebugOptions,
+} from "./observability/action_debug";
+
+export {
+  generateRecoveryGuidance,
+  classifyFailure,
+  isRetryRecommended,
+  getAlternativePath,
+  formatGuidance,
+} from "./observability/recovery";
+
+export {
+  PerformanceTracer,
+  getGlobalPerformanceTracer,
+  resetGlobalPerformanceTracer,
+} from "./observability/performance";
+
+export type {
+  DebugNamespace,
+} from "./browser_control";

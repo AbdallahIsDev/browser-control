@@ -1702,6 +1702,19 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleService(args);
       break;
 
+    // ── Section 10: Self-Debugging and Observability ────────────────
+    case "doctor":
+      await handleDoctor(args);
+      break;
+
+    case "status":
+      await handleStatus(args);
+      break;
+
+    case "debug":
+      await handleDebug(args);
+      break;
+
     // ── MCP Server (Section 7) ──────────────────────────────────────
     case "mcp":
       await handleMcp(args);
@@ -2720,6 +2733,216 @@ async function handleService(args: ParsedArgs): Promise<void> {
   } catch (error) {
     console.error("Error:", (error as Error).message);
     process.exit(1);
+  }
+}
+
+// ── Section 10: Self-Debugging and Observability Handlers ─────────────
+
+async function handleDoctor(args: ParsedArgs): Promise<void> {
+  const { flags } = args;
+  const jsonOutput = flags.json === "true";
+  const port = flags.port ? Number(flags.port) : undefined;
+
+  try {
+    const { HealthCheck } = await import("./health_check");
+    const { MemoryStore } = await import("./memory_store");
+
+    const store = new MemoryStore();
+    const healthCheck = new HealthCheck({
+      port,
+      memoryStore: store,
+    });
+
+    const report = await healthCheck.runExtended();
+
+    store.close();
+
+    if (jsonOutput) {
+      outputJson(report, false);
+    } else {
+      console.log(`Health: ${report.overall.toUpperCase()}`);
+      console.log(`Checked at: ${report.timestamp}\n`);
+      for (const check of report.checks) {
+        const icon = check.status === "pass" ? "✓" : check.status === "warn" ? "!" : "✗";
+        console.log(`  ${icon} ${check.name}: ${check.status}${check.details ? ` — ${check.details}` : ""}`);
+      }
+    }
+
+    if (report.overall === "unhealthy") {
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+async function handleStatus(args: ParsedArgs): Promise<void> {
+  const { flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  try {
+    const { probeDaemonHealth } = await import("./session_manager");
+    const { getPidFilePath } = await import("./paths");
+    const fs = await import("node:fs");
+
+    // Daemon status
+    let daemonRunning = false;
+    let daemonPid: number | null = null;
+    try {
+      const pidPath = getPidFilePath();
+      if (fs.existsSync(pidPath)) {
+        daemonPid = Number(fs.readFileSync(pidPath, "utf8").trim());
+        try {
+          process.kill(daemonPid, 0);
+          daemonRunning = true;
+        } catch {
+          // Dead
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    const daemonHealth = await probeDaemonHealth().catch(() => ({ running: false, brokerUrl: "" }));
+
+    const status = {
+      daemon: {
+        running: daemonRunning,
+        pid: daemonPid,
+        brokerReachable: daemonHealth.running,
+        brokerUrl: daemonHealth.brokerUrl,
+      },
+      browser: {
+        connected: false,
+      },
+      sessions: {
+        active: 0,
+      },
+    };
+
+    // Try to get browser status
+    try {
+      const store = new MemoryStore();
+      const connectionState = store.get<{ status: string }>("browser_connection:active");
+      if (connectionState) {
+        status.browser.connected = connectionState.status === "connected";
+      }
+      store.close();
+    } catch {
+      // Ignore
+    }
+
+    if (jsonOutput) {
+      outputJson(status, false);
+    } else {
+      console.log("Browser Control Status");
+      console.log("");
+      console.log(`Daemon:     ${status.daemon.running ? "running" : "not running"}${status.daemon.pid ? ` (PID: ${status.daemon.pid})` : ""}`);
+      console.log(`Broker:     ${status.daemon.brokerReachable ? "reachable" : "not reachable"}${status.daemon.brokerUrl ? ` at ${status.daemon.brokerUrl}` : ""}`);
+      console.log(`Browser:    ${status.browser.connected ? "connected" : "not connected"}`);
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+async function handleDebug(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "bundle": {
+      const bundleId = positional[0];
+      if (!bundleId) {
+        console.error("Error: Bundle ID is required");
+        process.exit(1);
+      }
+
+      try {
+        const { loadDebugBundle } = await import("./observability/debug_bundle");
+        const store = new MemoryStore();
+        const bundle = loadDebugBundle(bundleId, store);
+        store.close();
+
+        if (!bundle) {
+          console.error(`Error: Bundle "${bundleId}" not found`);
+          process.exit(1);
+        }
+
+        if (flags.output) {
+          const fs = await import("node:fs");
+          fs.writeFileSync(flags.output, JSON.stringify(bundle, null, 2));
+          console.log(`Bundle saved to: ${flags.output}`);
+        } else {
+          outputJson(bundle, !jsonOutput);
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "console": {
+      try {
+        const { getGlobalConsoleCapture } = await import("./observability/console_capture");
+        const capture = getGlobalConsoleCapture();
+        const sessionId = flags.session ?? "default";
+        const entries = capture.getEntries(sessionId);
+
+        if (jsonOutput) {
+          outputJson({ sessionId, entries }, false);
+        } else {
+          console.log(`Console entries for session: ${sessionId} (${entries.length} total)`);
+          for (const entry of entries.slice(-20)) {
+            const time = new Date(entry.timestamp).toLocaleTimeString();
+            console.log(`  [${time}] ${entry.level.toUpperCase()}: ${entry.message.slice(0, 200)}`);
+          }
+          if (entries.length > 20) {
+            console.log(`  ... and ${entries.length - 20} more`);
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "network": {
+      try {
+        const { getGlobalNetworkCapture } = await import("./observability/network_capture");
+        const capture = getGlobalNetworkCapture();
+        const sessionId = flags.session ?? "default";
+        const entries = capture.getEntries(sessionId);
+
+        if (jsonOutput) {
+          outputJson({ sessionId, entries }, false);
+        } else {
+          console.log(`Network entries for session: ${sessionId} (${entries.length} total)`);
+          for (const entry of entries.slice(-20)) {
+            const time = new Date(entry.timestamp).toLocaleTimeString();
+            const statusStr = entry.status ? ` [${entry.status}]` : "";
+            const errorStr = entry.error ? ` ERROR: ${entry.error}` : "";
+            console.log(`  [${time}] ${entry.method} ${entry.url.slice(0, 80)}${statusStr}${errorStr}`);
+          }
+          if (entries.length > 20) {
+            console.log(`  ... and ${entries.length - 20} more`);
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    default:
+      console.error(`Unknown debug command: ${subcommand}`);
+      console.error("Available: bundle <id>, console [--session=<id>], network [--session=<id>]");
+      process.exit(1);
   }
 }
 

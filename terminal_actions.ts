@@ -19,6 +19,8 @@ import {
   type ActionResult,
 } from "./action_result";
 import { logger } from "./logger";
+import { collectFailureDebugMetadata } from "./observability/action_debug";
+import type { ExecutionPath, PolicyDecision, RiskLevel } from "./policy";
 
 const log = logger.withComponent("terminal_actions");
 
@@ -181,17 +183,32 @@ export class TerminalActions {
    * provides a clear error message instead of a misleading "session not
    * found" from the empty LocalTerminalRuntime.
    */
-  private requireDaemonRuntime(
+  private async requireDaemonRuntime(
     policyEval: PolicyEvalResult,
     sessionId: string,
-  ): ActionResult<never> | null {
+    action: string,
+    terminalSessionId?: string,
+  ): Promise<ActionResult<never> | null> {
     if (!this.context.autoStartDaemon) return null;
     const runtime = this.getTerminalRuntime();
     if (runtime instanceof LocalTerminalRuntime) {
-      return failureResult(
+      const message =
         "This action requires the daemon runtime, but the daemon could not be started. " +
-        "Ensure the daemon is running (bc daemon start) or check daemon startup logs.",
-        { path: policyEval.path, sessionId },
+        "Ensure the daemon is running (bc daemon start) or check daemon startup logs.";
+      return this.failureWithDebug(
+        message,
+        new Error(message),
+        {
+          action,
+          path: policyEval.path,
+          sessionId,
+          terminalSessionId,
+          ...(isPolicyAllowed(policyEval) ? {
+            policyDecision: policyEval.policyDecision,
+            risk: policyEval.risk,
+            auditId: policyEval.auditId,
+          } : {}),
+        },
       );
     }
     return null;
@@ -224,6 +241,43 @@ export class TerminalActions {
     return session?.id ?? "default";
   }
 
+  private async failureWithDebug<T>(
+    message: string,
+    error: unknown,
+    options: {
+      action: string;
+      path: ExecutionPath;
+      sessionId: string;
+      policyDecision?: PolicyDecision;
+      risk?: RiskLevel;
+      auditId?: string;
+      terminalSessionId?: string;
+    },
+  ): Promise<ActionResult<T>> {
+    const debug = await collectFailureDebugMetadata({
+      action: options.action,
+      sessionId: options.sessionId,
+      executionPath: options.path,
+      error,
+      terminalSession: options.terminalSessionId ? {
+        sessionId: options.terminalSessionId,
+        lastOutput: "",
+        promptState: "unknown",
+      } : null,
+      store: this.context.sessionManager.getMemoryStore(),
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+    });
+    return failureResult<T>(message, {
+      path: options.path,
+      sessionId: options.sessionId,
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+      auditId: options.auditId,
+      ...debug,
+    });
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────
 
   /**
@@ -249,7 +303,7 @@ export class TerminalActions {
       // When autoStartDaemon is true, refuse to fall back to
       // LocalTerminalRuntime for open(). Persistent terminal sessions
       // must be daemon-backed so the caller's process can exit cleanly.
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_open");
       if (daemonGuard) return daemonGuard;
 
       const result = await runtime.open({
@@ -271,7 +325,14 @@ export class TerminalActions {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Failed to open terminal session: ${message}`);
-      return failureResult(`Failed to open terminal: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Failed to open terminal: ${message}`, error, {
+        action: "terminal_open",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -291,7 +352,7 @@ export class TerminalActions {
 
       // Session-bound exec must use daemon runtime when autoStartDaemon is true
       if (options.sessionId) {
-        const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+        const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_exec", options.sessionId);
         if (daemonGuard) return daemonGuard as ActionResult<ExecResult>;
       }
 
@@ -311,7 +372,15 @@ export class TerminalActions {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Command execution failed: ${message}`);
-      return failureResult(`Exec failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Exec failed: ${message}`, error, {
+        action: "terminal_exec",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -327,7 +396,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_write", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<{ typed: string }>;
       await runtime.type(options.sessionId, options.text);
 
@@ -335,7 +404,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Type failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Type failed: ${message}`, error, {
+        action: "terminal_write",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -352,7 +429,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_read", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<{ output: string }>;
       const output = await runtime.read(options.sessionId, options.maxBytes);
 
@@ -360,7 +437,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Read failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Read failed: ${message}`, error, {
+        action: "terminal_read",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -377,7 +462,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_snapshot", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<TerminalSnapshot | TerminalSnapshot[]>;
       const snapResult = await runtime.snapshot(options.sessionId);
 
@@ -386,7 +471,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Snapshot failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Snapshot failed: ${message}`, error, {
+        action: "terminal_snapshot",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -403,7 +496,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_interrupt", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<{ interrupted: boolean }>;
       await runtime.interrupt(options.sessionId);
 
@@ -411,7 +504,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Interrupt failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Interrupt failed: ${message}`, error, {
+        action: "terminal_interrupt",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -439,7 +540,7 @@ export class TerminalActions {
       // LocalTerminalRuntime for list(). The local manager has no
       // sessions, so it would return an empty list misleading the
       // user into thinking no daemon sessions exist.
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_list");
       if (daemonGuard) return daemonGuard as ActionResult<Array<{ id: string; name?: string; shell: string; cwd: string; status: string }>>;
 
       const sessions = await runtime.list();
@@ -448,7 +549,14 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`List failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`List failed: ${message}`, error, {
+        action: "terminal_list",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -464,7 +572,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_close", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<{ closed: boolean }>;
       await runtime.close(options.sessionId);
 
@@ -478,7 +586,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Close failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Close failed: ${message}`, error, {
+        action: "terminal_close",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -494,7 +610,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_resume", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<unknown>;
       const result = await runtime.resume(options.sessionId);
 
@@ -502,7 +618,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Resume failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Resume failed: ${message}`, error, {
+        action: "terminal_resume",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 
@@ -518,7 +642,7 @@ export class TerminalActions {
     try {
       await this.ensureDaemonRuntimeReady();
       const runtime = this.getTerminalRuntime();
-      const daemonGuard = this.requireDaemonRuntime(policyEval, sessionId);
+      const daemonGuard = await this.requireDaemonRuntime(policyEval, sessionId, "terminal_status", options.sessionId);
       if (daemonGuard) return daemonGuard as ActionResult<unknown>;
       const result = await runtime.status(options.sessionId);
 
@@ -526,7 +650,15 @@ export class TerminalActions {
     } catch (error: unknown) {
       this.invalidateBrokerRuntimeOnError(error);
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Status failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Status failed: ${message}`, error, {
+        action: "terminal_status",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        terminalSessionId: options.sessionId,
+      });
     }
   }
 }

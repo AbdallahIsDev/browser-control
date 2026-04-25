@@ -6,29 +6,51 @@ import os from "node:os";
 import { FsActions, type FsActionContext } from "./fs_actions";
 import { SessionManager } from "./session_manager";
 import { MemoryStore } from "./memory_store";
+import { loadDebugBundle } from "./observability/debug_bundle";
+import type { BrowserConnectionManager } from "./browser_connection";
+
+function createUnavailableBrowserManager() {
+  return {
+    getContext: () => null,
+    getBrowser: () => null,
+    isConnected: () => false,
+    getConnection: () => null,
+  } as unknown as BrowserConnectionManager;
+}
 
 describe("FsActions", () => {
   let sessionManager: SessionManager;
   let fsActions: FsActions;
   let tempDir: string;
   let store: MemoryStore;
+  let dataHome: string;
+  let originalHome: string | undefined;
 
   beforeEach(async () => {
+    originalHome = process.env.BROWSER_CONTROL_HOME;
+    dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-actions-home-"));
+    process.env.BROWSER_CONTROL_HOME = dataHome;
     store = new MemoryStore({ filename: ":memory:" });
-    sessionManager = new SessionManager({ memoryStore: store });
+    sessionManager = new SessionManager({ memoryStore: store, browserManager: createUnavailableBrowserManager() });
     await sessionManager.create("fs-test", { policyProfile: "trusted" });
     fsActions = new FsActions({ sessionManager });
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-test-"));
   });
 
   afterEach(() => {
-    store.close();
+    sessionManager.close();
     // Clean up temp directory
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }
+    if (originalHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = originalHome;
+    }
+    fs.rmSync(dataHome, { recursive: true, force: true });
   });
 
   describe("constructor", () => {
@@ -65,6 +87,9 @@ describe("FsActions", () => {
 
       assert.equal(readResult.success, false);
       assert.ok(readResult.error);
+      assert.ok(readResult.debugBundleId);
+      assert.ok(readResult.recoveryGuidance);
+      assert.ok(loadDebugBundle(readResult.debugBundleId, store));
     });
   });
 
@@ -253,7 +278,10 @@ describe("FsActions", () => {
     it("policy-denied fs action returns ActionResult with policyDecision", async () => {
       // Create a safe session — fs_write is high risk, safe denies high risk
       const safeStore = new MemoryStore({ filename: ":memory:" });
-      const safeManager = new SessionManager({ memoryStore: safeStore });
+      const safeManager = new SessionManager({
+        memoryStore: safeStore,
+        browserManager: createUnavailableBrowserManager(),
+      });
       await safeManager.create("safe-fs", { policyProfile: "safe" });
       const safeFs = new FsActions({ sessionManager: safeManager });
 
@@ -266,7 +294,7 @@ describe("FsActions", () => {
         assert.ok(result.sessionId, "denied ActionResult must have sessionId");
       }
 
-      safeStore.close();
+      safeManager.close();
     });
 
     it("fs stat returns ActionResult with policy metadata", async () => {

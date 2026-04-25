@@ -34,6 +34,15 @@ export interface ActionResult<T = unknown> {
   risk?: RiskLevel;
   /** ISO timestamp when the action completed. */
   completedAt: string;
+  // ── Section 10: Self-Debugging and Observability ─────────────────────
+  /** Debug bundle ID for failed actions (for later retrieval). */
+  debugBundleId?: string;
+  /** Debug bundle file path for failed actions. */
+  debugBundlePath?: string;
+  /** Recovery guidance for failed actions. */
+  recoveryGuidance?: import("./observability/types").RecoveryGuidance;
+  /** Whether this result includes partial debug evidence. */
+  partialDebug?: boolean;
 }
 
 // ── Helper Constructors ───────────────────────────────────────────────
@@ -76,6 +85,10 @@ export function failureResult<T = unknown>(
     auditId?: string;
     policyDecision?: PolicyDecision;
     risk?: RiskLevel;
+    debugBundleId?: string;
+    debugBundlePath?: string;
+    recoveryGuidance?: import("./observability/types").RecoveryGuidance;
+    partialDebug?: boolean;
   },
 ): ActionResult<T> {
   return {
@@ -86,6 +99,10 @@ export function failureResult<T = unknown>(
     ...(options.auditId ? { auditId: options.auditId } : {}),
     ...(options.policyDecision ? { policyDecision: options.policyDecision } : {}),
     ...(options.risk ? { risk: options.risk } : {}),
+    ...(options.debugBundleId ? { debugBundleId: options.debugBundleId } : {}),
+    ...(options.debugBundlePath ? { debugBundlePath: options.debugBundlePath } : {}),
+    ...(options.recoveryGuidance ? { recoveryGuidance: options.recoveryGuidance } : {}),
+    ...(options.partialDebug ? { partialDebug: options.partialDebug } : {}),
     completedAt: new Date().toISOString(),
   };
 }
@@ -158,6 +175,10 @@ export function formatActionResult<T>(result: ActionResult<T>): Record<string, u
   if (result.auditId) out.auditId = result.auditId;
   if (result.policyDecision) out.policyDecision = result.policyDecision;
   if (result.risk) out.risk = result.risk;
+  if (result.debugBundleId) out.debugBundleId = result.debugBundleId;
+  if (result.debugBundlePath) out.debugBundlePath = result.debugBundlePath;
+  if (result.recoveryGuidance) out.recoveryGuidance = result.recoveryGuidance;
+  if (result.partialDebug) out.partialDebug = result.partialDebug;
 
   return out;
 }

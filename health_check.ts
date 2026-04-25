@@ -3,6 +3,7 @@ import path from "node:path";
 import { isDebugPortReady } from "./browser_core";
 import { loadProxyConfigs } from "./proxy_manager";
 import type { MemoryStore } from "./memory_store";
+import type { HealthStatus, HealthCheckDetail } from "./observability/types";
 
 export interface HealthReport {
   overall: "healthy" | "degraded" | "unhealthy";
@@ -33,6 +34,14 @@ interface HealthCheckOptions {
   port?: number;
   memoryStore?: MemoryStore;
   checks?: RegisteredCheck[];
+  /** Optional: check browser tab/session integrity (requires browser instance) */
+  browserCheck?: () => Promise<{ connected: boolean; tabCount: number; details?: string }>;
+  /** Optional: check terminal runtime state */
+  terminalCheck?: () => Promise<{ alive: boolean; sessionCount: number; details?: string }>;
+  /** Optional: check skill registry status */
+  skillCheck?: () => Promise<{ healthy: boolean; loaded: number; details?: string }>;
+  /** Optional: check config/policy validity */
+  policyCheck?: () => Promise<{ valid: boolean; details?: string }>;
 }
 
 function evaluateCritical(rule: CriticalRule, env: NodeJS.ProcessEnv): boolean {
@@ -185,8 +194,149 @@ export class HealthCheck {
       : { status: "warn", details: "Skill checks are placeholders." };
   }
 
+  // ── Section 10: Extended Health Checks ───────────────────────────────
+
+  async checkBrowserState(): Promise<HealthCheckResult> {
+    try {
+      const { getChromeDebugPath } = await import("./paths");
+      const debugPath = getChromeDebugPath();
+      if (!fs.existsSync(debugPath)) {
+        return { status: "warn", details: "No Chrome debug metadata found. Chrome may not be running." };
+      }
+
+      const metadata = JSON.parse(fs.readFileSync(debugPath, "utf8")) as { port?: number; wslBridge?: boolean };
+      const port = metadata.port ?? 9222;
+
+      const ready = await isDebugPortReady(port);
+      if (!ready) {
+        return { status: "warn", details: `Chrome debug port ${port} is not reachable.` };
+      }
+
+      return { status: "pass", details: `Chrome is reachable on port ${port}.` };
+    } catch (error: unknown) {
+      return {
+        status: "warn",
+        details: `Browser state check failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  async checkDataDirectories(): Promise<HealthCheckResult> {
+    try {
+      const { ensureDataHome } = await import("./paths");
+      const home = ensureDataHome();
+
+      const dirs = [
+        path.join(home, "reports"),
+        path.join(home, "logs"),
+        path.join(home, ".interop"),
+        path.join(home, "skills"),
+      ];
+
+      for (const dir of dirs) {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        // Test writability
+        const testFile = path.join(dir, ".health-check-write-test");
+        fs.writeFileSync(testFile, "ok");
+        fs.unlinkSync(testFile);
+      }
+
+      return { status: "pass", details: "All data directories are writable." };
+    } catch (error: unknown) {
+      return {
+        status: "fail",
+        details: `Data directory check failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  async checkConfigValidity(): Promise<HealthCheckResult> {
+    try {
+      const { loadConfig } = await import("./config");
+      loadConfig({ validate: true });
+      return { status: "pass", details: "Configuration is valid." };
+    } catch (error: unknown) {
+      return {
+        status: "warn",
+        details: `Configuration validation failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  async checkDaemonBroker(options: { brokerUrl?: string } = {}): Promise<HealthCheckResult> {
+    const { probeDaemonHealth } = await import("./session_manager");
+    try {
+      const result = await probeDaemonHealth();
+      if (result.running) {
+        return { status: "pass", details: `Daemon broker is reachable at ${result.brokerUrl}.` };
+      }
+      return { status: "warn", details: "Daemon broker is not reachable." };
+    } catch (error: unknown) {
+      return {
+        status: "warn",
+        details: `Daemon broker check failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  async checkSkillRegistry(options: { skillCheck?: HealthCheckOptions["skillCheck"] } = {}): Promise<HealthCheckResult> {
+    if (options.skillCheck) {
+      try {
+        const result = await options.skillCheck();
+        return result.healthy
+          ? { status: "pass", details: `${result.loaded} skill(s) loaded. ${result.details ?? ""}` }
+          : { status: "warn", details: result.details ?? "Skill registry is unhealthy." };
+      } catch (error: unknown) {
+        return {
+          status: "warn",
+          details: `Skill registry check failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    return { status: "pass", details: "No skill registry check configured." };
+  }
+
+  async checkSystemMemory(): Promise<HealthCheckResult> {
+    try {
+      const memUsage = process.memoryUsage();
+      const heapUsedMb = Math.round(memUsage.heapUsed / (1024 * 1024));
+      const rssMb = Math.round(memUsage.rss / (1024 * 1024));
+
+      const thresholdMb = Number(this.env.MEMORY_ALERT_MB) || 1024;
+      if (heapUsedMb > thresholdMb) {
+        return {
+          status: "warn",
+          details: `Heap usage ${heapUsedMb}MB exceeds threshold ${thresholdMb}MB (RSS: ${rssMb}MB).`,
+        };
+      }
+
+      return { status: "pass", details: `Heap: ${heapUsedMb}MB, RSS: ${rssMb}MB.` };
+    } catch (error: unknown) {
+      return {
+        status: "warn",
+        details: `Memory check failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
   async runAll(): Promise<HealthReport> {
-    const checksToRun = this.getChecksToRun();
+    return this.runChecks(this.getChecksToRun());
+  }
+
+  async runExtended(): Promise<HealthReport> {
+    return this.runChecks([
+      ...this.getChecksToRun(),
+      { name: "browserState", critical: false, run: async () => this.checkBrowserState() },
+      { name: "dataDirectories", critical: true, run: async () => this.checkDataDirectories() },
+      { name: "configValidity", critical: false, run: async () => this.checkConfigValidity() },
+      { name: "daemonBroker", critical: false, run: async () => this.checkDaemonBroker() },
+      { name: "systemMemory", critical: false, run: async () => this.checkSystemMemory() },
+    ]);
+  }
+
+  private async runChecks(checksToRun: RegisteredCheck[]): Promise<HealthReport> {
     const checkResults: HealthReport["checks"] = [];
     let criticalFailure = false;
     let hasWarningOrNonCriticalFailure = false;

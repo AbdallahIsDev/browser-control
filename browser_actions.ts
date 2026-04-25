@@ -27,6 +27,8 @@ import {
 import { logger } from "./logger";
 import { resolveServiceUrl, mightBeServiceRef } from "./services/resolver";
 import { ServiceRegistry, globalServiceRegistry } from "./services/registry";
+import { collectFailureDebugMetadata } from "./observability/action_debug";
+import type { ExecutionPath, PolicyDecision, RiskLevel } from "./policy";
 
 const log = logger.withComponent("browser_actions");
 
@@ -167,7 +169,8 @@ export class BrowserActions {
             this.bindBrowserToSession(bm);
           } catch (launchError: unknown) {
             const launchMsg = launchError instanceof Error ? launchError.message : String(launchError);
-            return failureResult(`No browser available and auto-launch failed: ${launchMsg}. Use 'bc browser attach' or 'bc browser launch' first.`, {
+            return this.failureWithDebug(`No browser available and auto-launch failed: ${launchMsg}. Use 'bc browser attach' or 'bc browser launch' first.`, launchError, {
+              action: "browser_connect",
               path: "a11y",
               sessionId,
             });
@@ -204,6 +207,46 @@ export class BrowserActions {
   private getSessionId(): string {
     const session = this.context.sessionManager.getActiveSession();
     return session?.id ?? "default";
+  }
+
+  private tryGetPage(): Page | null {
+    try {
+      return this.getPage();
+    } catch {
+      return null;
+    }
+  }
+
+  private async failureWithDebug<T>(
+    message: string,
+    error: unknown,
+    options: {
+      action: string;
+      path: ExecutionPath;
+      sessionId: string;
+      policyDecision?: PolicyDecision;
+      risk?: RiskLevel;
+      auditId?: string;
+    },
+  ): Promise<ActionResult<T>> {
+    const debug = await collectFailureDebugMetadata({
+      action: options.action,
+      sessionId: options.sessionId,
+      executionPath: options.path,
+      error,
+      page: this.tryGetPage(),
+      store: this.context.sessionManager.getMemoryStore(),
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+    });
+    return failureResult<T>(message, {
+      path: options.path,
+      sessionId: options.sessionId,
+      policyDecision: options.policyDecision,
+      risk: options.risk,
+      auditId: options.auditId,
+      ...debug,
+    });
   }
 
   // ── Ref Resolution ──────────────────────────────────────────────────
@@ -259,7 +302,11 @@ export class BrowserActions {
     if (mightBeServiceRef(options.url, registry)) {
       const resolveResult = await resolveServiceUrl(options.url, registry);
       if ("error" in resolveResult) {
-        return failureResult(resolveResult.error, { path: "a11y", sessionId });
+        return this.failureWithDebug(resolveResult.error, new Error(resolveResult.error), {
+          action: "browser_navigate",
+          path: "a11y",
+          sessionId,
+        });
       }
       resolvedUrl = resolveResult.url;
       if (resolveResult.service) {
@@ -292,9 +339,13 @@ export class BrowserActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Failed to open URL: ${message}`);
-      return failureResult(`Failed to open ${options.url}: ${message}`, {
+      return this.failureWithDebug(`Failed to open ${options.url}: ${message}`, error, {
+        action: "browser_navigate",
         path: policyEval.path,
         sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
       });
     }
   }
@@ -332,9 +383,13 @@ export class BrowserActions {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Snapshot failed: ${message}`);
-      return failureResult(`Snapshot failed: ${message}`, {
+      return this.failureWithDebug(`Snapshot failed: ${message}`, error, {
+        action: "browser_snapshot",
         path: policyEval.path,
         sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
       });
     }
   }
@@ -361,9 +416,13 @@ export class BrowserActions {
 
         const retry = await this.resolveTarget(options.target, page);
         if (!retry) {
-          return failureResult(`Could not resolve click target: ${options.target}`, {
+          return this.failureWithDebug(`Could not resolve click target: ${options.target}`, new Error(`Could not resolve click target: ${options.target}`), {
+            action: "browser_click",
             path: policyEval.path,
             sessionId,
+            policyDecision: policyEval.policyDecision,
+            risk: policyEval.risk,
+            auditId: policyEval.auditId,
           });
         }
         await retry.locator.click({
@@ -383,9 +442,13 @@ export class BrowserActions {
       return successResult({ clicked: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Click failed for "${options.target}": ${message}`, {
+      return this.failureWithDebug(`Click failed for "${options.target}": ${message}`, error, {
+        action: "browser_click",
         path: policyEval.path,
         sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
       });
     }
   }
@@ -411,9 +474,13 @@ export class BrowserActions {
 
         const retry = await this.resolveTarget(options.target, page);
         if (!retry) {
-          return failureResult(`Could not resolve fill target: ${options.target}`, {
+          return this.failureWithDebug(`Could not resolve fill target: ${options.target}`, new Error(`Could not resolve fill target: ${options.target}`), {
+            action: "browser_fill",
             path: policyEval.path,
             sessionId,
+            policyDecision: policyEval.policyDecision,
+            risk: policyEval.risk,
+            auditId: policyEval.auditId,
           });
         }
         await retry.locator.fill(options.text, { timeout: options.timeoutMs ? Number(options.timeoutMs) : 5000 });
@@ -429,9 +496,13 @@ export class BrowserActions {
       return successResult({ filled: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Fill failed for "${options.target}": ${message}`, {
+      return this.failureWithDebug(`Fill failed for "${options.target}": ${message}`, error, {
+        action: "browser_fill",
         path: policyEval.path,
         sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
       });
     }
   }
@@ -450,9 +521,13 @@ export class BrowserActions {
       const resolved = await this.resolveTarget(options.target, page);
 
       if (!resolved) {
-        return failureResult(`Could not resolve hover target: ${options.target}`, {
+        return this.failureWithDebug(`Could not resolve hover target: ${options.target}`, new Error(`Could not resolve hover target: ${options.target}`), {
+          action: "browser_hover",
           path: policyEval.path,
           sessionId,
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
         });
       }
 
@@ -461,9 +536,13 @@ export class BrowserActions {
       return successResult({ hovered: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Hover failed for "${options.target}": ${message}`, {
+      return this.failureWithDebug(`Hover failed for "${options.target}": ${message}`, error, {
+        action: "browser_hover",
         path: policyEval.path,
         sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
       });
     }
   }
@@ -484,7 +563,14 @@ export class BrowserActions {
       return successResult({ typed: options.text }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Type failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Type failed: ${message}`, error, {
+        action: "browser_type",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -504,7 +590,14 @@ export class BrowserActions {
       return successResult({ pressed: options.key }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Press failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Press failed: ${message}`, error, {
+        action: "browser_press",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -531,7 +624,14 @@ export class BrowserActions {
       return successResult({ scrolled: `${options.direction} ${amount}px` }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Scroll failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Scroll failed: ${message}`, error, {
+        action: "browser_scroll",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -570,7 +670,14 @@ export class BrowserActions {
       return successResult({ path: outputPath, sizeBytes: stats.size }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Screenshot failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Screenshot failed: ${message}`, error, {
+        action: "screenshot",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -598,7 +705,14 @@ export class BrowserActions {
       return successResult(tabs, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Tab list failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Tab list failed: ${message}`, error, {
+        action: "browser_tab_list",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -619,9 +733,13 @@ export class BrowserActions {
       const index = parseInt(tabId, 10);
 
       if (index < 0 || index >= pages.length) {
-        return failureResult(`Tab index ${tabId} out of range (0..${pages.length - 1})`, {
+        return this.failureWithDebug(`Tab index ${tabId} out of range (0..${pages.length - 1})`, new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`), {
+          action: "browser_tab_switch",
           path: policyEval.path,
           sessionId,
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
         });
       }
 
@@ -630,7 +748,14 @@ export class BrowserActions {
       return successResult({ activeTab: tabId }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Tab switch failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Tab switch failed: ${message}`, error, {
+        action: "browser_tab_switch",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 
@@ -653,7 +778,14 @@ export class BrowserActions {
       return successResult({ closed: true }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return failureResult(`Close failed: ${message}`, { path: policyEval.path, sessionId });
+      return this.failureWithDebug(`Close failed: ${message}`, error, {
+        action: "browser_close",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
     }
   }
 }

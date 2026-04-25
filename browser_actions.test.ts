@@ -1,10 +1,14 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { BrowserActions, type BrowserActionContext } from "./browser_actions";
 import { SessionManager, isPolicyAllowed } from "./session_manager";
 import { MemoryStore } from "./memory_store";
 import { ServiceRegistry } from "./services/registry";
 import type { BrowserConnectionManager } from "./browser_connection";
+import { loadDebugBundle } from "./observability/debug_bundle";
 
 function createUnavailableBrowserManager() {
   const attempts = {
@@ -34,16 +38,30 @@ describe("BrowserActions", () => {
   let sessionManager: SessionManager;
   let browserActions: BrowserActions;
   let store: MemoryStore;
+  let dataHome: string;
+  let originalHome: string | undefined;
 
   beforeEach(async () => {
+    originalHome = process.env.BROWSER_CONTROL_HOME;
+    dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-browser-actions-test-"));
+    process.env.BROWSER_CONTROL_HOME = dataHome;
     store = new MemoryStore({ filename: ":memory:" });
-    sessionManager = new SessionManager({ memoryStore: store });
+    sessionManager = new SessionManager({
+      memoryStore: store,
+      browserManager: createUnavailableBrowserManager().manager,
+    });
     await sessionManager.create("test", { policyProfile: "balanced" });
     browserActions = new BrowserActions({ sessionManager });
   });
 
   afterEach(() => {
-    store.close();
+    sessionManager.close();
+    if (originalHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = originalHome;
+    }
+    fs.rmSync(dataHome, { recursive: true, force: true });
   });
 
   describe("constructor", () => {
@@ -97,6 +115,9 @@ describe("BrowserActions", () => {
 
       assert.equal(result.success, false);
       assert.ok(result.error?.includes("No active browser page"));
+      assert.ok(result.debugBundleId);
+      assert.ok(result.recoveryGuidance);
+      assert.ok(loadDebugBundle(result.debugBundleId, store));
     });
   });
 
