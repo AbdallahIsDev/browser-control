@@ -6,6 +6,89 @@ Never duplicate the core files — import them.
 
 ---
 
+## Install And First Run
+
+Requires Node.js `>=22`.
+
+Clean checkout:
+
+```bash
+npm ci
+npm run build
+node cli.js --help
+node cli.js setup --non-interactive
+node cli.js doctor
+node cli.js status --json
+```
+
+Windows PowerShell with isolated data home:
+
+```powershell
+$env:BROWSER_CONTROL_HOME = Join-Path $env:TEMP ("browser-control-" + [guid]::NewGuid().ToString())
+node cli.js setup --non-interactive --json
+node cli.js doctor --json
+node cli.js status --json
+```
+
+Windows `cmd.exe`:
+
+```cmd
+set BROWSER_CONTROL_HOME=%TEMP%\browser-control-%RANDOM%
+node cli.js setup --non-interactive --json
+node cli.js doctor --json
+```
+
+Linux/macOS:
+
+```bash
+BC_HOME="$(mktemp -d)"
+BROWSER_CONTROL_HOME="$BC_HOME" node cli.js setup --non-interactive --json
+BROWSER_CONTROL_HOME="$BC_HOME" node cli.js doctor --json
+```
+
+Packed install smoke:
+
+```bash
+npm pack
+mkdir bc-smoke && cd bc-smoke
+npm init -y
+npm install ../browser-control-1.0.0.tgz
+npx bc --help
+npx bc setup --non-interactive
+npx bc doctor
+```
+
+Global install from a local tarball also works:
+
+```bash
+npm install -g ../browser-control-1.0.0.tgz
+bc --help
+```
+
+Chrome is optional for terminal and filesystem workflows. If Chrome or CDP is missing, `bc doctor` reports degraded browser capability and still allows terminal/filesystem-only use. Install Chrome or set `BROWSER_CHROME_PATH` only when browser automation is needed.
+
+MCP:
+
+```bash
+bc setup --non-interactive
+bc mcp serve
+```
+
+MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "browser-control": {
+      "command": "bc",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+---
+
 ## Folder Structure
 
 ```

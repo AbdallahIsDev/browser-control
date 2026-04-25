@@ -11,20 +11,27 @@ export interface SpawnDaemonOptions {
   cwd?: string;
 }
 
-export function resolveDaemonEntryPoint(cwd: string): { command: string; args: string[] } {
-  const sourceEntry = path.join(cwd, "daemon.ts");
-  if (fs.existsSync(sourceEntry)) {
-    return {
-      command: process.execPath,
-      args: [require.resolve("ts-node/dist/bin.js"), sourceEntry],
-    };
-  }
+export function resolvePackageRoot(cwd: string): string {
+  const resolved = path.resolve(cwd);
+  return path.basename(resolved) === "dist" ? path.dirname(resolved) : resolved;
+}
 
-  const distEntry = path.join(cwd, "dist", "daemon.js");
+export function resolveDaemonEntryPoint(cwd: string): { command: string; args: string[] } {
+  const root = resolvePackageRoot(cwd);
+
+  const distEntry = path.join(root, "dist", "daemon.js");
   if (fs.existsSync(distEntry)) {
     return {
       command: process.execPath,
       args: [distEntry],
+    };
+  }
+
+  const sourceEntry = path.join(root, "daemon.ts");
+  if (fs.existsSync(sourceEntry)) {
+    return {
+      command: process.execPath,
+      args: [require.resolve("ts-node/dist/bin.js"), sourceEntry],
     };
   }
 
@@ -39,7 +46,7 @@ export function buildDaemonSpawnOptions(
   const config = loadConfig({ validate: false, env });
   const visible = options.visible ?? config.daemonVisible;
   return {
-    cwd: options.cwd ?? __dirname,
+    cwd: options.cwd ?? resolvePackageRoot(__dirname),
     env,
     detached: options.detached ?? true,
     stdio: options.stdio ?? (platform === "win32" && !visible ? "ignore" : ["ignore", "ignore", "pipe"]),
@@ -53,16 +60,15 @@ export function spawnDaemonProcess(options: SpawnDaemonOptions = {}): ChildProce
   const env = spawnOptions.env as NodeJS.ProcessEnv;
   const config = loadConfig({ validate: false, env });
   const visible = options.visible ?? config.daemonVisible;
+  const { command, args } = resolveDaemonEntryPoint(cwd);
 
   if (process.platform === "win32" && visible) {
-    return spawn("npx", ["ts-node", "daemon.ts"], {
+    return spawn(command, args, {
       ...spawnOptions,
       stdio: options.stdio ?? ["ignore", "ignore", "pipe"],
-      shell: true,
       windowsHide: false,
     });
   }
 
-  const { command, args } = resolveDaemonEntryPoint(cwd);
   return spawn(command, args, spawnOptions);
 }

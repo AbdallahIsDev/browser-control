@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { buildDaemonSpawnOptions, resolveDaemonEntryPoint } from "./daemon_launch";
 
@@ -25,4 +27,20 @@ test("resolveDaemonEntryPoint resolves a runnable daemon entrypoint", () => {
   const daemonArg = resolved.args[resolved.args.length - 1];
   assert.ok(daemonArg);
   assert.ok(path.basename(daemonArg).startsWith("daemon."));
+});
+
+test("resolveDaemonEntryPoint resolves installed dist daemon from dist cwd", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
+  try {
+    const distDir = path.join(tempRoot, "dist");
+    fs.mkdirSync(distDir, { recursive: true });
+    const daemonJs = path.join(distDir, "daemon.js");
+    fs.writeFileSync(daemonJs, "console.log('daemon');");
+
+    const resolved = resolveDaemonEntryPoint(distDir);
+    assert.equal(resolved.command, process.execPath);
+    assert.deepEqual(resolved.args, [daemonJs]);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
 });

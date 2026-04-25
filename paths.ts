@@ -35,7 +35,14 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "providers"),
   ];
   for (const dir of dirs) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    if (process.platform !== "win32") {
+      const stat = fs.lstatSync(dir);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Refusing to use symlinked Browser Control data directory: ${dir}`);
+      }
+      fs.chmodSync(dir, 0o700);
+    }
   }
   return home;
 }

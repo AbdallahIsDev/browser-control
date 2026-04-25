@@ -3,12 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { Browser } from "playwright";
-import { connectBrowser, getFramerPage, isDebugPortReady } from "@bc/browser_core";
-import { connectStagehand, disconnectStagehand } from "@bc/stagehand_core";
-import { publishSite } from "@bc/skills/framer_skill";
-import { discoverSelectors, getSelectors } from "@bc/selectors";
-import { TaskEngine } from "@bc/task_engine";
-import { Telemetry, createTelegramAlertHandler } from "@bc/telemetry";
+import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser_core";
+import { connectStagehand, disconnectStagehand } from "./stagehand_core";
+import { publishSite } from "./skills/framer_skill";
+import { discoverSelectors, getSelectors } from "./selectors";
+import { TaskEngine } from "./task_engine";
+import { Telemetry, createTelegramAlertHandler } from "./telemetry";
 
 const setupSchema = z.object({
   cdp_port: z.number().default(9222),
