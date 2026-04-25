@@ -249,6 +249,11 @@ Service Management:
   service resolve <name>                                              Resolve service to URL
   service remove <name>                                               Remove a service
 
+Debug:
+  debug bundle <id> [--output=<path>]                                 Retrieve a debug bundle
+  debug console [--session=<id>]                                      Show captured console entries
+  debug network [--session=<id>]                                      Show captured network entries
+
 Knowledge:
   knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
   knowledge show <name-or-domain>                                    Show knowledge for a domain or skill
@@ -1821,15 +1826,6 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleService(args);
       break;
 
-    // ── Section 10: Self-Debugging and Observability ────────────────
-    case "doctor":
-      await handleDoctor(args);
-      break;
-
-    case "status":
-      await handleStatus(args);
-      break;
-
     case "debug":
       await handleDebug(args);
       break;
@@ -2848,118 +2844,6 @@ async function handleService(args: ParsedArgs): Promise<void> {
           process.exit(1);
         }
       }
-    }
-  } catch (error) {
-    console.error("Error:", (error as Error).message);
-    process.exit(1);
-  }
-}
-
-// ── Section 10: Self-Debugging and Observability Handlers ─────────────
-
-async function handleDoctor(args: ParsedArgs): Promise<void> {
-  const { flags } = args;
-  const jsonOutput = flags.json === "true";
-  const port = flags.port ? Number(flags.port) : undefined;
-
-  try {
-    const { HealthCheck } = await import("./health_check");
-    const { MemoryStore } = await import("./memory_store");
-
-    const store = new MemoryStore();
-    const healthCheck = new HealthCheck({
-      port,
-      memoryStore: store,
-    });
-
-    const report = await healthCheck.runExtended();
-
-    store.close();
-
-    if (jsonOutput) {
-      outputJson(report, false);
-    } else {
-      console.log(`Health: ${report.overall.toUpperCase()}`);
-      console.log(`Checked at: ${report.timestamp}\n`);
-      for (const check of report.checks) {
-        const icon = check.status === "pass" ? "✓" : check.status === "warn" ? "!" : "✗";
-        console.log(`  ${icon} ${check.name}: ${check.status}${check.details ? ` — ${check.details}` : ""}`);
-      }
-    }
-
-    if (report.overall === "unhealthy") {
-      process.exit(1);
-    }
-  } catch (error) {
-    console.error("Error:", (error as Error).message);
-    process.exit(1);
-  }
-}
-
-async function handleStatus(args: ParsedArgs): Promise<void> {
-  const { flags } = args;
-  const jsonOutput = flags.json === "true";
-
-  try {
-    const { probeDaemonHealth } = await import("./session_manager");
-    const { getPidFilePath } = await import("./paths");
-    const fs = await import("node:fs");
-
-    // Daemon status
-    let daemonRunning = false;
-    let daemonPid: number | null = null;
-    try {
-      const pidPath = getPidFilePath();
-      if (fs.existsSync(pidPath)) {
-        daemonPid = Number(fs.readFileSync(pidPath, "utf8").trim());
-        try {
-          process.kill(daemonPid, 0);
-          daemonRunning = true;
-        } catch {
-          // Dead
-        }
-      }
-    } catch {
-      // Ignore
-    }
-
-    const daemonHealth = await probeDaemonHealth().catch(() => ({ running: false, brokerUrl: "" }));
-
-    const status = {
-      daemon: {
-        running: daemonRunning,
-        pid: daemonPid,
-        brokerReachable: daemonHealth.running,
-        brokerUrl: daemonHealth.brokerUrl,
-      },
-      browser: {
-        connected: false,
-      },
-      sessions: {
-        active: 0,
-      },
-    };
-
-    // Try to get browser status
-    try {
-      const store = new MemoryStore();
-      const connectionState = store.get<{ status: string }>("browser_connection:active");
-      if (connectionState) {
-        status.browser.connected = connectionState.status === "connected";
-      }
-      store.close();
-    } catch {
-      // Ignore
-    }
-
-    if (jsonOutput) {
-      outputJson(status, false);
-    } else {
-      console.log("Browser Control Status");
-      console.log("");
-      console.log(`Daemon:     ${status.daemon.running ? "running" : "not running"}${status.daemon.pid ? ` (PID: ${status.daemon.pid})` : ""}`);
-      console.log(`Broker:     ${status.daemon.brokerReachable ? "reachable" : "not reachable"}${status.daemon.brokerUrl ? ` at ${status.daemon.brokerUrl}` : ""}`);
-      console.log(`Browser:    ${status.browser.connected ? "connected" : "not connected"}`);
     }
   } catch (error) {
     console.error("Error:", (error as Error).message);
