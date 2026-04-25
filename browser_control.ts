@@ -34,6 +34,15 @@ import type {
 import type { ServiceEntry } from "./services/registry";
 import { ServiceRegistry } from "./services/registry";
 import type { ProviderListResult, ProviderSelectionResult } from "./providers/types";
+import {
+  getConfigEntries,
+  getConfigValue,
+  setUserConfigValue,
+  type ConfigEntry,
+  type ConfigSetResult,
+} from "./config";
+import { collectStatus } from "./operator/status";
+import type { SystemStatus } from "./operator/types";
 
 // ── Options ──────────────────────────────────────────────────────────
 
@@ -132,6 +141,14 @@ export interface DebugNamespace {
   listBundles(): Array<{ bundleId: string; taskId: string; assembledAt: string; partial: boolean }>;
 }
 
+// ── Config Namespace ──────────────────────────────────────────────────
+
+export interface ConfigNamespace {
+  list(): ConfigEntry[];
+  get(key: string): ConfigEntry;
+  set(key: string, value: unknown): ConfigSetResult;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -143,6 +160,10 @@ export interface BrowserControlAPI {
   provider: ProviderNamespace;
   /** Debug and observability namespace (Section 10). */
   debug: DebugNamespace;
+  /** Runtime configuration namespace (Section 11). */
+  config: ConfigNamespace;
+  /** Collect operator-facing system status (Section 11). */
+  status(): Promise<SystemStatus>;
   /** Access the underlying session manager for advanced use. */
   readonly sessionManager: SessionManager;
   /** Access the underlying browser actions instance. */
@@ -219,6 +240,11 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
     use: (name) => sessionManager.getBrowserManager().getProviderRegistry().select(name),
     getActive: () => sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
+  };
+  const configNamespace: ConfigNamespace = {
+    list: () => getConfigEntries({ validate: false }),
+    get: (key) => getConfigValue(key, { validate: false }),
+    set: (key, value) => setUserConfigValue(key, value),
   };
 
   const debugNamespace: DebugNamespace = {
@@ -299,6 +325,8 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     },
     provider: providerNamespace,
     debug: debugNamespace,
+    config: configNamespace,
+    status: () => collectStatus(),
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },
     get terminalActions() { return terminalActions; },

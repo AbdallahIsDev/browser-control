@@ -9,6 +9,18 @@ import { Telemetry } from "./telemetry";
 import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./paths";
 import { loadConfig } from "./config";
 import { spawnDaemonProcess } from "./daemon_launch";
+import { getConfigEntries, getConfigValue, setUserConfigValue } from "./config";
+import { runDoctor } from "./operator/doctor";
+import { runSetup } from "./operator/setup";
+import { collectStatus } from "./operator/status";
+import {
+  formatConfigGet,
+  formatConfigList,
+  formatConfigSet,
+  formatDoctor,
+  formatSetup,
+  formatStatus,
+} from "./operator/format";
 
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
@@ -24,6 +36,8 @@ const VALUE_FLAGS = new Set([
   "amount",
   "api-key",
   "cdp-url",
+  "chrome-bind-address",
+  "chrome-debug-port",
   "content",
   "cron",
   "cwd",
@@ -40,11 +54,15 @@ const VALUE_FLAGS = new Set([
   "port",
   "priority",
   "profile",
+  "browser-mode",
+  "browserless-api-key",
+  "browserless-endpoint",
   "protocol",
   "provider",
   "root-selector",
   "session",
   "shell",
+  "terminal-shell",
   "skill",
   "target",
   "target-type",
@@ -130,6 +148,12 @@ function printHelp(): void {
 Browser Control CLI
 
 Usage: bc <command> [subcommand] [options]
+
+Operator:
+  doctor [--json]                                                    Run operator diagnostics
+  setup [--non-interactive] [--profile=balanced]                     Create/update user config
+  config list|get|set                                                Inspect or update effective config
+  status [--json]                                                    Show daemon, broker, sessions, tasks, and health
 
 Browser Actions:
   open <url>                                                         Open a URL in the browser
@@ -239,6 +263,85 @@ Flags:
 Environment:
   BROKER_PORT                                                        Broker API port (default: 7788)
 `);
+}
+
+async function handleDoctor(args: ParsedArgs): Promise<void> {
+  const jsonOutput = args.flags.json === "true";
+  const result = await runDoctor();
+  if (jsonOutput) {
+    outputJson(result.report, false);
+  } else {
+    console.log(formatDoctor(result.report));
+  }
+  process.exitCode = result.exitCode;
+}
+
+async function handleSetup(args: ParsedArgs): Promise<void> {
+  const jsonOutput = args.flags.json === "true";
+  const result = await runSetup({
+    nonInteractive: args.flags["non-interactive"] === "true",
+    json: jsonOutput,
+    profile: args.flags.profile,
+    browserMode: args.flags["browser-mode"] as "managed" | "attach" | undefined,
+    chromeDebugPort: args.flags["chrome-debug-port"] ? Number(args.flags["chrome-debug-port"]) : undefined,
+    chromeBindAddress: args.flags["chrome-bind-address"],
+    terminalShell: args.flags["terminal-shell"] ?? args.flags.shell,
+    browserlessEndpoint: args.flags["browserless-endpoint"],
+    browserlessApiKey: args.flags["browserless-api-key"],
+    skipBrowserTest: args.flags["skip-browser-test"] === "true",
+    skipTerminalTest: args.flags["skip-terminal-test"] === "true",
+  });
+  if (jsonOutput) outputJson(result, false);
+  else console.log(formatSetup(result));
+  process.exitCode = result.success ? 0 : 1;
+}
+
+async function handleConfig(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "list": {
+      const entries = getConfigEntries({ validate: false });
+      if (jsonOutput) outputJson(entries, false);
+      else console.log(formatConfigList(entries));
+      break;
+    }
+    case "get": {
+      const key = positional[0];
+      if (!key) {
+        console.error("Error: config get requires a key");
+        process.exit(1);
+      }
+      const entry = getConfigValue(key, { validate: false });
+      if (jsonOutput) outputJson(entry, false);
+      else console.log(formatConfigGet(entry));
+      break;
+    }
+    case "set": {
+      const key = positional[0];
+      const value = positional[1];
+      if (!key || value === undefined) {
+        console.error("Error: config set requires <key> <value>");
+        process.exit(1);
+      }
+      const result = setUserConfigValue(key, value);
+      if (jsonOutput) outputJson(result, false);
+      else console.log(formatConfigSet(result));
+      break;
+    }
+    default:
+      console.error(`Unknown config command: ${subcommand}`);
+      console.error("Available: list, get, set");
+      process.exit(1);
+  }
+}
+
+async function handleStatus(args: ParsedArgs): Promise<void> {
+  const jsonOutput = args.flags.json === "true";
+  const status = await collectStatus();
+  if (jsonOutput) outputJson(status, false);
+  else console.log(formatStatus(status));
 }
 
 async function handleRun(args: ParsedArgs): Promise<void> {
@@ -1596,6 +1699,22 @@ export async function runCli(argv = process.argv): Promise<void> {
   }
 
   switch (args.command) {
+    case "doctor":
+      await handleDoctor(args);
+      break;
+
+    case "setup":
+      await handleSetup(args);
+      break;
+
+    case "config":
+      await handleConfig(args);
+      break;
+
+    case "status":
+      await handleStatus(args);
+      break;
+
     case "run":
       await handleRun(args);
       break;

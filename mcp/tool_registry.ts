@@ -20,6 +20,7 @@ import { buildSessionTools } from "./tools/session";
 import { buildDebugTools } from "./tools/debug";
 import { buildServiceTools } from "./tools/service";
 import { buildProviderTools } from "./tools/provider";
+import { buildStatusTools } from "./tools/status";
 
 /**
  * Build the complete MCP tool registry for a Browser Control instance.
@@ -28,6 +29,7 @@ import { buildProviderTools } from "./tools/provider";
  */
 export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
   return [
+    ...buildStatusTools(api),
     ...buildSessionTools(api),
     ...buildBrowserTools(api),
     ...buildProviderTools(api),
@@ -43,6 +45,7 @@ export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
  */
 export function getToolCategories(api: BrowserControlAPI): Record<string, string[]> {
   return {
+    status: buildStatusTools(api).map((t) => t.name),
     session: buildSessionTools(api).map((t) => t.name),
     browser: buildBrowserTools(api).map((t) => t.name),
     provider: buildProviderTools(api).map((t) => t.name),

@@ -36,11 +36,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/AbdallahIsDev/browser-automation-core.git"
+    "url": "https://github.com/AbdallahIsDev/browser-control.git"
   },
-  "homepage": "https://github.com/AbdallahIsDev/browser-automation-core#readme",
+  "homepage": "https://github.com/AbdallahIsDev/browser-control#readme",
   "bugs": {
-    "url": "https://github.com/AbdallahIsDev/browser-automation-core/issues"
+    "url": "https://github.com/AbdallahIsDev/browser-control/issues"
   },
   "engines": {
     "node": ">=22"
