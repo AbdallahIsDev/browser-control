@@ -23,3 +23,7 @@ Config values merge in this order:
 
 Sensitive values are redacted from config list/get output. The API does not expose interactive setup.
 
+## Compatibility
+
+The stable public TypeScript contract is the export set from `index.ts`, `createBrowserControl()`, its documented namespaces, and `ActionResult`. Public changes must follow `docs/compatibility.md`; accidental export/API/result-shape changes are guarded by `npm run compat:test`.
+

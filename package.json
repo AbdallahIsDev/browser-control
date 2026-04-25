@@ -17,6 +17,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build",
     "test": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1",
+    "compat:test": "node --require ts-node/register --require tsconfig-paths/register --test compatibility/package_import_smoke.test.ts compatibility/public_surface.test.ts",
+    "compat:update": "node scripts/update_public_surface_snapshots.cjs",
     "broker:start": "ts-node broker_server.ts",
     "daemon": "ts-node daemon.ts",
     "daemon:dev": "ts-node daemon.ts --dev",

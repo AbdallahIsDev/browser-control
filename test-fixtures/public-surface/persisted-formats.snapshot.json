@@ -1,0 +1,222 @@
+{
+  "dataHome": {
+    "defaultSuffix": ".browser-control",
+    "envOverride": "BROWSER_CONTROL_HOME",
+    "publicPaths": [
+      "config/config.json",
+      "memory.sqlite",
+      "reports/",
+      "logs/",
+      ".interop/chrome-debug.json",
+      ".interop/daemon.pid",
+      ".interop/daemon-status.json",
+      "skills/",
+      "policy-profiles/",
+      "profiles/",
+      "knowledge/interaction-skills/",
+      "knowledge/domain-skills/",
+      "services/registry.json",
+      "providers/registry.json",
+      "debug-bundles/",
+      "observability/"
+    ]
+  },
+  "debugBundle": {
+    "assembledAt": "string",
+    "browser": {
+      "consoleEntries": [
+        {
+          "level": "string",
+          "message": "string",
+          "timestamp": "string"
+        }
+      ],
+      "networkEntries": [
+        {
+          "method": "string",
+          "status": "number",
+          "timestamp": "string",
+          "url": "string"
+        }
+      ],
+      "screenshot": "string",
+      "snapshot": [
+        {
+          "name": "string",
+          "ref": "string",
+          "role": "string",
+          "text": "string"
+        }
+      ],
+      "title": "string",
+      "url": "string"
+    },
+    "bundleId": "string",
+    "exception": {
+      "code": "string",
+      "message": "string",
+      "stack": "string"
+    },
+    "executionPath": "string",
+    "failedStep": {
+      "action": "string",
+      "id": "string",
+      "params": {
+        "target": "string"
+      },
+      "risk": "string"
+    },
+    "filesystem": {
+      "errorCode": "string",
+      "operation": "string",
+      "path": "string"
+    },
+    "partial": "boolean",
+    "policyDecisions": [
+      {
+        "decision": "string",
+        "reason": "string",
+        "timestamp": "string"
+      }
+    ],
+    "recentActions": [
+      {
+        "action": "string",
+        "durationMs": "number",
+        "success": "boolean",
+        "timestamp": "string"
+      }
+    ],
+    "recoveryGuidance": {
+      "canRetry": "boolean",
+      "requiresConfirmation": "boolean",
+      "requiresHuman": "boolean"
+    },
+    "retrySummary": {
+      "attempts": "number",
+      "backoffUsed": "boolean",
+      "lastError": "string",
+      "totalDurationMs": "number"
+    },
+    "sessionId": "string",
+    "taskId": "string",
+    "terminal": {
+      "cwd": "string",
+      "exitCode": "number",
+      "lastOutput": "string",
+      "promptState": "string",
+      "sessionId": "string",
+      "shell": "string"
+    }
+  },
+  "memoryStoreKeys": {
+    "observability": {
+      "bundlePrefix": "obs:bundle:",
+      "consolePrefix": "obs:console:",
+      "healthPrefix": "obs:health:",
+      "networkPrefix": "obs:network:",
+      "tracePrefix": "obs:trace:"
+    },
+    "terminal": {
+      "bufferPrefix": "terminal:buffer:",
+      "metadataPrefix": "terminal:session:",
+      "pendingPrefix": "terminal:resume-pending:"
+    }
+  },
+  "providerRegistry": {
+    "builtIns": [
+      "local",
+      "custom",
+      "browserless"
+    ],
+    "publicListRedacts": [
+      "apiKey",
+      "sensitive endpoint query params"
+    ],
+    "shape": {
+      "activeProvider": "string",
+      "providers": [
+        {
+          "apiKey": "string",
+          "endpoint": "string",
+          "name": "string",
+          "options": {},
+          "type": "string"
+        }
+      ],
+      "updatedAt": "string",
+      "version": "number"
+    },
+    "version": 1
+  },
+  "serviceRegistry": {
+    "shape": {
+      "services": {
+        "sample": {
+          "name": "string",
+          "path": "string",
+          "port": "number",
+          "protocol": "string",
+          "registeredAt": "string",
+          "updatedAt": "string"
+        }
+      },
+      "updatedAt": "string",
+      "version": "number"
+    },
+    "version": 1
+  },
+  "source": [
+    "paths.ts",
+    "services/registry.ts",
+    "providers/types.ts",
+    "observability/types.ts",
+    "terminal_resume_types.ts",
+    "terminal_buffer_store.ts"
+  ],
+  "terminalResume": {
+    "bufferRecord": {
+      "capturedAt": "string",
+      "cursorPosition": {
+        "col": "number",
+        "row": "number"
+      },
+      "scrollback": [
+        "string"
+      ],
+      "sessionId": "string",
+      "visibleContent": "string"
+    },
+    "serializedSession": {
+      "createdAt": "string",
+      "cursorPosition": {
+        "col": "number",
+        "row": "number"
+      },
+      "cwd": "string",
+      "env": {
+        "API_KEY": "string",
+        "PATH": "string"
+      },
+      "history": [
+        "string"
+      ],
+      "lastActivityAt": "string",
+      "name": "string",
+      "processInfo": {
+        "pid": "number"
+      },
+      "promptSignature": "string",
+      "resumeLevel": "number",
+      "runningCommand": "string",
+      "scrollbackBuffer": [
+        "string"
+      ],
+      "serializedAt": "string",
+      "sessionId": "string",
+      "shell": "string",
+      "status": "string"
+    },
+    "serializedSessionValidates": true
+  }
+}

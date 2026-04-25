@@ -1,0 +1,3434 @@
+{
+  "createBrowserControl": {
+    "namespaces": {
+      "browser": [
+        "click",
+        "close",
+        "fill",
+        "hover",
+        "open",
+        "press",
+        "provider",
+        "screenshot",
+        "scroll",
+        "snapshot",
+        "tabList",
+        "tabSwitch",
+        "type"
+      ],
+      "config": [
+        "get",
+        "list",
+        "set"
+      ],
+      "debug": [
+        "bundle",
+        "console",
+        "health",
+        "listBundles",
+        "network"
+      ],
+      "fs": [
+        "ls",
+        "move",
+        "read",
+        "rm",
+        "stat",
+        "write"
+      ],
+      "provider": [
+        "getActive",
+        "list",
+        "use"
+      ],
+      "service": [
+        "list",
+        "register",
+        "remove",
+        "resolve"
+      ],
+      "session": [
+        "create",
+        "list",
+        "status",
+        "use"
+      ],
+      "terminal": [
+        "close",
+        "exec",
+        "interrupt",
+        "open",
+        "read",
+        "resume",
+        "snapshot",
+        "status",
+        "type"
+      ]
+    },
+    "source": "browser_control.ts#createBrowserControl",
+    "topLevel": [
+      "browser",
+      "browserActions",
+      "close",
+      "config",
+      "debug",
+      "fs",
+      "fsActions",
+      "provider",
+      "service",
+      "serviceActions",
+      "session",
+      "sessionManager",
+      "status",
+      "terminal",
+      "terminalActions"
+    ],
+    "typeSignatures": {
+      "BrowserControlAPI": {
+        "browser": "BrowserNamespace",
+        "browserActions": "BrowserActions",
+        "close": "(): void",
+        "config": "ConfigNamespace",
+        "debug": "DebugNamespace",
+        "fs": "FsNamespace",
+        "fsActions": "FsActions",
+        "provider": "ProviderNamespace",
+        "service": "ServiceNamespace",
+        "serviceActions": "ServiceActions",
+        "session": "SessionNamespace",
+        "sessionManager": "SessionManager",
+        "status": "(): Promise<SystemStatus>",
+        "terminal": "TerminalNamespace",
+        "terminalActions": "TerminalActions"
+      },
+      "BrowserNamespace": {
+        "click": "(options: { target: string; timeoutMs?: number | undefined; force?: boolean | undefined; }): Promise<ActionResult<{ clicked: string; }>>",
+        "close": "(): Promise<ActionResult<{ closed: boolean; }>>",
+        "fill": "(options: { target: string; text: string; timeoutMs?: number | undefined; commit?: boolean | undefined; }): Promise<ActionResult<{ filled: string; }>>",
+        "hover": "(options: { target: string; timeoutMs?: number | undefined; }): Promise<ActionResult<{ hovered: string; }>>",
+        "open": "(options: { url: string; waitUntil?: \"load\" | \"domcontentloaded\" | \"networkidle\" | \"commit\" | undefined; }): Promise<ActionResult<{ url: string; title: string; }>>",
+        "press": "(options: { key: string; }): Promise<ActionResult<{ pressed: string; }>>",
+        "provider": "ProviderNamespace",
+        "screenshot": "(options?: { outputPath?: string | undefined; fullPage?: boolean | undefined; target?: string | undefined; } | undefined): Promise<ActionResult<{ path: string; sizeBytes: number; }>>",
+        "scroll": "(options: { direction: \"up\" | \"down\" | \"left\" | \"right\"; amount?: number | undefined; }): Promise<ActionResult<{ scrolled: string; }>>",
+        "snapshot": "(options?: { rootSelector?: string | undefined; } | undefined): Promise<ActionResult<A11ySnapshot>>",
+        "tabList": "(): Promise<ActionResult<{ id: string; url: string; title: string; }[]>>",
+        "tabSwitch": "(tabId: string): Promise<ActionResult<{ activeTab: string; }>>",
+        "type": "(options: { text: string; delayMs?: number | undefined; }): Promise<ActionResult<{ typed: string; }>>"
+      },
+      "ConfigNamespace": {
+        "get": "(key: string): ConfigEntry",
+        "list": "(): ConfigEntry[]",
+        "set": "(key: string, value: unknown): ConfigSetResult"
+      },
+      "DebugNamespace": {
+        "bundle": "(bundleId: string): DebugBundle | null",
+        "console": "(options?: { sessionId?: string | undefined; } | undefined): ConsoleEntry[]",
+        "health": "(options?: { port?: number | undefined; } | undefined): Promise<HealthReport>",
+        "listBundles": "(): { bundleId: string; taskId: string; assembledAt: string; partial: boolean; }[]",
+        "network": "(options?: { sessionId?: string | undefined; } | undefined): NetworkEntry[]"
+      },
+      "FsNamespace": {
+        "ls": "(options: { path: string; recursive?: boolean | undefined; extension?: string | undefined; }): Promise<ActionResult<ListResult>>",
+        "move": "(options: { src: string; dst: string; }): Promise<ActionResult<MoveResult>>",
+        "read": "(options: { path: string; maxBytes?: number | undefined; }): Promise<ActionResult<FileReadResult>>",
+        "rm": "(options: { path: string; recursive?: boolean | undefined; force?: boolean | undefined; }): Promise<ActionResult<DeleteResult>>",
+        "stat": "(options: { path: string; }): Promise<ActionResult<FileStatResult>>",
+        "write": "(options: { path: string; content: string; createDirs?: boolean | undefined; }): Promise<ActionResult<FileWriteResult>>"
+      },
+      "ProviderNamespace": {
+        "getActive": "(): string",
+        "list": "(): ProviderListResult",
+        "use": "(name: string): ProviderSelectionResult"
+      },
+      "ServiceNamespace": {
+        "list": "(): ActionResult<ServiceEntry[]>",
+        "register": "(options: { name: string; port: number; protocol?: \"http\" | \"https\" | undefined; path?: string | undefined; }): Promise<ActionResult<ServiceEntry>>",
+        "remove": "(options: { name: string; }): ActionResult<{ removed: boolean; }>",
+        "resolve": "(options: { name: string; }): Promise<ActionResult<{ url: string; service?: ServiceEntry | undefined; }>>"
+      },
+      "SessionNamespace": {
+        "create": "(name: string, options?: { policyProfile?: string | undefined; workingDirectory?: string | undefined; } | undefined): Promise<ActionResult<SessionState>>",
+        "list": "(): ActionResult<SessionListEntry[]>",
+        "status": "(nameOrId?: string | undefined): ActionResult<SessionState>",
+        "use": "(nameOrId: string): ActionResult<SessionState>"
+      },
+      "TerminalNamespace": {
+        "close": "(options: { sessionId: string; }): Promise<ActionResult<{ closed: boolean; }>>",
+        "exec": "(options: { command: string; sessionId?: string | undefined; timeoutMs?: number | undefined; }): Promise<ActionResult<ExecResult>>",
+        "interrupt": "(options: { sessionId: string; }): Promise<ActionResult<{ interrupted: boolean; }>>",
+        "open": "(options?: { shell?: string | undefined; cwd?: string | undefined; name?: string | undefined; } | undefined): Promise<ActionResult<{ id: string; shell: string; cwd: string; status: string; }>>",
+        "read": "(options: { sessionId: string; maxBytes?: number | undefined; }): Promise<ActionResult<{ output: string; }>>",
+        "resume": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
+        "snapshot": "(options?: { sessionId?: string | undefined; } | undefined): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>",
+        "status": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
+        "type": "(options: { text: string; sessionId: string; }): Promise<ActionResult<{ typed: string; }>>"
+      }
+    }
+  },
+  "exports": [
+    {
+      "declarations": [
+        "a11y_snapshot.ts"
+      ],
+      "kind": "type",
+      "name": "A11yElement"
+    },
+    {
+      "declarations": [
+        "a11y_snapshot.ts"
+      ],
+      "kind": "type",
+      "name": "A11ySnapshot"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "ActionParam"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "ActionParamType"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "type",
+      "name": "ActionResult"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "actionResultToMcpContent"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "actionResultToMcpResult"
+    },
+    {
+      "declarations": [
+        "providers/interface.ts"
+      ],
+      "kind": "type",
+      "name": "ActiveConnection"
+    },
+    {
+      "declarations": [
+        "ai_agent.ts"
+      ],
+      "kind": "type+value",
+      "name": "AIAgent"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "type",
+      "name": "AuthExportOptions"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "type",
+      "name": "AuthImportOptions"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "type",
+      "name": "AuthSnapshot"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "type",
+      "name": "AutomationContextOptions"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "BALANCED_PROFILE"
+    },
+    {
+      "declarations": [
+        "network_interceptor.ts"
+      ],
+      "kind": "value",
+      "name": "blockResource"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrokerTerminalRuntime"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserActionContext"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserActions"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserConnection"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserConnectionManager"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserConnectionMode"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserConnectionStatus"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserControlAPI"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserControlConfig"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserControlOptions"
+    },
+    {
+      "declarations": [
+        "providers/browserless.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserlessProvider"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserNamespace"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserPolicy"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserProfile"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserProfileManager"
+    },
+    {
+      "declarations": [
+        "providers/interface.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserProvider"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserTargetType"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserTypeOptions"
+    },
+    {
+      "declarations": [
+        "mcp/tools/browser.ts"
+      ],
+      "kind": "value",
+      "name": "buildBrowserTools"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "buildDebugBundle"
+    },
+    {
+      "declarations": [
+        "mcp/tools/debug.ts"
+      ],
+      "kind": "value",
+      "name": "buildDebugTools"
+    },
+    {
+      "declarations": [
+        "operator/doctor.ts"
+      ],
+      "kind": "value",
+      "name": "buildDoctorChecks"
+    },
+    {
+      "declarations": [
+        "mcp/tools/fs.ts"
+      ],
+      "kind": "value",
+      "name": "buildFsTools"
+    },
+    {
+      "declarations": [
+        "mcp/tools/provider.ts"
+      ],
+      "kind": "value",
+      "name": "buildProviderTools"
+    },
+    {
+      "declarations": [
+        "terminal_resume.ts"
+      ],
+      "kind": "value",
+      "name": "buildResumeResult"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "buildSchema"
+    },
+    {
+      "declarations": [
+        "mcp/tools/service.ts"
+      ],
+      "kind": "value",
+      "name": "buildServiceTools"
+    },
+    {
+      "declarations": [
+        "mcp/tools/session.ts"
+      ],
+      "kind": "value",
+      "name": "buildSessionTools"
+    },
+    {
+      "declarations": [
+        "mcp/tools/status.ts"
+      ],
+      "kind": "value",
+      "name": "buildStatusTools"
+    },
+    {
+      "declarations": [
+        "mcp/tools/terminal.ts"
+      ],
+      "kind": "value",
+      "name": "buildTerminalTools"
+    },
+    {
+      "declarations": [
+        "mcp/tool_registry.ts"
+      ],
+      "kind": "value",
+      "name": "buildToolRegistry"
+    },
+    {
+      "declarations": [
+        "captcha_solver.ts"
+      ],
+      "kind": "type+value",
+      "name": "CaptchaSolver"
+    },
+    {
+      "declarations": [
+        "terminal_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "captureAllSnapshots"
+    },
+    {
+      "declarations": [
+        "network_interceptor.ts"
+      ],
+      "kind": "value",
+      "name": "captureJsonResponse"
+    },
+    {
+      "declarations": [
+        "terminal_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "captureSessionSnapshot"
+    },
+    {
+      "declarations": [
+        "observability/recovery.ts"
+      ],
+      "kind": "value",
+      "name": "classifyFailure"
+    },
+    {
+      "declarations": [
+        "daemon_cleanup.ts"
+      ],
+      "kind": "value",
+      "name": "cleanupStaleDaemonFiles"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ClickOptions"
+    },
+    {
+      "declarations": [
+        "observability/action_debug.ts"
+      ],
+      "kind": "value",
+      "name": "collectFailureDebugMetadata"
+    },
+    {
+      "declarations": [
+        "operator/status.ts"
+      ],
+      "kind": "value",
+      "name": "collectStatus"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "CommandPolicy"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "ConfigEntry"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "ConfigKey"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "ConfigNamespace"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "ConfigSetResult"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "ConfigSource"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "ConfirmationHandler"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "value",
+      "name": "confirmationRequiredResult"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "connectBrowser"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "type",
+      "name": "ConnectOptions"
+    },
+    {
+      "declarations": [
+        "stagehand_core.ts"
+      ],
+      "kind": "value",
+      "name": "connectStagehand"
+    },
+    {
+      "declarations": [
+        "observability/console_capture.ts"
+      ],
+      "kind": "type+value",
+      "name": "ConsoleCapture"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "ConsoleEntry"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "ConsoleLevel"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "type",
+      "name": "CookieRecord"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "createAutomationContext"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "value",
+      "name": "createBrowserControl"
+    },
+    {
+      "declarations": [
+        "browser_connection.ts"
+      ],
+      "kind": "value",
+      "name": "createConnectionManager"
+    },
+    {
+      "declarations": [
+        "mcp/server.ts"
+      ],
+      "kind": "value",
+      "name": "createMcpServer"
+    },
+    {
+      "declarations": [
+        "stealth.ts"
+      ],
+      "kind": "value",
+      "name": "createStealthContext"
+    },
+    {
+      "declarations": [
+        "telemetry.ts"
+      ],
+      "kind": "value",
+      "name": "createTelegramAlertHandler"
+    },
+    {
+      "declarations": [
+        "providers/custom.ts"
+      ],
+      "kind": "type+value",
+      "name": "CustomBrowserProvider"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type+value",
+      "name": "Daemon"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type",
+      "name": "DaemonConfig"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type",
+      "name": "DaemonStatus"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type",
+      "name": "DaemonStatusRecord"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type+value",
+      "name": "DaemonTerminalRuntime"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "DebugBundle"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "DebugBundleBrowserEvidence"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "DebugBundleException"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "DebugBundleFsEvidence"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "DebugBundleTerminalEvidence"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "type",
+      "name": "DebugInteropState"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "DebugNamespace"
+    },
+    {
+      "declarations": [
+        "terminal_resume.ts"
+      ],
+      "kind": "value",
+      "name": "decideResume"
+    },
+    {
+      "declarations": [
+        "operator/status.ts"
+      ],
+      "kind": "value",
+      "name": "defaultBrokerProbe"
+    },
+    {
+      "declarations": [
+        "policy_engine.ts"
+      ],
+      "kind": "type+value",
+      "name": "DefaultPolicyEngine"
+    },
+    {
+      "declarations": [
+        "execution_router.ts"
+      ],
+      "kind": "value",
+      "name": "defaultRouter"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "deleteArtifact"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "deleteAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "deleteDebugBundle"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "DeleteOptions"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "DeleteResult"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "deserializeProfile"
+    },
+    {
+      "declarations": [
+        "services/detector.ts"
+      ],
+      "kind": "value",
+      "name": "detectDevServer"
+    },
+    {
+      "declarations": [
+        "cross_platform.ts"
+      ],
+      "kind": "value",
+      "name": "detectShell"
+    },
+    {
+      "declarations": [
+        "snapshot_diff.ts"
+      ],
+      "kind": "value",
+      "name": "diffSnapshots"
+    },
+    {
+      "declarations": [
+        "stagehand_core.ts"
+      ],
+      "kind": "value",
+      "name": "disconnectStagehand"
+    },
+    {
+      "declarations": [
+        "operator/types.ts"
+      ],
+      "kind": "type",
+      "name": "DoctorCheckResult"
+    },
+    {
+      "declarations": [
+        "operator/types.ts"
+      ],
+      "kind": "type",
+      "name": "DoctorReport"
+    },
+    {
+      "declarations": [
+        "operator/types.ts"
+      ],
+      "kind": "type",
+      "name": "DoctorRunResult"
+    },
+    {
+      "declarations": [
+        "file_helpers.ts"
+      ],
+      "kind": "type+value",
+      "name": "DownloadManager"
+    },
+    {
+      "declarations": [
+        "snapshot_diff.ts"
+      ],
+      "kind": "type",
+      "name": "ElementDiff"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "ensureDataHome"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "ensureDataHomeAtPath"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "value",
+      "name": "exec"
+    },
+    {
+      "declarations": [
+        "terminal_session.ts"
+      ],
+      "kind": "value",
+      "name": "execCommand"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "type+value",
+      "name": "ExecError"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "ExecOptions"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "ExecResult"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "value",
+      "name": "execSequence"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "value",
+      "name": "execStdout"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "value",
+      "name": "execTest"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "ExecutionContext"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "ExecutionPath"
+    },
+    {
+      "declarations": [
+        "execution_router.ts"
+      ],
+      "kind": "type+value",
+      "name": "ExecutionRouter"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "exportAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "terminal_prompt.ts"
+      ],
+      "kind": "value",
+      "name": "extractCwdFromPrompt"
+    },
+    {
+      "declarations": [
+        "observability/action_debug.ts"
+      ],
+      "kind": "type",
+      "name": "FailureDebugMetadata"
+    },
+    {
+      "declarations": [
+        "observability/action_debug.ts"
+      ],
+      "kind": "type",
+      "name": "FailureDebugOptions"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "value",
+      "name": "failureResult"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "FileReadResult"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "FileStatResult"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "FilesystemPolicy"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "FileWriteResult"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FillOptions"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "findButton"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "findByDescription"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "findByDomain"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "findByName"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "findHeading"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "findLink"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "findPageByUrl"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "findTextbox"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "value",
+      "name": "formatActionResult"
+    },
+    {
+      "declarations": [
+        "snapshot_diff.ts"
+      ],
+      "kind": "value",
+      "name": "formatDiffSummary"
+    },
+    {
+      "declarations": [
+        "observability/recovery.ts"
+      ],
+      "kind": "value",
+      "name": "formatGuidance"
+    },
+    {
+      "declarations": [
+        "terminal_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "formatSnapshot"
+    },
+    {
+      "declarations": [
+        "a11y_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "formatSnapshotAsText"
+    },
+    {
+      "declarations": [
+        "terminal_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "formatSnapshotCollection"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "type",
+      "name": "FramerSkillResult"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsActionContext"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type+value",
+      "name": "FsActions"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsDeletePath"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type+value",
+      "name": "FsError"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsListDir"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsListOptions"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsMoveFile"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsMoveOptions"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "FsNamespace"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsReadFile"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsReadOptions"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsRmOptions"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsStatOptions"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsStatPath"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "fsWriteFile"
+    },
+    {
+      "declarations": [
+        "fs_actions.ts"
+      ],
+      "kind": "type",
+      "name": "FsWriteOptions"
+    },
+    {
+      "declarations": [
+        "observability/recovery.ts"
+      ],
+      "kind": "value",
+      "name": "generateRecoveryGuidance"
+    },
+    {
+      "declarations": [
+        "stagehand_core.ts"
+      ],
+      "kind": "value",
+      "name": "getActiveStagehand"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "getAllPages"
+    },
+    {
+      "declarations": [
+        "observability/recovery.ts"
+      ],
+      "kind": "value",
+      "name": "getAlternativePath"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "getBuiltInProfile"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getChromeDebugPath"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getConfigDir"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "getConfigEntries"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "getConfigValue"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getDaemonStatusPath"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getDataHome"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "getDebugEndpointCandidates"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "value",
+      "name": "getDefaultActionSessionManager"
+    },
+    {
+      "declarations": [
+        "policy_audit.ts"
+      ],
+      "kind": "value",
+      "name": "getDefaultAuditLogger"
+    },
+    {
+      "declarations": [
+        "policy_engine.ts"
+      ],
+      "kind": "value",
+      "name": "getDefaultPolicyEngine"
+    },
+    {
+      "declarations": [
+        "terminal_session.ts"
+      ],
+      "kind": "value",
+      "name": "getDefaultSessionManager"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "getDomainSkill"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getDomainSkillsDir"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "getEntriesByType"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "getFramerPage"
+    },
+    {
+      "declarations": [
+        "observability/console_capture.ts"
+      ],
+      "kind": "value",
+      "name": "getGlobalConsoleCapture"
+    },
+    {
+      "declarations": [
+        "observability/network_capture.ts"
+      ],
+      "kind": "value",
+      "name": "getGlobalNetworkCapture"
+    },
+    {
+      "declarations": [
+        "observability/performance.ts"
+      ],
+      "kind": "value",
+      "name": "getGlobalPerformanceTracer"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "getInteractionSkill"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getInteractionSkillsDir"
+    },
+    {
+      "declarations": [
+        "a11y_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "getInteractiveCount"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getInteropDir"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getKnowledgeDir"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "getKnowledgeStats"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getLogsDir"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getMemoryStorePath"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "getOrOpenPage"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "value",
+      "name": "getPageId"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getPidFilePath"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "getProfileDataDir"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "getProfileRegistryPath"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "getProfilesDir"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getProfilesDirPath"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getProviderRegistryPath"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getReportsDir"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "getRiskDecisionMatrix"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getServiceRegistryPath"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getServicesDir"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getSkillsDataDir"
+    },
+    {
+      "declarations": [
+        "mcp/tool_registry.ts"
+      ],
+      "kind": "value",
+      "name": "getToolCategories"
+    },
+    {
+      "declarations": [
+        "paths.ts"
+      ],
+      "kind": "value",
+      "name": "getUserConfigPath"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "globalRefStore"
+    },
+    {
+      "declarations": [
+        "ai_agent.ts"
+      ],
+      "kind": "type+value",
+      "name": "GuardrailError"
+    },
+    {
+      "declarations": [
+        "health_check.ts"
+      ],
+      "kind": "type+value",
+      "name": "HealthCheck"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "HealthCheckDetail"
+    },
+    {
+      "declarations": [
+        "health_check.ts"
+      ],
+      "kind": "type",
+      "name": "HealthReport"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "HealthStatus"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "HoverOptions"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "importAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "isDebugPortReady"
+    },
+    {
+      "declarations": [
+        "daemon_cleanup.ts"
+      ],
+      "kind": "value",
+      "name": "isPidAlive"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "value",
+      "name": "isPolicyAllowed"
+    },
+    {
+      "declarations": [
+        "terminal_prompt.ts"
+      ],
+      "kind": "value",
+      "name": "isPromptDetected"
+    },
+    {
+      "declarations": [
+        "observability/recovery.ts"
+      ],
+      "kind": "value",
+      "name": "isRetryRecommended"
+    },
+    {
+      "declarations": [
+        "services/resolver.ts"
+      ],
+      "kind": "value",
+      "name": "isServiceRef"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "isValidDebugBundleId"
+    },
+    {
+      "declarations": [
+        "cross_platform.ts"
+      ],
+      "kind": "value",
+      "name": "isWindowsPlatform"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "type",
+      "name": "JSONSchema"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "keyboardFill"
+    },
+    {
+      "declarations": [
+        "daemon_cleanup.ts"
+      ],
+      "kind": "value",
+      "name": "killAutomationBrowser"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "killProcess"
+    },
+    {
+      "declarations": [
+        "daemon_cleanup.ts"
+      ],
+      "kind": "value",
+      "name": "killProcessTree"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeArtifact"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeEntry"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeFrontmatter"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeKind"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeQueryFilter"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeSummary"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeValidationIssue"
+    },
+    {
+      "declarations": [
+        "knowledge_types.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeValidationResult"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "listAllKnowledge"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "listAuthSnapshots"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "listBuiltInProfiles"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "listByKind"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "listDebugBundles"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "ListEntry"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "listInteractionSkillNames"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "listKnownDomains"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "ListOptions"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "value",
+      "name": "listProcesses"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "ListResult"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "loadArtifact"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "loadAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "loadConfig"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "loadDebugBundle"
+    },
+    {
+      "declarations": [
+        "terminal_resume.ts"
+      ],
+      "kind": "value",
+      "name": "loadPersistedState"
+    },
+    {
+      "declarations": [
+        "proxy_manager.ts"
+      ],
+      "kind": "value",
+      "name": "loadProxyConfigs"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "loadUserConfig"
+    },
+    {
+      "declarations": [
+        "providers/local.ts"
+      ],
+      "kind": "type+value",
+      "name": "LocalBrowserProvider"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type+value",
+      "name": "LocalTerminalRuntime"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "LowLevelPolicy"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "ManifestValidationResult"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "mcpErrorResult"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "type",
+      "name": "McpTool"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "type",
+      "name": "McpToolCategory"
+    },
+    {
+      "declarations": [
+        "memory_store.ts"
+      ],
+      "kind": "type+value",
+      "name": "MemoryStore"
+    },
+    {
+      "declarations": [
+        "services/resolver.ts"
+      ],
+      "kind": "value",
+      "name": "mightBeServiceRef"
+    },
+    {
+      "declarations": [
+        "network_interceptor.ts"
+      ],
+      "kind": "value",
+      "name": "mockResponse"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "MoveResult"
+    },
+    {
+      "declarations": [
+        "observability/network_capture.ts"
+      ],
+      "kind": "type+value",
+      "name": "NetworkCapture"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "NetworkEntry"
+    },
+    {
+      "declarations": [
+        "network_interceptor.ts"
+      ],
+      "kind": "type+value",
+      "name": "NetworkInterceptor"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "normalizeError"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "value",
+      "name": "OBSERVABILITY_KEYS"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "value",
+      "name": "openCmsCollection"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "value",
+      "name": "openLayerPanel"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "OpenOptions"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "value",
+      "name": "openStylePanel"
+    },
+    {
+      "declarations": [
+        "cli.ts"
+      ],
+      "kind": "value",
+      "name": "parseArgs"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "PerformanceTrace"
+    },
+    {
+      "declarations": [
+        "observability/performance.ts"
+      ],
+      "kind": "type+value",
+      "name": "PerformanceTracer"
+    },
+    {
+      "declarations": [
+        "cross_platform.ts"
+      ],
+      "kind": "value",
+      "name": "platformShellName"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyAllowResult"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyAuditEntry"
+    },
+    {
+      "declarations": [
+        "policy_audit.ts"
+      ],
+      "kind": "type+value",
+      "name": "PolicyAuditLogger"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyDecision"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "value",
+      "name": "policyDeniedResult"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyEngine"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyEvalResult"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyEvaluationResult"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyProfile"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyTaskIntent"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "PressOptions"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "value",
+      "name": "probeDaemonHealth"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "ProcessInfo"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "type",
+      "name": "ProfileMetadata"
+    },
+    {
+      "declarations": [
+        "browser_profiles.ts"
+      ],
+      "kind": "type",
+      "name": "ProfileType"
+    },
+    {
+      "declarations": [
+        "providers/interface.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderAttachOptions"
+    },
+    {
+      "declarations": [
+        "providers/interface.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderCapabilities"
+    },
+    {
+      "declarations": [
+        "providers/types.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderConfig"
+    },
+    {
+      "declarations": [
+        "providers/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderConfigError"
+    },
+    {
+      "declarations": [
+        "providers/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderConnectionError"
+    },
+    {
+      "declarations": [
+        "providers/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderError"
+    },
+    {
+      "declarations": [
+        "providers/interface.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderLaunchOptions"
+    },
+    {
+      "declarations": [
+        "providers/types.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderListResult"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderNamespace"
+    },
+    {
+      "declarations": [
+        "providers/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderNotSupportedError"
+    },
+    {
+      "declarations": [
+        "providers/registry.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderRegistry"
+    },
+    {
+      "declarations": [
+        "providers/types.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderRegistryData"
+    },
+    {
+      "declarations": [
+        "providers/types.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderSelectionResult"
+    },
+    {
+      "declarations": [
+        "proxy_manager.ts"
+      ],
+      "kind": "type",
+      "name": "ProxyConfig"
+    },
+    {
+      "declarations": [
+        "proxy_manager.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProxyManager"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "pruneArtifact"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "pruneDebugBundles"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "value",
+      "name": "publishSite"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryAll"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryByName"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryByRole"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryByRoleAndName"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryFirst"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "queryKnowledge"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "rawDomClick"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "ReadFileOptions"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "readNameserverCandidates"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "readRouteGatewayCandidates"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "readText"
+    },
+    {
+      "declarations": [
+        "terminal_resume.ts"
+      ],
+      "kind": "value",
+      "name": "rebuildOutputBuffer"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "RecoveryGuidance"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactConsoleEntry"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactHeaders"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactNetworkEntry"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactObject"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactString"
+    },
+    {
+      "declarations": [
+        "observability/redaction.ts"
+      ],
+      "kind": "value",
+      "name": "redactUrl"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "type",
+      "name": "RefResolutionResult"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "type+value",
+      "name": "RefStore"
+    },
+    {
+      "declarations": [
+        "terminal_prompt.ts"
+      ],
+      "kind": "value",
+      "name": "registerCustomPrompt"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "value",
+      "name": "resetDefaultActionSessionManager"
+    },
+    {
+      "declarations": [
+        "policy_audit.ts"
+      ],
+      "kind": "value",
+      "name": "resetDefaultAuditLogger"
+    },
+    {
+      "declarations": [
+        "policy_engine.ts"
+      ],
+      "kind": "value",
+      "name": "resetDefaultPolicyEngine"
+    },
+    {
+      "declarations": [
+        "terminal_session.ts"
+      ],
+      "kind": "value",
+      "name": "resetDefaultSessionManager"
+    },
+    {
+      "declarations": [
+        "observability/console_capture.ts"
+      ],
+      "kind": "value",
+      "name": "resetGlobalConsoleCapture"
+    },
+    {
+      "declarations": [
+        "observability/network_capture.ts"
+      ],
+      "kind": "value",
+      "name": "resetGlobalNetworkCapture"
+    },
+    {
+      "declarations": [
+        "observability/performance.ts"
+      ],
+      "kind": "value",
+      "name": "resetGlobalPerformanceTracer"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "resolveDebugEndpointUrl"
+    },
+    {
+      "declarations": [
+        "cross_platform.ts"
+      ],
+      "kind": "value",
+      "name": "resolveNamedShell"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "value",
+      "name": "resolveRefBounds"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "value",
+      "name": "resolveRefLocator"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "type",
+      "name": "ResolveRefOptions"
+    },
+    {
+      "declarations": [
+        "ref_store.ts"
+      ],
+      "kind": "value",
+      "name": "resolveRefTarget"
+    },
+    {
+      "declarations": [
+        "services/resolver.ts"
+      ],
+      "kind": "type",
+      "name": "ResolveResult"
+    },
+    {
+      "declarations": [
+        "services/resolver.ts"
+      ],
+      "kind": "value",
+      "name": "resolveServiceUrl"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "restoreAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "terminal_resume.ts"
+      ],
+      "kind": "type",
+      "name": "ResumeDecision"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type",
+      "name": "ResumePolicy"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "retryAction"
+    },
+    {
+      "declarations": [
+        "observability/types.ts"
+      ],
+      "kind": "type",
+      "name": "RetrySummary"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "RiskLevel"
+    },
+    {
+      "declarations": [
+        "policy.ts"
+      ],
+      "kind": "type",
+      "name": "RoutedStep"
+    },
+    {
+      "declarations": [
+        "network_interceptor.ts"
+      ],
+      "kind": "type",
+      "name": "RouteHandler"
+    },
+    {
+      "declarations": [
+        "cli.ts"
+      ],
+      "kind": "value",
+      "name": "runCli"
+    },
+    {
+      "declarations": [
+        "operator/doctor.ts"
+      ],
+      "kind": "value",
+      "name": "runDoctor"
+    },
+    {
+      "declarations": [
+        "operator/setup.ts"
+      ],
+      "kind": "value",
+      "name": "runSetup"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "SAFE_PROFILE"
+    },
+    {
+      "declarations": [
+        "knowledge_store.ts"
+      ],
+      "kind": "value",
+      "name": "saveArtifact"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "saveAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "browser_auth_state.ts"
+      ],
+      "kind": "value",
+      "name": "saveAuthSnapshotToStore"
+    },
+    {
+      "declarations": [
+        "observability/debug_bundle.ts"
+      ],
+      "kind": "value",
+      "name": "saveDebugBundle"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "saveUserConfig"
+    },
+    {
+      "declarations": [
+        "scheduler.ts"
+      ],
+      "kind": "type",
+      "name": "ScheduledTask"
+    },
+    {
+      "declarations": [
+        "scheduler.ts"
+      ],
+      "kind": "type+value",
+      "name": "Scheduler"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "screenshotElement"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ScreenshotOptions"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ScrollOptions"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "searchDomainKnowledge"
+    },
+    {
+      "declarations": [
+        "knowledge_query.ts"
+      ],
+      "kind": "value",
+      "name": "searchInteractionSkills"
+    },
+    {
+      "declarations": [
+        "semantic_query.ts"
+      ],
+      "kind": "type",
+      "name": "SemanticQueryOptions"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "SerializedTerminalSession"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "serializeProfile"
+    },
+    {
+      "declarations": [
+        "terminal_serialize.ts"
+      ],
+      "kind": "value",
+      "name": "serializeTerminalSession"
+    },
+    {
+      "declarations": [
+        "service_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceActionContext"
+    },
+    {
+      "declarations": [
+        "service_actions.ts"
+      ],
+      "kind": "type+value",
+      "name": "ServiceActions"
+    },
+    {
+      "declarations": [
+        "services/registry.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceEntry"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceNamespace"
+    },
+    {
+      "declarations": [
+        "service_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceRegisterOptions"
+    },
+    {
+      "declarations": [
+        "services/registry.ts"
+      ],
+      "kind": "type+value",
+      "name": "ServiceRegistry"
+    },
+    {
+      "declarations": [
+        "services/registry.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceRegistryData"
+    },
+    {
+      "declarations": [
+        "service_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceRemoveOptions"
+    },
+    {
+      "declarations": [
+        "service_actions.ts"
+      ],
+      "kind": "type",
+      "name": "ServiceResolveOptions"
+    },
+    {
+      "declarations": [
+        "mcp/types.ts"
+      ],
+      "kind": "value",
+      "name": "sessionIdSchema"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type",
+      "name": "SessionListEntry"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type+value",
+      "name": "SessionManager"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "SessionNamespace"
+    },
+    {
+      "declarations": [
+        "terminal_snapshot.ts"
+      ],
+      "kind": "type",
+      "name": "SessionSnapshotCollection"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type",
+      "name": "SessionState"
+    },
+    {
+      "declarations": [
+        "skills/framer_skill.ts"
+      ],
+      "kind": "value",
+      "name": "setResponsiveBreakpoint"
+    },
+    {
+      "declarations": [
+        "operator/types.ts"
+      ],
+      "kind": "type",
+      "name": "SetupResult"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "setUserConfigValue"
+    },
+    {
+      "declarations": [
+        "cross_platform.ts"
+      ],
+      "kind": "type",
+      "name": "ShellInfo"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "Skill"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "SkillAction"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "SkillContext"
+    },
+    {
+      "declarations": [
+        "skill.ts"
+      ],
+      "kind": "type",
+      "name": "SkillManifest"
+    },
+    {
+      "declarations": [
+        "skill_memory.ts"
+      ],
+      "kind": "type+value",
+      "name": "SkillMemoryStore"
+    },
+    {
+      "declarations": [
+        "skill_registry.ts"
+      ],
+      "kind": "type+value",
+      "name": "SkillRegistry"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "smartClick"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "smartFill"
+    },
+    {
+      "declarations": [
+        "a11y_snapshot.ts"
+      ],
+      "kind": "value",
+      "name": "snapshot"
+    },
+    {
+      "declarations": [
+        "snapshot_diff.ts"
+      ],
+      "kind": "type",
+      "name": "SnapshotDiffResult"
+    },
+    {
+      "declarations": [
+        "browser_actions.ts"
+      ],
+      "kind": "type",
+      "name": "SnapshotOptions"
+    },
+    {
+      "declarations": [
+        "stagehand_core.ts"
+      ],
+      "kind": "type+value",
+      "name": "StagehandManager"
+    },
+    {
+      "declarations": [
+        "mcp/server.ts"
+      ],
+      "kind": "value",
+      "name": "startMcpServer"
+    },
+    {
+      "declarations": [
+        "snapshot_diff.ts"
+      ],
+      "kind": "type",
+      "name": "StateChange"
+    },
+    {
+      "declarations": [
+        "daemon_cleanup.ts"
+      ],
+      "kind": "value",
+      "name": "stopDaemon"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "type",
+      "name": "StructuredExecOptions"
+    },
+    {
+      "declarations": [
+        "terminal_exec.ts"
+      ],
+      "kind": "type",
+      "name": "StructuredExecResult"
+    },
+    {
+      "declarations": [
+        "action_result.ts"
+      ],
+      "kind": "value",
+      "name": "successResult"
+    },
+    {
+      "declarations": [
+        "operator/types.ts"
+      ],
+      "kind": "type",
+      "name": "SystemStatus"
+    },
+    {
+      "declarations": [
+        "task_engine.ts"
+      ],
+      "kind": "type",
+      "name": "Task"
+    },
+    {
+      "declarations": [
+        "task_engine.ts"
+      ],
+      "kind": "type",
+      "name": "TaskContext"
+    },
+    {
+      "declarations": [
+        "task_engine.ts"
+      ],
+      "kind": "type+value",
+      "name": "TaskEngine"
+    },
+    {
+      "declarations": [
+        "daemon.ts"
+      ],
+      "kind": "type",
+      "name": "TaskIntent"
+    },
+    {
+      "declarations": [
+        "task_engine.ts"
+      ],
+      "kind": "type",
+      "name": "TaskResult"
+    },
+    {
+      "declarations": [
+        "telemetry.ts"
+      ],
+      "kind": "type+value",
+      "name": "Telemetry"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermCloseOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermExecOptions"
+    },
+    {
+      "declarations": [
+        "terminal_buffer_store.ts"
+      ],
+      "kind": "value",
+      "name": "TERMINAL_BUFFER_KEY"
+    },
+    {
+      "declarations": [
+        "terminal_buffer_store.ts"
+      ],
+      "kind": "value",
+      "name": "TERMINAL_METADATA_KEY"
+    },
+    {
+      "declarations": [
+        "terminal_buffer_store.ts"
+      ],
+      "kind": "value",
+      "name": "TERMINAL_PENDING_KEY"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalActionContext"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type+value",
+      "name": "TerminalActions"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalBufferRecord"
+    },
+    {
+      "declarations": [
+        "terminal_buffer_store.ts"
+      ],
+      "kind": "type+value",
+      "name": "TerminalBufferStore"
+    },
+    {
+      "declarations": [
+        "browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalNamespace"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalResumeConfig"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalResumeLevel"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalResumeMetadata"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalResumeResult"
+    },
+    {
+      "declarations": [
+        "terminal_resume_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalResumeStatus"
+    },
+    {
+      "declarations": [
+        "session_manager.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalRuntime"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalSession"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalSessionConfig"
+    },
+    {
+      "declarations": [
+        "terminal_session.ts"
+      ],
+      "kind": "type+value",
+      "name": "TerminalSessionManager"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalSessionStatus"
+    },
+    {
+      "declarations": [
+        "terminal_types.ts"
+      ],
+      "kind": "type",
+      "name": "TerminalSnapshot"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermInterruptOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermOpenOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermReadOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermResumeOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermSnapshotOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermStatusOptions"
+    },
+    {
+      "declarations": [
+        "terminal_actions.ts"
+      ],
+      "kind": "type",
+      "name": "TermTypeOptions"
+    },
+    {
+      "declarations": [
+        "proxy_manager.ts"
+      ],
+      "kind": "value",
+      "name": "toPlaywrightProxySettings"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "TRUSTED_PROFILE"
+    },
+    {
+      "declarations": [
+        "services/detector.ts"
+      ],
+      "kind": "value",
+      "name": "tryDetectDefaultPort"
+    },
+    {
+      "declarations": [
+        "terminal_prompt.ts"
+      ],
+      "kind": "value",
+      "name": "unregisterCustomPrompt"
+    },
+    {
+      "declarations": [
+        "file_helpers.ts"
+      ],
+      "kind": "value",
+      "name": "uploadFile"
+    },
+    {
+      "declarations": [
+        "file_helpers.ts"
+      ],
+      "kind": "value",
+      "name": "uploadFiles"
+    },
+    {
+      "declarations": [
+        "file_helpers.ts"
+      ],
+      "kind": "value",
+      "name": "uploadWithDragDrop"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "type",
+      "name": "UserConfig"
+    },
+    {
+      "declarations": [
+        "knowledge_validator.ts"
+      ],
+      "kind": "value",
+      "name": "validateArtifact"
+    },
+    {
+      "declarations": [
+        "config.ts"
+      ],
+      "kind": "value",
+      "name": "validateConfigValue"
+    },
+    {
+      "declarations": [
+        "file_helpers.ts"
+      ],
+      "kind": "value",
+      "name": "validateFilePath"
+    },
+    {
+      "declarations": [
+        "skill_registry.ts"
+      ],
+      "kind": "value",
+      "name": "validateManifest"
+    },
+    {
+      "declarations": [
+        "policy_profiles.ts"
+      ],
+      "kind": "value",
+      "name": "validateProfile"
+    },
+    {
+      "declarations": [
+        "terminal_serialize.ts"
+      ],
+      "kind": "value",
+      "name": "validateSerializedSession"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "waitForAny"
+    },
+    {
+      "declarations": [
+        "browser_core.ts"
+      ],
+      "kind": "value",
+      "name": "waitForElement"
+    },
+    {
+      "declarations": [
+        "fs_operations.ts"
+      ],
+      "kind": "type",
+      "name": "WriteFileOptions"
+    }
+  ],
+  "source": "index.ts"
+}

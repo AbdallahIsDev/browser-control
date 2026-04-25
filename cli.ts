@@ -152,8 +152,9 @@ Usage: bc <command> [subcommand] [options]
 Operator:
   doctor [--json]                                                    Run operator diagnostics
   setup [--non-interactive] [--profile=balanced]                     Create/update user config
-  config list|get|set                                                Inspect or update effective config
+  config list|get|set [--json]                                       Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
+  mcp serve                                                          Start the MCP stdio server
 
 Browser Actions:
   open <url>                                                         Open a URL in the browser
