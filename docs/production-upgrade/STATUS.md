@@ -32,7 +32,7 @@ Last synchronized: 2026-04-25 premium-readiness planning update
 | 17 | Repository Architecture and Codebase Cleanup | Not implemented | None | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
 | 18 | Security, Privacy, and Policy Hardening | Not implemented | None | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
 | 19 | Install, Packaging, and First-Run Experience | Not implemented | None | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
-| 20 | CI, Release Gates, and Cross-Platform Verification | Not implemented | None | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
+| 20 | CI, Release Gates, and Cross-Platform Verification | Implemented on branch, pending orchestrator review | Branch `codex/section-20-ci-release-gates-cross-platform-verification` | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
 | 21 | End-to-End Reliability and Golden Workflows | Not implemented | None | Premium-readiness phase: real workflow proof across browser, terminal, fs, MCP, and recovery. |
 | 22 | Documentation and Product Onboarding Cleanup | Not implemented | None | Premium-readiness phase: user/admin/developer docs, quickstarts, examples, troubleshooting. |
 | 23 | Public API, Versioning, and Compatibility Contract | Not implemented | None | Premium-readiness phase: CLI/API/MCP stability and compatibility guarantees. |

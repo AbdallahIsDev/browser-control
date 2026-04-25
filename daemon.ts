@@ -254,8 +254,8 @@ export class Daemon {
     });
 
     // Auto-discover skills from the skills/ directory.
-    // Skill loading is non-fatal: broken skills (e.g., importing
-    // unresolvable path aliases like @bc/browser_core) are skipped
+    // Skill loading is non-fatal: broken skills with unresolvable
+    // development-only path aliases are skipped
     // with a warning. Terminal and FS features work independently
     // of any specific skill.
     try {

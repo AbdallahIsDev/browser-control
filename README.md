@@ -478,6 +478,10 @@ npm run daemon
 npm run daemon:dev
 ```
 
+## CI And Release Gates
+
+Pull requests run focused cross-platform checks through GitHub Actions: typecheck, docs/status drift, required non-browser tests, MCP stdio tests, high/critical audit, Windows lifecycle coverage, and package smoke. Release readiness steps live in `docs/release-checklist.md`.
+
 ## Broker Runtime
 
 `broker_server.ts` is now a real HTTP/WebSocket runtime surface instead of a stub.

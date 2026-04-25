@@ -337,6 +337,23 @@ export class BrowserConnectionManager {
       return this.connection;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      if (this.managedProcess) {
+        const pid = this.managedProcess.pid;
+        try {
+          this.managedProcess.kill();
+          if (process.platform === "win32" && pid) {
+            spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+              stdio: "ignore",
+              windowsHide: true,
+            });
+          }
+        } catch (cleanupError: unknown) {
+          log.warn(`Failed to clean up managed browser after launch failure: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+        } finally {
+          this.managedProcess = null;
+          stopWslBridge(port);
+        }
+      }
       log.error(`Failed to launch managed browser: ${message}`);
       throw new Error(
         `Failed to launch managed automation browser on port ${port}. ` +
