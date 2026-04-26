@@ -1,0 +1,106 @@
+{
+  "commands": [
+    {
+      "command": "bc doctor --json",
+      "shape": {
+        "checks": [
+          {
+            "category": "string",
+            "critical": "boolean",
+            "details": "string",
+            "fix": "string",
+            "id": "string",
+            "name": "string",
+            "status": "string"
+          }
+        ],
+        "overall": "string",
+        "summary": {
+          "criticalFailures": "number",
+          "fail": "number",
+          "pass": "number",
+          "warn": "number"
+        },
+        "timestamp": "string"
+      }
+    },
+    {
+      "command": "bc config list --json",
+      "shape": [
+        {
+          "category": "string",
+          "defaultValue": "string",
+          "description": "string",
+          "envVars": [
+            "string"
+          ],
+          "key": "string",
+          "sensitive": "boolean",
+          "source": "string",
+          "value": "string"
+        }
+      ]
+    },
+    {
+      "command": "bc config get logLevel --json",
+      "shape": {
+        "category": "string",
+        "defaultValue": "string",
+        "description": "string",
+        "envVars": [
+          "string"
+        ],
+        "key": "string",
+        "sensitive": "boolean",
+        "source": "string",
+        "value": "string"
+      }
+    },
+    {
+      "command": "bc status --json",
+      "shape": {
+        "broker": {
+          "error": "string (optional)",
+          "reachable": "boolean",
+          "url": "string"
+        },
+        "browser": {
+          "activeSessions": "number",
+          "connection": "object|null",
+          "provider": "string"
+        },
+        "daemon": {
+          "pid": "number (optional)",
+          "reason": "string (optional)",
+          "state": "string"
+        },
+        "dataHome": "string",
+        "health": {
+          "fail": "number",
+          "overall": "string",
+          "pass": "number",
+          "warn": "number"
+        },
+        "policyProfile": "string",
+        "provider": {
+          "active": "string"
+        },
+        "services": {
+          "count": "number"
+        },
+        "tasks": {
+          "queued": "number",
+          "running": "number"
+        },
+        "terminal": {
+          "activeSessions": "number",
+          "sessions": [
+            "object"
+          ]
+        },
+        "timestamp": "string"
+      }
+    }
+  ],
+  "source": "cli.ts JSON output"
+}

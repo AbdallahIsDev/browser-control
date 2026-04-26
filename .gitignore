@@ -18,6 +18,7 @@ docs/*
 !docs/security.md
 !docs/api.md
 !docs/cli.md
+!docs/compatibility.md
 !docs/troubleshooting.md
 !docs/specs/
 !docs/specs/**

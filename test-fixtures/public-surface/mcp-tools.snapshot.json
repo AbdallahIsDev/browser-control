@@ -1,0 +1,2176 @@
+{
+  "source": "mcp/tool_registry.ts",
+  "tools": [
+    {
+      "category": "browser",
+      "description": "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.",
+      "inputSchema": {
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Force click without actionability checks.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element to click: ref (@e3), CSS selector, or text match.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds. Default: 5000.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_click",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Close the current browser tab.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_close",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Fill a form field with text. Target can be a ref (@e3), CSS selector, or semantic text match. Use commit:true to press Tab after filling.",
+      "inputSchema": {
+        "properties": {
+          "commit": {
+            "default": false,
+            "description": "Press Tab after filling to move to the next field.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element to fill: ref (@e3), CSS selector, or text match.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to enter.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds. Default: 5000.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_fill",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element to hover: ref (@e3), CSS selector, or text match.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds. Default: 5000.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_hover",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL to navigate to.",
+            "type": "string"
+          },
+          "waitUntil": {
+            "default": "domcontentloaded",
+            "description": "Navigation wait condition: 'load', 'domcontentloaded', 'networkidle', or 'commit'. Default: 'domcontentloaded'.",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle",
+              "commit"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_open",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape').",
+      "inputSchema": {
+        "properties": {
+          "key": {
+            "description": "Key to press: Enter, Tab, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Escape, Backspace, etc.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_press",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "provider",
+      "description": "List available browser providers and the active provider.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_provider_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult-compatible object",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "provider",
+      "description": "Set the active browser provider.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Provider name to activate (local, custom, browserless).",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_provider_use",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult-compatible object",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Take a screenshot of the page or a specific element.",
+      "inputSchema": {
+        "properties": {
+          "fullPage": {
+            "default": false,
+            "description": "Capture the full page instead of just the viewport.",
+            "type": "boolean"
+          },
+          "outputPath": {
+            "description": "File path to save the screenshot. Default: auto-generated in reports directory.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element ref or selector to screenshot. If omitted, screenshots the viewport.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_screenshot",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Scroll the page in a direction.",
+      "inputSchema": {
+        "properties": {
+          "amount": {
+            "default": 300,
+            "description": "Pixels to scroll. Default: 300.",
+            "type": "number"
+          },
+          "direction": {
+            "description": "Direction to scroll: up, down, left, right.",
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right"
+            ],
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "direction"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_scroll",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Take an accessibility snapshot of the current page. Returns a structured representation with stable element refs (e.g., @e1, @e2) for semantic interaction. Use this before clicking or filling elements.",
+      "inputSchema": {
+        "properties": {
+          "rootSelector": {
+            "description": "Optional CSS selector to scope the snapshot to a subtree.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_snapshot",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "List all browser tabs with their IDs, URLs, and titles.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_tab_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Switch to a browser tab by index.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Tab index to activate (0-based).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tabId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_tab_switch",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Type text into the currently focused element (e.g., after clicking a textbox).",
+      "inputSchema": {
+        "properties": {
+          "delayMs": {
+            "default": 0,
+            "description": "Delay between keystrokes in milliseconds. Default: 0.",
+            "type": "number"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to type.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_type",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "debug",
+      "description": "Retrieve a debug bundle by ID. Debug bundles contain structured evidence about failed actions including browser state, terminal output, console logs, network events, and recovery guidance.",
+      "inputSchema": {
+        "properties": {
+          "bundleId": {
+            "description": "The debug bundle ID to retrieve.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_debug_failure_bundle",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "debug",
+      "description": "Get captured browser console entries for a session. Returns log, warn, error, info, and debug entries with timestamps and source locations.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "default": "default",
+            "description": "Session ID to get console entries for. Default: 'default'.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_debug_get_console",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "debug",
+      "description": "Get captured browser network entries for a session. Returns request failures and HTTP errors with URL, method, status, and duration.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "default": "default",
+            "description": "Session ID to get network entries for. Default: 'default'.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_debug_get_network",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "debug",
+      "description": "Run health checks on the Browser Control runtime: CDP connectivity, memory store, proxy pool, CAPTCHA config, OpenRouter config, disk space, browser state, data directories, config validity, daemon broker, and system memory. Returns an overall health status and per-check results.",
+      "inputSchema": {
+        "properties": {
+          "port": {
+            "default": 9222,
+            "description": "CDP port to check. Default: 9222.",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_debug_health",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Delete a file or directory. Use recursive:true for directories.",
+      "inputSchema": {
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Don't throw if path doesn't exist.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "Path to delete.",
+            "type": "string"
+          },
+          "recursive": {
+            "default": false,
+            "description": "Allow recursive directory deletion.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_delete",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "List the contents of a directory.",
+      "inputSchema": {
+        "properties": {
+          "extension": {
+            "description": "Filter by file extension (e.g., '.ts').",
+            "type": "string"
+          },
+          "path": {
+            "default": ".",
+            "description": "Directory path to list. Default: current working directory.",
+            "type": "string"
+          },
+          "recursive": {
+            "default": false,
+            "description": "Recurse into subdirectories.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_fs_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Move or rename a file or directory.",
+      "inputSchema": {
+        "properties": {
+          "dst": {
+            "description": "Destination path.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "src": {
+            "description": "Source path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "src",
+          "dst"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_move",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Read the contents of a file.",
+      "inputSchema": {
+        "properties": {
+          "maxBytes": {
+            "description": "Maximum bytes to read.",
+            "type": "number"
+          },
+          "path": {
+            "description": "File path to read.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_read",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Get file or directory metadata (size, type, modified time, permissions).",
+      "inputSchema": {
+        "properties": {
+          "path": {
+            "description": "Path to stat.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_stat",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Write content to a file. Creates parent directories by default.",
+      "inputSchema": {
+        "properties": {
+          "content": {
+            "description": "Content to write.",
+            "type": "string"
+          },
+          "createDirs": {
+            "default": true,
+            "description": "Create parent directories if they don't exist. Default: true.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "File path to write.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_write",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "service",
+      "description": "List all registered local services with their names, ports, protocols, and paths.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_service_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "service",
+      "description": "Resolve a service name to its local URL. Supports explicit bc:// references and bare registered names. Returns an error if the service is unknown or not responding.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Service name to resolve (e.g., 'trading-dashboard' or 'bc://trading-dashboard').",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "bc_service_resolve",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "session",
+      "description": "Create a new Browser Control session. Sessions bind together browser state, terminal state, policy profile, and filesystem working directory. Use this before running browser, terminal, or filesystem operations.",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "description": "Human-readable session name (e.g., 'trading-session-1').",
+            "type": "string"
+          },
+          "policyProfile": {
+            "default": "balanced",
+            "description": "Policy profile: 'safe', 'balanced', or 'trusted'. Default: from config.",
+            "type": "string"
+          },
+          "workingDirectory": {
+            "description": "Filesystem working directory for this session. Default: current working directory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "bc_session_create",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "session",
+      "description": "List all Browser Control sessions with their IDs, names, policy profiles, and whether they have browser/terminal bindings.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_session_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "session",
+      "description": "Set the active session by name or ID. All subsequent tools that don't specify a sessionId will use this session.",
+      "inputSchema": {
+        "properties": {
+          "nameOrId": {
+            "description": "Session name or ID to activate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nameOrId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_session_select",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "session",
+      "description": "Get the status of the active session or a specific session.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Session ID to check. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_session_status",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "status",
+      "description": "Get Browser Control operator status: daemon, broker, browser sessions, terminal sessions, tasks, services, provider, policy profile, data home, and health summary.",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_status",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult-compatible object",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Close a terminal session and release its resources.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_close",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Execute a command in a terminal session, or run a one-shot command. For one-shot execution, omit sessionId. For persistent session execution, provide the terminal session ID from bc_terminal_open.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "command": {
+            "description": "Command to execute.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open). If omitted, runs as one-shot.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds. Default: 30000.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_exec",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Send Ctrl+C to interrupt a running command in a terminal session.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_interrupt",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "List all active terminal sessions with their IDs, shells, working directories, and statuses.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_terminal_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Open a new terminal session. Returns the session ID which you must pass to other terminal tools.",
+      "inputSchema": {
+        "properties": {
+          "cwd": {
+            "description": "Working directory for the terminal session.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable name for the terminal session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID to bind the terminal to. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "shell": {
+            "description": "Shell to use (e.g., 'bash', 'powershell', 'zsh'). Auto-detected if omitted.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_terminal_open",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Read recent output from a terminal session.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "maxBytes": {
+            "description": "Maximum bytes to read.",
+            "type": "number"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_read",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Resume a terminal session from persisted daemon state after daemon restart or shutdown recovery.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID to resume from persisted state.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_resume",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Take a snapshot of terminal state (buffer content, cursor position, prompt status).",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open). If omitted, snapshots all sessions.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_terminal_snapshot",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Get resume status and metadata for a terminal session.",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID to inspect.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_status",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "terminal",
+      "description": "Type text into a terminal session (send stdin).",
+      "inputSchema": {
+        "properties": {
+          "browserControlSessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Terminal session ID (from bc_terminal_open).",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to type into the terminal.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "text"
+        ],
+        "type": "object"
+      },
+      "name": "bc_terminal_write",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    }
+  ]
+}
