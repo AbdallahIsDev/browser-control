@@ -1,1 +1,1 @@
-export * from "./runtime/telemetry";
+export * from "./src/telemetry";

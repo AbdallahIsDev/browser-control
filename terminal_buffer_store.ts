@@ -1,1 +1,1 @@
-export * from "./terminal/buffer_store";
+export * from "./src/terminal_buffer_store";

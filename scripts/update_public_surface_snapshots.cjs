@@ -3,7 +3,7 @@
 require("ts-node/register");
 require("tsconfig-paths/register");
 
-const { writeAllSnapshots } = require("../compatibility/public_surface");
+const { writeAllSnapshots } = require("../tests/compatibility/public_surface");
 
 writeAllSnapshots()
   .then(() => {

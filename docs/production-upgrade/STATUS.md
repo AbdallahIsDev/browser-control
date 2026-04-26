@@ -2,14 +2,14 @@
 
 This file is the canonical implementation status for the production-upgrade roadmap.
 
-Last synchronized: 2026-04-26 section-24 planning setup
+Last synchronized: 2026-04-26 section-24 implementation branch
 
 ## Summary
 
 - Sections 4 through 15 are implemented and merged into `main`.
 - Section 16 is not implemented yet.
 - Sections 17 through 23 are implemented and merged into `main` as the premium-readiness wave.
-- Section 24 is planned and has a dedicated setup branch/worktree for implementation.
+- Section 24 is implemented on its dedicated branch and is pending orchestrator review/merge.
 - The branch `codex/remote-browser-tool-api` is not merged into `main`, but it is not one of the numbered production-upgrade roadmap sections.
 - Section-specific `implementation-checklist.md` files are execution artifacts. This status file is the source of truth when checklist history and merge status disagree.
 
@@ -37,7 +37,7 @@ Last synchronized: 2026-04-26 section-24 planning setup
 | 21 | End-to-End Reliability and Golden Workflows | Implemented and merged | `2d5321b`, `e3e1514` | Premium-readiness phase: real workflow proof across browser, terminal, fs, MCP, and recovery. |
 | 22 | Documentation and Product Onboarding Cleanup | Implemented and merged | `2d5321b` | Premium-readiness phase: user/admin/developer docs, quickstarts, examples, troubleshooting. |
 | 23 | Public API, Versioning, and Compatibility Contract | Implemented and merged | `2d5321b` | Premium-readiness phase: CLI/API/MCP stability and compatibility guarantees. |
-| 24 | Repository Structure and Module Organization | Planned | Branch `codex/section-24-repository-structure-module-organization` | Restructure root-heavy source/test layout while preserving public API compatibility. |
+| 24 | Repository Structure and Module Organization | Implemented on branch | Branch `codex/section-24-repository-structure-module-organization` | Moves production code under `src/`, tests under `tests/`, preserves root compatibility entrypoints, and updates scripts/snapshots. Pending orchestrator review and merge. |
 
 ## Current Worktree Sync Expectation
 

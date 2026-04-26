@@ -1,1 +1,1 @@
-export * from "./policy/profiles";
+export * from "./src/policy_profiles";

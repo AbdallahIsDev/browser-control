@@ -9,11 +9,11 @@ const root = path.resolve(__dirname, "..");
 const reportRunId = `golden-suite-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
 const reportPath = path.join(root, "reports", "e2e", `${reportRunId}.json`);
 const testFiles = [
-  "e2e/golden/local_web_app.test.ts",
-  "e2e/golden/mcp_workflow.test.ts",
-  "e2e/golden/failure_recovery.test.ts",
-  "e2e/golden/terminal_resume_workflow.test.ts",
-  "e2e/golden/provider_service_workflow.test.ts",
+  "tests/e2e/golden/local_web_app.test.ts",
+  "tests/e2e/golden/mcp_workflow.test.ts",
+  "tests/e2e/golden/failure_recovery.test.ts",
+  "tests/e2e/golden/terminal_resume_workflow.test.ts",
+  "tests/e2e/golden/provider_service_workflow.test.ts",
 ];
 const expectedWorkflowNames = [
   "local web app",

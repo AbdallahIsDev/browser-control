@@ -1,1 +1,1 @@
-export * from "./terminal/prompt";
+export * from "./src/terminal_prompt";

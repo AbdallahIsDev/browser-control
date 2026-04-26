@@ -1,1 +1,1 @@
-export * from "./terminal/node_pty_windows_patch";
+export * from "./src/node_pty_windows_patch";

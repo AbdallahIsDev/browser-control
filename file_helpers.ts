@@ -1,1 +1,1 @@
-export * from "./browser/file_helpers";
+export * from "./src/file_helpers";

@@ -1,1 +1,1 @@
-export * from "./shared/config";
+export * from "./src/config";

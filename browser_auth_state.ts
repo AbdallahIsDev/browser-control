@@ -1,1 +1,1 @@
-export * from "./browser/auth_state";
+export * from "./src/browser_auth_state";

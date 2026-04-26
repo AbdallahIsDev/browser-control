@@ -1,1 +1,1 @@
-export * from "./browser/core";
+export * from "./src/browser_core";

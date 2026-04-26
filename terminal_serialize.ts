@@ -1,1 +1,1 @@
-export * from "./terminal/serialize";
+export * from "./src/terminal_serialize";

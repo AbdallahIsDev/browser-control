@@ -13,7 +13,7 @@ Note: `docs/specs/2026-04-20-browser-control-v1-unified-automation-roadmap.md` i
 
 ## Implementation
 
-- [x] Local fixture server created under `e2e/fixtures/local-app/`.
+- [x] Local fixture server created under `tests/e2e/fixtures/local-app/` after Section 24 layout migration.
 - [x] Local web app workflow added.
 - [x] MCP stdio workflow added.
 - [x] Failure recovery workflow added.

@@ -1,1 +1,1 @@
-export * from "./terminal/types";
+export * from "./src/terminal_types";

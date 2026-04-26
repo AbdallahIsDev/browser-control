@@ -1,7 +1,7 @@
-export * from "./runtime/daemon";
+export * from "./src/daemon";
 
-import { Daemon } from "./runtime/daemon";
-import { logger } from "./shared/logger";
+import { Daemon } from "./src/runtime/daemon";
+import { logger } from "./src/shared/logger";
 
 if (require.main === module) {
   const daemon = new Daemon({
