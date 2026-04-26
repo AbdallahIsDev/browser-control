@@ -157,23 +157,30 @@ export class BrowserActions {
       const sessionId = this.getSessionId();
 
       if (!bm.isConnected()) {
-        try {
-          await bm.attach({ actor: "human" });
-          // Bind the browser connection into the session (Issue 3)
+        const reconnected = typeof bm.reconnectActiveManaged === "function"
+          ? await bm.reconnectActiveManaged()
+          : false;
+        if (reconnected) {
           this.bindBrowserToSession(bm);
-        } catch {
-          // Attach failed — try launching managed browser
+        } else {
           try {
-            await bm.launchManaged({ actor: "human" });
+            await bm.attach({ actor: "human" });
             // Bind the browser connection into the session (Issue 3)
             this.bindBrowserToSession(bm);
-          } catch (launchError: unknown) {
-            const launchMsg = launchError instanceof Error ? launchError.message : String(launchError);
-            return this.failureWithDebug(`No browser available and auto-launch failed: ${launchMsg}. Use 'bc browser attach' or 'bc browser launch' first.`, launchError, {
-              action: "browser_connect",
-              path: "a11y",
-              sessionId,
-            });
+          } catch {
+            // Attach failed — try launching managed browser
+            try {
+              await bm.launchManaged({ actor: "human" });
+              // Bind the browser connection into the session (Issue 3)
+              this.bindBrowserToSession(bm);
+            } catch (launchError: unknown) {
+              const launchMsg = launchError instanceof Error ? launchError.message : String(launchError);
+              return this.failureWithDebug(`No browser available and auto-launch failed: ${launchMsg}. Use 'bc browser attach' or 'bc browser launch' first.`, launchError, {
+                action: "browser_connect",
+                path: "a11y",
+                sessionId,
+              });
+            }
           }
         }
       }
@@ -215,6 +222,12 @@ export class BrowserActions {
     } catch {
       return null;
     }
+  }
+
+  private async getConnectedPageForAction<T>(): Promise<Page | ActionResult<T>> {
+    const pageOrErr = await this.ensureBrowserConnected();
+    if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
+    return pageOrErr;
   }
 
   private async failureWithDebug<T>(
@@ -361,7 +374,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<A11ySnapshot>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<A11ySnapshot>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const snap = await snapshot(page, {
         sessionId,
         rootSelector: options.rootSelector,
@@ -405,7 +420,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ clicked: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ clicked: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const resolved = await this.resolveTarget(options.target, page);
 
       if (!resolved) {
@@ -464,7 +481,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ filled: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ filled: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const resolved = await this.resolveTarget(options.target, page);
 
       if (!resolved) {
@@ -517,7 +536,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ hovered: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ hovered: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const resolved = await this.resolveTarget(options.target, page);
 
       if (!resolved) {
@@ -557,7 +578,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ typed: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ typed: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       await page.keyboard.type(options.text, { delay: options.delayMs ?? 0 });
 
       return successResult({ typed: options.text }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
@@ -584,7 +607,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ pressed: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ pressed: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       await page.keyboard.press(options.key);
 
       return successResult({ pressed: options.key }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
@@ -611,7 +636,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ scrolled: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ scrolled: string; amount: number }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const amount = options.amount ?? 300;
       const delta = options.direction === "up" || options.direction === "left" ? -amount : amount;
 
@@ -645,7 +672,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ path: string; sizeBytes: number }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ path: string; sizeBytes: number }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const fs = await import("node:fs");
       const path = await import("node:path");
       const { getReportsDir } = await import("../shared/paths");
@@ -653,18 +682,22 @@ export class BrowserActions {
       const outputDir = getReportsDir();
       fs.mkdirSync(outputDir, { recursive: true });
       const outputPath = options.outputPath ?? path.join(outputDir, `screenshot-${Date.now()}.png`);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}.png`;
 
       if (options.target) {
         const resolved = await this.resolveTarget(options.target, page);
         if (resolved) {
-          await resolved.locator.screenshot({ path: outputPath });
+          await resolved.locator.screenshot({ path: tempPath });
         } else {
-          await page.screenshot({ path: outputPath, fullPage: options.fullPage ?? false });
+          await this.capturePageScreenshot(page, tempPath, options.fullPage ?? false);
         }
       } else {
-        await page.screenshot({ path: outputPath, fullPage: options.fullPage ?? false });
+        await this.capturePageScreenshot(page, tempPath, options.fullPage ?? false);
       }
 
+      if (fs.existsSync(outputPath)) fs.rmSync(outputPath, { force: true });
+      fs.renameSync(tempPath, outputPath);
       const stats = fs.statSync(outputPath);
 
       return successResult({ path: outputPath, sizeBytes: stats.size }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
@@ -681,6 +714,29 @@ export class BrowserActions {
     }
   }
 
+  private async capturePageScreenshot(page: Page, outputPath: string, fullPage: boolean): Promise<void> {
+    try {
+      await page.screenshot({ path: outputPath, fullPage, timeout: 30_000 });
+      return;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("Timeout")) throw error;
+
+      const fs = await import("node:fs");
+      let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+      try {
+        client = await page.context().newCDPSession(page);
+        const result = await client.send("Page.captureScreenshot", {
+          format: "png",
+          captureBeyondViewport: fullPage,
+        });
+        fs.writeFileSync(outputPath, Buffer.from(result.data, "base64"));
+      } finally {
+        await client?.detach().catch(() => undefined);
+      }
+    }
+  }
+
   /**
    * List browser tabs.
    */
@@ -692,15 +748,17 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<Array<{ id: string; url: string; title: string }>>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<Array<{ id: string; url: string; title: string }>>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const context = page.context();
       const pages = context.pages();
 
-      const tabs = pages.map((p, i) => ({
+      const tabs = await Promise.all(pages.map(async (p, i) => ({
         id: String(i),
         url: p.url(),
-        title: "", // Will be populated asynchronously if needed
-      }));
+        title: await p.title().catch(() => ""),
+      })));
 
       return successResult(tabs, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -727,7 +785,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ activeTab: string }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ activeTab: string }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       const context = page.context();
       const pages = context.pages();
       const index = parseInt(tabId, 10);
@@ -769,7 +829,9 @@ export class BrowserActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ closed: boolean }>;
 
     try {
-      const page = this.getPage();
+      const pageOrErr = await this.getConnectedPageForAction<{ closed: true }>();
+      if ("success" in pageOrErr) return pageOrErr;
+      const page = pageOrErr;
       await page.close();
 
       // Unbind browser from session when the tab is closed (Issue 3)

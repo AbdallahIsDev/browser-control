@@ -191,7 +191,7 @@ async function isPortListening(port: number, host: string, timeoutMs = 5000): Pr
   });
 }
 
-async function waitForCdp(port: number, timeoutMs = 10000): Promise<boolean> {
+async function waitForCdp(port: number, timeoutMs = 10000, options: { quiet?: boolean } = {}): Promise<boolean> {
   const start = Date.now();
   let lastError: Error | undefined;
   while (Date.now() - start < timeoutMs) {
@@ -200,9 +200,13 @@ async function waitForCdp(port: number, timeoutMs = 10000): Promise<boolean> {
       if (response.ok) {
         const text = await response.text();
         if (text && text.trim().startsWith("[")) return true;
-        console.error(`[waitForCdp] Port ${port} response ok, but invalid text:`, text.substring(0, 100));
+        if (!options.quiet) {
+          console.error(`[waitForCdp] Port ${port} response ok, but invalid text:`, text.substring(0, 100));
+        }
       } else {
-        console.error(`[waitForCdp] Port ${port} response not ok:`, response.status, response.statusText);
+        if (!options.quiet) {
+          console.error(`[waitForCdp] Port ${port} response not ok:`, response.status, response.statusText);
+        }
       }
     } catch (e: any) {
       lastError = e;
@@ -210,7 +214,9 @@ async function waitForCdp(port: number, timeoutMs = 10000): Promise<boolean> {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  console.error(`[waitForCdp] Port ${port} timed out after ${timeoutMs}ms. Last error:`, lastError?.message);
+  if (!options.quiet) {
+    console.error(`[waitForCdp] Port ${port} timed out after ${timeoutMs}ms. Last error:`, lastError?.message);
+  }
   return false;
 }
 
@@ -294,7 +300,7 @@ function writeDebugState(opts: {
 }
 
 async function isChromeAlive(port: number): Promise<boolean> {
-  return waitForCdp(port, 2000);
+  return waitForCdp(port, 2000, { quiet: true });
 }
 
 async function startWslBridgeIfNeeded(

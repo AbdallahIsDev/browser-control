@@ -268,8 +268,8 @@ describe("BrowserConnectionManager", () => {
     it("should pass configured chromeBindAddress to Chrome launch args", async () => {
       const originalBind = process.env.BROWSER_BIND_ADDRESS;
       const childProcess = require("node:child_process") as typeof import("node:child_process");
-      const launcherPath = require.resolve("./scripts/launch_browser");
-      const connectionPath = require.resolve("./browser_connection");
+      const launcherPath = require.resolve("../../scripts/launch_browser");
+      const connectionPath = require.resolve("../../browser_connection");
       const launcher = require(launcherPath) as typeof import("../../scripts/launch_browser");
       const originalSpawn = childProcess.spawn;
       const originalResolveChromePath = launcher.resolveChromePath;
@@ -340,6 +340,36 @@ describe("BrowserConnectionManager", () => {
           return true;
         },
       );
+    });
+
+    it("marks stale managed browser state disconnected when reconnect fails", async () => {
+      store.set("browser_connection:active", {
+        id: "stale-conn",
+        mode: "managed",
+        profileId: "default",
+        cdpEndpoint: "http://127.0.0.1:9",
+        status: "connected",
+        connectedAt: new Date().toISOString(),
+        targetType: "chrome",
+        isRealBrowser: false,
+        provider: "local",
+      });
+
+      const originalConnectOverCDP = chromium.connectOverCDP;
+      (chromium as unknown as { connectOverCDP: (endpoint: string) => Promise<unknown> }).connectOverCDP = async () => {
+        throw new Error("connection refused");
+      };
+
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+
+      try {
+        assert.equal(await manager.reconnectActiveManaged(), false);
+        const active = store.get<{ status: string; disconnectedAt?: string }>("browser_connection:active");
+        assert.equal(active?.status, "disconnected");
+        assert.ok(active?.disconnectedAt);
+      } finally {
+        (chromium as unknown as { connectOverCDP: typeof originalConnectOverCDP }).connectOverCDP = originalConnectOverCDP;
+      }
     });
 
     it("should attach through a configured custom provider and disconnect it", async () => {

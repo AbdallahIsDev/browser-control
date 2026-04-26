@@ -183,6 +183,7 @@ export class BrowserConnectionManager {
   private managedProcess: import("node:child_process").ChildProcess | null = null;
   private readonly profileManager: BrowserProfileManager;
   private readonly memoryStore: MemoryStore;
+  private readonly ownsMemoryStore: boolean;
   private policyEngine: DefaultPolicyEngine;
   private executionRouter: ExecutionRouter;
   private connectionCounter = 0;
@@ -197,6 +198,7 @@ export class BrowserConnectionManager {
     providerRegistry?: ProviderRegistry;
   } = {}) {
     const config = loadConfig({ validate: false });
+    this.ownsMemoryStore = !options.memoryStore;
     this.memoryStore = options.memoryStore ?? new MemoryStore();
     this.policyEngine = options.policyEngine ?? new DefaultPolicyEngine({ profileName: config.policyProfile });
     this.executionRouter = options.executionRouter ?? defaultRouter;
@@ -484,6 +486,85 @@ export class BrowserConnectionManager {
   }
 
   /**
+   * Reconnect to Browser Control's own persisted managed browser.
+   *
+   * This only trusts state previously persisted by Browser Control as a local
+   * managed/restored connection, so it does not downgrade arbitrary real-browser
+   * attach risk.
+   */
+  async reconnectActiveManaged(): Promise<boolean> {
+    const active = this.memoryStore.get<{
+      id?: string;
+      mode?: BrowserConnectionMode;
+      profileId?: string;
+      cdpEndpoint?: string;
+      status?: BrowserConnectionStatus;
+      connectedAt?: string;
+      targetType?: BrowserTargetType;
+      isRealBrowser?: boolean;
+      provider?: string;
+    }>("browser_connection:active");
+
+    if (
+      !active
+      || active.status !== "connected"
+      || !active.cdpEndpoint
+      || active.provider !== "local"
+      || active.isRealBrowser
+      || (active.mode !== "managed" && active.mode !== "restored")
+    ) {
+      return false;
+    }
+
+    try {
+      const profile = active.profileId
+        ? this.profileManager.getProfile(active.profileId) ?? this.profileManager.getDefaultProfile()
+        : this.profileManager.getDefaultProfile();
+      const browser = await chromium.connectOverCDP(active.cdpEndpoint);
+      this.browser = browser;
+      this.context = browser.contexts()[0] ?? await createAutomationContext(browser, {
+        memoryStore: this.memoryStore,
+        sessionKey: `profile:${profile.id}`,
+        persistSessionCookies: false,
+      });
+      const tabCount = getAllPages(browser).length;
+      this.connection = {
+        id: active.id ?? `conn-${Date.now()}-${++this.connectionCounter}`,
+        mode: active.mode,
+        profile,
+        cdpEndpoint: active.cdpEndpoint,
+        status: "connected",
+        connectedAt: active.connectedAt ?? new Date().toISOString(),
+        tabCount,
+        targetType: active.targetType ?? "chrome",
+        isRealBrowser: false,
+        provider: "local",
+      };
+      this.persistConnectionState();
+      log.info("Reconnected to active managed browser", {
+        connectionId: this.connection.id,
+        endpoint: this.connection.cdpEndpoint,
+        tabs: tabCount,
+      });
+      return true;
+    } catch (error: unknown) {
+      try {
+        this.memoryStore.set("browser_connection:active", {
+          ...active,
+          status: "disconnected",
+          disconnectedAt: new Date().toISOString(),
+        });
+      } catch {
+        // Best-effort stale-state cleanup only.
+      }
+      log.info("Previous managed browser is not reachable; state marked disconnected", {
+        endpoint: active.cdpEndpoint,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Restore a session: start a managed browser and rehydrate auth state.
    *
    * This combines managed launch with auth snapshot restoration.
@@ -628,6 +709,31 @@ export class BrowserConnectionManager {
     this.persistConnectionState();
     this.connection = null;
     this.currentProvider = null;
+  }
+
+  /**
+   * Release local Node handles after a one-shot CLI connect command.
+   *
+   * For CDP connections, Playwright's browser.close() closes the client
+   * connection while leaving the remote Chrome process running.
+   */
+  async releaseCliHandles(): Promise<void> {
+    if (this.browser) {
+      try {
+        await this.browser.close();
+      } catch (error: unknown) {
+        log.warn(`Failed to close CLI browser client: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    this.browser = null;
+    this.context = null;
+    this.managedProcess = null;
+    this.currentProvider = null;
+
+    if (this.ownsMemoryStore) {
+      this.memoryStore.close();
+    }
   }
 
   // ── Accessors ─────────────────────────────────────────────────────

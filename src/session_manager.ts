@@ -737,6 +737,11 @@ export class SessionManager {
     return this.browserManager;
   }
 
+  /** Release browser/CDP client handles held by one-shot CLI commands. */
+  async releaseCliHandles(): Promise<void> {
+    await this.browserManager.releaseCliHandles();
+  }
+
   /** Get the terminal session manager. */
   getTerminalManager(): TerminalSessionManager {
     return this.terminalManager;

@@ -114,7 +114,7 @@ describe("BrowserActions", () => {
       const result = await browserActions.takeSnapshot();
 
       assert.equal(result.success, false);
-      assert.ok(result.error?.includes("No active browser page"));
+      assert.ok(result.error?.includes("No browser available and auto-launch failed"));
       assert.ok(result.debugBundleId);
       assert.ok(result.recoveryGuidance);
       assert.ok(loadDebugBundle(result.debugBundleId, store));

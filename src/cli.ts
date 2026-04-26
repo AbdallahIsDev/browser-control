@@ -98,6 +98,41 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return result;
 }
 
+async function isCdpEndpointReachable(endpoint: unknown): Promise<boolean> {
+  if (typeof endpoint !== "string" || endpoint.length === 0) return false;
+  try {
+    const url = new URL(endpoint);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+    try {
+      const response = await fetch(new URL("/json/version", url), { signal: controller.signal });
+      return response.ok;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    return false;
+  }
+}
+
+async function normalizePersistedBrowserStatus(
+  connectionState: Record<string, unknown>,
+  store: { set: (key: string, value: unknown) => void },
+): Promise<Record<string, unknown>> {
+  if (connectionState.status !== "connected") return connectionState;
+  const reachable = await isCdpEndpointReachable(connectionState.cdpEndpoint);
+  if (reachable) return { ...connectionState, reachable: true };
+
+  const staleState = {
+    ...connectionState,
+    status: "disconnected",
+    reachable: false,
+    disconnectedAt: new Date().toISOString(),
+  };
+  store.set("browser_connection:active", staleState);
+  return staleState;
+}
+
 export function getBrowserActionPositionals(action: string, args: ParsedArgs): string[] {
   return action === "tab"
     ? args.positional
@@ -532,10 +567,9 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
         errorChunks.push(chunk);
       });
 
-      // Wait to detect immediate crashes. On Windows with ts-node,
-      // the daemon can take several seconds to compile before the
-      // broker starts listening, so we use a generous timeout.
-      const startupTimeout = 8000;
+      // Wait only long enough to catch immediate spawn failures. Readiness is
+      // probed separately below so this command does not feel stuck.
+      const startupTimeout = 1500;
       const exited = await new Promise<boolean>((resolve) => {
         daemonProcess.on("exit", () => resolve(true));
         setTimeout(() => resolve(false), startupTimeout);
@@ -564,18 +598,13 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       fs.writeFileSync(getPidFilePath(), String(daemonProcess.pid));
       daemonProcess.unref();
 
-      // Probe the daemon with retries to confirm it's ready.
-      // Two-stage probe: first /health (broker is listening), then
-      // /api/v1/term/sessions (terminal endpoints are wired up).
-      // This prevents the race where the broker responds to /health
-      // before terminal action endpoints are ready.
+      // Probe briefly so pasted command batches are not blocked for a long,
+      // silent startup. Follow-up commands can still poll daemon status.
       const { probeDaemonHealth, probeTerminalReadiness } = await import("./session_manager");
       let daemonReady = false;
       let daemonBrokerUrl = "";
-      // On Windows with ts-node, the daemon can take 10-20 seconds
-      // to compile and initialize before the broker starts listening.
-      const maxRetries = 30;
-      const retryDelayMs = 1000;
+      const maxRetries = 12;
+      const retryDelayMs = 500;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const healthResult = await probeDaemonHealth();
         if (healthResult.running) {
@@ -1271,6 +1300,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           console.log(`  Tabs:     ${connection.tabCount}`);
           console.log(`  Status:   ${connection.status}`);
         }
+        await manager.releaseCliHandles();
       } catch (error) {
         console.error("Error:", (error as Error).message);
         process.exit(1);
@@ -1307,6 +1337,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           console.log(`  Endpoint: ${connection.cdpEndpoint}`);
           console.log(`  Tabs:     ${connection.tabCount}`);
         }
+        await manager.releaseCliHandles();
       } catch (error) {
         console.error("Error:", (error as Error).message);
         process.exit(1);
@@ -1318,7 +1349,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       try {
         const { MemoryStore } = await import("./runtime/memory_store");
         const store = new MemoryStore();
-        const connectionState = store.get("browser_connection:active");
+        const rawConnectionState = store.get<Record<string, unknown>>("browser_connection:active");
+        const connectionState = rawConnectionState
+          ? await normalizePersistedBrowserStatus(rawConnectionState, store)
+          : null;
         store.close();
         if (!connectionState) {
           console.log(jsonOutput ? '{"connected":false}' : "No active browser connection.");
@@ -1908,6 +1942,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   // this, the Node.js event loop stays alive and the CLI process
   // never exits after commands like `bc term open --json`.
   if (_sessionManager) {
+    await _sessionManager.releaseCliHandles();
     _sessionManager.close();
   }
 
