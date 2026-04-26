@@ -2,13 +2,14 @@
 
 This file is the canonical implementation status for the production-upgrade roadmap.
 
-Last synchronized: 2026-04-25 premium-readiness planning update
+Last synchronized: 2026-04-26 section-24 planning setup
 
 ## Summary
 
 - Sections 4 through 15 are implemented and merged into `main`.
 - Section 16 is not implemented yet.
-- Section 17 is implemented on its branch and pending orchestrator review; Sections 18 through 23 are not implemented yet.
+- Sections 17 through 23 are implemented and merged into `main` as the premium-readiness wave.
+- Section 24 is planned and has a dedicated setup branch/worktree for implementation.
 - The branch `codex/remote-browser-tool-api` is not merged into `main`, but it is not one of the numbered production-upgrade roadmap sections.
 - Section-specific `implementation-checklist.md` files are execution artifacts. This status file is the source of truth when checklist history and merge status disagree.
 
@@ -28,19 +29,15 @@ Last synchronized: 2026-04-25 premium-readiness planning update
 | 13 | Terminal Resume and State Serialization | Implemented and merged | `a255288` | Branch `codex/section-13-terminal-resume-state-serialization` is merged into `main`. |
 | 14 | Stable Local URLs | Implemented and merged | `f0e0e84` | Branch `codex/section-14-stable-local-urls` is merged into `main`. |
 | 15 | Remote Browser Provider Layer | Implemented and merged | `f353124` | Branch `codex/section-15-remote-browser-provider-layer` is merged into `main`. |
-| 16 | Benchmarks and Examples | Not implemented | None | This is the next remaining numbered roadmap section. |
-| 17 | Repository Architecture and Codebase Cleanup | Implemented on branch, pending orchestrator review | `codex/section-17-repository-architecture-codebase-cleanup` | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
-| 18 | Security, Privacy, and Policy Hardening | Not implemented | None | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
-<<<<<<< HEAD
-| 19 | Install, Packaging, and First-Run Experience | Implemented on branch, pending orchestrator review | Branch `codex/section-19-install-packaging-first-run` | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
-| 20 | CI, Release Gates, and Cross-Platform Verification | Not implemented | None | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
-=======
-| 19 | Install, Packaging, and First-Run Experience | Not implemented | None | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
-| 20 | CI, Release Gates, and Cross-Platform Verification | Implemented on branch, pending orchestrator review | Branch `codex/section-20-ci-release-gates-cross-platform-verification` | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
->>>>>>> origin/codex/section-20-ci-release-gates-cross-platform-verification
-| 21 | End-to-End Reliability and Golden Workflows | Not implemented | None | Premium-readiness phase: real workflow proof across browser, terminal, fs, MCP, and recovery. |
-| 22 | Documentation and Product Onboarding Cleanup | Not implemented | None | Premium-readiness phase: user/admin/developer docs, quickstarts, examples, troubleshooting. |
-| 23 | Public API, Versioning, and Compatibility Contract | Not implemented | None | Premium-readiness phase: CLI/API/MCP stability and compatibility guarantees. |
+| 16 | Benchmarks and Examples | Not implemented | None | Remaining earlier roadmap section. |
+| 17 | Repository Architecture and Codebase Cleanup | Implemented and merged | `2d5321b` | Premium-readiness phase: reduce root clutter and make the codebase navigable. |
+| 18 | Security, Privacy, and Policy Hardening | Implemented and merged | `2d5321b` | Premium-readiness phase: threat model, secrets, policy bypass, dependency and MCP exposure review. |
+| 19 | Install, Packaging, and First-Run Experience | Implemented and merged | `2d5321b` | Premium-readiness phase: clean install, npm/bin packaging, setup validation. |
+| 20 | CI, Release Gates, and Cross-Platform Verification | Implemented and merged | `2d5321b` | Premium-readiness phase: GitHub Actions, release gates, Windows/Linux/macOS verification. |
+| 21 | End-to-End Reliability and Golden Workflows | Implemented and merged | `2d5321b`, `e3e1514` | Premium-readiness phase: real workflow proof across browser, terminal, fs, MCP, and recovery. |
+| 22 | Documentation and Product Onboarding Cleanup | Implemented and merged | `2d5321b` | Premium-readiness phase: user/admin/developer docs, quickstarts, examples, troubleshooting. |
+| 23 | Public API, Versioning, and Compatibility Contract | Implemented and merged | `2d5321b` | Premium-readiness phase: CLI/API/MCP stability and compatibility guarantees. |
+| 24 | Repository Structure and Module Organization | Planned | Branch `codex/section-24-repository-structure-module-organization` | Restructure root-heavy source/test layout while preserving public API compatibility. |
 
 ## Current Worktree Sync Expectation
 
