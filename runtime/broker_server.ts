@@ -449,6 +449,52 @@ function evaluateBrokerActionPolicy(
   };
 }
 
+function getTerminalPolicyAction(subcommand: string): string {
+  switch (subcommand) {
+    case "sessions":
+      return "terminal_list";
+    case "read":
+      return "terminal_read";
+    case "snapshot":
+      return "terminal_snapshot";
+    case "status":
+      return "terminal_status";
+    case "open":
+      return "terminal_open";
+    case "exec":
+      return "terminal_exec";
+    case "type":
+      return "terminal_write";
+    case "interrupt":
+      return "terminal_interrupt";
+    case "close":
+      return "terminal_close";
+    case "resume":
+      return "terminal_resume";
+    default:
+      return `terminal_${subcommand}`;
+  }
+}
+
+function getFilesystemPolicyAction(subcommand: string): string {
+  switch (subcommand) {
+    case "read":
+      return "fs_read";
+    case "write":
+      return "fs_write";
+    case "list":
+      return "fs_list";
+    case "move":
+      return "fs_move";
+    case "delete":
+      return "fs_delete";
+    case "stat":
+      return "fs_stat";
+    default:
+      return `fs_${subcommand}`;
+  }
+}
+
 async function readJsonBody(request: IncomingMessage): Promise<JsonRecord> {
   const chunks: Buffer[] = [];
 
@@ -873,6 +919,11 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
         const payload = request.method === "POST"
           ? await readJsonBody(request)
           : Object.fromEntries(requestUrl.searchParams.entries());
+        const policyEval = evaluateBrokerActionPolicy(getTerminalPolicyAction(subcommand), payload, options.env ?? process.env);
+        if (!policyEval.allowed) {
+          writeJson(response, policyEval.statusCode, policyEval.body);
+          return;
+        }
         const result = await callbacks.handleTerminal(subcommand, payload);
         writeJson(response, 200, result);
         return;
@@ -888,6 +939,11 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
         const payload = request.method === "POST"
           ? await readJsonBody(request)
           : Object.fromEntries(requestUrl.searchParams.entries());
+        const policyEval = evaluateBrokerActionPolicy(getFilesystemPolicyAction(subcommand), payload, options.env ?? process.env);
+        if (!policyEval.allowed) {
+          writeJson(response, policyEval.statusCode, policyEval.body);
+          return;
+        }
         const result = await callbacks.handleFilesystem(subcommand, payload);
         writeJson(response, 200, result);
         return;

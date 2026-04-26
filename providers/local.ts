@@ -20,6 +20,7 @@ import {
 } from "../scripts/launch_browser";
 import { connectBrowser, createAutomationContext, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
+import { loadConfig } from "../shared/config";
 import path from "node:path";
 
 export class LocalBrowserProvider implements BrowserProvider {
@@ -50,7 +51,7 @@ export class LocalBrowserProvider implements BrowserProvider {
     const userDataDir = profile.dataDir;
     fs.mkdirSync(userDataDir, { recursive: true });
 
-    const bindAddress = "0.0.0.0";
+    const bindAddress = loadConfig({ validate: false }).chromeBindAddress;
     const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
 
     const managedProcess = spawn(chromePath, chromeArgs, {

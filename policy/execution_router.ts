@@ -179,8 +179,13 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "low",
   },
   {
+    matches: (action) => action === "debug_bundle_export",
+    path: "command",
+    risk: "high",
+  },
+  {
     matches: (action) => {
-      const debugEvidenceActions = ["debug_bundle_export", "debug_console_read", "debug_network_read"];
+      const debugEvidenceActions = ["debug_console_read", "debug_network_read"];
       return debugEvidenceActions.includes(action);
     },
     path: "command",

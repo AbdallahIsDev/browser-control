@@ -119,7 +119,7 @@
       "ConfigNamespace": {
         "get": "(key: string): ConfigEntry",
         "list": "(): ConfigEntry[]",
-        "set": "(key: string, value: unknown): ConfigSetResult"
+        "set": "(key: string, value: unknown): ActionResult<ConfigSetResult>"
       },
       "DebugNamespace": {
         "bundle": "(bundleId: string): DebugBundle | null",
@@ -139,7 +139,7 @@
       "ProviderNamespace": {
         "getActive": "(): string",
         "list": "(): ProviderListResult",
-        "use": "(name: string): ProviderSelectionResult"
+        "use": "(name: string): ActionResult<ProviderSelectionResult>"
       },
       "ServiceNamespace": {
         "list": "(): ActionResult<ServiceEntry[]>",
@@ -197,7 +197,7 @@
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "type",
       "name": "ActionResult"
@@ -232,42 +232,42 @@
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "type",
       "name": "AuthExportOptions"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "type",
       "name": "AuthImportOptions"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "type",
       "name": "AuthSnapshot"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "type",
       "name": "AutomationContextOptions"
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "BALANCED_PROFILE"
     },
     {
       "declarations": [
-        "network_interceptor.ts"
+        "browser/network_interceptor.ts"
       ],
       "kind": "value",
       "name": "blockResource"
@@ -281,42 +281,42 @@
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "BrowserActionContext"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type+value",
       "name": "BrowserActions"
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type",
       "name": "BrowserConnection"
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type+value",
       "name": "BrowserConnectionManager"
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type",
       "name": "BrowserConnectionMode"
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type",
       "name": "BrowserConnectionStatus"
@@ -330,7 +330,7 @@
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "BrowserControlConfig"
@@ -358,21 +358,21 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "BrowserPolicy"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "type",
       "name": "BrowserProfile"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "type+value",
       "name": "BrowserProfileManager"
@@ -386,14 +386,14 @@
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type",
       "name": "BrowserTargetType"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "BrowserTypeOptions"
@@ -442,7 +442,7 @@
     },
     {
       "declarations": [
-        "terminal_resume.ts"
+        "terminal/resume.ts"
       ],
       "kind": "value",
       "name": "buildResumeResult"
@@ -498,21 +498,21 @@
     },
     {
       "declarations": [
-        "terminal_snapshot.ts"
+        "terminal/snapshot.ts"
       ],
       "kind": "value",
       "name": "captureAllSnapshots"
     },
     {
       "declarations": [
-        "network_interceptor.ts"
+        "browser/network_interceptor.ts"
       ],
       "kind": "value",
       "name": "captureJsonResponse"
     },
     {
       "declarations": [
-        "terminal_snapshot.ts"
+        "terminal/snapshot.ts"
       ],
       "kind": "value",
       "name": "captureSessionSnapshot"
@@ -526,14 +526,14 @@
     },
     {
       "declarations": [
-        "daemon_cleanup.ts"
+        "runtime/daemon_cleanup.ts"
       ],
       "kind": "value",
       "name": "cleanupStaleDaemonFiles"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "ClickOptions"
@@ -554,21 +554,21 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "CommandPolicy"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "ConfigEntry"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "ConfigKey"
@@ -582,49 +582,49 @@
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "ConfigSetResult"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "ConfigSource"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "ConfirmationHandler"
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "value",
       "name": "confirmationRequiredResult"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "connectBrowser"
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "type",
       "name": "ConnectOptions"
     },
     {
       "declarations": [
-        "stagehand_core.ts"
+        "browser/stagehand_core.ts"
       ],
       "kind": "value",
       "name": "connectStagehand"
@@ -652,14 +652,14 @@
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "type",
       "name": "CookieRecord"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "createAutomationContext"
@@ -673,7 +673,7 @@
     },
     {
       "declarations": [
-        "browser_connection.ts"
+        "browser/connection.ts"
       ],
       "kind": "value",
       "name": "createConnectionManager"
@@ -694,7 +694,7 @@
     },
     {
       "declarations": [
-        "telemetry.ts"
+        "runtime/telemetry.ts"
       ],
       "kind": "value",
       "name": "createTelegramAlertHandler"
@@ -708,28 +708,28 @@
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type+value",
       "name": "Daemon"
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type",
       "name": "DaemonConfig"
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type",
       "name": "DaemonStatus"
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type",
       "name": "DaemonStatusRecord"
@@ -778,7 +778,7 @@
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "type",
       "name": "DebugInteropState"
@@ -792,7 +792,7 @@
     },
     {
       "declarations": [
-        "terminal_resume.ts"
+        "terminal/resume.ts"
       ],
       "kind": "value",
       "name": "decideResume"
@@ -806,28 +806,28 @@
     },
     {
       "declarations": [
-        "policy_engine.ts"
+        "policy/engine.ts"
       ],
       "kind": "type+value",
       "name": "DefaultPolicyEngine"
     },
     {
       "declarations": [
-        "execution_router.ts"
+        "policy/execution_router.ts"
       ],
       "kind": "value",
       "name": "defaultRouter"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "deleteArtifact"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "deleteAuthSnapshot"
@@ -841,21 +841,21 @@
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "DeleteOptions"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "DeleteResult"
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "deserializeProfile"
@@ -869,7 +869,7 @@
     },
     {
       "declarations": [
-        "cross_platform.ts"
+        "terminal/cross_platform.ts"
       ],
       "kind": "value",
       "name": "detectShell"
@@ -883,7 +883,7 @@
     },
     {
       "declarations": [
-        "stagehand_core.ts"
+        "browser/stagehand_core.ts"
       ],
       "kind": "value",
       "name": "disconnectStagehand"
@@ -911,7 +911,7 @@
     },
     {
       "declarations": [
-        "file_helpers.ts"
+        "browser/file_helpers.ts"
       ],
       "kind": "type+value",
       "name": "DownloadManager"
@@ -925,105 +925,105 @@
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "ensureDataHome"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "ensureDataHomeAtPath"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "value",
       "name": "exec"
     },
     {
       "declarations": [
-        "terminal_session.ts"
+        "terminal/session.ts"
       ],
       "kind": "value",
       "name": "execCommand"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "type+value",
       "name": "ExecError"
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "ExecOptions"
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "ExecResult"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "value",
       "name": "execSequence"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "value",
       "name": "execStdout"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "value",
       "name": "execTest"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "ExecutionContext"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "ExecutionPath"
     },
     {
       "declarations": [
-        "execution_router.ts"
+        "policy/execution_router.ts"
       ],
       "kind": "type+value",
       "name": "ExecutionRouter"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "exportAuthSnapshot"
     },
     {
       "declarations": [
-        "terminal_prompt.ts"
+        "terminal/prompt.ts"
       ],
       "kind": "value",
       "name": "extractCwdFromPrompt"
@@ -1044,42 +1044,42 @@
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "value",
       "name": "failureResult"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "FileReadResult"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "FileStatResult"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "FilesystemPolicy"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "FileWriteResult"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "FillOptions"
@@ -1100,14 +1100,14 @@
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "findByDomain"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "findByName"
@@ -1128,7 +1128,7 @@
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "findPageByUrl"
@@ -1142,7 +1142,7 @@
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "value",
       "name": "formatActionResult"
@@ -1163,7 +1163,7 @@
     },
     {
       "declarations": [
-        "terminal_snapshot.ts"
+        "terminal/snapshot.ts"
       ],
       "kind": "value",
       "name": "formatSnapshot"
@@ -1177,7 +1177,7 @@
     },
     {
       "declarations": [
-        "terminal_snapshot.ts"
+        "terminal/snapshot.ts"
       ],
       "kind": "value",
       "name": "formatSnapshotCollection"
@@ -1191,56 +1191,56 @@
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsActionContext"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type+value",
       "name": "FsActions"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsDeletePath"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type+value",
       "name": "FsError"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsListDir"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsListOptions"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsMoveFile"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsMoveOptions"
@@ -1254,49 +1254,49 @@
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsReadFile"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsReadOptions"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsRmOptions"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsStatOptions"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsStatPath"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "fsWriteFile"
     },
     {
       "declarations": [
-        "fs_actions.ts"
+        "filesystem/actions.ts"
       ],
       "kind": "type",
       "name": "FsWriteOptions"
@@ -1310,14 +1310,14 @@
     },
     {
       "declarations": [
-        "stagehand_core.ts"
+        "browser/stagehand_core.ts"
       ],
       "kind": "value",
       "name": "getActiveStagehand"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "getAllPages"
@@ -1331,56 +1331,56 @@
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "getBuiltInProfile"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getChromeDebugPath"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getConfigDir"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "getConfigEntries"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "getConfigValue"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getDaemonStatusPath"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getDataHome"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "getDebugEndpointCandidates"
@@ -1394,49 +1394,49 @@
     },
     {
       "declarations": [
-        "policy_audit.ts"
+        "policy/audit.ts"
       ],
       "kind": "value",
       "name": "getDefaultAuditLogger"
     },
     {
       "declarations": [
-        "policy_engine.ts"
+        "policy/engine.ts"
       ],
       "kind": "value",
       "name": "getDefaultPolicyEngine"
     },
     {
       "declarations": [
-        "terminal_session.ts"
+        "terminal/session.ts"
       ],
       "kind": "value",
       "name": "getDefaultSessionManager"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "getDomainSkill"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getDomainSkillsDir"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "getEntriesByType"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "getFramerPage"
@@ -1464,14 +1464,14 @@
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "getInteractionSkill"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getInteractionSkillsDir"
@@ -1485,42 +1485,42 @@
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getInteropDir"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getKnowledgeDir"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "getKnowledgeStats"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getLogsDir"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getMemoryStorePath"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "getOrOpenPage"
@@ -1534,77 +1534,77 @@
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getPidFilePath"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "value",
       "name": "getProfileDataDir"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "value",
       "name": "getProfileRegistryPath"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "value",
       "name": "getProfilesDir"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getProfilesDirPath"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getProviderRegistryPath"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getReportsDir"
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "getRiskDecisionMatrix"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getServiceRegistryPath"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getServicesDir"
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getSkillsDataDir"
@@ -1618,14 +1618,14 @@
     },
     {
       "declarations": [
-        "paths.ts"
+        "shared/paths.ts"
       ],
       "kind": "value",
       "name": "getUserConfigPath"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "globalRefStore"
@@ -1639,7 +1639,7 @@
     },
     {
       "declarations": [
-        "health_check.ts"
+        "runtime/health_check.ts"
       ],
       "kind": "type+value",
       "name": "HealthCheck"
@@ -1653,7 +1653,7 @@
     },
     {
       "declarations": [
-        "health_check.ts"
+        "runtime/health_check.ts"
       ],
       "kind": "type",
       "name": "HealthReport"
@@ -1667,28 +1667,28 @@
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "HoverOptions"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "importAuthSnapshot"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "isDebugPortReady"
     },
     {
       "declarations": [
-        "daemon_cleanup.ts"
+        "runtime/daemon_cleanup.ts"
       ],
       "kind": "value",
       "name": "isPidAlive"
@@ -1702,7 +1702,7 @@
     },
     {
       "declarations": [
-        "terminal_prompt.ts"
+        "terminal/prompt.ts"
       ],
       "kind": "value",
       "name": "isPromptDetected"
@@ -1730,7 +1730,7 @@
     },
     {
       "declarations": [
-        "cross_platform.ts"
+        "terminal/cross_platform.ts"
       ],
       "kind": "value",
       "name": "isWindowsPlatform"
@@ -1744,112 +1744,112 @@
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "keyboardFill"
     },
     {
       "declarations": [
-        "daemon_cleanup.ts"
+        "runtime/daemon_cleanup.ts"
       ],
       "kind": "value",
       "name": "killAutomationBrowser"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "killProcess"
     },
     {
       "declarations": [
-        "daemon_cleanup.ts"
+        "runtime/daemon_cleanup.ts"
       ],
       "kind": "value",
       "name": "killProcessTree"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeArtifact"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeEntry"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeFrontmatter"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeKind"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeQueryFilter"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeSummary"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeValidationIssue"
     },
     {
       "declarations": [
-        "knowledge_types.ts"
+        "knowledge/types.ts"
       ],
       "kind": "type",
       "name": "KnowledgeValidationResult"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "listAllKnowledge"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "listAuthSnapshots"
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "listBuiltInProfiles"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "listByKind"
@@ -1863,63 +1863,63 @@
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "ListEntry"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "listInteractionSkillNames"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "listKnownDomains"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "ListOptions"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "value",
       "name": "listProcesses"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "ListResult"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "loadArtifact"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "loadAuthSnapshot"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "loadConfig"
@@ -1933,7 +1933,7 @@
     },
     {
       "declarations": [
-        "terminal_resume.ts"
+        "terminal/resume.ts"
       ],
       "kind": "value",
       "name": "loadPersistedState"
@@ -1947,7 +1947,7 @@
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "loadUserConfig"
@@ -1968,7 +1968,7 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "LowLevelPolicy"
@@ -2003,7 +2003,7 @@
     },
     {
       "declarations": [
-        "memory_store.ts"
+        "runtime/memory_store.ts"
       ],
       "kind": "type+value",
       "name": "MemoryStore"
@@ -2017,14 +2017,14 @@
     },
     {
       "declarations": [
-        "network_interceptor.ts"
+        "browser/network_interceptor.ts"
       ],
       "kind": "value",
       "name": "mockResponse"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "MoveResult"
@@ -2045,7 +2045,7 @@
     },
     {
       "declarations": [
-        "network_interceptor.ts"
+        "browser/network_interceptor.ts"
       ],
       "kind": "type+value",
       "name": "NetworkInterceptor"
@@ -2080,7 +2080,7 @@
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "OpenOptions"
@@ -2115,7 +2115,7 @@
     },
     {
       "declarations": [
-        "cross_platform.ts"
+        "terminal/cross_platform.ts"
       ],
       "kind": "value",
       "name": "platformShellName"
@@ -2129,35 +2129,35 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyAuditEntry"
     },
     {
       "declarations": [
-        "policy_audit.ts"
+        "policy/audit.ts"
       ],
       "kind": "type+value",
       "name": "PolicyAuditLogger"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyDecision"
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "value",
       "name": "policyDeniedResult"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyEngine"
@@ -2171,28 +2171,28 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyEvaluationResult"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyProfile"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "PolicyTaskIntent"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "PressOptions"
@@ -2206,21 +2206,21 @@
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "ProcessInfo"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "type",
       "name": "ProfileMetadata"
     },
     {
       "declarations": [
-        "browser_profiles.ts"
+        "browser/profiles.ts"
       ],
       "kind": "type",
       "name": "ProfileType"
@@ -2332,7 +2332,7 @@
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "pruneArtifact"
@@ -2388,49 +2388,49 @@
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "queryKnowledge"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "rawDomClick"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "ReadFileOptions"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "readNameserverCandidates"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "readRouteGatewayCandidates"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "readText"
     },
     {
       "declarations": [
-        "terminal_resume.ts"
+        "terminal/resume.ts"
       ],
       "kind": "value",
       "name": "rebuildOutputBuffer"
@@ -2500,7 +2500,7 @@
     },
     {
       "declarations": [
-        "terminal_prompt.ts"
+        "terminal/prompt.ts"
       ],
       "kind": "value",
       "name": "registerCustomPrompt"
@@ -2514,21 +2514,21 @@
     },
     {
       "declarations": [
-        "policy_audit.ts"
+        "policy/audit.ts"
       ],
       "kind": "value",
       "name": "resetDefaultAuditLogger"
     },
     {
       "declarations": [
-        "policy_engine.ts"
+        "policy/engine.ts"
       ],
       "kind": "value",
       "name": "resetDefaultPolicyEngine"
     },
     {
       "declarations": [
-        "terminal_session.ts"
+        "terminal/session.ts"
       ],
       "kind": "value",
       "name": "resetDefaultSessionManager"
@@ -2556,14 +2556,14 @@
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "resolveDebugEndpointUrl"
     },
     {
       "declarations": [
-        "cross_platform.ts"
+        "terminal/cross_platform.ts"
       ],
       "kind": "value",
       "name": "resolveNamedShell"
@@ -2612,28 +2612,28 @@
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "restoreAuthSnapshot"
     },
     {
       "declarations": [
-        "terminal_resume.ts"
+        "terminal/resume.ts"
       ],
       "kind": "type",
       "name": "ResumeDecision"
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type",
       "name": "ResumePolicy"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "retryAction"
@@ -2647,21 +2647,21 @@
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "RiskLevel"
     },
     {
       "declarations": [
-        "policy.ts"
+        "policy/types.ts"
       ],
       "kind": "type",
       "name": "RoutedStep"
     },
     {
       "declarations": [
-        "network_interceptor.ts"
+        "browser/network_interceptor.ts"
       ],
       "kind": "type",
       "name": "RouteHandler"
@@ -2689,28 +2689,28 @@
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "SAFE_PROFILE"
     },
     {
       "declarations": [
-        "knowledge_store.ts"
+        "knowledge/store.ts"
       ],
       "kind": "value",
       "name": "saveArtifact"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "saveAuthSnapshot"
     },
     {
       "declarations": [
-        "browser_auth_state.ts"
+        "browser/auth_state.ts"
       ],
       "kind": "value",
       "name": "saveAuthSnapshotToStore"
@@ -2724,56 +2724,56 @@
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "saveUserConfig"
     },
     {
       "declarations": [
-        "scheduler.ts"
+        "runtime/scheduler.ts"
       ],
       "kind": "type",
       "name": "ScheduledTask"
     },
     {
       "declarations": [
-        "scheduler.ts"
+        "runtime/scheduler.ts"
       ],
       "kind": "type+value",
       "name": "Scheduler"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "screenshotElement"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "ScreenshotOptions"
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "ScrollOptions"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "searchDomainKnowledge"
     },
     {
       "declarations": [
-        "knowledge_query.ts"
+        "knowledge/query.ts"
       ],
       "kind": "value",
       "name": "searchInteractionSkills"
@@ -2787,21 +2787,21 @@
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "SerializedTerminalSession"
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "serializeProfile"
     },
     {
       "declarations": [
-        "terminal_serialize.ts"
+        "terminal/serialize.ts"
       ],
       "kind": "value",
       "name": "serializeTerminalSession"
@@ -2899,7 +2899,7 @@
     },
     {
       "declarations": [
-        "terminal_snapshot.ts"
+        "terminal/snapshot.ts"
       ],
       "kind": "type",
       "name": "SessionSnapshotCollection"
@@ -2927,14 +2927,14 @@
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "setUserConfigValue"
     },
     {
       "declarations": [
-        "cross_platform.ts"
+        "terminal/cross_platform.ts"
       ],
       "kind": "type",
       "name": "ShellInfo"
@@ -2983,14 +2983,14 @@
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "smartClick"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "smartFill"
@@ -3011,14 +3011,14 @@
     },
     {
       "declarations": [
-        "browser_actions.ts"
+        "browser/actions.ts"
       ],
       "kind": "type",
       "name": "SnapshotOptions"
     },
     {
       "declarations": [
-        "stagehand_core.ts"
+        "browser/stagehand_core.ts"
       ],
       "kind": "type+value",
       "name": "StagehandManager"
@@ -3039,28 +3039,28 @@
     },
     {
       "declarations": [
-        "daemon_cleanup.ts"
+        "runtime/daemon_cleanup.ts"
       ],
       "kind": "value",
       "name": "stopDaemon"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "type",
       "name": "StructuredExecOptions"
     },
     {
       "declarations": [
-        "terminal_exec.ts"
+        "terminal/exec.ts"
       ],
       "kind": "type",
       "name": "StructuredExecResult"
     },
     {
       "declarations": [
-        "action_result.ts"
+        "shared/action_result.ts"
       ],
       "kind": "value",
       "name": "successResult"
@@ -3074,105 +3074,105 @@
     },
     {
       "declarations": [
-        "task_engine.ts"
+        "runtime/task_engine.ts"
       ],
       "kind": "type",
       "name": "Task"
     },
     {
       "declarations": [
-        "task_engine.ts"
+        "runtime/task_engine.ts"
       ],
       "kind": "type",
       "name": "TaskContext"
     },
     {
       "declarations": [
-        "task_engine.ts"
+        "runtime/task_engine.ts"
       ],
       "kind": "type+value",
       "name": "TaskEngine"
     },
     {
       "declarations": [
-        "daemon.ts"
+        "runtime/daemon.ts"
       ],
       "kind": "type",
       "name": "TaskIntent"
     },
     {
       "declarations": [
-        "task_engine.ts"
+        "runtime/task_engine.ts"
       ],
       "kind": "type",
       "name": "TaskResult"
     },
     {
       "declarations": [
-        "telemetry.ts"
+        "runtime/telemetry.ts"
       ],
       "kind": "type+value",
       "name": "Telemetry"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermCloseOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermExecOptions"
     },
     {
       "declarations": [
-        "terminal_buffer_store.ts"
+        "terminal/buffer_store.ts"
       ],
       "kind": "value",
       "name": "TERMINAL_BUFFER_KEY"
     },
     {
       "declarations": [
-        "terminal_buffer_store.ts"
+        "terminal/buffer_store.ts"
       ],
       "kind": "value",
       "name": "TERMINAL_METADATA_KEY"
     },
     {
       "declarations": [
-        "terminal_buffer_store.ts"
+        "terminal/buffer_store.ts"
       ],
       "kind": "value",
       "name": "TERMINAL_PENDING_KEY"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TerminalActionContext"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type+value",
       "name": "TerminalActions"
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalBufferRecord"
     },
     {
       "declarations": [
-        "terminal_buffer_store.ts"
+        "terminal/buffer_store.ts"
       ],
       "kind": "type+value",
       "name": "TerminalBufferStore"
@@ -3186,35 +3186,35 @@
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalResumeConfig"
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalResumeLevel"
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalResumeMetadata"
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalResumeResult"
     },
     {
       "declarations": [
-        "terminal_resume_types.ts"
+        "terminal/resume_types.ts"
       ],
       "kind": "type",
       "name": "TerminalResumeStatus"
@@ -3228,84 +3228,84 @@
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "TerminalSession"
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "TerminalSessionConfig"
     },
     {
       "declarations": [
-        "terminal_session.ts"
+        "terminal/session.ts"
       ],
       "kind": "type+value",
       "name": "TerminalSessionManager"
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "TerminalSessionStatus"
     },
     {
       "declarations": [
-        "terminal_types.ts"
+        "terminal/types.ts"
       ],
       "kind": "type",
       "name": "TerminalSnapshot"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermInterruptOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermOpenOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermReadOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermResumeOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermSnapshotOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermStatusOptions"
     },
     {
       "declarations": [
-        "terminal_actions.ts"
+        "terminal/actions.ts"
       ],
       "kind": "type",
       "name": "TermTypeOptions"
@@ -3319,7 +3319,7 @@
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "TRUSTED_PROFILE"
@@ -3333,56 +3333,56 @@
     },
     {
       "declarations": [
-        "terminal_prompt.ts"
+        "terminal/prompt.ts"
       ],
       "kind": "value",
       "name": "unregisterCustomPrompt"
     },
     {
       "declarations": [
-        "file_helpers.ts"
+        "browser/file_helpers.ts"
       ],
       "kind": "value",
       "name": "uploadFile"
     },
     {
       "declarations": [
-        "file_helpers.ts"
+        "browser/file_helpers.ts"
       ],
       "kind": "value",
       "name": "uploadFiles"
     },
     {
       "declarations": [
-        "file_helpers.ts"
+        "browser/file_helpers.ts"
       ],
       "kind": "value",
       "name": "uploadWithDragDrop"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "type",
       "name": "UserConfig"
     },
     {
       "declarations": [
-        "knowledge_validator.ts"
+        "knowledge/validator.ts"
       ],
       "kind": "value",
       "name": "validateArtifact"
     },
     {
       "declarations": [
-        "config.ts"
+        "shared/config.ts"
       ],
       "kind": "value",
       "name": "validateConfigValue"
     },
     {
       "declarations": [
-        "file_helpers.ts"
+        "browser/file_helpers.ts"
       ],
       "kind": "value",
       "name": "validateFilePath"
@@ -3396,35 +3396,35 @@
     },
     {
       "declarations": [
-        "policy_profiles.ts"
+        "policy/profiles.ts"
       ],
       "kind": "value",
       "name": "validateProfile"
     },
     {
       "declarations": [
-        "terminal_serialize.ts"
+        "terminal/serialize.ts"
       ],
       "kind": "value",
       "name": "validateSerializedSession"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "waitForAny"
     },
     {
       "declarations": [
-        "browser_core.ts"
+        "browser/core.ts"
       ],
       "kind": "value",
       "name": "waitForElement"
     },
     {
       "declarations": [
-        "fs_operations.ts"
+        "filesystem/operations.ts"
       ],
       "kind": "type",
       "name": "WriteFileOptions"

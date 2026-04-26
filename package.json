@@ -31,7 +31,7 @@
     "test:lifecycle": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 daemon_launch.test.ts node_pty_windows_patch.test.ts process_leak_detection.test.ts api_term_exit.test.ts cli_term_exit.test.ts cold_start_exit.test.ts",
     "test:browser-smoke": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 browser_smoke.test.ts",
     "test:package": "node scripts/ci_package_smoke.cjs",
-    "docs:check": "node scripts/check_production_status.cjs",
+    "docs:check": "node scripts/check_production_status.cjs && node scripts/check_docs.cjs",
     "audit:high": "npm audit --audit-level=high",
     "test:e2e": "node scripts/run_golden_workflows.cjs",
     "test:e2e:golden": "npm run test:e2e",

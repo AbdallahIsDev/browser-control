@@ -55,7 +55,7 @@ Sensitive values are redacted in config output.
 | `dataHome` | `BROWSER_CONTROL_HOME` | `~/.browser-control` |
 | `brokerPort` | `BROKER_PORT` | `7788` |
 | `chromeDebugPort` | `BROWSER_DEBUG_PORT` | `9222` |
-| `chromeBindAddress` | `BROWSER_BIND_ADDRESS` | `0.0.0.0` |
+| `chromeBindAddress` | `BROWSER_BIND_ADDRESS` | `127.0.0.1` |
 | `chromePath` | `BROWSER_CHROME_PATH` | unset |
 | `browserDebugUrl` | `BROWSER_DEBUG_URL` | unset |
 | `browserMode` | `BROWSER_MODE` | `managed` |

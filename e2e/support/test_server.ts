@@ -78,7 +78,11 @@ function closeChild(child: LocalServerProcess): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      resolve();
+      const forceTimer = setTimeout(resolve, 2000);
+      child.once("exit", () => {
+        clearTimeout(forceTimer);
+        resolve();
+      });
     }, 3000);
     child.once("exit", () => {
       clearTimeout(timer);

@@ -394,7 +394,7 @@ function stopWslBridge(port: number): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const port = Number(args[0] || process.env.BROWSER_DEBUG_PORT || "9222");
-  const bindAddress = args[1] || process.env.BROWSER_BIND_ADDRESS || "0.0.0.0";
+  const bindAddress = args[1] || process.env.BROWSER_BIND_ADDRESS || "127.0.0.1";
   const chromeOverride = process.env.BROWSER_CHROME_PATH;
 
   if (!Number.isFinite(port) || port <= 0) {

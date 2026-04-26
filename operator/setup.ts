@@ -45,7 +45,7 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   let profile = options.profile ?? "balanced";
   let browserMode = options.browserMode ?? "managed";
   let chromeDebugPort = options.chromeDebugPort ?? 9222;
-  let chromeBindAddress = options.chromeBindAddress ?? "0.0.0.0";
+  let chromeBindAddress = options.chromeBindAddress ?? "127.0.0.1";
 
   if (!nonInteractive) {
     profile = await ask("Policy profile: safe, balanced, trusted", profile);

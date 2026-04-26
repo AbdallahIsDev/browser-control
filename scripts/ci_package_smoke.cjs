@@ -80,6 +80,8 @@ try {
     "cli.js",
     "dist/index.js",
     "dist/index.d.ts",
+    "dist/wsl_cdp_bridge.cjs",
+    "dist/telegram_notifier.ps1",
     "LICENSE",
     ".env.example",
   ];

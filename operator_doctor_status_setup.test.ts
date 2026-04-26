@@ -118,7 +118,7 @@ test("setup non-interactive creates config and never waits for prompts", async (
     assert.equal(userConfig.policyProfile, "balanced");
     assert.equal(userConfig.browserMode, "managed");
     assert.equal(userConfig.chromeDebugPort, 9222);
-    assert.equal(userConfig.chromeBindAddress, "0.0.0.0");
+    assert.equal(userConfig.chromeBindAddress, "127.0.0.1");
     assert.deepEqual(result.mcpConfigSnippet, {
       mcpServers: {
         "browser-control": {

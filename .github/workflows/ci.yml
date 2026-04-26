@@ -98,10 +98,24 @@ jobs:
               $_.Name -match 'node|cmd|conpty|chrome' -and
               ($_.CommandLine -like '*browser-control*' -or $_.CommandLine -like '*wsl_cdp_bridge*')
             } |
-            Select-Object ProcessId, ParentProcessId, Name, CommandLine |
+            Select-Object ProcessId, ParentProcessId, Name,
+              @{Name='CommandLineRedacted';Expression={
+                ($_.CommandLine -replace '(?i)(token|api[_-]?key|authorization|password|secret)=([^\\s&]+)', '$1=[REDACTED]') `
+                  -replace '(?i)Bearer\\s+[A-Za-z0-9._~+/-]+=*', 'Bearer [REDACTED]'
+              }} |
             Format-List | Out-File -FilePath (Join-Path $diag "processes.txt") -Encoding utf8
           if (Test-Path $env:BROWSER_CONTROL_HOME) {
-            Copy-Item -Path $env:BROWSER_CONTROL_HOME -Destination (Join-Path $diag "browser-control-home") -Recurse -Force -ErrorAction SilentlyContinue
+            Get-ChildItem -Path $env:BROWSER_CONTROL_HOME -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\(logs|reports)\\' -and $_.Extension -in '.log','.txt','.json' } |
+              ForEach-Object {
+                $relative = $_.FullName.Substring($env:BROWSER_CONTROL_HOME.Length).TrimStart('\\','/')
+                $target = Join-Path (Join-Path $diag "browser-control-home") $relative
+                New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+                (Get-Content -Raw -Path $_.FullName -ErrorAction SilentlyContinue) `
+                  -replace '(?i)(token|api[_-]?key|authorization|password|secret)=([^\\s&]+)', '$1=[REDACTED]' `
+                  -replace '(?i)Bearer\\s+[A-Za-z0-9._~+/-]+=*', 'Bearer [REDACTED]' |
+                  Set-Content -Path $target -Encoding utf8
+              }
           }
 
       - name: Upload cleanup diagnostics

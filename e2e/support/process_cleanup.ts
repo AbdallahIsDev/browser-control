@@ -7,6 +7,7 @@ import { redactString } from "../../observability/redaction";
 
 export interface CleanupScanOptions {
   commandFragments?: string[];
+  commandFragmentGroups?: string[][];
   fixturePids?: Array<number | undefined>;
 }
 
@@ -26,13 +27,14 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-function scanWindowsProcesses(fragments: string[]): ProcessRow[] {
-  if (fragments.length === 0) return [];
+function scanWindowsProcesses(fragments: string[], groups: string[][]): ProcessRow[] {
+  if (fragments.length === 0 && groups.length === 0) return [];
   const systemRoot = process.env.SystemRoot ?? process.env.WINDIR ?? "C:\\Windows";
   const powershellPath = path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const powershell = existsSync(powershellPath) ? powershellPath : "powershell.exe";
   const script = `
 $fragments = ConvertFrom-Json $env:BC_E2E_FRAGMENTS
+$groups = ConvertFrom-Json $env:BC_E2E_FRAGMENT_GROUPS
 Get-CimInstance Win32_Process |
   Where-Object {
     $cmd = $_.CommandLine
@@ -41,6 +43,18 @@ Get-CimInstance Win32_Process |
     }
     foreach ($fragment in $fragments) {
       if ($fragment -and $fragment.Length -gt 0 -and $cmd.Contains([string]$fragment)) {
+        return $true
+      }
+    }
+    foreach ($group in $groups) {
+      $matchedAll = $true
+      foreach ($fragment in $group) {
+        if (-not $fragment -or -not $cmd.Contains([string]$fragment)) {
+          $matchedAll = $false
+          break
+        }
+      }
+      if ($matchedAll) {
         return $true
       }
     }
@@ -55,6 +69,7 @@ Get-CimInstance Win32_Process |
       SystemRoot: systemRoot,
       WINDIR: systemRoot,
       BC_E2E_FRAGMENTS: JSON.stringify(fragments),
+      BC_E2E_FRAGMENT_GROUPS: JSON.stringify(groups),
     },
     windowsHide: true,
     timeout: 10000,
@@ -64,8 +79,8 @@ Get-CimInstance Win32_Process |
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-function scanUnixProcesses(fragments: string[]): ProcessRow[] {
-  if (fragments.length === 0) return [];
+function scanUnixProcesses(fragments: string[], groups: string[][]): ProcessRow[] {
+  if (fragments.length === 0 && groups.length === 0) return [];
   const psPath = existsSync("/bin/ps") ? "/bin/ps" : existsSync("/usr/bin/ps") ? "/usr/bin/ps" : "ps";
   const output = execFileSync(psPath, ["-eo", "pid=,ppid=,comm=,args="], {
     encoding: "utf8",
@@ -73,7 +88,10 @@ function scanUnixProcesses(fragments: string[]): ProcessRow[] {
   });
   return output
     .split(/\r?\n/)
-    .filter((line) => fragments.some((fragment) => fragment && line.includes(fragment)))
+    .filter((line) =>
+      fragments.some((fragment) => fragment && line.includes(fragment)) ||
+      groups.some((group) => group.every((fragment) => fragment && line.includes(fragment)))
+    )
     .map((line) => {
       const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
       return {
@@ -89,12 +107,13 @@ export async function scanForBrowserControlLeftovers(
   options: CleanupScanOptions = {},
 ): Promise<CleanupReport> {
   const fragments = options.commandFragments ?? [];
+  const groups = options.commandFragmentGroups ?? [];
   const fixturePids = (options.fixturePids ?? []).filter((pid): pid is number => typeof pid === "number");
   const notes: string[] = [];
   let rows: ProcessRow[] = [];
 
   try {
-    rows = process.platform === "win32" ? scanWindowsProcesses(fragments) : scanUnixProcesses(fragments);
+    rows = process.platform === "win32" ? scanWindowsProcesses(fragments, groups) : scanUnixProcesses(fragments, groups);
   } catch (error) {
     notes.push(`process scan skipped: ${error instanceof Error ? error.message : String(error)}`);
   }

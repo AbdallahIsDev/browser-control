@@ -275,6 +275,9 @@ Debug:
   debug console [--session=<id>]                                      Show captured console entries
   debug network [--session=<id>]                                      Show captured network entries
 
+MCP:
+  mcp serve                                                           Start MCP stdio server
+
 Knowledge:
   knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
   knowledge show <name-or-domain>                                    Show knowledge for a domain or skill

@@ -21,7 +21,11 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      resolve();
+      const forceTimer = setTimeout(resolve, 2000);
+      child.once("exit", () => {
+        clearTimeout(forceTimer);
+        resolve();
+      });
     }, timeoutMs);
     child.once("exit", () => {
       clearTimeout(timer);

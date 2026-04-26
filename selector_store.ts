@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Locator, Page } from "playwright";
-import { getActiveStagehand, observe } from "@bc/stagehand_core";
+import { getActiveStagehand, observe } from "./browser/stagehand_core";
 import { logger } from "./shared/logger";
 
 const log = logger.withComponent("selector_store");

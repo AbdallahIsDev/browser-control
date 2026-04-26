@@ -26,6 +26,7 @@ function resolveUserDataDir(overridePath) {
 }
 
 function buildChromeArgs({ port, userDataDir, initialUrl, bindAddress }) {
+  const debugBindAddress = bindAddress || "127.0.0.1";
   const chromeArgs = [
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
@@ -34,8 +35,8 @@ function buildChromeArgs({ port, userDataDir, initialUrl, bindAddress }) {
     "--disable-background-mode",
   ];
 
-  if (bindAddress && String(bindAddress).trim()) {
-    chromeArgs.push(`--remote-debugging-address=${String(bindAddress).trim()}`);
+  if (debugBindAddress && String(debugBindAddress).trim()) {
+    chromeArgs.push(`--remote-debugging-address=${String(debugBindAddress).trim()}`);
   }
 
   if (initialUrl && initialUrl.trim()) {
@@ -70,7 +71,7 @@ async function main() {
   const userDataDir = resolveUserDataDir(process.argv[3]);
   const initialUrl = process.argv[4] !== undefined ? process.argv[4] : "about:blank";
   const chromePath = process.argv[5] || resolveChromePath();
-  const bindAddress = process.argv[6] || "0.0.0.0";
+  const bindAddress = process.argv[6];
 
   fs.mkdirSync(userDataDir, { recursive: true });
 

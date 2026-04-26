@@ -21,13 +21,57 @@
           "commandPath": [
             "setup"
           ],
-          "description": "Create/update user config",
+          "description": "",
           "flags": [
+            "browser-mode",
+            "json",
             "non-interactive",
             "profile"
           ],
+          "jsonSupport": true,
+          "syntax": "setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "chrome-bind-address",
+            "chrome-debug-port"
+          ],
           "jsonSupport": false,
-          "syntax": "setup [--non-interactive] [--profile=balanced]"
+          "syntax": "[--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "browserless-endpoint",
+            "terminal-shell"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--terminal-shell=powershell] [--browserless-endpoint=<url>]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "browserless-api-key",
+            "skip-browser-test",
+            "skip-terminal-test"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]"
+        },
+        {
+          "commandPath": [
+            "Create/update",
+            "user",
+            "config"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Create/update user config"
         },
         {
           "commandPath": [
@@ -35,11 +79,9 @@
             "list|get|set"
           ],
           "description": "Inspect or update effective config",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "config list|get|set [--json]"
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "config list|get|set"
         },
         {
           "commandPath": [
@@ -51,16 +93,6 @@
           ],
           "jsonSupport": true,
           "syntax": "status [--json]"
-        },
-        {
-          "commandPath": [
-            "mcp",
-            "serve"
-          ],
-          "description": "Start the MCP stdio server",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "mcp serve"
         }
       ],
       "section": "Operator"
@@ -146,10 +178,11 @@
           "description": "Take a screenshot",
           "flags": [
             "full-page",
+            "output",
             "target"
           ],
           "jsonSupport": false,
-          "syntax": "screenshot [--full-page] [--target=<ref>]"
+          "syntax": "screenshot [--output=<path>] [--full-page] [--target=<ref>]"
         },
         {
           "commandPath": [
@@ -237,14 +270,26 @@
             "browser",
             "attach"
           ],
-          "description": "Attach to running Chrome/Electron",
+          "description": "",
           "flags": [
             "cdp-url",
             "port",
-            "provider"
+            "provider",
+            "target-type"
           ],
           "jsonSupport": false,
-          "syntax": "browser attach [--port=9222] [--cdp-url=...] [--provider=<name>]"
+          "syntax": "browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]"
+        },
+        {
+          "commandPath": [
+            "Attach",
+            "to",
+            "running"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Attach to running Chrome/Electron"
         },
         {
           "commandPath": [
@@ -784,10 +829,11 @@
           "description": "Open a terminal session",
           "flags": [
             "cwd",
+            "name",
             "shell"
           ],
           "jsonSupport": false,
-          "syntax": "term open [--shell=<name>] [--cwd=<path>]"
+          "syntax": "term open [--shell=<name>] [--cwd=<path>] [--name=<name>]"
         },
         {
           "commandPath": [
@@ -823,10 +869,11 @@
           ],
           "description": "Read recent output",
           "flags": [
+            "max-bytes",
             "session"
           ],
           "jsonSupport": false,
-          "syntax": "term read [--session=<id>]"
+          "syntax": "term read [--session=<id>] [--max-bytes=<n>]"
         },
         {
           "commandPath": [
@@ -900,9 +947,11 @@
             "read"
           ],
           "description": "Read a file",
-          "flags": [],
+          "flags": [
+            "max-bytes"
+          ],
           "jsonSupport": false,
-          "syntax": "fs read <path>"
+          "syntax": "fs read <path> [--max-bytes=<n>]"
         },
         {
           "commandPath": [
@@ -974,12 +1023,14 @@
           ],
           "description": "",
           "flags": [
+            "cwd",
+            "detect",
             "path",
             "port",
             "protocol"
           ],
           "jsonSupport": false,
-          "syntax": "service register <name> --port <port> [--protocol=http|https] [--path=/...]"
+          "syntax": "service register <name> --port <port> [--protocol=http|https] [--path=/...] [--detect] [--cwd=<path>]"
         },
         {
           "commandPath": [
@@ -1054,6 +1105,21 @@
         }
       ],
       "section": "Debug"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "mcp",
+            "serve"
+          ],
+          "description": "Start MCP stdio server",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "mcp serve"
+        }
+      ],
+      "section": "MCP"
     },
     {
       "entries": [

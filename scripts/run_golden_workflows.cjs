@@ -41,4 +41,24 @@ const result = spawnSync(
   },
 );
 
-process.exit(result.status ?? 1);
+if ((result.status ?? 1) !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+if (!fs.existsSync(reportPath)) {
+  console.error(`E2E reliability report was not written: ${reportPath}`);
+  process.exit(1);
+}
+
+const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+const workflows = Array.isArray(report.workflows) ? report.workflows : [];
+const bad = workflows.filter((workflow) => workflow.status !== "pass" || workflow.cleanup?.status !== "pass");
+if (bad.length > 0) {
+  console.error("E2E reliability gate failed. All workflows and cleanup checks must pass with zero skips.");
+  for (const workflow of bad) {
+    console.error(`- ${workflow.name}: status=${workflow.status}, cleanup=${workflow.cleanup?.status ?? "missing"}${workflow.errorSummary ? `, error=${workflow.errorSummary}` : ""}`);
+  }
+  process.exit(1);
+}
+
+process.exit(0);

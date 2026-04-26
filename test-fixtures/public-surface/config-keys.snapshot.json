@@ -32,7 +32,7 @@
     },
     {
       "category": "browser",
-      "defaultValue": "0.0.0.0",
+      "defaultValue": "127.0.0.1",
       "description": "Chrome debug bind address.",
       "envVars": [
         "BROWSER_BIND_ADDRESS"
@@ -260,6 +260,14 @@
     {
       "backedByConfigRegistry": true,
       "name": "BROKER_PORT"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_RATE_LIMIT_MAX_REQUESTS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_RATE_LIMIT_WINDOW_MS"
     },
     {
       "backedByConfigRegistry": false,

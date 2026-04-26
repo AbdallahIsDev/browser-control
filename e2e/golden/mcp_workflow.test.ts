@@ -94,7 +94,8 @@ test("golden MCP workflow keeps stdio clean and runs status/fs/terminal tools", 
   } finally {
     await harness?.close();
     const cleanup = await scanForBrowserControlLeftovers({
-      commandFragments: [harness?.homeDir, "mcp serve"].filter((fragment): fragment is string => Boolean(fragment)),
+      commandFragments: [harness?.homeDir].filter((fragment): fragment is string => Boolean(fragment)),
+      commandFragmentGroups: [["cli.ts", "mcp", "serve"]],
       fixturePids: harness?.pids,
     });
     const cleanupFailure = summarizeCleanupFailure(cleanup);

@@ -21,6 +21,7 @@ import type {
   BrowserPolicy,
   LowLevelPolicy,
 } from "./types";
+import fs from "node:fs";
 import path from "node:path";
 import { getBuiltInProfile, getRiskDecisionMatrix } from "./profiles";
 import { Logger } from "../shared/logger";
@@ -607,7 +608,27 @@ export class DefaultPolicyEngine implements PolicyEngine {
   }
 
   private normalizeFilesystemPath(inputPath: string): string {
-    return path.resolve(inputPath).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+    const resolved = path.resolve(inputPath);
+    try {
+      return fs.realpathSync.native(resolved).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+    } catch {
+      const existingParent = this.findExistingParent(resolved);
+      if (existingParent) {
+        const realParent = fs.realpathSync.native(existingParent);
+        const relativeSuffix = path.relative(existingParent, resolved);
+        return path.join(realParent, relativeSuffix).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+      }
+      return resolved.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+    }
+  }
+
+  private findExistingParent(inputPath: string): string | undefined {
+    let current = inputPath;
+    while (current && current !== path.dirname(current)) {
+      if (fs.existsSync(current)) return current;
+      current = path.dirname(current);
+    }
+    return fs.existsSync(current) ? current : undefined;
   }
 
   private isFilesystemAction(step: RoutedStep): boolean {

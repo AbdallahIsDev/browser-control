@@ -84,7 +84,7 @@ test("classifies provider and service mutations as policy-governed command actio
   assert.strictEqual(serviceRemove.risk, "moderate");
 });
 
-test("classifies debug evidence reads as moderate-risk command actions", () => {
+test("classifies debug evidence reads as policy-governed command actions", () => {
   const router = new ExecutionRouter();
   const intent: PolicyTaskIntent = {
     goal: "read debug evidence",
@@ -94,7 +94,7 @@ test("classifies debug evidence reads as moderate-risk command actions", () => {
 
   const bundle = router.buildRoutedStep(intent, "debug_bundle_export", { bundleId: "bundle-test" });
   assert.strictEqual(bundle.path, "command");
-  assert.strictEqual(bundle.risk, "moderate");
+  assert.strictEqual(bundle.risk, "high");
 
   const consoleRead = router.buildRoutedStep(intent, "debug_console_read", { sessionId: "debug-test" });
   assert.strictEqual(consoleRead.path, "command");
