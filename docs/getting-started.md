@@ -1,82 +1,105 @@
 # Getting Started
 
-Browser Control is a unified automation engine for agents and operators. It exposes terminal, filesystem, system, semantic browser, and low-level CDP tools through one runtime.
+Browser Control runs locally. It can control Chromium through CDP, run terminal commands, read/write files, resolve registered local services, and expose the same action surface through MCP.
 
-## Requirements
+## Prerequisites
 
-Node.js `>=22`.
+- Node.js `>=22`
+- npm
+- Chrome or Chromium for browser workflows
+- PowerShell on Windows, or `bash`/`sh` on Unix-like systems
 
-Chrome is not required for terminal/filesystem-only first run. Missing Chrome or unreachable CDP is reported as degraded browser capability.
+Install from this source checkout:
 
-## Clean Checkout
-
-```bash
-npm ci
-npm run build
-node cli.js --help
-node cli.js setup --non-interactive
-node cli.js doctor
-node cli.js status --json
+```powershell
+npm install
+npm run typecheck
+npm run cli -- --help
 ```
 
-`bc setup` creates the data home and user config. Runtime data is stored in `~/.browser-control` by default, or in `BROWSER_CONTROL_HOME` when set.
+Use `npm run cli --` in the checkout, or use `bc` after installing/linking the package.
 
-## Isolated First Run
+## First Setup
 
 PowerShell:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME = Join-Path $env:TEMP ("browser-control-" + [guid]::NewGuid().ToString())
-node cli.js setup --non-interactive --json
-node cli.js doctor --json
-node cli.js status --json
+bc setup --non-interactive --profile balanced
+bc doctor
+bc status
 ```
 
-Windows `cmd.exe`:
+Source checkout equivalent:
 
-```cmd
-set BROWSER_CONTROL_HOME=%TEMP%\browser-control-%RANDOM%
-node cli.js setup --non-interactive --json
-node cli.js doctor --json
+```powershell
+npm run cli -- setup --non-interactive --profile balanced
+npm run cli -- doctor
+npm run cli -- status
 ```
 
-Linux/macOS:
+`bc setup` creates the data home and user config. Default data home:
 
-```bash
-BC_HOME="$(mktemp -d)"
-BROWSER_CONTROL_HOME="$BC_HOME" node cli.js setup --non-interactive --json
-BROWSER_CONTROL_HOME="$BC_HOME" node cli.js doctor --json
+```text
+~/.browser-control
 ```
 
-## Packed Package Install
+Override:
 
-```bash
-npm pack
-mkdir bc-smoke
-cd bc-smoke
-npm init -y
-npm install ../browser-control-1.0.0.tgz
-npx bc --help
-npx bc setup --non-interactive
-npx bc doctor
-npx bc status --json
+```powershell
+$env:BROWSER_CONTROL_HOME = Join-Path $env:USERPROFILE ".browser-control-dev"
 ```
 
-Global install from a local tarball:
+## First CLI Workflow
 
-```bash
-npm install -g ../browser-control-1.0.0.tgz
-bc --help
+PowerShell:
+
+```powershell
+bc session create demo --policy balanced
+bc term exec "node --version" --json
+bc fs ls . --json
+bc status --json
 ```
 
-## MCP
+`--json` returns machine-readable output for scripts. Human output may include status text.
 
-```bash
-bc setup --non-interactive
-bc mcp serve
+## First Browser Workflow
+
+Managed browser:
+
+```powershell
+bc browser launch --port 9222 --profile default
+bc open https://example.com
+bc snapshot
+bc screenshot --output .\example.png
 ```
 
-Use this MCP client snippet:
+Attach to an existing CDP endpoint:
+
+```powershell
+bc browser attach --port 9222
+bc open https://example.com
+bc snapshot
+```
+
+If Chrome/CDP is missing, browser commands fail or report degraded status. Terminal and filesystem commands do not require Chrome.
+
+## First Terminal and Filesystem Workflow
+
+PowerShell:
+
+```powershell
+bc term open --shell powershell --cwd .
+bc term exec "Get-Location" --json
+bc fs write .\tmp\browser-control-demo.txt --content "hello"
+bc fs read .\tmp\browser-control-demo.txt
+bc fs rm .\tmp\browser-control-demo.txt --force
+```
+
+Filesystem delete/move/write operations are riskier than reads and are governed by policy.
+
+## First MCP Workflow
+
+Configure an agent with:
 
 ```json
 {
@@ -89,6 +112,4 @@ Use this MCP client snippet:
 }
 ```
 
-## Browser Workflows
-
-For browser workflows, use managed browser mode or attach to an existing Chrome debug session. If Chrome is missing, terminal and filesystem commands still work. Install Chrome or set `BROWSER_CHROME_PATH` when browser automation is needed.
+Then ask the agent to call `bc_status` first. Use browser tools after a browser is available; use terminal and filesystem tools only when you trust the agent and policy profile.

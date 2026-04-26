@@ -1,18 +1,31 @@
 # Policy
 
-Browser Control uses policy profiles to control risk:
+Browser Control uses policy profiles to control local automation risk.
 
-- `safe`: most restrictive.
-- `balanced`: default operator profile.
-- `trusted`: broadest local automation profile.
+Built-ins:
 
-Set the active profile:
+- `safe`: denies high and critical risk actions.
+- `balanced`: default; requires confirmation for high and critical risk actions.
+- `trusted`: audits high risk actions and requires confirmation for critical risk actions.
 
-```bash
+Set profile:
+
+```powershell
 bc config set policyProfile balanced
 ```
 
-Environment variables still override user config, so `POLICY_PROFILE=safe` wins over `~/.browser-control/config.json`.
+Inspect:
 
-Use `bc doctor` to validate policy configuration and `bc status` to see the effective profile.
+```powershell
+bc policy list
+bc policy inspect balanced
+bc status
+```
 
+Environment variables override user config:
+
+```powershell
+$env:POLICY_PROFILE = "safe"
+```
+
+Policy affects command, filesystem, browser, service, terminal, and debug actions. Read [Security](security.md) before connecting Browser Control to untrusted agents.

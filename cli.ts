@@ -167,7 +167,11 @@ Usage: bc <command> [subcommand] [options]
 
 Operator:
   doctor [--json]                                                    Run operator diagnostics
-  setup [--non-interactive] [--profile=balanced]                     Create/update user config
+  setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]
+        [--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]
+        [--terminal-shell=powershell] [--browserless-endpoint=<url>]
+        [--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]
+                                                                      Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
 
@@ -180,7 +184,7 @@ Browser Actions:
   type <text>                                                        Type text into focused element
   press <key>                                                        Press a keyboard key
   scroll <direction>                                                 Scroll (up/down/left/right)
-  screenshot [--full-page] [--target=<ref>]                          Take a screenshot
+  screenshot [--output=<path>] [--full-page] [--target=<ref>]         Take a screenshot
   tab list                                                           List browser tabs
   tab switch <id>                                                    Switch to a browser tab
   close                                                              Close the current browser tab
@@ -192,7 +196,8 @@ Session:
   session status                                                     Show active session status
 
 Browser Lifecycle:
-  browser attach [--port=9222] [--cdp-url=...] [--provider=<name>]      Attach to running Chrome/Electron
+  browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]
+                                                                      Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
   browser provider list                                              List browser providers
@@ -242,17 +247,17 @@ Browser Lifecycle:
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
-  term open [--shell=<name>] [--cwd=<path>]                          Open a terminal session
+  term open [--shell=<name>] [--cwd=<path>] [--name=<name>]           Open a terminal session
   term exec "<command>" [--session=<id>] [--timeout=<ms>]             Execute a command
   term type "<text>" --session=<id>                                   Type into a session
-  term read [--session=<id>]                                          Read recent output
+  term read [--session=<id>] [--max-bytes=<n>]                        Read recent output
   term snapshot [--session=<id>]                                      Capture terminal state
   term interrupt --session=<id>                                       Send Ctrl+C
   term close --session=<id>                                           Close a session
   term list                                                           List active sessions
   term resume <sessionId>                                             Resume a session from persisted state
   term status <sessionId>                                             Show resume status for a session
-  fs read <path>                                                      Read a file
+  fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>]                                  Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
   fs move <src> <dst>                                                 Move/rename
@@ -260,7 +265,7 @@ Browser Lifecycle:
   fs stat <path>                                                      File metadata
 
 Service Management:
-  service register <name> --port <port> [--protocol=http|https] [--path=/...]
+  service register <name> --port <port> [--protocol=http|https] [--path=/...] [--detect] [--cwd=<path>]
   service list                                                        List registered services
   service resolve <name>                                              Resolve service to URL
   service remove <name>                                               Remove a service
