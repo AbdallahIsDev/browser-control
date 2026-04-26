@@ -1,4 +1,4 @@
-import type { MemoryStore } from "./memory_store";
+import type { MemoryStore } from "./runtime/memory_store";
 
 /**
  * A thin wrapper around MemoryStore that prefixes all keys with `skill:{name}:`.

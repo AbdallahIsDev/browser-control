@@ -9,7 +9,7 @@ import {
   saveSelectorCache,
   type SelectorCacheRecord,
 } from "@bc/selector_store";
-import { logger } from "./logger";
+import { logger } from "./shared/logger";
 
 const log = logger.withComponent("selectors");
 

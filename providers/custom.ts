@@ -5,9 +5,9 @@ import type {
   ProviderAttachOptions,
   ActiveConnection,
 } from "./interface";
-import type { BrowserConnection } from "../browser_connection";
-import { getAllPages } from "../browser_core";
-import { BrowserProfileManager } from "../browser_profiles";
+import type { BrowserConnection } from "../browser/connection";
+import { getAllPages } from "../browser/core";
+import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import { sanitizeString, stripSensitiveParams } from "./utils";
 

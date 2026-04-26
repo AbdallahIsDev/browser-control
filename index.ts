@@ -27,18 +27,18 @@ export {
   getDebugEndpointCandidates,
   readNameserverCandidates,
   readRouteGatewayCandidates,
-} from "./browser_core";
+} from "./browser/core";
 
 export type {
   DebugInteropState,
   AutomationContextOptions,
-} from "./browser_core";
+} from "./browser/core";
 
 // Browser connection / profiles / auth (Section 8)
 export {
   BrowserConnectionManager,
   createConnectionManager,
-} from "./browser_connection";
+} from "./browser/connection";
 
 export type {
   BrowserConnectionMode,
@@ -46,20 +46,20 @@ export type {
   BrowserConnectionStatus,
   BrowserConnection,
   ConnectOptions,
-} from "./browser_connection";
+} from "./browser/connection";
 
 export {
   BrowserProfileManager,
   getProfilesDir,
   getProfileDataDir,
   getProfileRegistryPath,
-} from "./browser_profiles";
+} from "./browser/profiles";
 
 export type {
   ProfileType,
   BrowserProfile,
   ProfileMetadata,
-} from "./browser_profiles";
+} from "./browser/profiles";
 
 export {
   exportAuthSnapshot,
@@ -70,14 +70,14 @@ export {
   listAuthSnapshots,
   saveAuthSnapshot,
   restoreAuthSnapshot,
-} from "./browser_auth_state";
+} from "./browser/auth_state";
 
 export type {
   AuthSnapshot,
   CookieRecord,
   ExportOptions as AuthExportOptions,
   ImportOptions as AuthImportOptions,
-} from "./browser_auth_state";
+} from "./browser/auth_state";
 
 // Stagehand multi-session manager
 export {
@@ -85,21 +85,21 @@ export {
   connectStagehand,
   disconnectStagehand,
   getActiveStagehand,
-} from "./stagehand_core";
+} from "./browser/stagehand_core";
 
 // Task engine
-export { TaskEngine } from "./task_engine";
-export type { Task, TaskResult, TaskContext } from "./task_engine";
+export { TaskEngine } from "./runtime/task_engine";
+export type { Task, TaskResult, TaskContext } from "./runtime/task_engine";
 
 // Telemetry
-export { Telemetry, createTelegramAlertHandler } from "./telemetry";
+export { Telemetry, createTelegramAlertHandler } from "./runtime/telemetry";
 
 // Health checks
-export { HealthCheck } from "./health_check";
-export type { HealthReport } from "./health_check";
+export { HealthCheck } from "./runtime/health_check";
+export type { HealthReport } from "./runtime/health_check";
 
 // Memory store
-export { MemoryStore } from "./memory_store";
+export { MemoryStore } from "./runtime/memory_store";
 
 // Skill system
 export type {
@@ -120,18 +120,18 @@ export { publishSite, openCmsCollection, setResponsiveBreakpoint, openLayerPanel
 export type { FramerSkillResult } from "./skills/framer_skill";
 
 // Daemon
-export { Daemon } from "./daemon";
+export { Daemon } from "./runtime/daemon";
 export type {
   DaemonConfig,
   DaemonStatus,
   DaemonStatusRecord,
   TaskIntent,
   ResumePolicy,
-} from "./daemon";
+} from "./runtime/daemon";
 
 // Scheduler
-export { Scheduler } from "./scheduler";
-export type { ScheduledTask } from "./scheduler";
+export { Scheduler } from "./runtime/scheduler";
+export type { ScheduledTask } from "./runtime/scheduler";
 
 // Proxy management
 export {
@@ -153,8 +153,8 @@ export {
   captureJsonResponse,
   blockResource,
   mockResponse,
-} from "./network_interceptor";
-export type { RouteHandler } from "./network_interceptor";
+} from "./browser/network_interceptor";
+export type { RouteHandler } from "./browser/network_interceptor";
 
 // File helpers
 export {
@@ -163,7 +163,7 @@ export {
   uploadFiles,
   uploadWithDragDrop,
   validateFilePath,
-} from "./file_helpers";
+} from "./browser/file_helpers";
 
 // AI agent
 export { AIAgent, GuardrailError } from "./ai_agent";
@@ -184,7 +184,7 @@ export {
   getConfigDir,
   getUserConfigPath,
   getProfilesDir as getProfilesDirPath,
-} from "./paths";
+} from "./shared/paths";
 
 // Config
 export {
@@ -195,7 +195,7 @@ export {
   getConfigValue,
   setUserConfigValue,
   validateConfigValue,
-} from "./config";
+} from "./shared/config";
 export type {
   BrowserControlConfig,
   ConfigEntry,
@@ -203,7 +203,7 @@ export type {
   ConfigKey,
   ConfigSource,
   UserConfig,
-} from "./config";
+} from "./shared/config";
 
 // CLI
 export { parseArgs, runCli } from "./cli";
@@ -225,13 +225,13 @@ export type {
   ConfirmationHandler,
   PolicyAuditEntry,
   PolicyEngine,
-} from "./policy";
+} from "./policy/types";
 
 export {
   DefaultPolicyEngine,
   getDefaultPolicyEngine,
   resetDefaultPolicyEngine,
-} from "./policy_engine";
+} from "./policy/engine";
 
 export {
   SAFE_PROFILE,
@@ -243,18 +243,18 @@ export {
   validateProfile,
   serializeProfile,
   deserializeProfile,
-} from "./policy_profiles";
+} from "./policy/profiles";
 
 export {
   ExecutionRouter,
   defaultRouter,
-} from "./execution_router";
+} from "./policy/execution_router";
 
 export {
   PolicyAuditLogger,
   getDefaultAuditLogger,
   resetDefaultAuditLogger,
-} from "./policy_audit";
+} from "./policy/audit";
 
 // Section 6: A11y Snapshot + Ref Layer
 export {
@@ -272,7 +272,7 @@ export {
   RefStore,
   getPageId,
   globalRefStore,
-} from "./browser_core";
+} from "./browser/core";
 
 export {
   resolveRefTarget,
@@ -322,7 +322,7 @@ export type {
   KnowledgeQueryFilter,
   ValidationResult as KnowledgeValidationResult,
   ValidationIssue as KnowledgeValidationIssue,
-} from "./knowledge_types";
+} from "./knowledge/types";
 
 export {
   loadArtifact,
@@ -333,9 +333,9 @@ export {
   listByKind,
   findByDomain,
   findByName,
-} from "./knowledge_store";
+} from "./knowledge/store";
 
-export { validateArtifact } from "./knowledge_validator";
+export { validateArtifact } from "./knowledge/validator";
 
 export {
   queryKnowledge,
@@ -347,14 +347,14 @@ export {
   listKnownDomains,
   listInteractionSkillNames,
   getKnowledgeStats,
-} from "./knowledge_query";
+} from "./knowledge/query";
 
 // Knowledge paths
 export {
   getKnowledgeDir,
   getInteractionSkillsDir,
   getDomainSkillsDir,
-} from "./paths";
+} from "./shared/paths";
 
 // ── Section 12: Native Terminal Automation Layer ──────────────────────
 
@@ -364,7 +364,7 @@ export {
   getDefaultSessionManager,
   resetDefaultSessionManager,
   execCommand,
-} from "./terminal_session";
+} from "./terminal/session";
 
 export type {
   TerminalSession,
@@ -373,7 +373,7 @@ export type {
   ExecOptions,
   ExecResult,
   TerminalSnapshot,
-} from "./terminal_types";
+} from "./terminal/types";
 
 // Terminal exec helpers
 export {
@@ -382,12 +382,12 @@ export {
   execTest,
   execSequence,
   ExecError,
-} from "./terminal_exec";
+} from "./terminal/exec";
 
 export type {
   StructuredExecOptions,
   StructuredExecResult,
-} from "./terminal_exec";
+} from "./terminal/exec";
 
 // Terminal snapshot
 export {
@@ -395,11 +395,11 @@ export {
   captureAllSnapshots,
   formatSnapshot,
   formatSnapshotCollection,
-} from "./terminal_snapshot";
+} from "./terminal/snapshot";
 
 export type {
   SessionSnapshotCollection,
-} from "./terminal_snapshot";
+} from "./terminal/snapshot";
 
 // Terminal prompt detection
 export {
@@ -407,7 +407,7 @@ export {
   extractCwdFromPrompt,
   registerCustomPrompt,
   unregisterCustomPrompt,
-} from "./terminal_prompt";
+} from "./terminal/prompt";
 
 // Cross-platform shell detection
 export {
@@ -415,9 +415,9 @@ export {
   resolveNamedShell,
   platformShellName,
   isWindowsPlatform,
-} from "./cross_platform";
+} from "./terminal/cross_platform";
 
-export type { ShellInfo } from "./cross_platform";
+export type { ShellInfo } from "./terminal/cross_platform";
 
 // ── Section 13: Terminal Resume and State Serialization ────────────────
 
@@ -429,28 +429,28 @@ export type {
   TerminalResumeMetadata,
   TerminalResumeResult,
   TerminalResumeConfig,
-} from "./terminal_resume_types";
+} from "./terminal/resume_types";
 
-export type { ResumeDecision } from "./terminal_resume";
+export type { ResumeDecision } from "./terminal/resume";
 
 export {
   serializeTerminalSession,
   validateSerializedSession,
-} from "./terminal_serialize";
+} from "./terminal/serialize";
 
 export {
   TerminalBufferStore,
   TERMINAL_BUFFER_KEY,
   TERMINAL_METADATA_KEY,
   TERMINAL_PENDING_KEY,
-} from "./terminal_buffer_store";
+} from "./terminal/buffer_store";
 
 export {
   decideResume,
   buildResumeResult,
   loadPersistedState,
   rebuildOutputBuffer,
-} from "./terminal_resume";
+} from "./terminal/resume";
 
 // Filesystem operations
 export {
@@ -463,7 +463,7 @@ export {
   listProcesses,
   killProcess,
   FsError,
-} from "./fs_operations";
+} from "./filesystem/operations";
 
 export type {
   FileReadResult,
@@ -478,7 +478,7 @@ export type {
   ListOptions,
   DeleteOptions,
   ProcessInfo,
-} from "./fs_operations";
+} from "./filesystem/operations";
 
 // ── Section 5: Agent Action Surface ────────────────────────────────────
 
@@ -489,9 +489,9 @@ export {
   policyDeniedResult,
   confirmationRequiredResult,
   formatActionResult,
-} from "./action_result";
+} from "./shared/action_result";
 
-export type { ActionResult } from "./action_result";
+export type { ActionResult } from "./shared/action_result";
 
 // Session manager — unified session surface
 export {
@@ -517,7 +517,7 @@ export {
 } from "./session_manager";
 
 // Browser actions — canonical browser action surface
-export { BrowserActions } from "./browser_actions";
+export { BrowserActions } from "./browser/actions";
 
 export type {
   BrowserActionContext,
@@ -530,10 +530,10 @@ export type {
   PressOptions,
   ScrollOptions,
   ScreenshotOptions,
-} from "./browser_actions";
+} from "./browser/actions";
 
 // Terminal actions — canonical terminal action surface
-export { TerminalActions } from "./terminal_actions";
+export { TerminalActions } from "./terminal/actions";
 
 export type {
   TerminalActionContext,
@@ -546,10 +546,10 @@ export type {
   TermCloseOptions,
   TermResumeOptions,
   TermStatusOptions,
-} from "./terminal_actions";
+} from "./terminal/actions";
 
 // FS actions — canonical filesystem action surface
-export { FsActions } from "./fs_actions";
+export { FsActions } from "./filesystem/actions";
 
 export type {
   FsActionContext,
@@ -559,7 +559,7 @@ export type {
   FsMoveOptions,
   FsRmOptions,
   FsStatOptions,
-} from "./fs_actions";
+} from "./filesystem/actions";
 
 // Daemon cleanup helpers (shared between CLI and tests)
 export {
@@ -568,7 +568,7 @@ export {
   killAutomationBrowser,
   cleanupStaleDaemonFiles,
   stopDaemon,
-} from "./daemon_cleanup";
+} from "./runtime/daemon_cleanup";
 
 // ── Section 14: Stable Local URLs ────────────────────────────────────
 
@@ -656,7 +656,7 @@ export {
   getServicesDir,
   getServiceRegistryPath,
   getProviderRegistryPath,
-} from "./paths";
+} from "./shared/paths";
 
 // ── Section 15: Remote Browser Provider Layer ──────────────────────────
 

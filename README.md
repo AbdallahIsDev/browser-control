@@ -17,7 +17,7 @@ browser-control/
 │   ├── launch_browser.ts    ← Cross-platform Chrome launcher (main entry)
 │   ├── launch_browser.cjs   ← Node shim (bootstraps ts-node)
 │   └── launch_browser.sh    ← Chrome launcher wrapper (Linux/macOS)
-├── browser_core.ts          ← Global: connect, smartClick, smartFill, screenshots
+├── browser_core.ts          ← Public compatibility import; implementation lives in browser/core.ts
 ├── selector_store.ts        ← Global: the selector caching pattern (reference)
 │
 └── project-template/        ← COPY THIS for every new project
@@ -37,6 +37,8 @@ Runtime data lives in `~/.browser-control/` (override with `BROWSER_CONTROL_HOME
 ├── .interop/                ← Chrome debug metadata, daemon PID
 └── skills/                  ← Installed skills
 ```
+
+Contributor source ownership is documented in `docs/architecture/source-layout.md`. New internal browser edits should target `browser/` modules; root `browser_core.ts` remains for public/backward-compatible imports.
 
 ---
 

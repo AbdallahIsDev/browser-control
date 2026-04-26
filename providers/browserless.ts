@@ -5,13 +5,13 @@ import type {
   ProviderAttachOptions,
   ActiveConnection,
 } from "./interface";
-import type { BrowserConnection } from "../browser_connection";
+import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
-import { createAutomationContext, getAllPages } from "../browser_core";
-import { BrowserProfileManager } from "../browser_profiles";
+import { createAutomationContext, getAllPages } from "../browser/core";
+import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import { stripSensitiveParams, sanitizeString } from "./utils";
-import { loadConfig } from "../config";
+import { loadConfig } from "../shared/config";
 
 export class BrowserlessProvider implements BrowserProvider {
   readonly name = "browserless";

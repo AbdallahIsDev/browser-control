@@ -18,7 +18,7 @@ import { createBrowserControl, type BrowserControlAPI } from "../browser_control
 import { buildToolRegistry } from "./tool_registry";
 import { actionResultToMcpResult, normalizeError, mcpErrorResult } from "./types";
 import type { McpTool } from "./types";
-import { logger } from "../logger";
+import { logger } from "../shared/logger";
 
 const log = logger.withComponent("mcp_server");
 

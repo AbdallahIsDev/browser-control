@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import { buildDaemonSpawnOptions, resolveDaemonEntryPoint } from "./daemon_launch";
 
 test("buildDaemonSpawnOptions hides daemon windows by default on Windows", () => {
@@ -25,4 +27,36 @@ test("resolveDaemonEntryPoint resolves a runnable daemon entrypoint", () => {
   const daemonArg = resolved.args[resolved.args.length - 1];
   assert.ok(daemonArg);
   assert.ok(path.basename(daemonArg).startsWith("daemon."));
+});
+
+test("resolveDaemonEntryPoint resolves a compiled package daemon from package root", () => {
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
+  try {
+    const distDir = path.join(packageRoot, "dist");
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, "daemon.js"), "");
+
+    const resolved = resolveDaemonEntryPoint(packageRoot);
+
+    assert.equal(resolved.command, process.execPath);
+    assert.deepEqual(resolved.args, [path.join(distDir, "daemon.js")]);
+  } finally {
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveDaemonEntryPoint resolves when cwd is compiled dist directory", () => {
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
+  try {
+    const distDir = path.join(packageRoot, "dist");
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, "daemon.js"), "");
+
+    const resolved = resolveDaemonEntryPoint(distDir);
+
+    assert.equal(resolved.command, process.execPath);
+    assert.deepEqual(resolved.args, [path.join(distDir, "daemon.js")]);
+  } finally {
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
 });

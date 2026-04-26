@@ -7,8 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getServiceRegistryPath } from "../paths";
-import { logger } from "../logger";
+import { getServiceRegistryPath } from "../shared/paths";
+import { logger } from "../shared/logger";
 
 const log = logger.withComponent("service_registry");
 

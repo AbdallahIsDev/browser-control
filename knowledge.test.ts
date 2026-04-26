@@ -17,6 +17,7 @@ import {
 } from "./knowledge_store";
 import {
   validateArtifact,
+  validateFile,
 } from "./knowledge_validator";
 import {
   queryKnowledge,
@@ -322,6 +323,24 @@ test("knowledge validator: valid artifact passes", () => {
       const artifact = loadArtifact(filePath)!;
       const result = validateArtifact(artifact);
       assert.ok(result.valid, `Should be valid. Issues: ${JSON.stringify(result.issues)}`);
+    });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("knowledge validator: validateFile loads saved artifacts after module move", () => {
+  const tmp = createTempKnowledgeHome();
+  try {
+    withTempHome(tmp, () => {
+      const filePath = saveArtifact("domain-skill", "github.com", {
+        kind: "domain-skill", domain: "github.com", capturedAt: "2026-04-20T10:00:00Z",
+      }, "## Stable Selectors\n- PR merge button\n  - selector: `[data-test-id]`\n  - verified: true\n  - lastVerified: 2026-04-20");
+
+      const result = validateFile(filePath);
+
+      assert.ok(result);
+      assert.equal(result.filePath, filePath);
     });
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

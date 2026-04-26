@@ -9,7 +9,7 @@
 import type { ConsoleEntry, ConsoleLevel } from "./types";
 import { redactConsoleEntry } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
-import type { MemoryStore } from "../memory_store";
+import type { MemoryStore } from "../runtime/memory_store";
 
 // ── Ring Buffer ────────────────────────────────────────────────────────
 

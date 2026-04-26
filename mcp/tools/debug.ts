@@ -11,9 +11,9 @@
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
 import { buildSchema } from "../types";
-import { HealthCheck } from "../../health_check";
+import { HealthCheck } from "../../runtime/health_check";
 import { isPolicyAllowed, type PolicyAllowResult } from "../../session_manager";
-import type { ActionResult } from "../../action_result";
+import type { ActionResult } from "../../shared/action_result";
 
 function evaluateDebugPolicy(
   api: BrowserControlAPI,

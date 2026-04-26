@@ -18,6 +18,10 @@ docs/*
 !docs/api.md
 !docs/cli.md
 !docs/troubleshooting.md
+!docs/specs/
+!docs/specs/**
+!docs/architecture/
+!docs/architecture/**
 !docs/production-upgrade/
 !docs/production-upgrade/**
 reports/

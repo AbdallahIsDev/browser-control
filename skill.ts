@@ -2,9 +2,9 @@ import type { Page } from "playwright";
 
 import type { CaptchaSolver } from "./captcha_solver";
 import type { AIAgent } from "./ai_agent";
-import type { MemoryStore } from "./memory_store";
+import type { MemoryStore } from "./runtime/memory_store";
 import type { SkillMemoryStore } from "./skill_memory";
-import type { Telemetry } from "./telemetry";
+import type { Telemetry } from "./runtime/telemetry";
 
 // ── Action Schema ──────────────────────────────────────────────────
 
