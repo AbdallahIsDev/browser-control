@@ -1,0 +1,442 @@
+{
+  "configKeys": [
+    {
+      "category": "runtime",
+      "defaultValue": "BROWSER_CONTROL_HOME_PLACEHOLDER",
+      "description": "Browser Control runtime data home.",
+      "envVars": [
+        "BROWSER_CONTROL_HOME"
+      ],
+      "key": "dataHome",
+      "sensitive": false
+    },
+    {
+      "category": "broker",
+      "defaultValue": 7788,
+      "description": "Broker HTTP API port.",
+      "envVars": [
+        "BROKER_PORT"
+      ],
+      "key": "brokerPort",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": 9222,
+      "description": "Chrome remote debugging port.",
+      "envVars": [
+        "BROWSER_DEBUG_PORT"
+      ],
+      "key": "chromeDebugPort",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": "127.0.0.1",
+      "description": "Chrome debug bind address.",
+      "envVars": [
+        "BROWSER_BIND_ADDRESS"
+      ],
+      "key": "chromeBindAddress",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "description": "Explicit Chrome executable path.",
+      "envVars": [
+        "BROWSER_CHROME_PATH"
+      ],
+      "key": "chromePath",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "description": "Explicit CDP endpoint URL override.",
+      "envVars": [
+        "BROWSER_DEBUG_URL"
+      ],
+      "key": "browserDebugUrl",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": "managed",
+      "description": "Browser ownership mode.",
+      "envVars": [
+        "BROWSER_MODE"
+      ],
+      "key": "browserMode",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "description": "User agent for automation-owned browser contexts.",
+      "envVars": [
+        "BROWSER_USER_AGENT"
+      ],
+      "key": "browserUserAgent",
+      "sensitive": false
+    },
+    {
+      "category": "policy",
+      "defaultValue": "balanced",
+      "description": "Default policy profile.",
+      "envVars": [
+        "POLICY_PROFILE"
+      ],
+      "key": "policyProfile",
+      "sensitive": false
+    },
+    {
+      "category": "daemon",
+      "defaultValue": false,
+      "description": "Whether daemon launches use a visible console window on Windows.",
+      "envVars": [
+        "DAEMON_VISIBLE"
+      ],
+      "key": "daemonVisible",
+      "sensitive": false
+    },
+    {
+      "category": "logging",
+      "defaultValue": "info",
+      "description": "Minimum log level.",
+      "envVars": [
+        "LOG_LEVEL"
+      ],
+      "key": "logLevel",
+      "sensitive": false
+    },
+    {
+      "category": "logging",
+      "defaultValue": false,
+      "description": "Whether logs are also written to files.",
+      "envVars": [
+        "LOG_FILE"
+      ],
+      "key": "logFile",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "description": "Default shell for terminal sessions.",
+      "envVars": [
+        "TERMINAL_SHELL"
+      ],
+      "key": "terminalShell",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": 80,
+      "description": "Default terminal column count.",
+      "envVars": [
+        "TERMINAL_COLS"
+      ],
+      "key": "terminalCols",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": 24,
+      "description": "Default terminal row count.",
+      "envVars": [
+        "TERMINAL_ROWS"
+      ],
+      "key": "terminalRows",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": "resume",
+      "description": "Terminal recovery policy on daemon startup.",
+      "envVars": [
+        "TERMINAL_RESUME_POLICY"
+      ],
+      "key": "terminalResumePolicy",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": true,
+      "description": "Whether terminal sessions auto-resume on daemon startup.",
+      "envVars": [
+        "TERMINAL_AUTO_RESUME"
+      ],
+      "key": "terminalAutoResume",
+      "sensitive": false
+    },
+    {
+      "category": "provider",
+      "description": "Browserless endpoint.",
+      "envVars": [
+        "BROWSERLESS_ENDPOINT"
+      ],
+      "key": "browserlessEndpoint",
+      "sensitive": false
+    },
+    {
+      "category": "provider",
+      "defaultValue": "[redacted]",
+      "description": "Browserless API key.",
+      "envVars": [
+        "BROWSERLESS_API_KEY"
+      ],
+      "key": "browserlessApiKey",
+      "sensitive": true
+    },
+    {
+      "category": "captcha",
+      "description": "CAPTCHA provider.",
+      "envVars": [
+        "CAPTCHA_PROVIDER"
+      ],
+      "key": "captchaProvider",
+      "sensitive": false
+    },
+    {
+      "category": "captcha",
+      "defaultValue": "[redacted]",
+      "description": "CAPTCHA provider API key.",
+      "envVars": [
+        "CAPTCHA_API_KEY"
+      ],
+      "key": "captchaApiKey",
+      "sensitive": true
+    },
+    {
+      "category": "ai",
+      "defaultValue": "openai/gpt-4.1-mini",
+      "description": "OpenRouter model for AI agent features.",
+      "envVars": [
+        "OPENROUTER_MODEL",
+        "AI_AGENT_MODEL"
+      ],
+      "key": "openrouterModel",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
+      "defaultValue": "https://openrouter.ai/api/v1",
+      "description": "OpenRouter API base URL.",
+      "envVars": [
+        "OPENROUTER_BASE_URL"
+      ],
+      "key": "openrouterBaseUrl",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
+      "defaultValue": "[redacted]",
+      "description": "OpenRouter API key.",
+      "envVars": [
+        "OPENROUTER_API_KEY"
+      ],
+      "key": "openrouterApiKey",
+      "sensitive": true
+    }
+  ],
+  "envVars": [
+    {
+      "backedByConfigRegistry": false,
+      "name": "AI_AGENT_COST_PER_TOKEN"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "AI_AGENT_MODEL"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_ALLOWED_DOMAINS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_ALLOWED_ORIGINS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROKER_PORT"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_RATE_LIMIT_MAX_REQUESTS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_RATE_LIMIT_WINDOW_MS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "BROKER_SECRET"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSERLESS_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSERLESS_ENDPOINT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_BIND_ADDRESS"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CHROME_PATH"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_HOME"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_DEBUG_PORT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_DEBUG_URL"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_MODE"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_USER_AGENT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "CAPTCHA_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "CAPTCHA_PROVIDER"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "CAPTCHA_TIMEOUT_MS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "CHROME_TAB_LIMIT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "DAEMON_VISIBLE"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "ENABLE_STEALTH"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "LOG_FILE"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "LOG_LEVEL"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "MEMORY_ALERT_MB"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_BASE_URL"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_MODEL"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "POLICY_PROFILE"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "PROXY_LIST"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "RESUME_POLICY"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STAGEHAND_MODEL"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_DEVICE_MEMORY"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_FINGERPRINT_SEED"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_HARDWARE_CONCURRENCY"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_LOCALE"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_PLATFORM"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_TIMEZONE_ID"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_WEBGL_RENDERER"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "STEALTH_WEBGL_VENDOR"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "TERMINAL_AUTO_RESUME"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "TERMINAL_COLS"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "TERMINAL_MAX_OUTPUT_BYTES"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "TERMINAL_MAX_SCROLLBACK_LINES"
+    },
+    {
+      "backedByConfigRegistry": false,
+      "name": "TERMINAL_MAX_SERIALIZED_SESSIONS"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "TERMINAL_RESUME_POLICY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "TERMINAL_ROWS"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "TERMINAL_SHELL"
+    }
+  ],
+  "source": "config.ts + .env.example"
+}

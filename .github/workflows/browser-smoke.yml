@@ -1,0 +1,43 @@
+name: Browser Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    name: Managed browser smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Audit lockfile before install
+        run: npm audit --audit-level=high --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Resolve Playwright Chromium path
+        shell: bash
+        run: |
+          chromium_path="$(node -e 'const { chromium } = require("playwright"); process.stdout.write(chromium.executablePath())')"
+          echo "BROWSER_CHROME_PATH=${chromium_path}" >> "$GITHUB_ENV"
+
+      - name: Browser connection smoke
+        run: npm run test:browser-smoke

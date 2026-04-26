@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  required:
+    name: Required (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        node:
+          - 22
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Audit lockfile before install
+        run: npm audit --audit-level=high --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Docs status check
+        run: npm run docs:check
+
+      - name: Focused CI tests
+        run: npm run test:ci
+
+      - name: MCP stdio tests
+        run: npm run test:mcp
+
+      - name: Audit high and critical vulnerabilities
+        run: npm run audit:high
+
+  windows-lifecycle:
+    name: Windows lifecycle and cleanup
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      BROWSER_CONTROL_HOME: ${{ runner.temp }}\browser-control-home
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Audit lockfile before install
+        run: npm audit --audit-level=high --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lifecycle tests
+        timeout-minutes: 8
+        run: npm run test:lifecycle
+
+      - name: Cleanup diagnostics on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $diag = Join-Path $env:RUNNER_TEMP "browser-control-diagnostics"
+          New-Item -ItemType Directory -Force -Path $diag | Out-Null
+          Get-CimInstance Win32_Process |
+            Where-Object {
+              $_.Name -match 'node|cmd|conpty|chrome' -and
+              ($_.CommandLine -like '*browser-control*' -or $_.CommandLine -like '*wsl_cdp_bridge*')
+            } |
+            Select-Object ProcessId, ParentProcessId, Name,
+              @{Name='CommandLineRedacted';Expression={
+                ($_.CommandLine -replace '(?i)(token|api[_-]?key|authorization|password|secret)=([^\\s&]+)', '$1=[REDACTED]') `
+                  -replace '(?i)Bearer\\s+[A-Za-z0-9._~+/-]+=*', 'Bearer [REDACTED]'
+              }} |
+            Format-List | Out-File -FilePath (Join-Path $diag "processes.txt") -Encoding utf8
+          if (Test-Path $env:BROWSER_CONTROL_HOME) {
+            Get-ChildItem -Path $env:BROWSER_CONTROL_HOME -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\(logs|reports)\\' -and $_.Extension -in '.log','.txt','.json' } |
+              ForEach-Object {
+                $relative = $_.FullName.Substring($env:BROWSER_CONTROL_HOME.Length).TrimStart('\\','/')
+                $target = Join-Path (Join-Path $diag "browser-control-home") $relative
+                New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+                (Get-Content -Raw -Path $_.FullName -ErrorAction SilentlyContinue) `
+                  -replace '(?i)(token|api[_-]?key|authorization|password|secret)=([^\\s&]+)', '$1=[REDACTED]' `
+                  -replace '(?i)Bearer\\s+[A-Za-z0-9._~+/-]+=*', 'Bearer [REDACTED]' |
+                  Set-Content -Path $target -Encoding utf8
+              }
+          }
+
+      - name: Upload cleanup diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-lifecycle-diagnostics
+          path: ${{ runner.temp }}\browser-control-diagnostics
+          if-no-files-found: ignore
+
+  package-smoke:
+    name: Package smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Audit lockfile before install
+        run: npm audit --audit-level=high --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package smoke
+        run: npm run test:package

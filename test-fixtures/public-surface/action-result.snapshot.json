@@ -1,0 +1,69 @@
+{
+  "confirmationRequired": {
+    "completedAt": "<iso-timestamp>",
+    "error": "Confirmation required: sample reason",
+    "path": "command",
+    "policyDecision": "require_confirmation",
+    "risk": "high",
+    "sessionId": "session-1",
+    "success": false
+  },
+  "coreFields": [
+    "success",
+    "path",
+    "sessionId",
+    "data",
+    "warning",
+    "error",
+    "auditId",
+    "policyDecision",
+    "risk",
+    "completedAt",
+    "debugBundleId",
+    "debugBundlePath",
+    "recoveryGuidance",
+    "partialDebug"
+  ],
+  "failure": {
+    "auditId": "audit-2",
+    "completedAt": "<iso-timestamp>",
+    "debugBundleId": "bundle-sample",
+    "debugBundlePath": "<data-home>/debug-bundles/bundle-sample.json",
+    "error": "sample error",
+    "partialDebug": true,
+    "path": "a11y",
+    "policyDecision": "deny",
+    "recoveryGuidance": {
+      "canRetry": true,
+      "requiresConfirmation": false,
+      "requiresHuman": false,
+      "retryReason": "sample"
+    },
+    "risk": "moderate",
+    "sessionId": "session-1",
+    "success": false
+  },
+  "policyDenied": {
+    "completedAt": "<iso-timestamp>",
+    "error": "Policy denied: sample reason",
+    "path": "command",
+    "policyDecision": "deny",
+    "risk": "high",
+    "sessionId": "session-1",
+    "success": false
+  },
+  "source": "action_result.ts",
+  "success": {
+    "auditId": "audit-1",
+    "completedAt": "<iso-timestamp>",
+    "data": {
+      "value": 1
+    },
+    "path": "command",
+    "policyDecision": "allow",
+    "risk": "low",
+    "sessionId": "session-1",
+    "success": true,
+    "warning": "sample warning"
+  }
+}

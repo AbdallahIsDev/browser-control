@@ -162,4 +162,53 @@ describe("createBrowserControl", () => {
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   });
+
+  it("provider.use is policy-governed through the TypeScript API", async () => {
+    const previousHome = process.env.BROWSER_CONTROL_HOME;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-provider-policy-"));
+    process.env.BROWSER_CONTROL_HOME = tmpDir;
+    try {
+      const bc = createBrowserControl({ memoryStore: store, policyProfile: "safe" });
+      await bc.session.create("safe-provider", { policyProfile: "safe" });
+
+      const result = bc.browser.provider.use("browserless");
+
+      assert.equal(result.success, false);
+      assert.equal(result.policyDecision, "require_confirmation");
+      assert.equal(bc.browser.provider.getActive(), "local");
+    } finally {
+      if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+      else process.env.BROWSER_CONTROL_HOME = previousHome;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("config.set is policy-governed through the TypeScript API", async () => {
+    const previousHome = process.env.BROWSER_CONTROL_HOME;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-config-policy-"));
+    process.env.BROWSER_CONTROL_HOME = tmpDir;
+    try {
+      const bc = createBrowserControl({ memoryStore: store, policyProfile: "safe" });
+      await bc.session.create("safe-config", { policyProfile: "safe" });
+
+      const result = bc.config.set("logLevel", "debug");
+
+      assert.equal(result.success, false);
+      assert.equal(result.policyDecision, "require_confirmation");
+      assert.equal(fs.existsSync(path.join(tmpDir, "config", "config.json")), false);
+    } finally {
+      if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+      else process.env.BROWSER_CONTROL_HOME = previousHome;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("debug evidence methods are policy-governed through the TypeScript API", async () => {
+    const bc = createBrowserControl({ memoryStore: store, policyProfile: "safe" });
+    await bc.session.create("safe-debug", { policyProfile: "safe" });
+
+    assert.throws(() => bc.debug.network(), /Confirmation required/);
+    assert.throws(() => bc.debug.console(), /Confirmation required/);
+    assert.throws(() => bc.debug.listBundles(), /Confirmation required/);
+  });
 });

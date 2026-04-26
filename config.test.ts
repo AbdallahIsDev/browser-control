@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { loadConfig, type BrowserControlConfig } from "./config";
+import { getConfigEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "./config";
 
 // ── Config Loader: Defaults ──────────────────────────────────────────
 
@@ -12,7 +12,7 @@ test("loadConfig returns sensible defaults with empty env", () => {
   const config = loadConfig({ env: {}, validate: false });
   assert.equal(config.brokerPort, 7788);
   assert.equal(config.chromeDebugPort, 9222);
-  assert.equal(config.chromeBindAddress, "0.0.0.0");
+  assert.equal(config.chromeBindAddress, "127.0.0.1");
   assert.equal(config.browserlessEndpoint, undefined);
   assert.equal(config.browserlessApiKey, undefined);
   assert.equal(config.stealthEnabled, false);
@@ -81,6 +81,22 @@ test("loadConfig reads Browserless provider env vars", () => {
   });
   assert.equal(config.browserlessEndpoint, "https://browserless.example.com");
   assert.equal(config.browserlessApiKey, "secret-key");
+});
+
+test("config list/get redact sensitive URL query params in endpoint values", () => {
+  const env = {
+    BROWSERLESS_ENDPOINT: "wss://production-sfo.browserless.io?token=browserless-secret-token-123456",
+    BROWSER_DEBUG_URL: "ws://user:pass@example.test/devtools?access_token=debug-secret-token-123456",
+  };
+
+  const entries = getConfigEntries({ env, validate: false });
+  const browserlessEndpoint = entries.find((entry) => entry.key === "browserlessEndpoint");
+  const browserDebugUrl = getConfigValue("browserDebugUrl", { env, validate: false });
+
+  assert.equal(browserlessEndpoint?.value, "wss://production-sfo.browserless.io/?token=[REDACTED]");
+  assert.match(String(browserDebugUrl.value), /REDACTED/);
+  assert.match(String(browserDebugUrl.value), /example\.test/);
+  assert.doesNotMatch(JSON.stringify(entries), /browserless-secret-token-123456|debug-secret-token-123456|user:pass/);
 });
 
 test("loadConfig reads ENABLE_STEALTH", () => {

@@ -9,6 +9,7 @@ import test from "node:test";
 import { DefaultPolicyEngine } from "./policy_engine";
 import type { RoutedStep, ExecutionContext, ConfirmationHandler, PolicyEvaluationResult } from "./policy";
 import { Logger } from "./logger";
+import { TRUSTED_PROFILE } from "./policy_profiles";
 
 test("initializes with the default balanced profile", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
@@ -277,6 +278,48 @@ test("allows raw CDP execution in trusted profile", () => {
   };
   const result = policyEngine.evaluate(step);
   assert.strictEqual(result.decision, "allow_with_audit");
+});
+
+test("filesystem allowed roots canonicalize paths and validate move destination", () => {
+  const allowed = process.platform === "win32" ? "C:\\allowed" : "/tmp/allowed";
+  const outside = process.platform === "win32" ? "C:\\outside\\file.txt" : "/tmp/outside/file.txt";
+  const traversal = process.platform === "win32"
+    ? "C:\\allowed\\..\\outside\\file.txt"
+    : "/tmp/allowed/../outside/file.txt";
+  const policyEngine = new DefaultPolicyEngine({
+    customProfile: {
+      ...TRUSTED_PROFILE,
+      name: "trusted",
+      filesystemPolicy: {
+        ...TRUSTED_PROFILE.filesystemPolicy,
+        allowedReadRoots: [allowed],
+        allowedWriteRoots: [allowed],
+        allowedDeleteRoots: [allowed],
+      },
+    },
+  });
+
+  const traversalResult = policyEngine.evaluate({
+    id: "fs-traversal",
+    path: "command",
+    action: "fs_write",
+    params: { path: traversal },
+    risk: "high",
+    sessionId: "test-session",
+  });
+  assert.equal(traversalResult.decision, "deny");
+  assert.equal(traversalResult.matchedRule, "allowedWriteRoots");
+
+  const moveResult = policyEngine.evaluate({
+    id: "fs-move",
+    path: "command",
+    action: "fs_move",
+    params: { src: `${allowed}/source.txt`, dst: outside },
+    risk: "high",
+    sessionId: "test-session",
+  });
+  assert.equal(moveResult.decision, "deny");
+  assert.equal(moveResult.matchedRule, "allowedWriteRoots");
 });
 
 test("records audit entries when enabled", () => {

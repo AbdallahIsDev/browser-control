@@ -1,6 +1,6 @@
 param(
   [int]    $Port            = 9222,
-  [string] $BindAddress     = "0.0.0.0"
+  [string] $BindAddress     = "127.0.0.1"
 )
 
 # Browser Control — Chrome launcher (Windows/PowerShell)

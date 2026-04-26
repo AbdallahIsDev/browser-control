@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { loadConfig } from "../config";
-import { isPidAlive } from "../daemon_cleanup";
+import { loadConfig } from "../shared/config";
+import { isPidAlive } from "../runtime/daemon_cleanup";
 import { ProviderRegistry } from "../providers/registry";
-import type { BrowserControlConfig } from "../config";
+import type { BrowserControlConfig } from "../shared/config";
 import type { BrokerProbeResult, SystemStatus } from "./types";
 
 interface StatusOptions {

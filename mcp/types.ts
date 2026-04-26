@@ -11,7 +11,8 @@
  * Browser Control's ActionResult metadata in the MCP response.
  */
 
-import type { ActionResult } from "../action_result";
+import type { ActionResult } from "../shared/action_result";
+import { redactString } from "../observability/redaction";
 
 // ── MCP Tool Definition ────────────────────────────────────────────────
 
@@ -135,8 +136,8 @@ export function buildSchema(
  * Normalize an unknown error into a safe string message.
  */
 export function normalizeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return redactString(message);
 }
 
 /**
@@ -150,7 +151,7 @@ export function mcpErrorResult(error: string): {
     content: [
       {
         type: "text",
-        text: JSON.stringify({ success: false, error }, null, 2),
+        text: JSON.stringify({ success: false, error: redactString(error) }, null, 2),
       },
     ],
     isError: true,

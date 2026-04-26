@@ -58,10 +58,36 @@ describe("redactString", () => {
     assert(!result.includes("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"));
   });
 
+  it("redacts full JWT bearer tokens", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature_secret";
+    const result = redactString(`Authorization: Bearer ${jwt}`);
+
+    assert.equal(result, "Authorization: [REDACTED]");
+    assert(!result.includes("eyJ"));
+    assert(!result.includes("signature_secret"));
+  });
+
   it("redacts cookies", () => {
     const input = "Cookie: session_id=abc123; auth_token=xyz789";
     const result = redactString(input);
     assert(result.includes("[REDACTED]"));
+  });
+
+  it("redacts full Cookie headers", () => {
+    const input = "Cookie: session_id=abc123; auth_token=xyz789; theme=dark";
+    const result = redactString(input);
+
+    assert.equal(result, "Cookie: [REDACTED]");
+    assert(!result.includes("abc123"));
+    assert(!result.includes("xyz789"));
+    assert(!result.includes("theme=dark"));
+  });
+
+  it("redacts Set-Cookie headers in arbitrary strings", () => {
+    const input = "Set-Cookie: sid=supersecretsession; HttpOnly";
+    const result = redactString(input);
+    assert(result.includes("[REDACTED]"));
+    assert(!result.includes("supersecretsession"));
   });
 
   it("leaves harmless text intact", () => {
@@ -76,6 +102,19 @@ describe("redactString", () => {
     assert(result.includes("REDACTED"));
     assert(!result.includes("supersecrettoken1234567890"));
     assert(result.includes("session=abc"));
+  });
+
+  it("does not recurse on invalid URL-like strings with trailing punctuation", () => {
+    const input = "Tried: http://127.0.0.1:9222, http://localhost:9222";
+    const result = redactString(input);
+    assert(result.includes("http://127.0.0.1:9222"));
+    assert(result.includes("http://localhost:9222"));
+  });
+
+  it("redacts Browser Control fake test secret values wherever they appear", () => {
+    const input = "C:/tmp/bc_secret_test_token_12345/missing.txt";
+    const result = redactString(input);
+    assert.strictEqual(result, "C:/tmp/[REDACTED]/missing.txt");
   });
 });
 
@@ -113,6 +152,21 @@ describe("redactConsoleEntry", () => {
     assert(!result.message.includes("super_secret_key_12345"));
     assert.strictEqual(result.level, "log");
   });
+
+  it("redacts secrets in pageUrl", () => {
+    const entry: ConsoleEntry = {
+      level: "error",
+      message: "failed",
+      pageUrl: "https://example.test/app?token=page-secret&view=main",
+      timestamp: "2024-01-01T00:00:00Z",
+    };
+
+    const result = redactConsoleEntry(entry);
+
+    assert(result.pageUrl?.includes("REDACTED"));
+    assert(!result.pageUrl?.includes("page-secret"));
+    assert(result.pageUrl?.includes("view=main"));
+  });
 });
 
 describe("redactNetworkEntry", () => {
@@ -126,6 +180,21 @@ describe("redactNetworkEntry", () => {
     // URL encoding turns [REDACTED] into %5BREDACTED%5D
     assert(result.url.includes("REDACTED"));
     assert.strictEqual(result.redacted, true);
+  });
+
+  it("redacts secrets in network pageUrl", () => {
+    const entry: NetworkEntry = {
+      url: "https://api.example.test/data",
+      pageUrl: "https://example.test/app?access_token=page-secret&view=main",
+      method: "GET",
+      timestamp: "2024-01-01T00:00:00Z",
+    };
+
+    const result = redactNetworkEntry(entry);
+
+    assert(result.pageUrl?.includes("REDACTED"));
+    assert(!result.pageUrl?.includes("page-secret"));
+    assert(result.pageUrl?.includes("view=main"));
   });
 });
 
@@ -160,5 +229,39 @@ describe("redactObject", () => {
 
     assert.strictEqual(result.browserless_token, "[REDACTED]");
     assert.strictEqual((result.nested as Record<string, unknown>).refresh_token, "[REDACTED]");
+  });
+
+  it("redacts camelCase secret-like object keys", () => {
+    const result = redactObject({
+      browserlessApiKey: "browserless-key-value",
+      openrouterApiKey: "openrouter-key-value",
+      brokerAuthKey: "broker-key-value",
+      privateKey: "private-key-value",
+    }) as Record<string, unknown>;
+
+    assert.strictEqual(result.browserlessApiKey, "[REDACTED]");
+    assert.strictEqual(result.openrouterApiKey, "[REDACTED]");
+    assert.strictEqual(result.brokerAuthKey, "[REDACTED]");
+    assert.strictEqual(result.privateKey, "[REDACTED]");
+  });
+
+  it("preserves non-plain log data values", () => {
+    const when = new Date("2024-01-01T00:00:00.000Z");
+    const result = redactObject({ when }) as Record<string, unknown>;
+
+    assert.strictEqual(result.when, when);
+  });
+
+  it("redacts URL objects before JSON serialization", () => {
+    const result = redactObject({
+      endpoint: new URL("wss://user:pass@example.test/cdp?token=secret-token-value&session=ok"),
+    }) as Record<string, unknown>;
+    const serialized = JSON.stringify(result);
+
+    assert(serialized.includes("REDACTED"));
+    assert(!serialized.includes("user"));
+    assert(!serialized.includes("pass"));
+    assert(!serialized.includes("secret-token-value"));
+    assert(serialized.includes("session=ok"));
   });
 });

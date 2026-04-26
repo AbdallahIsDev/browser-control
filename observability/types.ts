@@ -10,7 +10,7 @@
  *   - Performance traces
  */
 
-import type { ExecutionPath, RiskLevel, PolicyDecision } from "../policy";
+import type { ExecutionPath, RiskLevel, PolicyDecision } from "../policy/types";
 import type { A11yElement } from "../a11y_snapshot";
 
 // ── Console Capture ────────────────────────────────────────────────────

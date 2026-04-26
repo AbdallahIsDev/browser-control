@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { serializeTerminalSession, validateSerializedSession } from "./terminal_serialize";
+import { captureTerminalBuffer, serializeTerminalSession, validateSerializedSession } from "./terminal_serialize";
 
 function createMockSession(overrides: Record<string, unknown> = {}) {
   const now = new Date().toISOString();
@@ -46,6 +46,7 @@ test("serializeTerminalSession: redacts secrets from env", () => {
       API_KEY: "secret123",
       GITHUB_TOKEN: "ghp_xxx",
       PASSWORD: "hunter2",
+      SESSION_COOKIE: "sid=secret",
     },
   });
   const serialized = serializeTerminalSession(session);
@@ -54,6 +55,7 @@ test("serializeTerminalSession: redacts secrets from env", () => {
   assert.equal(serialized!.env.API_KEY, "<redacted>");
   assert.equal(serialized!.env.GITHUB_TOKEN, "<redacted>");
   assert.equal(serialized!.env.PASSWORD, "<redacted>");
+  assert.equal(serialized!.env.SESSION_COOKIE, "<redacted>");
   assert.equal(serialized!.env.PATH, "/usr/bin");
 });
 
@@ -98,6 +100,39 @@ test("serializeTerminalSession: bounds metadata scrollback", () => {
 
   assert.ok(serialized !== null);
   assert.deepEqual(serialized!.scrollbackBuffer, ["line-15", "line-16", "line-17", "line-18", "line-19"]);
+});
+
+test("serializeTerminalSession: redacts secrets from scrollback", () => {
+  const session = createMockSession({
+    _outputBuffer: [
+      "curl -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.secret\" https://example.test",
+      "Cookie: sid=secret-session; theme=dark",
+      "$ ",
+    ].join("\n"),
+  });
+
+  const serialized = serializeTerminalSession(session);
+
+  assert.ok(serialized !== null);
+  assert.ok(serialized!.scrollbackBuffer.join("\n").includes("[REDACTED]"));
+  assert.ok(!serialized!.scrollbackBuffer.join("\n").includes("eyJ"));
+  assert.ok(!serialized!.scrollbackBuffer.join("\n").includes("secret-session"));
+  assert.ok(!serialized!.scrollbackBuffer.join("\n").includes("theme=dark"));
+});
+
+test("captureTerminalBuffer: redacts secrets from scrollback and visibleContent", () => {
+  const output = [
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.secret",
+    "Cookie: sid=secret-session; theme=dark",
+  ].join("\n");
+
+  const captured = captureTerminalBuffer("test-session-123", output);
+
+  assert.ok(captured.scrollback.join("\n").includes("[REDACTED]"));
+  assert.ok(captured.visibleContent.includes("[REDACTED]"));
+  assert.ok(!captured.scrollback.join("\n").includes("eyJ"));
+  assert.ok(!captured.visibleContent.includes("secret-session"));
+  assert.ok(!captured.visibleContent.includes("theme=dark"));
 });
 
 test("serializeTerminalSession: returns null for closed session", () => {

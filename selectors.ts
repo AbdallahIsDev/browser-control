@@ -2,14 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { Page } from "playwright";
-import { connectBrowser, getFramerPage } from "@bc/browser_core";
+import { connectBrowser, getFramerPage } from "./browser/core";
 import {
   loadSelectorCache,
   mergeSelectorCache,
   saveSelectorCache,
   type SelectorCacheRecord,
-} from "@bc/selector_store";
-import { logger } from "./logger";
+} from "./selector_store";
+import { logger } from "./shared/logger";
 
 const log = logger.withComponent("selectors");
 

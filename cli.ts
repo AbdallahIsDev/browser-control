@@ -3,13 +3,14 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { MemoryStore } from "./memory_store";
+import { MemoryStore } from "./runtime/memory_store";
+import { isPolicyAllowed, SessionManager } from "./session_manager";
 import { loadProxyConfigs } from "./proxy_manager";
-import { Telemetry } from "./telemetry";
-import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./paths";
-import { loadConfig } from "./config";
-import { spawnDaemonProcess } from "./daemon_launch";
-import { getConfigEntries, getConfigValue, setUserConfigValue } from "./config";
+import { Telemetry } from "./runtime/telemetry";
+import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./shared/paths";
+import { loadConfig } from "./shared/config";
+import { spawnDaemonProcess } from "./runtime/daemon_launch";
+import { getConfigEntries, getConfigValue, setUserConfigValue } from "./shared/config";
 import { runDoctor } from "./operator/doctor";
 import { runSetup } from "./operator/setup";
 import { collectStatus } from "./operator/status";
@@ -143,6 +144,21 @@ function outputJson(data: unknown, pretty = true): void {
   console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
 
+function requireCliPolicy(action: string, params: Record<string, unknown>, jsonOutput: boolean): void {
+  const store = new MemoryStore({ filename: ":memory:" });
+  try {
+    const manager = new SessionManager({ memoryStore: store });
+    const policyEval = manager.evaluateAction(action, params);
+    if (!isPolicyAllowed(policyEval)) {
+      if (jsonOutput) outputJson(policyEval, false);
+      else console.error(policyEval.error ?? "Policy denied.");
+      process.exit(1);
+    }
+  } finally {
+    store.close();
+  }
+}
+
 function printHelp(): void {
   console.log(`
 Browser Control CLI
@@ -151,7 +167,11 @@ Usage: bc <command> [subcommand] [options]
 
 Operator:
   doctor [--json]                                                    Run operator diagnostics
-  setup [--non-interactive] [--profile=balanced]                     Create/update user config
+  setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]
+        [--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]
+        [--terminal-shell=powershell] [--browserless-endpoint=<url>]
+        [--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]
+                                                                      Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
 
@@ -164,7 +184,7 @@ Browser Actions:
   type <text>                                                        Type text into focused element
   press <key>                                                        Press a keyboard key
   scroll <direction>                                                 Scroll (up/down/left/right)
-  screenshot [--full-page] [--target=<ref>]                          Take a screenshot
+  screenshot [--output=<path>] [--full-page] [--target=<ref>]         Take a screenshot
   tab list                                                           List browser tabs
   tab switch <id>                                                    Switch to a browser tab
   close                                                              Close the current browser tab
@@ -176,7 +196,8 @@ Session:
   session status                                                     Show active session status
 
 Browser Lifecycle:
-  browser attach [--port=9222] [--cdp-url=...] [--provider=<name>]      Attach to running Chrome/Electron
+  browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]
+                                                                      Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
   browser provider list                                              List browser providers
@@ -226,17 +247,17 @@ Browser Lifecycle:
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
-  term open [--shell=<name>] [--cwd=<path>]                          Open a terminal session
+  term open [--shell=<name>] [--cwd=<path>] [--name=<name>]           Open a terminal session
   term exec "<command>" [--session=<id>] [--timeout=<ms>]             Execute a command
   term type "<text>" --session=<id>                                   Type into a session
-  term read [--session=<id>]                                          Read recent output
+  term read [--session=<id>] [--max-bytes=<n>]                        Read recent output
   term snapshot [--session=<id>]                                      Capture terminal state
   term interrupt --session=<id>                                       Send Ctrl+C
   term close --session=<id>                                           Close a session
   term list                                                           List active sessions
   term resume <sessionId>                                             Resume a session from persisted state
   term status <sessionId>                                             Show resume status for a session
-  fs read <path>                                                      Read a file
+  fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>]                                  Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
   fs move <src> <dst>                                                 Move/rename
@@ -244,7 +265,7 @@ Browser Lifecycle:
   fs stat <path>                                                      File metadata
 
 Service Management:
-  service register <name> --port <port> [--protocol=http|https] [--path=/...]
+  service register <name> --port <port> [--protocol=http|https] [--path=/...] [--detect] [--cwd=<path>]
   service list                                                        List registered services
   service resolve <name>                                              Resolve service to URL
   service remove <name>                                               Remove a service
@@ -253,6 +274,9 @@ Debug:
   debug bundle <id> [--output=<path>]                                 Retrieve a debug bundle
   debug console [--session=<id>]                                      Show captured console entries
   debug network [--session=<id>]                                      Show captured network entries
+
+MCP:
+  mcp serve                                                           Start MCP stdio server
 
 Knowledge:
   knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
@@ -330,6 +354,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
         console.error("Error: config set requires <key> <value>");
         process.exit(1);
       }
+      requireCliPolicy("config_set", { key, value }, jsonOutput);
       const result = setUserConfigValue(key, value);
       if (jsonOutput) outputJson(result, false);
       else console.log(formatConfigSet(result));
@@ -476,7 +501,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 import {
   cleanupStaleDaemonFiles,
   stopDaemon,
-} from "./daemon_cleanup";
+} from "./runtime/daemon_cleanup";
 
 /**
  * CLI-specific wrapper: clean up stale daemon-status.json for the
@@ -1106,7 +1131,7 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
     deserializeProfile, 
     validateProfile,
     saveCustomProfile 
-  } = await import("./policy_profiles");
+  } = await import("./policy/profiles");
 
   switch (subcommand) {
     case "list": {
@@ -1206,9 +1231,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const provider = flags.provider ?? undefined;
 
       try {
-        const { BrowserConnectionManager } = await import("./browser_connection");
-        const { loadConfig } = await import("./config");
-        const { DefaultPolicyEngine } = await import("./policy_engine");
+        const { BrowserConnectionManager } = await import("./browser/connection");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
         
         const config = loadConfig({ validate: false });
         const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1243,9 +1268,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const provider = flags.provider ?? undefined;
 
       try {
-        const { BrowserConnectionManager } = await import("./browser_connection");
-        const { loadConfig } = await import("./config");
-        const { DefaultPolicyEngine } = await import("./policy_engine");
+        const { BrowserConnectionManager } = await import("./browser/connection");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
 
         const config = loadConfig({ validate: false });
         const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1322,6 +1347,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_use", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.select(name);
@@ -1361,6 +1387,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: --endpoint is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_add", { name, type: providerType, endpoint }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const config: Record<string, unknown> = { name, type: providerType, endpoint };
@@ -1385,6 +1412,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
+          requireCliPolicy("browser_provider_remove", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.remove(name);
@@ -1414,7 +1442,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
       switch (profileAction) {
         case "list": {
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profiles = pm.listProfiles();
           if (jsonOutput) {
@@ -1439,7 +1467,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             process.exit(1);
           }
           const type = (flags.type ?? "named") as "shared" | "isolated" | "named";
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profile = pm.createProfile(name, type);
           if (jsonOutput) {
@@ -1457,7 +1485,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Profile name is required");
             process.exit(1);
           }
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const profile = pm.getProfileByName(name);
           if (!profile) {
@@ -1483,7 +1511,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Profile name is required");
             process.exit(1);
           }
-          const { BrowserProfileManager } = await import("./browser_profiles");
+          const { BrowserProfileManager } = await import("./browser/profiles");
           const pm = new BrowserProfileManager();
           const deleted = pm.deleteProfileByName(name);
           if (!deleted) {
@@ -1521,12 +1549,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              process.exit(1);
           }
 
+          requireCliPolicy("browser_auth_export", {
+            profileName: profileName ?? "default",
+            outputFile,
+            live: isLive,
+            stored: isStored,
+          }, jsonOutput);
+
           try {
-            const { BrowserProfileManager } = await import("./browser_profiles");
-            const { BrowserConnectionManager } = await import("./browser_connection");
-            const { loadAuthSnapshot } = await import("./browser_auth_state");
-            const { loadConfig } = await import("./config");
-            const { DefaultPolicyEngine } = await import("./policy_engine");
+            const { BrowserProfileManager } = await import("./browser/profiles");
+            const { BrowserConnectionManager } = await import("./browser/connection");
+            const { loadAuthSnapshot } = await import("./browser/auth_state");
+            const { loadConfig } = await import("./shared/config");
+            const { DefaultPolicyEngine } = await import("./policy/engine");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1615,13 +1650,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              process.exit(1);
           }
 
+          requireCliPolicy("browser_auth_import", {
+            filePath,
+            live: isLive,
+            stored: isStored,
+          }, jsonOutput);
+
           try {
             const content = fs.readFileSync(filePath, "utf-8");
             const snapshot = JSON.parse(content);
-            const { BrowserConnectionManager } = await import("./browser_connection");
-            const { saveAuthSnapshotToStore } = await import("./browser_auth_state");
-            const { loadConfig } = await import("./config");
-            const { DefaultPolicyEngine } = await import("./policy_engine");
+            const { BrowserConnectionManager } = await import("./browser/connection");
+            const { saveAuthSnapshotToStore } = await import("./browser/auth_state");
+            const { loadConfig } = await import("./shared/config");
+            const { DefaultPolicyEngine } = await import("./policy/engine");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1871,11 +1912,11 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
     deleteArtifact,
     pruneArtifact,
     loadArtifact,
-  } = await import("./knowledge_store");
+  } = await import("./knowledge/store");
   const {
     getKnowledgeStats,
-  } = await import("./knowledge_query");
-  const { validateArtifact } = await import("./knowledge_validator");
+  } = await import("./knowledge/query");
+  const { validateArtifact } = await import("./knowledge/validator");
 
   switch (subcommand) {
     case "list": {
@@ -2129,8 +2170,8 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { TerminalActions } = await import("./terminal_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { TerminalActions } = await import("./terminal/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // ── Terminal ownership model ──────────────────────────────────────
   // Terminal sessions must be owned by the long-lived daemon, NOT by
@@ -2201,7 +2242,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
   });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "open": {
@@ -2315,7 +2356,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
         if (result.success) {
           // Human-friendly output per action type
           if (subcommand === "exec" && result.data) {
-            const execData = result.data as import("./terminal_types").ExecResult;
+            const execData = result.data as import("./terminal/types").ExecResult;
             console.log(execData.stdout ?? "");
             if (execData.exitCode !== 0 && execData.stderr) {
               console.error(execData.stderr);
@@ -2365,8 +2406,8 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { FsActions } = await import("./fs_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { FsActions } = await import("./filesystem/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // Use or create a session manager singleton (same as browser/term actions)
   if (!_sessionManager) {
@@ -2376,7 +2417,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
   const fsActions = new FsActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "read": {
@@ -2463,10 +2504,10 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
         if (result.success) {
           // Human-friendly output per action type
           if (subcommand === "read" && result.data) {
-            const readData = result.data as import("./fs_operations").FileReadResult;
+            const readData = result.data as import("./filesystem/operations").FileReadResult;
             console.log(readData.content);
           } else if (subcommand === "ls" && result.data) {
-            const listData = result.data as import("./fs_operations").ListResult;
+            const listData = result.data as import("./filesystem/operations").ListResult;
             for (const entry of listData.entries) {
               const typeChar = entry.type === "directory" ? "d" : entry.type === "symlink" ? "l" : "-";
               const size = entry.sizeBytes.toString().padStart(10);
@@ -2497,8 +2538,8 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { BrowserActions } = await import("./browser_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { BrowserActions } = await import("./browser/actions");
+  const { formatActionResult } = await import("./shared/action_result");
 
   // Use or create a session manager singleton
   if (!_sessionManager) {
@@ -2508,7 +2549,7 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
   const browserActions = new BrowserActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (action) {
       case "open": {
@@ -2676,14 +2717,14 @@ async function handleSession(args: ParsedArgs): Promise<void> {
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
-  const { formatActionResult } = await import("./action_result");
+  const { formatActionResult } = await import("./shared/action_result");
 
   if (!_sessionManager) {
     _sessionManager = new SessionManager();
   }
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "list": {
@@ -2752,7 +2793,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 
   const { SessionManager } = await import("./session_manager");
   const { ServiceActions } = await import("./service_actions");
-  const { formatActionResult } = await import("./action_result");
+  const { formatActionResult } = await import("./shared/action_result");
 
   if (!_sessionManager) {
     _sessionManager = new SessionManager();
@@ -2761,7 +2802,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
   const serviceActions = new ServiceActions({ sessionManager: _sessionManager });
 
   try {
-    let result: import("./action_result").ActionResult | undefined;
+    let result: import("./shared/action_result").ActionResult | undefined;
 
     switch (subcommand) {
       case "register": {
@@ -2862,6 +2903,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         console.error("Error: Bundle ID is required");
         process.exit(1);
       }
+      requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput);
 
       try {
         const { loadDebugBundle } = await import("./observability/debug_bundle");
@@ -2893,6 +2935,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalConsoleCapture } = await import("./observability/console_capture");
         const capture = getGlobalConsoleCapture();
         const sessionId = flags.session ?? "default";
+        requireCliPolicy("debug_console_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {
@@ -2919,6 +2962,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalNetworkCapture } = await import("./observability/network_capture");
         const capture = getGlobalNetworkCapture();
         const sessionId = flags.session ?? "default";
+        requireCliPolicy("debug_network_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {

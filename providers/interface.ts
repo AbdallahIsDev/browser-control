@@ -1,7 +1,7 @@
 import type { Browser, BrowserContext } from "playwright";
-import type { BrowserConnection, BrowserConnectionMode } from "../browser_connection";
-import type { BrowserTargetType } from "../browser_connection";
-import type { AutomationContextOptions } from "../browser_core";
+import type { BrowserConnection, BrowserConnectionMode } from "../browser/connection";
+import type { BrowserTargetType } from "../browser/connection";
+import type { AutomationContextOptions } from "../browser/core";
 import type { ProviderConfig } from "./types";
 import type { ChildProcess } from "node:child_process";
 
@@ -18,7 +18,7 @@ export interface ProviderCapabilities {
 export interface ProviderLaunchOptions {
   port?: number;
   cdpUrl?: string;
-  profile?: import("../browser_profiles").BrowserProfile;
+  profile?: import("../browser/profiles").BrowserProfile;
   contextOptions?: AutomationContextOptions;
   targetType?: BrowserTargetType;
   config?: ProviderConfig;

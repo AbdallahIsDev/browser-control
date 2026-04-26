@@ -220,6 +220,36 @@ describe("MCP Tool Registry", () => {
       }
     });
 
+    it("provider mutation tools route through policy and honor denial", async () => {
+      const originalEvaluate = api.sessionManager.evaluateAction.bind(api.sessionManager);
+      const calls: string[] = [];
+      api.sessionManager.evaluateAction = ((action: string) => {
+        calls.push(action);
+        return {
+          success: false,
+          path: "command",
+          sessionId: "test-session",
+          error: "Policy denied: provider mutation blocked",
+          policyDecision: "deny",
+          risk: "moderate",
+          completedAt: new Date().toISOString(),
+        };
+      }) as typeof api.sessionManager.evaluateAction;
+
+      try {
+        const tools = buildToolRegistry(api);
+        const providerUseTool = tools.find((t) => t.name === "bc_browser_provider_use")!;
+        const result = await providerUseTool.handler({ name: "browserless" });
+
+        assert.equal(result.success, false);
+        assert.equal(result.policyDecision, "deny");
+        assert.equal(result.error, "Policy denied: provider mutation blocked");
+        assert.deepEqual(calls, ["browser_provider_use"]);
+      } finally {
+        api.sessionManager.evaluateAction = originalEvaluate as typeof api.sessionManager.evaluateAction;
+      }
+    });
+
     it("bc_service_list returns registered services", async () => {
       // Register a service via the API first
       await api.service.register({ name: "mcp-service", port: 5555 });

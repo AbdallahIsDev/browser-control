@@ -2,6 +2,7 @@ node_modules/
 .omx/
 .interop/
 .worktrees/
+.vscode/
 
 .env
 .env.*
@@ -14,9 +15,15 @@ docs/*
 !docs/skills.md
 !docs/mcp.md
 !docs/policy.md
+!docs/security.md
 !docs/api.md
 !docs/cli.md
+!docs/compatibility.md
 !docs/troubleshooting.md
+!docs/specs/
+!docs/specs/**
+!docs/architecture/
+!docs/architecture/**
 !docs/production-upgrade/
 !docs/production-upgrade/**
 reports/

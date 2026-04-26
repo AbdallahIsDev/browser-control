@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { runDoctor } from "./operator/doctor";
+import { buildDoctorChecks, runDoctor } from "./operator/doctor";
 import { runSetup } from "./operator/setup";
 import { collectStatus } from "./operator/status";
 import { loadUserConfig } from "./config";
@@ -53,6 +53,42 @@ test("doctor exits 1 when a critical failure is present", async () => {
   assert.equal(result.report.summary.criticalFailures, 1);
 });
 
+test("doctor treats missing Chrome as degraded browser capability, not total failure", async () => {
+  const home = makeHome();
+  try {
+    const result = await runDoctor({
+      env: {
+        BROWSER_CONTROL_HOME: home,
+        BROWSER_CHROME_PATH: path.join(home, "missing-chrome.exe"),
+        BROKER_PORT: "1",
+      },
+    });
+
+    const chrome = result.report.checks.find((check) => check.id === "browser.chrome");
+    assert.equal(chrome?.status, "warn");
+    assert.equal(chrome?.critical, false);
+    assert.equal(result.exitCode, 0);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("doctor node version check does not depend on caller cwd", async () => {
+  const home = makeHome();
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-doctor-cwd-"));
+  try {
+    const env = { BROWSER_CONTROL_HOME: home, BROKER_PORT: "1" };
+    const [nodeCheck] = buildDoctorChecks({ env, cwd });
+    const result = await runDoctor({ env, cwd, checks: [nodeCheck] });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.report.checks[0]?.id, "node.version");
+    assert.equal(result.report.checks[0]?.status, "pass");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("setup non-interactive creates config and never waits for prompts", async () => {
   const home = makeHome();
   try {
@@ -82,7 +118,7 @@ test("setup non-interactive creates config and never waits for prompts", async (
     assert.equal(userConfig.policyProfile, "balanced");
     assert.equal(userConfig.browserMode, "managed");
     assert.equal(userConfig.chromeDebugPort, 9222);
-    assert.equal(userConfig.chromeBindAddress, "0.0.0.0");
+    assert.equal(userConfig.chromeBindAddress, "127.0.0.1");
     assert.deepEqual(result.mcpConfigSnippet, {
       mcpServers: {
         "browser-control": {

@@ -63,6 +63,48 @@ test("infers command path for terminal resume/status actions", () => {
   assert.strictEqual(resumeStep.risk, "moderate");
 });
 
+test("classifies provider and service mutations as policy-governed command actions", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "mutate local registries",
+    actor: "agent",
+    sessionId: "test-session",
+  };
+
+  const providerUse = router.buildRoutedStep(intent, "browser_provider_use", { name: "browserless" });
+  assert.strictEqual(providerUse.path, "command");
+  assert.strictEqual(providerUse.risk, "moderate");
+
+  const serviceRegister = router.buildRoutedStep(intent, "service_register", { name: "app" });
+  assert.strictEqual(serviceRegister.path, "command");
+  assert.strictEqual(serviceRegister.risk, "moderate");
+
+  const serviceRemove = router.buildRoutedStep(intent, "service_remove", { name: "app" });
+  assert.strictEqual(serviceRemove.path, "command");
+  assert.strictEqual(serviceRemove.risk, "moderate");
+});
+
+test("classifies debug evidence reads as policy-governed command actions", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "read debug evidence",
+    actor: "agent",
+    sessionId: "debug-test",
+  };
+
+  const bundle = router.buildRoutedStep(intent, "debug_bundle_export", { bundleId: "bundle-test" });
+  assert.strictEqual(bundle.path, "command");
+  assert.strictEqual(bundle.risk, "high");
+
+  const consoleRead = router.buildRoutedStep(intent, "debug_console_read", { sessionId: "debug-test" });
+  assert.strictEqual(consoleRead.path, "command");
+  assert.strictEqual(consoleRead.risk, "moderate");
+
+  const networkRead = router.buildRoutedStep(intent, "debug_network_read", { sessionId: "debug-test" });
+  assert.strictEqual(networkRead.path, "command");
+  assert.strictEqual(networkRead.risk, "moderate");
+});
+
 test("infers low_level path for CDP actions", () => {
   const router = new ExecutionRouter();
   const intent: PolicyTaskIntent = {

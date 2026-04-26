@@ -9,7 +9,7 @@
 import type { NetworkEntry } from "./types";
 import { redactNetworkEntry, redactUrl, redactHeaders } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
-import type { MemoryStore } from "../memory_store";
+import type { MemoryStore } from "../runtime/memory_store";
 
 // ── Ring Buffer (shared with console_capture pattern) ──────────────────
 

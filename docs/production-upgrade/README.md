@@ -8,6 +8,8 @@ The source of truth for product direction lives in:
 
 - `docs/specs/2026-04-20-browser-control-v1-unified-automation-roadmap.md`
 
+Some section worktrees may not carry `docs/specs/`. If the roadmap file is absent, record that in the section checklist and use this folder's `STATUS.md` plus the target section `spec.md` as the available local source of truth.
+
 This folder exists to break that roadmap into section-by-section specs that are detailed enough for a future AI agent to generate fresh implementation prompts based on the latest repo state.
 
 ## Current Implementation Status

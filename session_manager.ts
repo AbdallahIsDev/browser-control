@@ -13,11 +13,11 @@
  */
 
 import crypto from "node:crypto";
-import { MemoryStore } from "./memory_store";
-import { BrowserConnectionManager } from "./browser_connection";
-import { TerminalSessionManager } from "./terminal_session";
-import { DefaultPolicyEngine } from "./policy_engine";
-import { ExecutionRouter, defaultRouter } from "./execution_router";
+import { MemoryStore } from "./runtime/memory_store";
+import { BrowserConnectionManager } from "./browser/connection";
+import { TerminalSessionManager } from "./terminal/session";
+import { DefaultPolicyEngine } from "./policy/engine";
+import { ExecutionRouter, defaultRouter } from "./policy/execution_router";
 import type {
   PolicyTaskIntent,
   RoutedStep,
@@ -25,17 +25,17 @@ import type {
   PolicyDecision,
   RiskLevel,
   ExecutionPath,
-} from "./policy";
-import { loadConfig } from "./config";
-import { logger } from "./logger";
-import { spawnDaemonProcess } from "./daemon_launch";
+} from "./policy/types";
+import { loadConfig } from "./shared/config";
+import { logger } from "./shared/logger";
+import { spawnDaemonProcess } from "./runtime/daemon_launch";
 import {
   successResult,
   failureResult,
   policyDeniedResult,
   confirmationRequiredResult,
   type ActionResult,
-} from "./action_result";
+} from "./shared/action_result";
 
 const log = logger.withComponent("session_manager");
 
@@ -135,7 +135,7 @@ export interface TerminalRuntime {
   exec(command: string, options: {
     sessionId?: string;
     timeoutMs?: number;
-  }): Promise<import("./terminal_types").ExecResult>;
+  }): Promise<import("./terminal/types").ExecResult>;
   type(sessionId: string, text: string): Promise<void>;
   read(sessionId: string, maxBytes?: number): Promise<string>;
   snapshot(sessionId?: string): Promise<unknown>;
@@ -167,7 +167,7 @@ export class LocalTerminalRuntime implements TerminalRuntime {
       return session.exec(command, { timeoutMs: options.timeoutMs });
     }
     // One-shot exec — import the standalone exec
-    const { exec: oneShotExec } = await import("./terminal_exec");
+    const { exec: oneShotExec } = await import("./terminal/exec");
     return oneShotExec(command, { timeoutMs: options.timeoutMs });
   }
 
@@ -245,7 +245,7 @@ export class LocalTerminalRuntime implements TerminalRuntime {
  * Used when the daemon is running and owns terminal session state.
  */
 export class DaemonTerminalRuntime implements TerminalRuntime {
-  constructor(private readonly daemon: import("./daemon").Daemon) {}
+  constructor(private readonly daemon: import("./runtime/daemon").Daemon) {}
 
   async open(config: { shell?: string; cwd?: string; name?: string }) {
     const raw = await this.daemon.termOpen(config);
@@ -325,7 +325,7 @@ export class DaemonTerminalRuntime implements TerminalRuntime {
  *          `{ running: false, brokerUrl }` otherwise.
  */
 export async function probeDaemonHealth(
-  config?: import("./config").BrowserControlConfig,
+  config?: import("./shared/config").BrowserControlConfig,
 ): Promise<{ running: boolean; brokerUrl: string }> {
   const resolvedConfig = config ?? loadConfig({ validate: false });
   const brokerUrl = `http://127.0.0.1:${resolvedConfig.brokerPort}`;
@@ -686,6 +686,12 @@ export class SessionManager {
 
     this.activeSessionId = state.id;
     this.touchSession(state.id);
+    try {
+      this.policyEngine.setProfile(state.policyProfile);
+    } catch {
+      // Creation validates profiles; this is best-effort protection for
+      // corrupted persisted session state.
+    }
 
     log.info("Session activated", { sessionId: state.id, name: state.name });
 
@@ -802,7 +808,7 @@ export class SessionManager {
    * ensuring that getTerminalRuntime() returns a DaemonTerminalRuntime
    * instead of a LocalTerminalRuntime.
    */
-  setDaemon(daemon: import("./daemon").Daemon): void {
+  setDaemon(daemon: import("./runtime/daemon").Daemon): void {
     this.daemon = daemon;
   }
 
@@ -811,7 +817,7 @@ export class SessionManager {
     return this.daemon !== null;
   }
 
-  private daemon: import("./daemon").Daemon | null = null;
+  private daemon: import("./runtime/daemon").Daemon | null = null;
 
   /**
    * Cached broker-backed terminal runtime, set when the API user
@@ -910,7 +916,7 @@ export class SessionManager {
     if (options.autoStart) {
       try {
         const path = await import("node:path");
-        const { getPidFilePath } = await import("./paths");
+        const { getPidFilePath } = await import("./shared/paths");
         const fs = await import("node:fs");
 
         const daemonProcess = spawnDaemonProcess({
@@ -1021,7 +1027,8 @@ export class SessionManager {
     const state = this.resolveSession(sessionOverride);
     const sessionId = state?.id ?? this.activeSessionId ?? "default";
     const actor: "human" | "agent" = "human";
-    const profileName = state?.policyProfile ?? this.policyEngine.getActiveProfile();
+    const activeState = this.activeSessionId ? this.sessions.get(this.activeSessionId) ?? null : null;
+    const profileName = state?.policyProfile ?? activeState?.policyProfile ?? this.policyEngine.getActiveProfile();
 
     const intent: PolicyTaskIntent = {
       goal: action,
@@ -1061,7 +1068,7 @@ export class SessionManager {
       }
     }
 
-    let evaluation: import("./policy").PolicyEvaluationResult;
+    let evaluation: import("./policy/types").PolicyEvaluationResult;
     try {
       evaluation = this.policyEngine.evaluate(step, {
         sessionId,

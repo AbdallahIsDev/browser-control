@@ -1,11 +1,11 @@
 import type { Page } from "playwright";
 
-import { smartClick, smartFill } from "./browser_core";
-import { loadConfig, type BrowserControlConfig } from "./config";
-import { logger } from "./logger";
-import type { StagehandManager } from "./stagehand_core";
-import type { Task, TaskContext, TaskResult } from "./task_engine";
-import type { Telemetry } from "./telemetry";
+import { smartClick, smartFill } from "./browser/core";
+import { loadConfig, type BrowserControlConfig } from "./shared/config";
+import { logger } from "./shared/logger";
+import type { StagehandManager } from "./browser/stagehand_core";
+import type { Task, TaskContext, TaskResult } from "./runtime/task_engine";
+import type { Telemetry } from "./runtime/telemetry";
 
 const log = logger.withComponent("ai_agent");
 

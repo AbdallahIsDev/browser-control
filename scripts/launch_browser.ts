@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../paths";
+import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../shared/paths";
 
 interface LaunchOptions {
   port: number;
@@ -41,8 +41,12 @@ const CHROME_CANDIDATES: Record<string, string[]> = {
 };
 
 function resolveChromePath(platform: NodeJS.Platform, override?: string): string {
-  if (override && override.trim() && fs.existsSync(override.trim())) {
-    return override.trim();
+  if (override && override.trim()) {
+    const explicitPath = override.trim();
+    if (fs.existsSync(explicitPath)) {
+      return explicitPath;
+    }
+    throw new Error(`Chrome not found at BROWSER_CHROME_PATH: ${explicitPath}`);
   }
 
   const rawCandidates = CHROME_CANDIDATES[platform] ?? CHROME_CANDIDATES.linux;
@@ -390,7 +394,7 @@ function stopWslBridge(port: number): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const port = Number(args[0] || process.env.BROWSER_DEBUG_PORT || "9222");
-  const bindAddress = args[1] || process.env.BROWSER_BIND_ADDRESS || "0.0.0.0";
+  const bindAddress = args[1] || process.env.BROWSER_BIND_ADDRESS || "127.0.0.1";
   const chromeOverride = process.env.BROWSER_CHROME_PATH;
 
   if (!Number.isFinite(port) || port <= 0) {

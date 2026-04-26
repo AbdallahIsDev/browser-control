@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { request, type BrowserContextOptions } from "playwright";
-import type { Telemetry } from "./telemetry";
+import type { Telemetry } from "./runtime/telemetry";
 
 export interface ProxyConfig {
   url: string;

@@ -11,7 +11,7 @@
 
 import net from "node:net";
 import { ServiceRegistry, type ServiceEntry } from "./registry";
-import { logger } from "../logger";
+import { logger } from "../shared/logger";
 
 const log = logger.withComponent("service_resolver");
 

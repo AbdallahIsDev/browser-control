@@ -1,0 +1,1225 @@
+{
+  "globalFlags": [
+    "help",
+    "json"
+  ],
+  "sections": [
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "doctor"
+          ],
+          "description": "Run operator diagnostics",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "doctor [--json]"
+        },
+        {
+          "commandPath": [
+            "setup"
+          ],
+          "description": "",
+          "flags": [
+            "browser-mode",
+            "json",
+            "non-interactive",
+            "profile"
+          ],
+          "jsonSupport": true,
+          "syntax": "setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "chrome-bind-address",
+            "chrome-debug-port"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "browserless-endpoint",
+            "terminal-shell"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--terminal-shell=powershell] [--browserless-endpoint=<url>]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "browserless-api-key",
+            "skip-browser-test",
+            "skip-terminal-test"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]"
+        },
+        {
+          "commandPath": [
+            "Create/update",
+            "user",
+            "config"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Create/update user config"
+        },
+        {
+          "commandPath": [
+            "config",
+            "list|get|set"
+          ],
+          "description": "Inspect or update effective config",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "config list|get|set"
+        },
+        {
+          "commandPath": [
+            "status"
+          ],
+          "description": "Show daemon, broker, sessions, tasks, and health",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "status [--json]"
+        }
+      ],
+      "section": "Operator"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "open"
+          ],
+          "description": "Open a URL in the browser",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "open <url>"
+        },
+        {
+          "commandPath": [
+            "snapshot"
+          ],
+          "description": "Take an accessibility snapshot",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "snapshot"
+        },
+        {
+          "commandPath": [
+            "click"
+          ],
+          "description": "Click an element (ref, selector, or text)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "click <ref-or-target>"
+        },
+        {
+          "commandPath": [
+            "fill"
+          ],
+          "description": "Fill an element with text",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "fill <ref-or-target> <text>"
+        },
+        {
+          "commandPath": [
+            "hover"
+          ],
+          "description": "Hover over an element",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "hover <ref-or-target>"
+        },
+        {
+          "commandPath": [
+            "type"
+          ],
+          "description": "Type text into focused element",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "type <text>"
+        },
+        {
+          "commandPath": [
+            "press"
+          ],
+          "description": "Press a keyboard key",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "press <key>"
+        },
+        {
+          "commandPath": [
+            "scroll"
+          ],
+          "description": "Scroll (up/down/left/right)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "scroll <direction>"
+        },
+        {
+          "commandPath": [
+            "screenshot"
+          ],
+          "description": "Take a screenshot",
+          "flags": [
+            "full-page",
+            "output",
+            "target"
+          ],
+          "jsonSupport": false,
+          "syntax": "screenshot [--output=<path>] [--full-page] [--target=<ref>]"
+        },
+        {
+          "commandPath": [
+            "tab",
+            "list"
+          ],
+          "description": "List browser tabs",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "tab list"
+        },
+        {
+          "commandPath": [
+            "tab",
+            "switch"
+          ],
+          "description": "Switch to a browser tab",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "tab switch <id>"
+        },
+        {
+          "commandPath": [
+            "close"
+          ],
+          "description": "Close the current browser tab",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "close"
+        }
+      ],
+      "section": "Browser Actions"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "session",
+            "list"
+          ],
+          "description": "List sessions",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "session list"
+        },
+        {
+          "commandPath": [
+            "session",
+            "create"
+          ],
+          "description": "Create a new session",
+          "flags": [
+            "policy"
+          ],
+          "jsonSupport": false,
+          "syntax": "session create <name> [--policy=balanced]"
+        },
+        {
+          "commandPath": [
+            "session",
+            "use"
+          ],
+          "description": "Set the active session",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "session use <name-or-id>"
+        },
+        {
+          "commandPath": [
+            "session",
+            "status"
+          ],
+          "description": "Show active session status",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "session status"
+        }
+      ],
+      "section": "Session"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "browser",
+            "attach"
+          ],
+          "description": "",
+          "flags": [
+            "cdp-url",
+            "port",
+            "provider",
+            "target-type"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]"
+        },
+        {
+          "commandPath": [
+            "Attach",
+            "to",
+            "running"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Attach to running Chrome/Electron"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "launch"
+          ],
+          "description": "Launch managed automation browser",
+          "flags": [
+            "port",
+            "profile",
+            "provider"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser launch [--port=9222] [--profile=default] [--provider=<name>]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "status"
+          ],
+          "description": "Show browser connection status",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser status"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
+            "list"
+          ],
+          "description": "List browser providers",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser provider list"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
+            "use"
+          ],
+          "description": "Set active browser provider",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser provider use <name>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
+            "add"
+          ],
+          "description": "Add or configure a browser provider",
+          "flags": [
+            "endpoint",
+            "type"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser provider add <name> --type=<type> --endpoint=<url>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
+            "remove"
+          ],
+          "description": "Remove a configured browser provider",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser provider remove <name>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "profile",
+            "list"
+          ],
+          "description": "List browser profiles",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser profile list"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "profile",
+            "create"
+          ],
+          "description": "Create a browser profile",
+          "flags": [
+            "type"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser profile create <name> [--type=named]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "profile",
+            "use"
+          ],
+          "description": "Activate a browser profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser profile use <name>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "profile",
+            "delete"
+          ],
+          "description": "Delete a browser profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser profile delete <name>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "auth",
+            "export"
+          ],
+          "description": "Export auth state (cookies/storage)",
+          "flags": [
+            "live",
+            "profile",
+            "stored"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser auth export [--live | --stored] [--profile=default]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "auth",
+            "import"
+          ],
+          "description": "Import auth state from file",
+          "flags": [
+            "live",
+            "stored"
+          ],
+          "jsonSupport": false,
+          "syntax": "browser auth import <file> [--live | --stored]"
+        },
+        {
+          "commandPath": [
+            "run"
+          ],
+          "description": "Run a task",
+          "flags": [
+            "action",
+            "params",
+            "skill"
+          ],
+          "jsonSupport": false,
+          "syntax": "run --skill=<name> --action=<action> [--params='{\"key\":\"value\"}']"
+        },
+        {
+          "commandPath": [
+            "schedule",
+            "*",
+            "*"
+          ],
+          "description": "",
+          "flags": [
+            "action",
+            "cron",
+            "skill"
+          ],
+          "jsonSupport": false,
+          "syntax": "schedule <id> --cron=\"*/5 * * * *\" --skill=<name> --action=<action> Schedule a task"
+        },
+        {
+          "commandPath": [
+            "schedule",
+            "list"
+          ],
+          "description": "List scheduled tasks",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "schedule list"
+        },
+        {
+          "commandPath": [
+            "schedule",
+            "pause"
+          ],
+          "description": "Pause a scheduled task",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "schedule pause <id>"
+        },
+        {
+          "commandPath": [
+            "schedule",
+            "resume"
+          ],
+          "description": "Resume a scheduled task",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "schedule resume <id>"
+        },
+        {
+          "commandPath": [
+            "schedule",
+            "remove"
+          ],
+          "description": "Remove a scheduled task",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "schedule remove <id>"
+        },
+        {
+          "commandPath": [
+            "daemon",
+            "start"
+          ],
+          "description": "Start the daemon",
+          "flags": [
+            "visible"
+          ],
+          "jsonSupport": false,
+          "syntax": "daemon start [--visible]"
+        },
+        {
+          "commandPath": [
+            "daemon",
+            "stop"
+          ],
+          "description": "Stop the daemon",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "daemon stop"
+        },
+        {
+          "commandPath": [
+            "daemon",
+            "status"
+          ],
+          "description": "Check daemon status",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "daemon status"
+        },
+        {
+          "commandPath": [
+            "daemon",
+            "health"
+          ],
+          "description": "Run health checks",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "daemon health"
+        },
+        {
+          "commandPath": [
+            "daemon",
+            "logs"
+          ],
+          "description": "View daemon logs",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "daemon logs"
+        },
+        {
+          "commandPath": [
+            "proxy",
+            "test"
+          ],
+          "description": "Test proxies",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "proxy test"
+        },
+        {
+          "commandPath": [
+            "proxy",
+            "add"
+          ],
+          "description": "Add a proxy",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "proxy add <url>"
+        },
+        {
+          "commandPath": [
+            "proxy",
+            "remove"
+          ],
+          "description": "Remove a proxy",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "proxy remove <url>"
+        },
+        {
+          "commandPath": [
+            "proxy",
+            "list"
+          ],
+          "description": "List proxies",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "proxy list"
+        },
+        {
+          "commandPath": [
+            "memory",
+            "stats"
+          ],
+          "description": "Show memory stats",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "memory stats"
+        },
+        {
+          "commandPath": [
+            "memory",
+            "clear"
+          ],
+          "description": "Clear memory",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "memory clear"
+        },
+        {
+          "commandPath": [
+            "memory",
+            "get"
+          ],
+          "description": "Get a memory key",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "memory get <key>"
+        },
+        {
+          "commandPath": [
+            "memory",
+            "set"
+          ],
+          "description": "Set a memory key",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "memory set <key> <value>"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "list"
+          ],
+          "description": "List skills (name, version, actions)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill list"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "health"
+          ],
+          "description": "Check skill health",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill health <name>"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "actions"
+          ],
+          "description": "Show skill action metadata",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill actions <name>"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "install"
+          ],
+          "description": "Install a packaged skill from a directory",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill install <path>"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "validate"
+          ],
+          "description": "Validate a skill manifest",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill validate <name-or-path>"
+        },
+        {
+          "commandPath": [
+            "skill",
+            "remove"
+          ],
+          "description": "Remove an installed skill",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "skill remove <name>"
+        },
+        {
+          "commandPath": [
+            "report",
+            "generate"
+          ],
+          "description": "Generate report",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "report generate"
+        },
+        {
+          "commandPath": [
+            "report",
+            "view"
+          ],
+          "description": "View report",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "report view"
+        },
+        {
+          "commandPath": [
+            "captcha",
+            "test"
+          ],
+          "description": "Validate captcha solver configuration",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "captcha test"
+        },
+        {
+          "commandPath": [
+            "policy",
+            "list"
+          ],
+          "description": "List built-in policy profiles",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "policy list"
+        },
+        {
+          "commandPath": [
+            "policy",
+            "inspect"
+          ],
+          "description": "Inspect a policy profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "policy inspect <name>"
+        },
+        {
+          "commandPath": [
+            "policy",
+            "export"
+          ],
+          "description": "Export a policy profile to JSON",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "policy export <name> [file]"
+        },
+        {
+          "commandPath": [
+            "policy",
+            "import"
+          ],
+          "description": "Import a custom policy profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "policy import <file>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "list"
+          ],
+          "description": "List knowledge artifacts",
+          "flags": [
+            "kind"
+          ],
+          "jsonSupport": false,
+          "syntax": "knowledge list [--kind=interaction-skill|domain-skill]"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "show"
+          ],
+          "description": "Show knowledge for a domain or skill",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge show <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "validate"
+          ],
+          "description": "Validate knowledge files",
+          "flags": [
+            "all"
+          ],
+          "jsonSupport": false,
+          "syntax": "knowledge validate [--all]"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "prune"
+          ],
+          "description": "Remove stale entries (not full delete)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge prune <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "delete"
+          ],
+          "description": "Delete entire knowledge artifact",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge delete <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "term",
+            "open"
+          ],
+          "description": "Open a terminal session",
+          "flags": [
+            "cwd",
+            "name",
+            "shell"
+          ],
+          "jsonSupport": false,
+          "syntax": "term open [--shell=<name>] [--cwd=<path>] [--name=<name>]"
+        },
+        {
+          "commandPath": [
+            "term",
+            "exec",
+            "\"<command>\""
+          ],
+          "description": "Execute a command",
+          "flags": [
+            "session",
+            "timeout"
+          ],
+          "jsonSupport": false,
+          "syntax": "term exec \"<command>\" [--session=<id>] [--timeout=<ms>]"
+        },
+        {
+          "commandPath": [
+            "term",
+            "type",
+            "\"<text>\""
+          ],
+          "description": "Type into a session",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "term type \"<text>\" --session=<id>"
+        },
+        {
+          "commandPath": [
+            "term",
+            "read"
+          ],
+          "description": "Read recent output",
+          "flags": [
+            "max-bytes",
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "term read [--session=<id>] [--max-bytes=<n>]"
+        },
+        {
+          "commandPath": [
+            "term",
+            "snapshot"
+          ],
+          "description": "Capture terminal state",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "term snapshot [--session=<id>]"
+        },
+        {
+          "commandPath": [
+            "term",
+            "interrupt"
+          ],
+          "description": "Send Ctrl+C",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "term interrupt --session=<id>"
+        },
+        {
+          "commandPath": [
+            "term",
+            "close"
+          ],
+          "description": "Close a session",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "term close --session=<id>"
+        },
+        {
+          "commandPath": [
+            "term",
+            "list"
+          ],
+          "description": "List active sessions",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "term list"
+        },
+        {
+          "commandPath": [
+            "term",
+            "resume"
+          ],
+          "description": "Resume a session from persisted state",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "term resume <sessionId>"
+        },
+        {
+          "commandPath": [
+            "term",
+            "status"
+          ],
+          "description": "Show resume status for a session",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "term status <sessionId>"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "read"
+          ],
+          "description": "Read a file",
+          "flags": [
+            "max-bytes"
+          ],
+          "jsonSupport": false,
+          "syntax": "fs read <path> [--max-bytes=<n>]"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "write"
+          ],
+          "description": "Write to a file",
+          "flags": [
+            "content"
+          ],
+          "jsonSupport": false,
+          "syntax": "fs write <path> [--content=<text>]"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "ls"
+          ],
+          "description": "List directory",
+          "flags": [
+            "ext",
+            "recursive"
+          ],
+          "jsonSupport": false,
+          "syntax": "fs ls <path> [--recursive] [--ext=<.ext>]"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "move"
+          ],
+          "description": "Move/rename",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "fs move <src> <dst>"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "rm"
+          ],
+          "description": "Delete file/dir",
+          "flags": [
+            "force",
+            "recursive"
+          ],
+          "jsonSupport": false,
+          "syntax": "fs rm <path> [--recursive] [--force]"
+        },
+        {
+          "commandPath": [
+            "fs",
+            "stat"
+          ],
+          "description": "File metadata",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "fs stat <path>"
+        }
+      ],
+      "section": "Browser Lifecycle"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "service",
+            "register"
+          ],
+          "description": "",
+          "flags": [
+            "cwd",
+            "detect",
+            "path",
+            "port",
+            "protocol"
+          ],
+          "jsonSupport": false,
+          "syntax": "service register <name> --port <port> [--protocol=http|https] [--path=/...] [--detect] [--cwd=<path>]"
+        },
+        {
+          "commandPath": [
+            "service",
+            "list"
+          ],
+          "description": "List registered services",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "service list"
+        },
+        {
+          "commandPath": [
+            "service",
+            "resolve"
+          ],
+          "description": "Resolve service to URL",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "service resolve <name>"
+        },
+        {
+          "commandPath": [
+            "service",
+            "remove"
+          ],
+          "description": "Remove a service",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "service remove <name>"
+        }
+      ],
+      "section": "Service Management"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "debug",
+            "bundle"
+          ],
+          "description": "Retrieve a debug bundle",
+          "flags": [
+            "output"
+          ],
+          "jsonSupport": false,
+          "syntax": "debug bundle <id> [--output=<path>]"
+        },
+        {
+          "commandPath": [
+            "debug",
+            "console"
+          ],
+          "description": "Show captured console entries",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "debug console [--session=<id>]"
+        },
+        {
+          "commandPath": [
+            "debug",
+            "network"
+          ],
+          "description": "Show captured network entries",
+          "flags": [
+            "session"
+          ],
+          "jsonSupport": false,
+          "syntax": "debug network [--session=<id>]"
+        }
+      ],
+      "section": "Debug"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "mcp",
+            "serve"
+          ],
+          "description": "Start MCP stdio server",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "mcp serve"
+        }
+      ],
+      "section": "MCP"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "knowledge",
+            "list"
+          ],
+          "description": "List knowledge artifacts",
+          "flags": [
+            "kind"
+          ],
+          "jsonSupport": false,
+          "syntax": "knowledge list [--kind=interaction-skill|domain-skill]"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "show"
+          ],
+          "description": "Show knowledge for a domain or skill",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge show <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "validate"
+          ],
+          "description": "Validate knowledge files",
+          "flags": [
+            "all"
+          ],
+          "jsonSupport": false,
+          "syntax": "knowledge validate [--all]"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "prune"
+          ],
+          "description": "Remove stale entries (not full delete)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge prune <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "delete"
+          ],
+          "description": "Delete entire knowledge artifact",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge delete <name-or-domain>"
+        }
+      ],
+      "section": "Knowledge"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [],
+          "description": "Raw JSON output",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "--json"
+        },
+        {
+          "commandPath": [
+            "-h"
+          ],
+          "description": "Show help",
+          "flags": [
+            "help"
+          ],
+          "jsonSupport": false,
+          "syntax": "--help, -h"
+        }
+      ],
+      "section": "Flags"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "BROKER_PORT"
+          ],
+          "description": "Broker API port (default: 7788)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "BROKER_PORT"
+        }
+      ],
+      "section": "Environment"
+    }
+  ],
+  "source": "cli.ts#printHelp",
+  "usage": "bc <command> [subcommand] [options]"
+}

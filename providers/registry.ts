@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   type ProviderConfig,
@@ -10,7 +10,7 @@ import {
   PROVIDER_REGISTRY_VERSION,
   DEFAULT_PROVIDER_NAME,
 } from "./types";
-import { getProviderRegistryPath } from "../paths";
+import { getProviderRegistryPath } from "../shared/paths";
 import { redactUrl } from "./utils";
 
 const BUILT_IN_PROVIDERS: ProviderConfig[] = [
@@ -78,10 +78,30 @@ export class ProviderRegistry {
     try {
       const dir = dirname(this.path);
       if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+      }
+      if (process.platform !== "win32") {
+        chmodSync(dir, 0o700);
       }
       this.data.updatedAt = new Date().toISOString();
-      writeFileSync(this.path, JSON.stringify(this.data, null, 2));
+      const tmpPath = `${this.path}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        writeFileSync(tmpPath, `${JSON.stringify(this.data, null, 2)}\n`, { mode: 0o600 });
+        if (process.platform !== "win32") {
+          chmodSync(tmpPath, 0o600);
+        }
+        renameSync(tmpPath, this.path);
+        if (process.platform !== "win32") {
+          chmodSync(this.path, 0o600);
+        }
+      } catch (error) {
+        try {
+          rmSync(tmpPath, { force: true });
+        } catch {
+          // ignore temp cleanup failure
+        }
+        throw error;
+      }
       return true;
     } catch {
       return false;

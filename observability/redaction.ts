@@ -13,28 +13,28 @@ const SENSITIVE_PATTERNS = [
   /api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   /api[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   /auth[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
-  /bearer\s+[a-zA-Z0-9_-]{20,}/gi,
+  /bearer\s+[a-zA-Z0-9._~+/-]+=*/gi,
   /access[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   /refresh[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // Browserless
   /browserless[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
+  // Deterministic Browser Control test tokens used in E2E proofs
+  /bc_secret_test_token_[a-zA-Z0-9_-]+/gi,
   // OpenRouter
   /openrouter[_-]?api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // CAPTCHA
   /captcha[_-]?api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // Generic secrets
   /secret\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
+  /[a-zA-Z0-9_-]*cookie[a-zA-Z0-9_-]*\s*[:=]\s*["']?[^"'\s;]{4,}["']?/gi,
   /password\s*[:=]\s*["']?[^"'\s]{4,}["']?/gi,
   /passwd\s*[:=]\s*["']?[^"'\s]{4,}["']?/gi,
-  // Cookies in headers
-  /cookie:\s*[^;\n]+/gi,
-  // Authorization headers
-  /authorization:\s*bearer\s+[a-zA-Z0-9_-]+/gi,
-  /authorization:\s*basic\s+[a-zA-Z0-9+/=]+/gi,
 ];
 
 const REDACTION_TOKEN = "[REDACTED]";
 const URL_PATTERN = /\b(?:https?|wss?|ws):\/\/[^\s"'<>]+/gi;
+const AUTHORIZATION_HEADER_PATTERN = /(\bauthorization\s*:\s*)(?:bearer|basic)\s+[^\s"'\r\n]+/gi;
+const COOKIE_HEADER_PATTERN = /(\b(?:set-)?cookie\s*:\s*)[^\r\n"']+/gi;
 
 // ── URL Redaction ──────────────────────────────────────────────────────
 
@@ -72,8 +72,10 @@ export function redactUrl(url: string): string {
     }
     return parsed.toString();
   } catch {
-    // Not a valid URL — redact the whole thing if it looks like it contains secrets
-    return redactString(url);
+    return url.replace(
+      /([?&](?:token|api[_-]?key|apikey|key|secret|password|auth|access_token|refresh_token)=)([^&\s"'<>]+)/gi,
+      `$1${REDACTION_TOKEN}`,
+    );
   }
 }
 
@@ -84,6 +86,8 @@ export function redactUrl(url: string): string {
  */
 export function redactString(input: string): string {
   let result = input.replace(URL_PATTERN, (match) => redactUrl(match));
+  result = result.replace(AUTHORIZATION_HEADER_PATTERN, `$1${REDACTION_TOKEN}`);
+  result = result.replace(COOKIE_HEADER_PATTERN, `$1${REDACTION_TOKEN}`);
   for (const pattern of SENSITIVE_PATTERNS) {
     result = result.replace(pattern, (match) => {
       // Keep the key name, redact the value
@@ -101,6 +105,10 @@ export function redactString(input: string): string {
   }
   result = result.replace(
     /(\b(?:token|api[_-]?key|api[_-]?token|auth[_-]?token|access[_-]?token|refresh[_-]?token|browserless[_-]?token|secret|password|passwd|bearer)\s*=\s*)[^&\s"'<>]+/gi,
+    `$1${REDACTION_TOKEN}`,
+  );
+  result = result.replace(
+    /(\b[a-zA-Z0-9_-]*cookie[a-zA-Z0-9_-]*\s*=\s*)[^&\s"'<>;]+/gi,
     `$1${REDACTION_TOKEN}`,
   );
   return result;
@@ -144,6 +152,7 @@ export function redactConsoleEntry(entry: ConsoleEntry): ConsoleEntry {
     ...entry,
     message: redactString(entry.message),
     ...(entry.source ? { source: redactString(entry.source) } : {}),
+    ...(entry.pageUrl ? { pageUrl: redactUrl(entry.pageUrl) } : {}),
   };
 }
 
@@ -159,6 +168,7 @@ export function redactNetworkEntry(entry: NetworkEntry): NetworkEntry {
     ...entry,
     url: redactUrl(entry.url),
     ...(entry.error ? { error: redactString(entry.error) } : {}),
+    ...(entry.pageUrl ? { pageUrl: redactUrl(entry.pageUrl) } : {}),
     redacted: true,
   };
 }
@@ -180,13 +190,23 @@ export function redactObject(obj: unknown, depth = 0): unknown {
     return obj;
   }
 
+  if (obj instanceof URL) {
+    return redactUrl(obj.toString());
+  }
+
   if (Array.isArray(obj)) {
     return obj.map((item) => redactObject(item, depth + 1));
+  }
+
+  const prototype = Object.getPrototypeOf(obj);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return obj;
   }
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
     const lowerKey = key.toLowerCase();
+    const normalizedKey = lowerKey.replace(/[^a-z0-9]/gu, "");
     if (
       lowerKey === "password" ||
       lowerKey === "secret" ||
@@ -201,7 +221,16 @@ export function redactObject(obj: unknown, depth = 0): unknown {
       lowerKey.endsWith("_key") ||
       lowerKey.endsWith("-key") ||
       lowerKey.endsWith("_secret") ||
-      lowerKey.endsWith("-secret")
+      lowerKey.endsWith("-secret") ||
+      normalizedKey.includes("apikey") ||
+      normalizedKey.includes("authkey") ||
+      normalizedKey.includes("privatekey") ||
+      normalizedKey.includes("passphrase") ||
+      normalizedKey.endsWith("token") ||
+      normalizedKey.endsWith("secret") ||
+      normalizedKey.endsWith("password") ||
+      normalizedKey.endsWith("cookie") ||
+      normalizedKey.endsWith("credential")
     ) {
       result[key] = REDACTION_TOKEN;
     } else {

@@ -14,15 +14,15 @@
  *   const file = await bc.fs.read({ path: "/tmp/data.json" });
  */
 
-import { SessionManager, type SessionState, type SessionListEntry } from "./session_manager";
-import { DefaultPolicyEngine } from "./policy_engine";
-import { BrowserActions, type BrowserActionContext } from "./browser_actions";
-import { TerminalActions, type TerminalActionContext } from "./terminal_actions";
-import { FsActions, type FsActionContext } from "./fs_actions";
+import { isPolicyAllowed, SessionManager, type SessionState, type SessionListEntry } from "./session_manager";
+import { DefaultPolicyEngine } from "./policy/engine";
+import { BrowserActions, type BrowserActionContext } from "./browser/actions";
+import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
+import { FsActions, type FsActionContext } from "./filesystem/actions";
 import { ServiceActions, type ServiceActionContext } from "./service_actions";
-import type { ActionResult } from "./action_result";
+import type { ActionResult } from "./shared/action_result";
 import type { A11ySnapshot } from "./a11y_snapshot";
-import type { ExecResult, TerminalSnapshot } from "./terminal_types";
+import type { ExecResult, TerminalSnapshot } from "./terminal/types";
 import type {
   FileReadResult,
   FileWriteResult,
@@ -30,7 +30,7 @@ import type {
   MoveResult,
   DeleteResult,
   FileStatResult,
-} from "./fs_operations";
+} from "./filesystem/operations";
 import type { ServiceEntry } from "./services/registry";
 import { ServiceRegistry } from "./services/registry";
 import type { ProviderListResult, ProviderSelectionResult } from "./providers/types";
@@ -40,7 +40,7 @@ import {
   setUserConfigValue,
   type ConfigEntry,
   type ConfigSetResult,
-} from "./config";
+} from "./shared/config";
 import { collectStatus } from "./operator/status";
 import type { SystemStatus } from "./operator/types";
 
@@ -52,7 +52,7 @@ export interface BrowserControlOptions {
   /** Working directory for filesystem context. */
   workingDirectory?: string;
   /** Memory store instance (for testing / dependency injection). */
-  memoryStore?: import("./memory_store").MemoryStore;
+  memoryStore?: import("./runtime/memory_store").MemoryStore;
 }
 
 // ── Browser Namespace ────────────────────────────────────────────────
@@ -122,7 +122,7 @@ export interface SessionNamespace {
 
 export interface ProviderNamespace {
   list(): ProviderListResult;
-  use(name: string): ProviderSelectionResult;
+  use(name: string): ActionResult<ProviderSelectionResult>;
   getActive(): string;
 }
 
@@ -130,7 +130,7 @@ export interface ProviderNamespace {
 
 export interface DebugNamespace {
   /** Run health checks across all components. */
-  health(options?: { port?: number }): Promise<import("./health_check").HealthReport>;
+  health(options?: { port?: number }): Promise<import("./runtime/health_check").HealthReport>;
   /** Get a debug bundle by ID. */
   bundle(bundleId: string): import("./observability/debug_bundle").DebugBundle | null;
   /** Get captured console entries for a session. */
@@ -146,7 +146,7 @@ export interface DebugNamespace {
 export interface ConfigNamespace {
   list(): ConfigEntry[];
   get(key: string): ConfigEntry;
-  set(key: string, value: unknown): ConfigSetResult;
+  set(key: string, value: unknown): ActionResult<ConfigSetResult>;
 }
 
 // ── Unified API Object ────────────────────────────────────────────────
@@ -236,20 +236,59 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
   const terminalActions = new TerminalActions(terminalCtx);
   const fsActions = new FsActions(fsCtx);
   const serviceActions = new ServiceActions(serviceCtx);
+
+  const requireDebugPolicy = (action: string, params: Record<string, unknown> = {}) => {
+    const policyEval = sessionManager.evaluateAction(action, params);
+    if (!isPolicyAllowed(policyEval)) {
+      throw new Error(policyEval.error ?? `Policy blocked ${action}`);
+    }
+    return policyEval;
+  };
+
   const providerNamespace: ProviderNamespace = {
     list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
-    use: (name) => sessionManager.getBrowserManager().getProviderRegistry().select(name),
+    use: (name) => {
+      const policyEval = sessionManager.evaluateAction("browser_provider_use", { name });
+      if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<ProviderSelectionResult>;
+      const result = sessionManager.getBrowserManager().getProviderRegistry().select(name);
+      return {
+        success: result.success,
+        path: policyEval.path,
+        sessionId: sessionManager.getActiveSession()?.id ?? "default",
+        data: result,
+        ...(result.error ? { error: result.error } : {}),
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        ...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+        completedAt: new Date().toISOString(),
+      };
+    },
     getActive: () => sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
   };
   const configNamespace: ConfigNamespace = {
     list: () => getConfigEntries({ validate: false }),
     get: (key) => getConfigValue(key, { validate: false }),
-    set: (key, value) => setUserConfigValue(key, value),
+    set: (key, value) => {
+      const policyEval = sessionManager.evaluateAction("config_set", { key, value });
+      if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<ConfigSetResult>;
+      const result = setUserConfigValue(key, value);
+      return {
+        success: true,
+        path: policyEval.path,
+        sessionId: sessionManager.getActiveSession()?.id ?? "default",
+        data: result,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        ...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+        completedAt: new Date().toISOString(),
+      };
+    },
   };
 
   const debugNamespace: DebugNamespace = {
     health: async (options = {}) => {
-      const { HealthCheck } = await import("./health_check");
+      requireDebugPolicy("debug_health", options);
+      const { HealthCheck } = await import("./runtime/health_check");
       const healthCheck = new HealthCheck({
         port: options.port,
         memoryStore: sessionManager.getMemoryStore(),
@@ -257,20 +296,24 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       return healthCheck.runExtended();
     },
     bundle: (bundleId) => {
+      requireDebugPolicy("debug_bundle_export", { bundleId });
       const { loadDebugBundle } = require("./observability/debug_bundle");
       return loadDebugBundle(bundleId, sessionManager.getMemoryStore());
     },
     console: (options = {}) => {
+      requireDebugPolicy("debug_console_read", options);
       const { getGlobalConsoleCapture } = require("./observability/console_capture");
       const capture = getGlobalConsoleCapture();
       return capture.getEntries(options.sessionId ?? "default");
     },
     network: (options = {}) => {
+      requireDebugPolicy("debug_network_read", options);
       const { getGlobalNetworkCapture } = require("./observability/network_capture");
       const capture = getGlobalNetworkCapture();
       return capture.getEntries(options.sessionId ?? "default");
     },
     listBundles: () => {
+      requireDebugPolicy("debug_bundle_export", { list: true });
       const { listDebugBundles } = require("./observability/debug_bundle");
       return listDebugBundles(sessionManager.getMemoryStore());
     },

@@ -11,7 +11,7 @@
  */
 
 import type { CDPSession, Page } from "playwright";
-import { logger } from "./logger";
+import { logger } from "./shared/logger";
 
 const log = logger.withComponent("a11y_snapshot");
 

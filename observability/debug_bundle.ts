@@ -30,7 +30,7 @@ import type {
 import { OBSERVABILITY_KEYS } from "./types";
 import { generateRecoveryGuidance } from "./recovery";
 import { redactObject } from "./redaction";
-import type { MemoryStore } from "../memory_store";
+import type { MemoryStore } from "../runtime/memory_store";
 import type { A11yElement } from "../a11y_snapshot";
 
 // ── Bundle Builder Options ─────────────────────────────────────────────
@@ -159,7 +159,7 @@ export async function buildDebugBundle(options: BundleBuilderOptions): Promise<D
     ...(fsEvidence ? { filesystem: fsEvidence } : {}),
   };
 
-  return bundle;
+  return redactObject(bundle) as DebugBundle;
 }
 
 // ── Evidence Collectors ────────────────────────────────────────────────
@@ -259,7 +259,7 @@ function generateBundleId(): string {
 // ── Storage ────────────────────────────────────────────────────────────
 
 export function getBundleDir(): string {
-  const { getDataHome } = require("../paths");
+  const { getDataHome } = require("../shared/paths");
   return path.join(getDataHome(), "debug-bundles");
 }
 

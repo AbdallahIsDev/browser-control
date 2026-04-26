@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { Logger, logger } from "./logger";
+import { Logger, logger } from "./shared/logger";
 import type {
   Skill,
   SkillContext,
@@ -292,7 +292,7 @@ export class SkillRegistry {
 
     // Use require() instead of import() so ts-node path aliases resolve.
     // Individual skill load failures are non-fatal: a broken skill
-    // (e.g., importing unresolvable path aliases like @bc/browser_core)
+    // with unresolvable development-only path aliases
     // should not prevent the daemon from starting. Terminal and FS
     // features work independently of any specific skill.
     let mod: Record<string, unknown>;

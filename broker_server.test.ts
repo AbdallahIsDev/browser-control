@@ -637,6 +637,103 @@ test("createBrokerServer rejects config mutation when broker auth is not configu
   assert.match(body.error ?? "", /requires BROKER_API_KEY/i);
 });
 
+test("createBrokerServer rejects config mutation when policy requires confirmation", async (t) => {
+  let setConfigCalls = 0;
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "operator-key",
+      POLICY_PROFILE: "safe",
+    },
+    callbacks: {
+      setConfig: async (key, value) => {
+        setConfigCalls += 1;
+        return { key, value, source: "user" };
+      },
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const response = await fetch(`${baseUrl}/api/v1/config/logLevel`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "operator-key",
+    },
+    body: JSON.stringify({ value: "debug" }),
+  });
+
+  assert.equal(response.status, 403);
+  const body = await response.json() as { policyDecision?: string; risk?: string; error?: string };
+  assert.equal(body.policyDecision, "require_confirmation");
+  assert.equal(body.risk, "moderate");
+  assert.match(body.error ?? "", /requires user confirmation/i);
+  assert.equal(setConfigCalls, 0);
+});
+
+test("createBrokerServer rejects browser-origin requests when broker auth is absent", async (t) => {
+  const broker = createBrokerServer({
+    callbacks: {
+      submitTask: async () => ({ taskId: "should-not-run" }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const response = await fetch(`${baseUrl}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://attacker.example",
+    },
+    body: JSON.stringify({ action: "terminal_exec", params: { command: "echo unsafe" } }),
+  });
+
+  assert.equal(response.status, 403);
+  assert.match(JSON.stringify(await response.json()), /BROKER_API_KEY/);
+});
+
+test("createBrokerServer redacts secrets from callback error responses", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "error-key",
+    },
+    callbacks: {
+      getConfig: async () => {
+        throw new Error("connect failed: wss://browserless.example?token=supersecrettoken1234567890");
+      },
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const response = await fetch(`${baseUrl}/api/v1/config/browserlessEndpoint`, {
+    headers: {
+      "x-api-key": "error-key",
+    },
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json() as { error?: string };
+  assert.match(body.error ?? "", /REDACTED/);
+  assert.doesNotMatch(body.error ?? "", /supersecrettoken1234567890/);
+});
+
 test("createBrokerServer routes skill tasks through daemon.submitSkillTask when daemon is provided", async (t) => {
   const submittedSkillTasks: Array<{ taskId: string; skillName: string; action: string; params: Record<string, unknown> }> = [];
   const submittedTasks: Array<{ id: string; name: string }> = [];
