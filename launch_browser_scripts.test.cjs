@@ -142,6 +142,13 @@ test("getWslHostCandidates filters out public DNS from WSL-side sources", () => 
   }
 });
 
+test("WSL CDP bridge is disabled by default and requires explicit opt-in", () => {
+  assert.equal(launcher.isWslCdpBridgeEnabled({}), false);
+  assert.equal(launcher.isWslCdpBridgeEnabled({ BROWSER_ENABLE_WSL_CDP_BRIDGE: "0" }), false);
+  assert.equal(launcher.isWslCdpBridgeEnabled({ BROWSER_ENABLE_WSL_CDP_BRIDGE: "true" }), true);
+  assert.equal(launcher.isWslCdpBridgeEnabled({ BROWSER_ENABLE_WSL_CDP_BRIDGE: "1" }), true);
+});
+
 // ── buildChromeArgs ───────────────────────────────────────────────────
 
 test("buildChromeArgs includes debugging port and user-data-dir", () => {

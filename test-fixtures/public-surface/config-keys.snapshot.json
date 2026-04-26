@@ -302,6 +302,10 @@
       "name": "BROWSER_DEBUG_URL"
     },
     {
+      "backedByConfigRegistry": false,
+      "name": "BROWSER_ENABLE_WSL_CDP_BRIDGE"
+    },
+    {
       "backedByConfigRegistry": true,
       "name": "BROWSER_MODE"
     },

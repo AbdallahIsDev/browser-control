@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { MemoryStore } from "./memory_store";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { getChromeDebugPath } from "./paths";
 
 import {
   createAutomationContext,
@@ -53,6 +57,86 @@ test("getDebugEndpointCandidates prefers launcher metadata when running in WSL",
   assert.deepEqual(candidates, [
     "http://172.24.240.1:9222",
     "http://192.168.1.25:9222",
+    "http://localhost:9222",
+    "http://127.0.0.1:9222",
+  ]);
+});
+
+test("getDebugEndpointCandidates can ignore env overrides for managed launch", () => {
+  const candidates = getDebugEndpointCandidates(9222, {
+    env: {
+      BROWSER_DEBUG_URL: "http://10.0.0.5:9555",
+      BROWSER_DEBUG_HOST: "10.0.0.6",
+    },
+    platform: "win32",
+    metadata: null,
+    resolvConf: "",
+    routeTable: "",
+    ignoreEnvOverrides: true,
+  });
+
+  assert.deepEqual(candidates, [
+    "http://127.0.0.1:9222",
+    "http://localhost:9222",
+  ]);
+});
+
+test("getDebugEndpointCandidates reads debug metadata from current BROWSER_CONTROL_HOME", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-debug-home-"));
+
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    const debugPath = getChromeDebugPath();
+    fs.mkdirSync(path.dirname(debugPath), { recursive: true });
+    fs.writeFileSync(debugPath, JSON.stringify({
+      port: 9222,
+      bindAddress: "127.0.0.1",
+      windowsLoopbackUrl: "http://127.0.0.1:9222",
+      localhostUrl: "http://localhost:9222",
+      wslPreferredUrl: "http://172.20.32.1:9222",
+      wslHostCandidates: ["172.20.32.1"],
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    }));
+
+    const candidates = getDebugEndpointCandidates(9222, {
+      env: { WSL_DISTRO_NAME: "Ubuntu" },
+      platform: "linux",
+      resolvConf: "",
+      routeTable: "",
+    });
+
+    assert.equal(candidates[0], "http://172.20.32.1:9222");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("getDebugEndpointCandidates ignores launcher metadata for a different port", () => {
+  const candidates = getDebugEndpointCandidates(9222, {
+    env: {
+      WSL_DISTRO_NAME: "Ubuntu",
+    },
+    platform: "linux",
+    metadata: {
+      port: 63530,
+      bindAddress: "127.0.0.1",
+      windowsLoopbackUrl: "http://127.0.0.1:63530",
+      localhostUrl: "http://localhost:63530",
+      wslPreferredUrl: "http://172.20.32.1:63530",
+      wslHostCandidates: ["172.20.32.1"],
+      updatedAt: "2026-04-26T00:00:00.000Z",
+    },
+    resolvConf: "",
+    routeTable: "",
+  });
+
+  assert.deepEqual(candidates, [
     "http://localhost:9222",
     "http://127.0.0.1:9222",
   ]);

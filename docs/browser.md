@@ -82,7 +82,6 @@ Windows launcher from a source checkout:
 
 ```powershell
 .\launch_browser.bat 9222 127.0.0.1
-.\launch_browser.bat 9222 0.0.0.0
 ```
 
 The launcher writes CDP endpoint metadata to:
@@ -91,7 +90,14 @@ The launcher writes CDP endpoint metadata to:
 ~/.browser-control/.interop/chrome-debug.json
 ```
 
-Binding CDP to `0.0.0.0` can expose the unauthenticated debug endpoint beyond loopback. Use explicit loopback (`127.0.0.1`) unless WSL or remote access requires another address, and rely on firewall/network controls when using a non-loopback bind.
+Binding CDP to `0.0.0.0` can expose the unauthenticated debug endpoint beyond loopback. Use explicit loopback (`127.0.0.1`) unless remote access is required, and rely on firewall/network controls when using a non-loopback bind.
+
+WSL CDP bridge is disabled by default because it forwards the unauthenticated CDP port onto a private interface. Enable it only when you intentionally need WSL-to-Windows CDP access:
+
+```powershell
+$env:BROWSER_ENABLE_WSL_CDP_BRIDGE = "1"
+.\launch_browser.bat 9222 127.0.0.1
+```
 
 ## Remote Providers
 

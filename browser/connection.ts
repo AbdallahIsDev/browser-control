@@ -25,6 +25,7 @@ import {
   writeDebugState,
   getWslHostCandidates,
   isChromeAlive,
+  isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
 } from "../scripts/launch_browser";
@@ -255,7 +256,7 @@ export class BrowserConnectionManager {
     try {
       const bindAddress = config.chromeBindAddress;
       const wslHostCandidates = getWslHostCandidates();
-      const needsBridge = wslHostCandidates.length > 0;
+      const needsBridge = isWslCdpBridgeEnabled() && wslHostCandidates.length > 0;
       let shouldLaunch = true;
 
       if (await isChromeAlive(port)) {
@@ -292,8 +293,8 @@ export class BrowserConnectionManager {
       }
 
       // Use existing connectBrowser which handles resolution
-      const browser = await connectBrowser(port);
-      const cdpEndpoint = await resolveDebugEndpointUrl(port);
+      const browser = await connectBrowser(port, { ignoreEnvOverrides: true });
+      const cdpEndpoint = await resolveDebugEndpointUrl(port, { ignoreEnvOverrides: true });
 
       this.browser = browser;
 

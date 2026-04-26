@@ -43,6 +43,7 @@ interface DebugEndpointCandidateOptions {
   metadata?: DebugInteropState | null;
   resolvConf?: string;
   routeTable?: string;
+  ignoreEnvOverrides?: boolean;
 }
 
 interface CaptchaSolverLike {
@@ -63,8 +64,6 @@ interface ActionCaptchaOptions {
 
 const DEFAULT_DEBUG_HOST = "127.0.0.1";
 const DEFAULT_LOCALHOST = "localhost";
-const DEBUG_INTEROP_PATH = getChromeDebugPath();
-
 function logActionError(action: string, selector: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   log.error(`${action} failed for "${selector}": ${message}`);
@@ -141,11 +140,12 @@ function pushUniqueCandidate(
 
 function readDebugInteropState(): DebugInteropState | null {
   try {
-    if (!fs.existsSync(DEBUG_INTEROP_PATH)) {
+    const debugInteropPath = getChromeDebugPath();
+    if (!fs.existsSync(debugInteropPath)) {
       return null;
     }
 
-    return JSON.parse(fs.readFileSync(DEBUG_INTEROP_PATH, "utf8")) as DebugInteropState;
+    return JSON.parse(fs.readFileSync(debugInteropPath, "utf8")) as DebugInteropState;
   } catch {
     return null;
   }
@@ -256,18 +256,21 @@ export function getDebugEndpointCandidates(
 ): string[] {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
-  const metadata = options.metadata === undefined ? readDebugInteropState() : options.metadata;
+  const rawMetadata = options.metadata === undefined ? readDebugInteropState() : options.metadata;
+  const metadata = rawMetadata?.port === port ? rawMetadata : null;
   const resolvConf = options.resolvConf ?? readLocalResolvConf(env);
   const routeTable = options.routeTable ?? readLocalRouteTable(env);
 
-  if (env.BROWSER_DEBUG_URL?.trim()) {
+  if (!options.ignoreEnvOverrides && env.BROWSER_DEBUG_URL?.trim()) {
     return [toBaseUrl(env.BROWSER_DEBUG_URL, port)];
   }
 
   const candidates: string[] = [];
   const isWsl = isLikelyWsl(env, platform);
 
-  pushUniqueCandidate(candidates, env.BROWSER_DEBUG_HOST, port);
+  if (!options.ignoreEnvOverrides) {
+    pushUniqueCandidate(candidates, env.BROWSER_DEBUG_HOST, port);
+  }
 
   if (isWsl) {
     pushUniqueCandidate(candidates, metadata?.wslPreferredUrl, port, { requireWslReachableHost: true });
@@ -312,8 +315,11 @@ async function isDebugEndpointReachable(baseUrl: string): Promise<boolean> {
   }
 }
 
-export async function resolveDebugEndpointUrl(port = 9222): Promise<string> {
-  const candidates = getDebugEndpointCandidates(port);
+export async function resolveDebugEndpointUrl(
+  port = 9222,
+  options: Pick<DebugEndpointCandidateOptions, "ignoreEnvOverrides"> = {},
+): Promise<string> {
+  const candidates = getDebugEndpointCandidates(port, options);
 
   for (const candidate of candidates) {
     if (await isDebugEndpointReachable(candidate)) {
@@ -360,8 +366,11 @@ function resolveContextProxy(
 }
 
 /** Connect to an already-running Chrome instance via CDP. */
-export async function connectBrowser(port = 9222): Promise<Browser> {
-  return chromium.connectOverCDP(await resolveDebugEndpointUrl(port));
+export async function connectBrowser(
+  port = 9222,
+  options: Pick<DebugEndpointCandidateOptions, "ignoreEnvOverrides"> = {},
+): Promise<Browser> {
+  return chromium.connectOverCDP(await resolveDebugEndpointUrl(port, options));
 }
 
 /** Create a new automation-owned context with optional stealth hardening. */
