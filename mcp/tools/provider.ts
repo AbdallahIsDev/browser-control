@@ -8,7 +8,8 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema, actionResultToMcpResult, sessionIdSchema } from "../types";
+import { buildSchema, sessionIdSchema } from "../types";
+import { isPolicyAllowed } from "../../session_manager";
 
 export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
   return [
@@ -39,13 +40,25 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       }, ["name"]),
       handler: async (params) => {
         const name = String(params.name);
-        const result = api.provider.use(name);
+        const sessionId = (params.sessionId as string | undefined) ?? "mcp";
+        if (params.sessionId) api.session.use(sessionId);
+        const policyEval = api.sessionManager.evaluateAction("browser_provider_use", { name }, sessionId);
+        if (!isPolicyAllowed(policyEval)) return policyEval;
+
+        const providerResult = api.provider.use(name);
+        const result = providerResult.success ? providerResult.data! : {
+          success: false,
+          error: providerResult.error ?? "Provider selection failed",
+        };
         return {
           success: result.success,
-          path: "command",
-          sessionId: "mcp",
+          path: policyEval.path,
+          sessionId,
           data: result,
           ...(result.error ? { error: result.error } : {}),
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          ...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
           completedAt: new Date().toISOString(),
         };
       },

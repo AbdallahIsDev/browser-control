@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getDataHome as _getDataHome, ensureDataHomeAtPath, getUserConfigPath } from "./paths";
+import { redactString } from "../observability/redaction";
 
 /** Allow override for testing. */
 function getDataHome(env?: NodeJS.ProcessEnv): string {
@@ -44,7 +45,7 @@ export interface BrowserControlConfig {
   // ── Chrome / CDP ────────────────────────────────────────────────
   /** Chrome remote-debugging port (default: 9222) */
   chromeDebugPort: number;
-  /** Chrome debug bind address (default: 0.0.0.0) */
+  /** Chrome debug bind address (default: 127.0.0.1) */
   chromeBindAddress: string;
   /** Explicit Chrome binary path (optional) */
   chromePath: string | undefined;
@@ -295,7 +296,7 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "dataHome", category: "runtime", envVars: ["BROWSER_CONTROL_HOME"], description: "Browser Control runtime data home.", defaultValue: (env) => getDataHome(env), parse: requiredString },
   { key: "brokerPort", category: "broker", envVars: ["BROKER_PORT"], description: "Broker HTTP API port.", defaultValue: () => 7788, parse: integerValue, validate: ensurePort },
   { key: "chromeDebugPort", category: "browser", envVars: ["BROWSER_DEBUG_PORT"], description: "Chrome remote debugging port.", defaultValue: () => 9222, parse: integerValue, validate: ensurePort },
-  { key: "chromeBindAddress", category: "browser", envVars: ["BROWSER_BIND_ADDRESS"], description: "Chrome debug bind address.", defaultValue: () => "0.0.0.0", parse: requiredString },
+  { key: "chromeBindAddress", category: "browser", envVars: ["BROWSER_BIND_ADDRESS"], description: "Chrome debug bind address.", defaultValue: () => "127.0.0.1", parse: requiredString },
   { key: "chromePath", category: "browser", envVars: ["BROWSER_CHROME_PATH"], description: "Explicit Chrome executable path.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserDebugUrl", category: "browser", envVars: ["BROWSER_DEBUG_URL"], description: "Explicit CDP endpoint URL override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
   { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "managed", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
@@ -386,7 +387,10 @@ function readDefinitionValue(
 }
 
 function redactConfigValue(definition: ConfigDefinition, value: ConfigValue): ConfigValue | "[redacted]" {
-  return definition.sensitive && value !== undefined ? "[redacted]" : value;
+  if (definition.sensitive && value !== undefined) return "[redacted]";
+  if (typeof value === "string") return redactString(value);
+  if (Array.isArray(value)) return value.map((item) => redactString(item));
+  return value;
 }
 
 function resolveUserConfigPath(env: NodeJS.ProcessEnv): string {

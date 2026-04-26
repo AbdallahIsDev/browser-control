@@ -66,7 +66,103 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   // ── Service path (Section 14) ───────────────────────────────────
   {
     matches: (action) => {
-      const serviceActions = ["service_register", "service_list", "service_resolve", "service_remove"];
+      const serviceReadActions = ["service_list", "service_resolve"];
+      return serviceReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const serviceMutationActions = ["service_register", "service_remove"];
+      return serviceMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
+  // ── Provider path (Section 15) ──────────────────────────────────
+  {
+    matches: (action) => {
+      const providerReadActions = ["browser_provider_list", "browser_provider_get_active"];
+      return providerReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const providerMutationActions = ["browser_provider_use", "browser_provider_add", "browser_provider_remove"];
+      return providerMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
+  // ── Config path (Section 11) ────────────────────────────────────
+  {
+    matches: (action) => {
+      const configReadActions = ["config_list", "config_get"];
+      return configReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const configMutationActions = ["config_set"];
+      return configMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
+  // ── Daemon path ─────────────────────────────────────────────────
+  {
+    matches: (action) => {
+      const daemonActions = ["daemon_start", "daemon_stop", "daemon_restart"];
+      return daemonActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+  {
+    matches: (action) => {
+      const daemonReadActions = ["daemon_status"];
+      return daemonReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+
+  // ── Browser auth/profile path (Sections 8 and 15) ───────────────
+  {
+    matches: (action) => {
+      const authProfileActions = [
+        "browser_auth_export",
+        "browser_auth_import",
+        "browser_profile_use",
+        "browser_profile_create",
+        "browser_profile_delete",
+      ];
+      return authProfileActions.includes(action);
+    },
+    path: "low_level",
+    risk: "high",
+  },
+  {
+    matches: (action) => {
+      const authProfileReadActions = ["browser_profile_list", "browser_auth_status"];
+      return authProfileReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+
+  // ── Service path (legacy aggregate aliases) ─────────────────────
+  {
+    matches: (action) => {
+      const serviceActions = ["service_status"];
       return serviceActions.includes(action);
     },
     path: "command",
@@ -76,7 +172,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   // ── Debug/observability path (Section 10) ──────────────────────────
   {
     matches: (action) => {
-      const debugReadActions = ["debug_health", "debug_console_read"];
+      const debugReadActions = ["debug_health"];
       return debugReadActions.includes(action);
     },
     path: "command",
@@ -84,7 +180,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   },
   {
     matches: (action) => {
-      const debugEvidenceActions = ["debug_bundle_export", "debug_network_read"];
+      const debugEvidenceActions = ["debug_bundle_export", "debug_console_read", "debug_network_read"];
       return debugEvidenceActions.includes(action);
     },
     path: "command",
@@ -186,6 +282,14 @@ const DEFAULT_RISK_RULES: RiskAdjustmentRule[] = [
   // State-changing browser verbs - elevate risk to high
   {
     matches: (action) => {
+      if (
+        action.startsWith("service_") ||
+        action.startsWith("browser_provider_") ||
+        action.startsWith("config_") ||
+        action.startsWith("daemon_")
+      ) {
+        return false;
+      }
       const stateChangingActions = [
         "publish", "submit", "confirm", "delete", "remove", "finalize", "approve", "reject",
         "upload", "download", "place_trade", "execute_order", "transfer", "payment", "checkout",

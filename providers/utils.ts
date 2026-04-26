@@ -1,14 +1,35 @@
-const SENSITIVE_PARAMS = [
+import { redactString as redactStringCentral, redactUrl as redactUrlCentral } from "../observability/redaction";
+
+const SENSITIVE_PARAMS = new Set([
   "token",
   "apiKey",
   "apikey",
   "api_key",
+  "api_token",
+  "auth_token",
   "key",
   "access_token",
+  "refresh_token",
   "authorization",
   "password",
+  "passwd",
   "secret",
-];
+  "bearer",
+  "browserless_token",
+  "openrouter_api_key",
+  "captcha_api_key",
+]);
+
+function isSensitiveParam(param: string): boolean {
+  const lower = param.toLowerCase();
+  return SENSITIVE_PARAMS.has(lower)
+    || lower.endsWith("_token")
+    || lower.endsWith("-token")
+    || lower.endsWith("_key")
+    || lower.endsWith("-key")
+    || lower.endsWith("_secret")
+    || lower.endsWith("-secret");
+}
 
 /**
  * Redact sensitive query parameters from URLs.
@@ -16,19 +37,7 @@ const SENSITIVE_PARAMS = [
  * Used to prevent credential leaks in logs, errors, metadata, and persisted state.
  */
 export function redactUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    let changed = false;
-    for (const param of SENSITIVE_PARAMS) {
-      if (parsed.searchParams.has(param)) {
-        parsed.searchParams.set(param, "***REDACTED***");
-        changed = true;
-      }
-    }
-    return changed ? parsed.toString() : url;
-  } catch {
-    return url;
-  }
+  return redactUrlCentral(url);
 }
 
 /**
@@ -40,12 +49,16 @@ export function redactUrl(url: string): string {
 export function stripSensitiveParams(url: string): string {
   try {
     const parsed = new URL(url);
-    for (const param of SENSITIVE_PARAMS) {
-      parsed.searchParams.delete(param);
+    parsed.username = "";
+    parsed.password = "";
+    for (const param of [...parsed.searchParams.keys()]) {
+      if (isSensitiveParam(param)) {
+        parsed.searchParams.delete(param);
+      }
     }
     return parsed.toString();
   } catch {
-    return url;
+    return redactUrlCentral(url);
   }
 }
 
@@ -54,11 +67,5 @@ export function stripSensitiveParams(url: string): string {
  * query parameter values that may have leaked into the text.
  */
 export function sanitizeString(text: string): string {
-  let result = text;
-  for (const param of SENSITIVE_PARAMS) {
-    // Match param=value or param="value" or param='value' in URLs or text
-    const regex = new RegExp(`([?&;]${param}=)([^&\\s"']+)`, "gi");
-    result = result.replace(regex, "$1***REDACTED***");
-  }
-  return result;
+  return redactStringCentral(text);
 }

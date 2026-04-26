@@ -159,7 +159,7 @@ export async function buildDebugBundle(options: BundleBuilderOptions): Promise<D
     ...(fsEvidence ? { filesystem: fsEvidence } : {}),
   };
 
-  return bundle;
+  return redactObject(bundle) as DebugBundle;
 }
 
 // ── Evidence Collectors ────────────────────────────────────────────────

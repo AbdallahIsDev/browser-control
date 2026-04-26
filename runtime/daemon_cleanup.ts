@@ -236,6 +236,7 @@ export async function stopDaemon(options: {
   try {
     await fetch(`${brokerUrl}/api/v1/kill`, {
       method: "POST",
+      headers: config.brokerAuthKey ? { "X-API-Key": config.brokerAuthKey } : undefined,
       signal: AbortSignal.timeout(5000),
     });
   } catch { /* daemon not reachable — fine */ }

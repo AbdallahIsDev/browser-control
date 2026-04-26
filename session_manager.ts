@@ -686,6 +686,12 @@ export class SessionManager {
 
     this.activeSessionId = state.id;
     this.touchSession(state.id);
+    try {
+      this.policyEngine.setProfile(state.policyProfile);
+    } catch {
+      // Creation validates profiles; this is best-effort protection for
+      // corrupted persisted session state.
+    }
 
     log.info("Session activated", { sessionId: state.id, name: state.name });
 
@@ -1021,7 +1027,8 @@ export class SessionManager {
     const state = this.resolveSession(sessionOverride);
     const sessionId = state?.id ?? this.activeSessionId ?? "default";
     const actor: "human" | "agent" = "human";
-    const profileName = state?.policyProfile ?? this.policyEngine.getActiveProfile();
+    const activeState = this.activeSessionId ? this.sessions.get(this.activeSessionId) ?? null : null;
+    const profileName = state?.policyProfile ?? activeState?.policyProfile ?? this.policyEngine.getActiveProfile();
 
     const intent: PolicyTaskIntent = {
       goal: action,

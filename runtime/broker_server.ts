@@ -15,9 +15,13 @@ import type {
 import type { SkillManifest } from "../skill";
 import { Logger } from "../shared/logger";
 import type { TelemetrySummary } from "./telemetry";
-import { getConfigEntries, getConfigValue, setUserConfigValue, type ConfigEntry, type ConfigSetResult } from "../shared/config";
+import { getConfigEntries, getConfigValue, loadConfig, setUserConfigValue, type ConfigEntry, type ConfigSetResult } from "../shared/config";
 import { collectStatus } from "../operator/status";
 import type { SystemStatus } from "../operator/types";
+import { redactString } from "../observability/redaction";
+import { DefaultPolicyEngine } from "../policy/engine";
+import { defaultRouter } from "../policy/execution_router";
+import type { ExecutionContext, PolicyTaskIntent } from "../policy/types";
 
 const brokerLog = new Logger({ component: "broker" });
 
@@ -394,6 +398,57 @@ function extractApiKey(request: IncomingMessage): string | null {
   return match?.[1]?.trim() || null;
 }
 
+function isBrowserOriginRequest(request: IncomingMessage): boolean {
+  return typeof request.headers.origin === "string" && request.headers.origin.trim().length > 0;
+}
+
+function isPolicyAllowed(decision: string): boolean {
+  return decision === "allow" || decision === "allow_with_audit";
+}
+
+function evaluateBrokerActionPolicy(
+  action: string,
+  params: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+): { allowed: true } | { allowed: false; statusCode: number; body: JsonRecord } {
+  const appConfig = loadConfig({ env, validate: false });
+  const profileName = appConfig.policyProfile;
+  const sessionId = "broker";
+  const actor = "agent";
+  const intent: PolicyTaskIntent = {
+    goal: action,
+    actor,
+    sessionId,
+    metadata: { source: "broker" },
+  };
+  const context: ExecutionContext = {
+    sessionId,
+    actor,
+    profileName,
+    metadata: { source: "broker" },
+  };
+  const step = defaultRouter.buildRoutedStep(intent, action, params, context);
+  const evaluation = new DefaultPolicyEngine({ profileName }).evaluate(step, context);
+
+  if (isPolicyAllowed(evaluation.decision)) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    statusCode: 403,
+    body: {
+      success: false,
+      path: step.path,
+      sessionId,
+      error: evaluation.reason,
+      policyDecision: evaluation.decision,
+      risk: evaluation.risk,
+      completedAt: new Date().toISOString(),
+    },
+  };
+}
+
 async function readJsonBody(request: IncomingMessage): Promise<JsonRecord> {
   const chunks: Buffer[] = [];
 
@@ -645,6 +700,13 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
       return;
     }
 
+    if (!config.authKey && isBrowserOriginRequest(request)) {
+      writeJson(response, 403, {
+        error: "Browser-origin broker requests require BROKER_API_KEY or BROKER_SECRET to be configured.",
+      });
+      return;
+    }
+
     if (config.authKey) {
       const apiKey = extractApiKey(request);
       if (apiKey !== config.authKey) {
@@ -792,6 +854,11 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
           writeJson(response, 400, { error: "Config set requires a JSON body with value." });
           return;
         }
+        const policyEval = evaluateBrokerActionPolicy("config_set", { key, value: body.value }, options.env ?? process.env);
+        if (!policyEval.allowed) {
+          writeJson(response, policyEval.statusCode, policyEval.body);
+          return;
+        }
         writeJson(response, 200, callbacks.setConfig ? await callbacks.setConfig(key, body.value) : setUserConfigValue(key, body.value));
         return;
       }
@@ -828,8 +895,9 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
 
       writeJson(response, 404, { error: "Not found." });
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       writeJson(response, 400, {
-        error: error instanceof Error ? error.message : String(error),
+        error: redactString(message),
       });
     }
   });

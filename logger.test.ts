@@ -114,6 +114,40 @@ test("Logger includes structured data as JSON in output", () => {
   assert.ok(output.stdout.includes('"count":42'));
 });
 
+test("Logger redacts secrets from messages and structured data", () => {
+  const logger = new Logger({ component: "test", level: "info", fileEnabled: false });
+
+  const output = captureOutput(() => {
+    logger.info("connecting to wss://browserless.example?token=supersecrettoken1234567890", {
+      Authorization: "Bearer secretbearertoken1234567890",
+      nested: {
+        browserless_token: "provider-secret",
+      },
+    });
+  });
+
+  assert.ok(output.stdout.includes("REDACTED"));
+  assert.ok(!output.stdout.includes("supersecrettoken1234567890"));
+  assert.ok(!output.stdout.includes("secretbearertoken1234567890"));
+  assert.ok(!output.stdout.includes("provider-secret"));
+});
+
+test("Logger redacts credential URL objects from structured data", () => {
+  const logger = new Logger({ component: "test", level: "info", fileEnabled: false });
+
+  const output = captureOutput(() => {
+    logger.info("connecting", {
+      endpoint: new URL("wss://user:pass@example.test/cdp?token=secret-token-value&session=ok"),
+    });
+  });
+
+  assert.ok(output.stdout.includes("REDACTED"));
+  assert.ok(!output.stdout.includes("user"));
+  assert.ok(!output.stdout.includes("pass"));
+  assert.ok(!output.stdout.includes("secret-token-value"));
+  assert.ok(output.stdout.includes("session=ok"));
+});
+
 test("Logger does not append data when no structured data is given", () => {
   const logger = new Logger({ component: "test", level: "info", fileEnabled: false });
 

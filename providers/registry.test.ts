@@ -105,8 +105,36 @@ describe("ProviderRegistry", () => {
 
       assert.ok(listed);
       assert.ok(!listed.endpoint?.includes("secret-token"));
-      assert.equal(listed.endpoint, "wss://b.example.com/?token=***REDACTED***&region=us");
+      assert.equal(listed.endpoint, "wss://b.example.com/?token=%5BREDACTED%5D&region=us");
       assert.equal(registry.get("remote-url-secret")?.endpoint, "wss://b.example.com?token=secret-token&region=us");
+    });
+
+    it("should redact endpoint credentials and token/key/secret params in list output", () => {
+      registry.add({
+        name: "remote-url-credential",
+        type: "custom",
+        endpoint: "wss://user:pass@b.example.com?token=secret-token&api_key=secret-key&client_secret=secret-secret&region=us",
+      });
+
+      const listed = registry.list().providers.find((p) => p.name === "remote-url-credential");
+
+      assert.ok(listed?.endpoint);
+      assert.doesNotMatch(listed.endpoint, /user|pass|secret-token|secret-key|secret-secret/);
+      assert.match(listed.endpoint, /%5BREDACTED%5D/);
+      assert.equal(
+        registry.get("remote-url-credential")?.endpoint,
+        "wss://user:pass@b.example.com?token=secret-token&api_key=secret-key&client_secret=secret-secret&region=us",
+      );
+    });
+
+    it("should persist registry files with restrictive permissions on POSIX", () => {
+      if (process.platform === "win32") return;
+
+      registry.add({ name: "mode-check", type: "custom", endpoint: "ws://x:9222", apiKey: "secret-key" });
+
+      const registryPath = path.join(testHome, "providers", "registry.json");
+      const mode = fs.statSync(registryPath).mode & 0o777;
+      assert.equal(mode, 0o600);
     });
 
     it("should remove a custom provider", () => {

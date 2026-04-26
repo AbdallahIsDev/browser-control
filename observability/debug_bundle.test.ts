@@ -103,6 +103,28 @@ describe("buildDebugBundle", () => {
     assert(bundle.terminal.lastOutput.length <= 5000);
   });
 
+  it("redacts secrets in returned exception and terminal evidence", async () => {
+    const error = new Error("failed with token=supersecrettoken1234567890");
+    error.stack = "Error: failed\n    at connect (https://alice:password@example.test?api_key=secretkey1234567890)";
+
+    const bundle = await buildDebugBundle({
+      taskId: "task-1",
+      sessionId: "session-1",
+      executionPath: "command",
+      error,
+      terminalSession: {
+        sessionId: "term-1",
+        lastOutput: "SESSION_COOKIE=sid-secret",
+        promptState: "error",
+      },
+    });
+
+    assert(!bundle.exception.message.includes("supersecrettoken1234567890"));
+    assert(!bundle.exception.stack?.includes("secretkey1234567890"));
+    assert(!bundle.exception.stack?.includes("password"));
+    assert(!bundle.terminal?.lastOutput.includes("sid-secret"));
+  });
+
   it("marks partial when evidence collection fails", async () => {
     const bundle = await buildDebugBundle({
       taskId: "task-1",

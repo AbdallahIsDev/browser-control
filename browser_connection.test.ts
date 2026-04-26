@@ -265,6 +265,61 @@ describe("BrowserConnectionManager", () => {
       }
     });
 
+    it("should pass configured chromeBindAddress to Chrome launch args", async () => {
+      const originalBind = process.env.BROWSER_BIND_ADDRESS;
+      const childProcess = require("node:child_process") as typeof import("node:child_process");
+      const launcherPath = require.resolve("./scripts/launch_browser");
+      const connectionPath = require.resolve("./browser_connection");
+      const launcher = require(launcherPath) as typeof import("./scripts/launch_browser");
+      const originalSpawn = childProcess.spawn;
+      const originalResolveChromePath = launcher.resolveChromePath;
+      const originalBuildChromeArgs = launcher.buildChromeArgs;
+      const originalWaitForCdp = launcher.waitForCdp;
+      const originalIsChromeAlive = launcher.isChromeAlive;
+      const originalWriteDebugState = launcher.writeDebugState;
+      const originalGetWslHostCandidates = launcher.getWslHostCandidates;
+      let capturedBindAddress: string | undefined;
+
+      process.env.BROWSER_BIND_ADDRESS = "127.0.0.1";
+      delete require.cache[connectionPath];
+
+      (childProcess as unknown as { spawn: unknown }).spawn = () => ({
+        unref: () => {},
+        kill: () => true,
+        pid: 12345,
+      });
+      (launcher as unknown as { resolveChromePath: unknown }).resolveChromePath = () => process.execPath;
+      (launcher as unknown as { buildChromeArgs: unknown }).buildChromeArgs = (opts: { bindAddress: string }) => {
+        capturedBindAddress = opts.bindAddress;
+        return ["--test-chrome"];
+      };
+      (launcher as unknown as { waitForCdp: unknown }).waitForCdp = async () => false;
+      (launcher as unknown as { isChromeAlive: unknown }).isChromeAlive = async () => false;
+      (launcher as unknown as { writeDebugState: unknown }).writeDebugState = () => ({});
+      (launcher as unknown as { getWslHostCandidates: unknown }).getWslHostCandidates = () => [];
+
+      try {
+        const fresh = require(connectionPath) as typeof import("./browser_connection");
+        const manager = new fresh.BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+        await assert.rejects(() => manager.launchManaged({ port: 19998 }), /Failed to launch managed automation browser/);
+        assert.equal(capturedBindAddress, "127.0.0.1");
+      } finally {
+        (childProcess as unknown as { spawn: unknown }).spawn = originalSpawn;
+        (launcher as unknown as { resolveChromePath: unknown }).resolveChromePath = originalResolveChromePath;
+        (launcher as unknown as { buildChromeArgs: unknown }).buildChromeArgs = originalBuildChromeArgs;
+        (launcher as unknown as { waitForCdp: unknown }).waitForCdp = originalWaitForCdp;
+        (launcher as unknown as { isChromeAlive: unknown }).isChromeAlive = originalIsChromeAlive;
+        (launcher as unknown as { writeDebugState: unknown }).writeDebugState = originalWriteDebugState;
+        (launcher as unknown as { getWslHostCandidates: unknown }).getWslHostCandidates = originalGetWslHostCandidates;
+        delete require.cache[connectionPath];
+        if (originalBind === undefined) {
+          delete process.env.BROWSER_BIND_ADDRESS;
+        } else {
+          process.env.BROWSER_BIND_ADDRESS = originalBind;
+        }
+      }
+    });
+
     it("should expose provider registry via getProviderRegistry", () => {
       const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
       const registry = manager.getProviderRegistry();
