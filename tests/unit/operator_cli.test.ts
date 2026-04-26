@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { parseArgs, runCli } from "../../cli";
+import { getBrowserActionPositionals, parseArgs, runCli } from "../../cli";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-cli-"));
@@ -84,6 +84,14 @@ test("bc --help does not import SQLite-backed runtime modules", () => {
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
+});
+
+test("top-level browser actions keep the first user argument", () => {
+  const parsed = parseArgs(["node", "cli.ts", "open", "https://example.com"]);
+  assert.deepEqual(getBrowserActionPositionals("open", parsed), ["https://example.com"]);
+
+  const fill = parseArgs(["node", "cli.ts", "fill", "#email", "user@example.com"]);
+  assert.deepEqual(getBrowserActionPositionals("fill", fill), ["#email", "user@example.com"]);
 });
 
 test("bc policy import --json writes clean parseable JSON", async () => {

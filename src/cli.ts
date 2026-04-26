@@ -98,6 +98,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return result;
 }
 
+export function getBrowserActionPositionals(action: string, args: ParsedArgs): string[] {
+  return action === "tab"
+    ? args.positional
+    : [args.subcommand, ...args.positional].filter((value): value is string => Boolean(value));
+}
+
 async function getApiUrl(): Promise<string> {
   const { loadConfig } = await import("./shared/config");
   const config = loadConfig({ validate: false });
@@ -2549,7 +2555,8 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 // ── Top-level Browser Action Handler (Section 5) ────────────────────
 
 async function handleBrowserAction(action: string, args: ParsedArgs): Promise<void> {
-  const { positional, flags } = args;
+  const { flags } = args;
+  const positional = getBrowserActionPositionals(action, args);
   const jsonOutput = flags.json === "true";
 
   const { SessionManager } = await import("./session_manager");
