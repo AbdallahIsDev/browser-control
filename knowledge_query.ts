@@ -1,1 +1,1 @@
-export * from "./knowledge/query";
+export * from "./src/knowledge_query";

@@ -1,1 +1,1 @@
-export * from "./terminal/session";
+export * from "./src/terminal_session";

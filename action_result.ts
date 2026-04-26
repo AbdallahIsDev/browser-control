@@ -1,1 +1,1 @@
-export * from "./shared/action_result";
+export * from "./src/action_result";

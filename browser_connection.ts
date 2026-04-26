@@ -1,1 +1,1 @@
-export * from "./browser/connection";
+export * from "./src/browser_connection";

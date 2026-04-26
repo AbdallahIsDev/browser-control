@@ -161,18 +161,24 @@ for (const [file, text] of markdownCache) {
 
 const mcpDocs = read("docs/mcp.md");
 let toolNames = [];
-if (exists("mcp/tool_registry.ts")) {
+const mcpToolRegistryPath = exists("src/mcp/tool_registry.ts")
+  ? path.join(root, "src", "mcp", "tool_registry.ts")
+  : exists("mcp/tool_registry.ts")
+    ? path.join(root, "mcp", "tool_registry.ts")
+    : "";
+
+if (mcpToolRegistryPath) {
   process.env.BROWSER_CONTROL_HOME = path.join(root, ".tmp-docs-check-home");
   require("ts-node/register");
   require("tsconfig-paths/register");
-  const { getToolCategories } = require(path.join(root, "mcp", "tool_registry.ts"));
+  const { getToolCategories } = require(mcpToolRegistryPath);
   const categories = getToolCategories({});
   toolNames = Object.values(categories).flat().sort();
   for (const name of toolNames) {
     if (!mcpDocs.includes(name)) fail(`MCP tool missing from docs/mcp.md: ${name}`);
   }
 } else {
-  sourceChecksSkipped.push("MCP registry check skipped because mcp/tool_registry.ts is not present.");
+  sourceChecksSkipped.push("MCP registry check skipped because src/mcp/tool_registry.ts is not present.");
 }
 
 const cliDocs = read("docs/cli.md");

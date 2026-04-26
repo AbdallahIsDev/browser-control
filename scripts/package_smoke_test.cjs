@@ -72,7 +72,7 @@ try {
   const packOutput = runNpm(["pack", "--json"]).stdout;
   const packInfo = JSON.parse(packOutput)[0];
   const packedFiles = new Set((packInfo.files ?? []).map((file) => file.path));
-  for (const forbidden of ["dist/test_daemon_helpers.js", "dist/test_daemon_helpers.d.ts"]) {
+  for (const forbidden of ["dist/test_daemon_helpers.js", "dist/test_daemon_helpers.d.ts", "dist/tests/"]) {
     if (packedFiles.has(forbidden)) throw new Error(`Packed tarball unexpectedly includes ${forbidden}`);
   }
   tarballPath = path.join(root, packInfo.filename);

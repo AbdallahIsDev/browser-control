@@ -1,1 +1,1 @@
-export * from "./knowledge/types";
+export * from "./src/knowledge_types";

@@ -1,1 +1,1 @@
-export * from "./browser/network_interceptor";
+export * from "./src/network_interceptor";

@@ -1,1 +1,1 @@
-export * from "./terminal/snapshot";
+export * from "./src/terminal_snapshot";

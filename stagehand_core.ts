@@ -1,1 +1,1 @@
-export * from "./browser/stagehand_core";
+export * from "./src/stagehand_core";

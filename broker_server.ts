@@ -1,7 +1,7 @@
-export * from "./runtime/broker_server";
+export * from "./src/broker_server";
 
-import { startStandaloneBroker } from "./runtime/broker_server";
-import { Logger } from "./shared/logger";
+import { startStandaloneBroker } from "./src/runtime/broker_server";
+import { Logger } from "./src/shared/logger";
 
 const brokerLog = new Logger({ component: "broker-server" });
 

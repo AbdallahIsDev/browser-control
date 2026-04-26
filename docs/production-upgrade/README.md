@@ -20,6 +20,8 @@ The short version as of the latest synchronization:
 
 - Sections 4 through 15 are implemented and merged into `main`.
 - Section 16 is not implemented yet.
+- Sections 17 through 23 are implemented and merged into `main`.
+- Section 24 is planned in `codex/section-24-repository-structure-module-organization`.
 - Section-specific `implementation-checklist.md` files are execution artifacts; when their historical checkbox state conflicts with `STATUS.md`, `STATUS.md` wins.
 
 ## What Belongs Here

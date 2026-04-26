@@ -1,1 +1,1 @@
-export * from "./shared/logger";
+export * from "./src/logger";

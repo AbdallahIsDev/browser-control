@@ -1,1 +1,1 @@
-export * from "./terminal/resume_types";
+export * from "./src/terminal_resume_types";

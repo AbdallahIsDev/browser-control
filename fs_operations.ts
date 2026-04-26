@@ -1,1 +1,1 @@
-export * from "./filesystem/operations";
+export * from "./src/fs_operations";

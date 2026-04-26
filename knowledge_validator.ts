@@ -1,1 +1,1 @@
-export * from "./knowledge/validator";
+export * from "./src/knowledge_validator";

@@ -1,1 +1,1 @@
-export * from "./browser/profiles";
+export * from "./src/browser_profiles";

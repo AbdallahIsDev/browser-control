@@ -1,56 +1,48 @@
 # Source Layout
 
-Browser Control keeps public entrypoints at the repository root and places implementation code in owned feature folders.
+Browser Control keeps product implementation under `src/`, tests under `tests/`, docs under `docs/`, scripts under `scripts/`, and only public/package compatibility entrypoints at the repository root.
 
 ## Folder Map
 
-- `browser/` owns browser automation: CDP/Playwright connection, browser actions, profiles, auth snapshots, Stagehand integration, network interception, and browser file transfer helpers.
-- `terminal/` owns native terminal automation: pty sessions, one-shot exec, prompt detection, snapshots, resume decisions, serialization, buffer persistence, shell/platform detection, and the Windows `node-pty` patch.
-- `filesystem/` owns native filesystem/system operations and the policy-aware filesystem action facade.
-- `policy/` owns execution path/risk types, policy profiles, the policy engine, audit logging, and the execution router.
-- `runtime/` owns long-running and process runtime code: daemon, broker server/types, daemon launch and cleanup, health checks, memory store, task engine, scheduler, and telemetry.
-- `knowledge/` owns knowledge artifact types, storage, queries, and validation.
-- `shared/` owns cross-cutting utilities used by many systems: `ActionResult`, config loading/user config, path resolution, and logging.
-
-Existing stable folders remain in place:
-
-- `mcp/` owns MCP server startup, tool registry, schemas, and tool handlers.
-- `observability/` owns debug bundles, redaction, captures, recovery, performance, and shared observability types.
-- `operator/` owns human/operator CLI support such as doctor, setup, status, config formatting, and summaries.
-- `providers/` owns browser provider abstractions and adapters.
-- `services/` owns stable local service URL registry, resolver, and detector.
-- `skills/` owns built-in skill implementations.
-- `scripts/` owns launch and helper scripts that are executed directly or wrapped by platform shims.
+- `src/` owns production TypeScript implementation and public API barrels.
+- `src/browser/` owns browser automation: CDP/Playwright connection, browser actions, profiles, auth snapshots, Stagehand integration, network interception, and browser file transfer helpers.
+- `src/terminal/` owns native terminal automation: pty sessions, one-shot exec, prompt detection, snapshots, resume decisions, serialization, buffer persistence, shell/platform detection, and the Windows `node-pty` patch.
+- `src/filesystem/` owns native filesystem/system operations and the policy-aware filesystem action facade.
+- `src/policy/` owns execution path/risk types, policy profiles, the policy engine, audit logging, and the execution router.
+- `src/runtime/` owns long-running and process runtime code: daemon, broker server/types, daemon launch and cleanup, health checks, memory store, task engine, scheduler, and telemetry.
+- `src/knowledge/` owns knowledge artifact types, storage, queries, and validation.
+- `src/shared/` owns cross-cutting utilities used by many systems: `ActionResult`, config loading/user config, path resolution, and logging.
+- `src/mcp/` owns MCP server startup, tool registry, schemas, and tool handlers.
+- `src/observability/` owns debug bundles, redaction, captures, recovery, performance, and shared observability types.
+- `src/operator/` owns human/operator CLI support such as doctor, setup, status, config formatting, and summaries.
+- `src/providers/` owns browser provider abstractions and adapters.
+- `src/services/` owns stable local service URL registry, resolver, and detector.
+- `src/skills/` owns built-in skill implementations.
+- `tests/unit/` owns unit and integration-style node tests.
+- `tests/e2e/` owns golden workflow tests and e2e fixtures/support.
+- `tests/compatibility/` owns public API, CLI, MCP, persisted-format, and package import compatibility snapshots.
+- `tests/helpers/` owns reusable test support.
+- `scripts/` owns build, packaging, compatibility, docs, browser launch, and CI helper scripts.
 - `docs/` owns product, architecture, API, and production-upgrade documentation.
 
 ## Root Files
 
-Root files are reserved for package entrypoints, compatibility imports, tests, repository metadata, and a small set of intentionally deferred implementation modules.
+Root files are reserved for package entrypoints, compatibility imports, repository metadata, and project configuration.
 
 Root entrypoints intentionally remain:
 
-- `index.ts` is the public TypeScript API barrel.
-- `cli.ts` and `cli.js` are package/bin entrypoints.
-- `main.ts` remains a local example/start script.
+- `index.ts` is the public TypeScript API compatibility barrel and re-exports `src/index.ts`.
+- `cli.ts` and `cli.js` are package/bin compatibility entrypoints.
+- `daemon.ts`, `broker_server.ts`, and `main.ts` preserve historical executable entrypoints while delegating to `src/`.
 - `package.json`, lockfile, TypeScript configs, `README.md`, `LICENSE`, `.env.example`, and platform launcher shims remain at root.
 
-Moved public modules keep root compatibility wrappers such as `browser_core.ts`, `terminal_actions.ts`, `policy_engine.ts`, `memory_store.ts`, `config.ts`, and `paths.ts`. These wrappers re-export the new implementation modules so existing imports keep working until Section 23 defines the formal compatibility contract.
+Moved public modules keep root compatibility wrappers such as `browser_control.ts`, `browser_core.ts`, `terminal_actions.ts`, `policy_engine.ts`, `memory_store.ts`, `config.ts`, and `paths.ts`. These wrappers re-export `src/` implementation modules so existing imports keep working.
 
-Executable compatibility wrappers that must still run from root, such as `daemon.ts`, `broker_server.ts`, and `memory_store.ts`, also preserve their previous CLI behavior.
-
-Some root implementation modules remain intentionally:
-
-- `browser_control.ts` and `session_manager.ts` remain root-level orchestration/facade modules because they coordinate browser, terminal, filesystem, policy, service, provider, and daemon concerns.
-- `a11y_snapshot.ts`, `ref_store.ts`, `semantic_query.ts`, and `snapshot_diff.ts` remain root-level a11y/ref/query modules for now; a future a11y-specific cleanup can move them together.
-- `ai_agent.ts`, `captcha_solver.ts`, `proxy_manager.ts`, `selector_store.ts`, `selectors.ts`, and `stealth.ts` remain root-level browser-adjacent public utilities to avoid expanding this refactor beyond the Section 17 high-confidence clusters.
-- `service_actions.ts`, `skill.ts`, `skill_registry.ts`, `skill_memory.ts`, and `skill_yaml.ts` remain root-level public service/skill surfaces while `services/` and `skills/` stay stable.
-- `test_daemon_helpers.ts` is test support, not production API.
-
-These deferred files should not be treated as missed moves. Future sections may move them only with matching compatibility wrappers and focused verification.
+New production logic should not be added to root wrappers. Put it under `src/` and update the wrapper only when a public import path must stay stable.
 
 ## Import Policy
 
-First-party implementation code should import from the owning folder directly:
+First-party implementation code should import from the owning `src/` module directly:
 
 - browser code imports sibling browser modules from `./...`
 - terminal code imports sibling terminal modules from `./...`
@@ -62,19 +54,19 @@ Root compatibility wrappers are for external/backward compatibility and tests th
 
 ## Tests
 
-Tests currently remain at the repository root and use the historical `*.test.ts` naming style. That keeps this refactor behavior-neutral and avoids a simultaneous test-layout migration.
+Tests live under `tests/` and keep historical names where that preserves context.
 
 Going forward:
 
 - name tests after the module or behavior they verify, e.g. `browser_actions.test.ts`
-- keep compatibility smoke tests at root when they validate root import compatibility
-- when a future section creates a new focused subsystem with many tests, it may place tests next to that subsystem if the repo adopts that pattern consistently
-- Section 20 CI should test both public root compatibility imports and new folder module paths
+- keep compatibility smoke tests in `tests/compatibility/`
+- keep golden workflows and local-app fixtures in `tests/e2e/`
+- keep reusable harness code in `tests/helpers/`
+- CI should test both public root compatibility imports and direct `src/` module paths
 
 ## Future Section Guidance
 
-- Section 18 security/privacy hardening should add security-specific policy or shared/runtime modules near the system they protect, and document any cross-cutting security helpers here.
-- Section 19 install/packaging should preserve root package/bin entrypoints and avoid undoing the feature-folder layout.
-- Section 20 CI should keep root compatibility import tests plus direct new-path import/typecheck coverage.
-- Section 22 docs should reference this file as the developer orientation map.
-- Section 23 public API/versioning should decide which compatibility wrappers become contractual, deprecated, or internal.
+- Add new implementation under `src/`, not the repository root.
+- Add new tests under `tests/unit/`, `tests/e2e/`, or `tests/compatibility/`.
+- Preserve root/package compatibility wrappers unless a compatibility snapshot intentionally proves a breaking change.
+- Update this file when new top-level folders or major source ownership boundaries are introduced.

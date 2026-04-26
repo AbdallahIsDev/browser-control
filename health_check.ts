@@ -1,1 +1,1 @@
-export * from "./runtime/health_check";
+export * from "./src/health_check";

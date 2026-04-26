@@ -77,6 +77,7 @@ Main surfaces:
 - [Terminal and filesystem behavior](docs/terminal.md)
 - [Configuration](docs/configuration.md)
 - [Security model](docs/security.md)
+- [Source layout](docs/architecture/source-layout.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Support matrix](docs/support-matrix.md)
 - [Examples](docs/examples/)

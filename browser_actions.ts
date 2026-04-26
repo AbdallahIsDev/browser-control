@@ -1,1 +1,1 @@
-export * from "./browser/actions";
+export * from "./src/browser_actions";

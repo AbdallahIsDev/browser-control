@@ -1,1 +1,1 @@
-export * from "./terminal/exec";
+export * from "./src/terminal_exec";

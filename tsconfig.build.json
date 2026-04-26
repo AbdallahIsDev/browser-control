@@ -11,6 +11,7 @@
     "screenshots",
     ".omx",
     "reports",
+    "tests",
     "project-template",
     "voice_typer",
     "**/*.test.ts",

@@ -1,1 +1,1 @@
-export * from "./terminal/cross_platform";
+export * from "./src/cross_platform";
