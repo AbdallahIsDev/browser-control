@@ -36,6 +36,29 @@ test("normalizeClientIp collapses IPv6 loopback and IPv4-mapped loopback address
   assert.equal(normalizeClientIp("192.168.1.5"), "192.168.1.5");
 });
 
+test("createBrokerServer rejects oversized JSON request bodies", async (t) => {
+  const broker = createBrokerServer({
+    env: { BROKER_MAX_BODY_BYTES: "32" },
+    callbacks: {
+      submitTask: async () => ({ taskId: "should-not-run" }),
+    },
+  });
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const response = await fetch(`${getBaseUrl(broker)}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "visit", params: { text: "x".repeat(64) } }),
+  });
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 400);
+  assert.match(body.error ?? "", /Request body too large/);
+});
+
 test("createBrokerServer exposes runtime endpoints and WebSocket completion events", async (t) => {
   let broker!: BrokerServer;
   let scheduledBody: Record<string, unknown> | undefined;

@@ -29,6 +29,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7788;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 100;
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 const HOSTNAME_PATTERN =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -142,6 +143,7 @@ interface BrokerResolvedConfig {
   allowedDomainParamFields: string[];
   rateLimitWindowMs: number;
   rateLimitMaxRequests: number;
+  maxBodyBytes: number;
 }
 
 interface RateLimitBucket {
@@ -213,6 +215,7 @@ function resolveBrokerConfig(options: BrokerServerOptions): BrokerResolvedConfig
       ?? parsePositiveInteger(env.BROKER_RATE_LIMIT_WINDOW_MS, DEFAULT_RATE_LIMIT_WINDOW_MS),
     rateLimitMaxRequests: options.rateLimit?.maxRequests
       ?? parsePositiveInteger(env.BROKER_RATE_LIMIT_MAX_REQUESTS, DEFAULT_RATE_LIMIT_MAX_REQUESTS),
+    maxBodyBytes: parsePositiveInteger(env.BROKER_MAX_BODY_BYTES, DEFAULT_MAX_BODY_BYTES),
   };
 }
 
@@ -495,11 +498,17 @@ function getFilesystemPolicyAction(subcommand: string): string {
   }
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<JsonRecord> {
+async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise<JsonRecord> {
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new Error(`Request body too large. Maximum size is ${maxBytes} bytes.`);
+    }
+    chunks.push(buffer);
   }
 
   const rawBody = Buffer.concat(chunks).toString("utf8").trim();
@@ -771,7 +780,7 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
           return;
         }
 
-        const body = await readJsonBody(request);
+        const body = await readJsonBody(request, config.maxBodyBytes);
 
         // All task submissions — including skill tasks — go through the
         // submitTask callback so the daemon-managed path handles intent
@@ -803,7 +812,7 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
           return;
         }
 
-        const payload = toScheduleTaskRequest(await readJsonBody(request));
+        const payload = toScheduleTaskRequest(await readJsonBody(request, config.maxBodyBytes));
         const scheduled = await callbacks.scheduleTask(payload);
         writeJson(response, 200, {
           id: scheduled.id,
@@ -895,7 +904,7 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
           return;
         }
 
-        const body = await readJsonBody(request);
+        const body = await readJsonBody(request, config.maxBodyBytes);
         if (!Object.prototype.hasOwnProperty.call(body, "value")) {
           writeJson(response, 400, { error: "Config set requires a JSON body with value." });
           return;
@@ -917,7 +926,7 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
 
         const subcommand = pathname.slice("/api/v1/term/".length);
         const payload = request.method === "POST"
-          ? await readJsonBody(request)
+          ? await readJsonBody(request, config.maxBodyBytes)
           : Object.fromEntries(requestUrl.searchParams.entries());
         const policyEval = evaluateBrokerActionPolicy(getTerminalPolicyAction(subcommand), payload, options.env ?? process.env);
         if (!policyEval.allowed) {
@@ -937,7 +946,7 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
 
         const subcommand = pathname.slice("/api/v1/fs/".length);
         const payload = request.method === "POST"
-          ? await readJsonBody(request)
+          ? await readJsonBody(request, config.maxBodyBytes)
           : Object.fromEntries(requestUrl.searchParams.entries());
         const policyEval = evaluateBrokerActionPolicy(getFilesystemPolicyAction(subcommand), payload, options.env ?? process.env);
         if (!policyEval.allowed) {

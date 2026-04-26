@@ -5,11 +5,14 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { DefaultPolicyEngine } from "../../policy_engine";
 import type { RoutedStep, ExecutionContext, ConfirmationHandler, PolicyEvaluationResult } from "../../policy";
 import { Logger } from "../../logger";
-import { TRUSTED_PROFILE } from "../../policy_profiles";
+import { getProfile, saveCustomProfile, TRUSTED_PROFILE, validateProfile } from "../../policy_profiles";
 
 test("initializes with the default balanced profile", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
@@ -67,6 +70,41 @@ test("degrades to safe profile when unknown profile is requested on initializati
     logger: mockLogger,
   });
   assert.strictEqual(policyEngine.getActiveProfile(), "safe");
+});
+
+test("rejects custom policy profile names that could escape the profile directory", () => {
+  const validation = validateProfile({
+    ...TRUSTED_PROFILE,
+    name: "..\\providers\\registry",
+  });
+
+  assert.equal(validation.valid, false);
+  assert.match(validation.errors.join("\n"), /Profile name/);
+});
+
+test("saveCustomProfile refuses path traversal profile names", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-"));
+  process.env.BROWSER_CONTROL_HOME = home;
+
+  try {
+    assert.throws(
+      () => saveCustomProfile({ ...TRUSTED_PROFILE, name: "../providers/registry" }),
+      /Profile name/,
+    );
+    assert.equal(fs.existsSync(path.join(home, "providers", "registry.json")), false);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("getProfile returns null for unsafe custom profile names", () => {
+  assert.equal(getProfile("../providers/registry"), null);
 });
 
 test("allows low-risk actions in balanced profile", () => {

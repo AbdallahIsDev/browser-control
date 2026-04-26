@@ -200,6 +200,22 @@ const BUILT_IN_PROFILES = new Map<string, PolicyProfile>([
   ["trusted", TRUSTED_PROFILE],
 ]);
 
+const SAFE_PROFILE_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+
+export function isValidProfileName(name: string): boolean {
+  return SAFE_PROFILE_NAME.test(name);
+}
+
+export function validateProfileName(name: string): { valid: boolean; error?: string } {
+  if (!isValidProfileName(name)) {
+    return {
+      valid: false,
+      error: "Profile name must be 1-64 characters and contain only letters, numbers, hyphens, and underscores.",
+    };
+  }
+  return { valid: true };
+}
+
 export function getBuiltInProfile(name: string): PolicyProfile | null {
   return BUILT_IN_PROFILES.get(name) ?? null;
 }
@@ -233,6 +249,11 @@ export function validateProfile(profile: PolicyProfile): { valid: boolean; error
 
   if (!profile.name || typeof profile.name !== "string") {
     errors.push("Profile name is required and must be a string.");
+  } else {
+    const nameValidation = validateProfileName(profile.name);
+    if (!nameValidation.valid) {
+      errors.push(nameValidation.error ?? "Invalid profile name.");
+    }
   }
 
   if (!profile.commandPolicy || typeof profile.commandPolicy !== "object") {
@@ -274,6 +295,10 @@ export function deserializeProfile(json: string): PolicyProfile | null {
 // ── Custom Profile Persistence ────────────────────────────────────────────
 
 function getCustomProfilePath(name: string): string {
+  const nameValidation = validateProfileName(name);
+  if (!nameValidation.valid) {
+    throw new Error(nameValidation.error ?? "Invalid profile name.");
+  }
   const profilesDir = getPolicyProfilesDir();
   return path.join(profilesDir, `${name}.json`);
 }
@@ -292,6 +317,9 @@ export function saveCustomProfile(profile: PolicyProfile): void {
 }
 
 export function loadCustomProfile(name: string): PolicyProfile | null {
+  if (!validateProfileName(name).valid) {
+    return null;
+  }
   const profilePath = getCustomProfilePath(name);
   if (!fs.existsSync(profilePath)) {
     return null;
@@ -306,6 +334,9 @@ export function loadCustomProfile(name: string): PolicyProfile | null {
 }
 
 export function deleteCustomProfile(name: string): boolean {
+  if (!validateProfileName(name).valid) {
+    return false;
+  }
   const profilePath = getCustomProfilePath(name);
   if (!fs.existsSync(profilePath)) {
     return false;

@@ -1209,7 +1209,9 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 
       saveCustomProfile(profile);
       outputJson(profile, !jsonOutput);
-      console.log(`Profile "${profile.name}" imported and saved successfully`);
+      if (!jsonOutput) {
+        console.log(`Profile "${profile.name}" imported and saved successfully`);
+      }
       break;
     }
 

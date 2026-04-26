@@ -57,3 +57,58 @@ test("bc config list --json writes clean parseable JSON", async () => {
   }
 });
 
+test("bc policy import --json writes clean parseable JSON", async () => {
+  const home = makeHome();
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const profilePath = path.join(home, "review-profile.json");
+  fs.writeFileSync(profilePath, JSON.stringify({
+    name: "review_profile",
+    commandPolicy: {
+      allowedCommands: [],
+      deniedCommands: [],
+      requireConfirmationCommands: [],
+      restrictedWorkingDirectories: [],
+      restrictedNetworkClasses: [],
+      restrictedProcessClasses: [],
+      restrictedServiceClasses: [],
+    },
+    filesystemPolicy: {
+      allowedReadRoots: [],
+      allowedWriteRoots: [],
+      allowedDeleteRoots: [],
+      recursiveDeleteDefaultBehavior: "require_confirmation",
+      tempDirectoryDefaultBehavior: "allow",
+    },
+    browserPolicy: {
+      allowedDomains: [],
+      blockedDomains: [],
+      fileUploadAllowed: true,
+      fileDownloadAllowed: true,
+      screenshotAllowed: true,
+      clipboardAllowed: true,
+      credentialSubmissionAllowed: false,
+      automationOnlyInExplicitSessions: true,
+    },
+    lowLevelPolicy: {
+      rawCdpAllowed: false,
+      jsEvalAllowed: false,
+      networkInterceptionAllowed: false,
+      cookieExportImportAllowed: false,
+      coordinateActionsAllowed: false,
+      performanceTracesAllowed: true,
+    },
+  }), "utf8");
+
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    const output = await captureStdout(async () => {
+      await runCli(["node", "cli.ts", "policy", "import", profilePath, "--json"]);
+    });
+    const parsed = JSON.parse(output);
+    assert.equal(parsed.name, "review_profile");
+  } finally {
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
