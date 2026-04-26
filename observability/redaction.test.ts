@@ -110,6 +110,12 @@ describe("redactString", () => {
     assert(result.includes("http://127.0.0.1:9222"));
     assert(result.includes("http://localhost:9222"));
   });
+
+  it("redacts Browser Control fake test secret values wherever they appear", () => {
+    const input = "C:/tmp/bc_secret_test_token_12345/missing.txt";
+    const result = redactString(input);
+    assert.strictEqual(result, "C:/tmp/[REDACTED]/missing.txt");
+  });
 });
 
 describe("redactHeaders", () => {

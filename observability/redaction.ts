@@ -18,6 +18,8 @@ const SENSITIVE_PATTERNS = [
   /refresh[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // Browserless
   /browserless[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
+  // Deterministic Browser Control test tokens used in E2E proofs
+  /bc_secret_test_token_[a-zA-Z0-9_-]+/gi,
   // OpenRouter
   /openrouter[_-]?api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // CAPTCHA

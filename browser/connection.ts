@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import {
   resolveChromePath,
@@ -337,23 +337,39 @@ export class BrowserConnectionManager {
       return this.connection;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
+      if (this.context) {
+        try {
+          await this.context.close();
+        } catch {
+          // best effort
+        }
+      }
+      if (this.browser) {
+        try {
+          await this.browser.close();
+        } catch {
+          // best effort
+        }
+      }
       if (this.managedProcess) {
         const pid = this.managedProcess.pid;
         try {
           this.managedProcess.kill();
           if (process.platform === "win32" && pid) {
-            spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+            spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
               stdio: "ignore",
-              windowsHide: true,
+              timeout: 5000,
             });
           }
-        } catch (cleanupError: unknown) {
-          log.warn(`Failed to clean up managed browser after launch failure: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
-        } finally {
-          this.managedProcess = null;
           stopWslBridge(port);
+        } catch (cleanupError: unknown) {
+          log.warn(`Failed to clean partial managed browser launch: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
         }
       }
+      this.browser = null;
+      this.context = null;
+      this.connection = null;
+      this.managedProcess = null;
       log.error(`Failed to launch managed browser: ${message}`);
       throw new Error(
         `Failed to launch managed automation browser on port ${port}. ` +
