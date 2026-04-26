@@ -15,6 +15,13 @@ const testFiles = [
   "e2e/golden/terminal_resume_workflow.test.ts",
   "e2e/golden/provider_service_workflow.test.ts",
 ];
+const expectedWorkflowNames = [
+  "local web app",
+  "mcp stdio",
+  "failure recovery",
+  "terminal resume",
+  "provider service",
+];
 
 fs.rmSync(reportPath, { force: true });
 
@@ -52,6 +59,17 @@ if (!fs.existsSync(reportPath)) {
 
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const workflows = Array.isArray(report.workflows) ? report.workflows : [];
+const workflowNames = workflows.map((workflow) => workflow.name);
+const missing = expectedWorkflowNames.filter((name) => !workflowNames.includes(name));
+const unexpected = workflowNames.filter((name) => !expectedWorkflowNames.includes(name));
+const duplicates = workflowNames.filter((name, index) => workflowNames.indexOf(name) !== index);
+if (missing.length > 0 || unexpected.length > 0 || duplicates.length > 0) {
+  console.error("E2E reliability report is incomplete or inconsistent.");
+  if (missing.length > 0) console.error(`- missing workflows: ${missing.join(", ")}`);
+  if (unexpected.length > 0) console.error(`- unexpected workflows: ${unexpected.join(", ")}`);
+  if (duplicates.length > 0) console.error(`- duplicate workflows: ${[...new Set(duplicates)].join(", ")}`);
+  process.exit(1);
+}
 const bad = workflows.filter((workflow) => workflow.status !== "pass" || workflow.cleanup?.status !== "pass");
 if (bad.length > 0) {
   console.error("E2E reliability gate failed. All workflows and cleanup checks must pass with zero skips.");

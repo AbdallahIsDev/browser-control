@@ -15,6 +15,10 @@ test("golden provider/service workflow resolves local services and preserves pro
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-e2e-provider-home-"));
   const previousHome = process.env.BROWSER_CONTROL_HOME;
   const previousDebugPort = process.env.BROWSER_DEBUG_PORT;
+  const previousDebugUrl = process.env.BROWSER_DEBUG_URL;
+  const previousDebugHost = process.env.BROWSER_DEBUG_HOST;
+  const previousBindAddress = process.env.BROWSER_BIND_ADDRESS;
+  const previousBrowserMode = process.env.BROWSER_MODE;
   const debugPort = String(21000 + Math.floor(Math.random() * 1000));
   let server: LocalAppServer | undefined;
   let bc: ReturnType<typeof createBrowserControl> | undefined;
@@ -24,6 +28,10 @@ test("golden provider/service workflow resolves local services and preserves pro
   try {
     process.env.BROWSER_CONTROL_HOME = homeDir;
     process.env.BROWSER_DEBUG_PORT = debugPort;
+    delete process.env.BROWSER_DEBUG_URL;
+    delete process.env.BROWSER_DEBUG_HOST;
+    process.env.BROWSER_BIND_ADDRESS = "127.0.0.1";
+    process.env.BROWSER_MODE = "managed";
     server = await startLocalAppServer();
     bc = createBrowserControl({ policyProfile: "trusted" });
     const registered = await bc.service.register({ name: "provider-golden-app", port: server.port, path: "/" });
@@ -102,6 +110,26 @@ test("golden provider/service workflow resolves local services and preserves pro
       delete process.env.BROWSER_DEBUG_PORT;
     } else {
       process.env.BROWSER_DEBUG_PORT = previousDebugPort;
+    }
+    if (previousDebugUrl === undefined) {
+      delete process.env.BROWSER_DEBUG_URL;
+    } else {
+      process.env.BROWSER_DEBUG_URL = previousDebugUrl;
+    }
+    if (previousDebugHost === undefined) {
+      delete process.env.BROWSER_DEBUG_HOST;
+    } else {
+      process.env.BROWSER_DEBUG_HOST = previousDebugHost;
+    }
+    if (previousBindAddress === undefined) {
+      delete process.env.BROWSER_BIND_ADDRESS;
+    } else {
+      process.env.BROWSER_BIND_ADDRESS = previousBindAddress;
+    }
+    if (previousBrowserMode === undefined) {
+      delete process.env.BROWSER_MODE;
+    } else {
+      process.env.BROWSER_MODE = previousBrowserMode;
     }
     fs.rmSync(homeDir, { recursive: true, force: true });
   }

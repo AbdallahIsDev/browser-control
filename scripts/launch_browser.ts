@@ -226,6 +226,11 @@ function getWslHostCandidates(): string[] {
   return [];
 }
 
+function isWslCdpBridgeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.BROWSER_ENABLE_WSL_CDP_BRIDGE?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
 /** Discover WSL-reachable IPs from inside WSL (original behavior). */
 function getWslHostCandidatesFromWsl(): string[] {
   const seen = new Set<string>();
@@ -420,7 +425,7 @@ async function main(): Promise<void> {
 
   // Compute WSL host candidates (works from both WSL and Windows)
   const wslHostCandidates = getWslHostCandidates();
-  const needsBridge = wslHostCandidates.length > 0;
+  const needsBridge = isWslCdpBridgeEnabled() && wslHostCandidates.length > 0;
 
   // Check for existing Chrome on this port
   if (await isChromeAlive(port)) {
@@ -466,7 +471,8 @@ async function main(): Promise<void> {
   writeDebugState({ port, bindAddress, wslHostCandidates });
   console.log(`SUCCESS: Chrome debug session ready on port ${port}`);
 
-  // Start WSL bridge when we have candidates (works from both WSL and Windows)
+  // WSL CDP bridge exposes an unauthenticated debugging port on a private
+  // interface, so it is explicit opt-in only.
   if (needsBridge) {
     const bridgeScript = path.resolve(__dirname, "..", "wsl_cdp_bridge.cjs");
     await startWslBridgeIfNeeded(port, wslHostCandidates, bridgeScript);
@@ -487,6 +493,7 @@ export {
   getWslHostCandidatesFromWsl,
   getWslHostCandidatesFromWindows,
   isChromeAlive,
+  isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
   waitForCdp,
