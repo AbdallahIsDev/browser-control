@@ -1,7 +1,7 @@
 {
   "name": "browser-control",
   "version": "1.0.0",
-  "description": "AI-powered browser automation platform — Playwright, Stagehand, and CDP.",
+  "description": "Unified browser, terminal, filesystem, and MCP automation engine for AI agents.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
@@ -11,10 +11,18 @@
     "dist/",
     "cli.js",
     "LICENSE",
-    ".env.example"
+    "README.md",
+    ".env.example",
+    "docs/getting-started.md",
+    "docs/cli.md",
+    "docs/mcp.md",
+    "docs/troubleshooting.md",
+    "docs/policy.md",
+    "docs/api.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/clean_dist.cjs && tsc -p tsconfig.build.json",
+    "package:smoke": "node scripts/package_smoke_test.cjs",
     "prepublishOnly": "npm run build",
     "test": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1",
     "broker:start": "ts-node broker_server.ts",
@@ -51,5 +59,9 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "uuid": "^14.0.0",
+    "langsmith": "^0.5.25"
   }
 }

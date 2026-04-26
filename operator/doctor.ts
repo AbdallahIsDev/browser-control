@@ -39,6 +39,17 @@ function nodeSatisfies(engine: string | undefined, version = process.versions.no
   return true;
 }
 
+function resolvePackageJsonPath(): string {
+  const candidates = [
+    path.join(__dirname, "..", "package.json"),
+    path.join(__dirname, "..", "..", "package.json"),
+    path.join(process.cwd(), "package.json"),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!found) throw new Error("Unable to locate browser-control package.json");
+  return found;
+}
+
 async function runCheck(check: DoctorCheck): Promise<DoctorCheckResult> {
   try {
     return await check();
@@ -62,7 +73,7 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
 
   return [
     async () => {
-      const pkgPath = path.join(cwd, "package.json");
+      const pkgPath = resolvePackageJsonPath();
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { engines?: { node?: string } };
       const engine = pkg.engines?.node;
       return nodeSatisfies(engine)
@@ -96,15 +107,14 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
         const chromePath = resolveChromePath(process.platform, config.chromePath);
         return result("browser.chrome", "Chrome Availability", "browser", "pass", `Chrome found at ${chromePath}.`, "No action needed.", false);
       } catch (error) {
-        const critical = config.browserMode === "managed";
         return result(
           "browser.chrome",
           "Chrome Availability",
           "browser",
-          critical ? "fail" : "warn",
+          "warn",
           error instanceof Error ? error.message : String(error),
           "Install Chrome or set BROWSER_CHROME_PATH. Terminal and filesystem commands can still run.",
-          critical,
+          false,
         );
       }
     },

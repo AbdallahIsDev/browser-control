@@ -2,33 +2,93 @@
 
 Browser Control is a unified automation engine for agents and operators. It exposes terminal, filesystem, system, semantic browser, and low-level CDP tools through one runtime.
 
-## Install
+## Requirements
+
+Node.js `>=22`.
+
+Chrome is not required for terminal/filesystem-only first run. Missing Chrome or unreachable CDP is reported as degraded browser capability.
+
+## Clean Checkout
 
 ```bash
-npm install
-npm run typecheck
+npm ci
+npm run build
+node cli.js --help
+node cli.js setup --non-interactive
+node cli.js doctor
+node cli.js status --json
 ```
 
-Node.js must satisfy the `engines.node` field in `package.json`.
+`bc setup` creates the data home and user config. Runtime data is stored in `~/.browser-control` by default, or in `BROWSER_CONTROL_HOME` when set.
 
-## First Setup
+## Isolated First Run
+
+PowerShell:
+
+```powershell
+$env:BROWSER_CONTROL_HOME = Join-Path $env:TEMP ("browser-control-" + [guid]::NewGuid().ToString())
+node cli.js setup --non-interactive --json
+node cli.js doctor --json
+node cli.js status --json
+```
+
+Windows `cmd.exe`:
+
+```cmd
+set BROWSER_CONTROL_HOME=%TEMP%\browser-control-%RANDOM%
+node cli.js setup --non-interactive --json
+node cli.js doctor --json
+```
+
+Linux/macOS:
 
 ```bash
-bc setup --non-interactive --profile balanced
-bc doctor
-bc status
+BC_HOME="$(mktemp -d)"
+BROWSER_CONTROL_HOME="$BC_HOME" node cli.js setup --non-interactive --json
+BROWSER_CONTROL_HOME="$BC_HOME" node cli.js doctor --json
 ```
 
-`bc setup` creates the Browser Control data home and user config. Runtime data is stored in `~/.browser-control` by default, or in `BROWSER_CONTROL_HOME` when set.
-
-## First Automation
-
-Start the daemon for broker-backed workflows:
+## Packed Package Install
 
 ```bash
-bc daemon start
-bc status
+npm pack
+mkdir bc-smoke
+cd bc-smoke
+npm init -y
+npm install ../browser-control-1.0.0.tgz
+npx bc --help
+npx bc setup --non-interactive
+npx bc doctor
+npx bc status --json
 ```
 
-For browser workflows, use managed browser mode or attach to an existing Chrome debug session. For terminal-only and filesystem-only workflows, Chrome does not need to be running.
+Global install from a local tarball:
 
+```bash
+npm install -g ../browser-control-1.0.0.tgz
+bc --help
+```
+
+## MCP
+
+```bash
+bc setup --non-interactive
+bc mcp serve
+```
+
+Use this MCP client snippet:
+
+```json
+{
+  "mcpServers": {
+    "browser-control": {
+      "command": "bc",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+## Browser Workflows
+
+For browser workflows, use managed browser mode or attach to an existing Chrome debug session. If Chrome is missing, terminal and filesystem commands still work. Install Chrome or set `BROWSER_CHROME_PATH` when browser automation is needed.

@@ -1,8 +1,8 @@
 import type { Page } from "playwright";
-import { retryAction, waitForAny, waitForElement } from "@bc/browser_core";
-import { act } from "@bc/stagehand_core";
-import { resolveSelector } from "@bc/selector_store";
-import { getSelectors, getSelectorsPath, selectorDescriptions } from "@bc/selectors";
+import { retryAction, waitForAny, waitForElement } from "../browser_core";
+import { act } from "../stagehand_core";
+import { resolveSelector } from "../selector_store";
+import { getSelectors, getSelectorsPath, selectorDescriptions } from "../selectors";
 import type { Skill, SkillContext, SkillManifest } from "../skill";
 
 export interface FramerSkillResult {

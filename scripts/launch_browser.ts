@@ -41,8 +41,12 @@ const CHROME_CANDIDATES: Record<string, string[]> = {
 };
 
 function resolveChromePath(platform: NodeJS.Platform, override?: string): string {
-  if (override && override.trim() && fs.existsSync(override.trim())) {
-    return override.trim();
+  if (override && override.trim()) {
+    const explicitPath = override.trim();
+    if (fs.existsSync(explicitPath)) {
+      return explicitPath;
+    }
+    throw new Error(`Chrome not found at BROWSER_CHROME_PATH: ${explicitPath}`);
   }
 
   const rawCandidates = CHROME_CANDIDATES[platform] ?? CHROME_CANDIDATES.linux;

@@ -16,6 +16,7 @@
     "**/*.test.ts",
     "dist",
     "cli.js",
+    "test_daemon_helpers.ts",
     "setup.json",
     "proxies.example.json",
     "automation-memory.sqlite"

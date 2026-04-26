@@ -9,6 +9,12 @@
 const path = require("node:path");
 const fs = require("node:fs");
 
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (!Number.isFinite(nodeMajor) || nodeMajor < 22) {
+  console.error(`Browser Control requires Node.js >=22. Current Node.js: ${process.versions.node}.`);
+  process.exit(1);
+}
+
 const distCli = path.join(__dirname, "dist", "cli.js");
 const hasTsRuntime = Boolean(require.extensions[".ts"]);
 

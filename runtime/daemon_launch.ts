@@ -11,21 +11,20 @@ export interface SpawnDaemonOptions {
   cwd?: string;
 }
 
+export function resolvePackageRoot(cwd: string): string {
+  const resolved = path.resolve(cwd);
+  return path.basename(resolved) === "dist" ? path.dirname(resolved) : resolved;
+}
+
 function getDefaultDaemonCwd(): string {
   const parent = path.resolve(__dirname, "..");
-  return path.basename(parent) === "dist" ? path.resolve(parent, "..") : parent;
+  return resolvePackageRoot(parent);
 }
 
 export function resolveDaemonEntryPoint(cwd: string): { command: string; args: string[] } {
-  const sourceEntry = path.join(cwd, "daemon.ts");
-  if (fs.existsSync(sourceEntry)) {
-    return {
-      command: process.execPath,
-      args: [require.resolve("ts-node/dist/bin.js"), sourceEntry],
-    };
-  }
+  const root = resolvePackageRoot(cwd);
 
-  const distEntry = path.join(cwd, "dist", "daemon.js");
+  const distEntry = path.join(root, "dist", "daemon.js");
   if (fs.existsSync(distEntry)) {
     return {
       command: process.execPath,
@@ -33,7 +32,15 @@ export function resolveDaemonEntryPoint(cwd: string): { command: string; args: s
     };
   }
 
-  const compiledEntry = path.join(cwd, "daemon.js");
+  const sourceEntry = path.join(root, "daemon.ts");
+  if (fs.existsSync(sourceEntry)) {
+    return {
+      command: process.execPath,
+      args: [require.resolve("ts-node/dist/bin.js"), sourceEntry],
+    };
+  }
+
+  const compiledEntry = path.join(root, "daemon.js");
   if (fs.existsSync(compiledEntry)) {
     return {
       command: process.execPath,
@@ -41,7 +48,7 @@ export function resolveDaemonEntryPoint(cwd: string): { command: string; args: s
     };
   }
 
-  const compiledRuntimeEntry = path.join(cwd, "runtime", "daemon.js");
+  const compiledRuntimeEntry = path.join(root, "runtime", "daemon.js");
   if (fs.existsSync(compiledRuntimeEntry)) {
     return {
       command: process.execPath,
