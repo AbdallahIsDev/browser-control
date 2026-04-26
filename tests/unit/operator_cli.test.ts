@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -53,6 +54,34 @@ test("bc config list --json writes clean parseable JSON", async () => {
   } finally {
     if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
     else process.env.BROWSER_CONTROL_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("bc --help does not import SQLite-backed runtime modules", () => {
+  const home = makeHome();
+  try {
+    const result = spawnSync(process.execPath, [
+      "--require",
+      "ts-node/register",
+      "--require",
+      "tsconfig-paths/register",
+      "cli.ts",
+      "--help",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        BROWSER_CONTROL_HOME: home,
+        NODE_OPTIONS: "--trace-warnings",
+      },
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Browser Control CLI/);
+    assert.doesNotMatch(result.stderr, /SQLite|node:sqlite|ExperimentalWarning/);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

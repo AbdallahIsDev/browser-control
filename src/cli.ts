@@ -3,25 +3,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { MemoryStore } from "./runtime/memory_store";
-import { isPolicyAllowed, SessionManager } from "./session_manager";
-import { loadProxyConfigs } from "./proxy_manager";
-import { Telemetry } from "./runtime/telemetry";
-import { getPidFilePath, getReportsDir, ensureDataHome, getSkillsDataDir } from "./shared/paths";
-import { loadConfig } from "./shared/config";
-import { spawnDaemonProcess } from "./runtime/daemon_launch";
-import { getConfigEntries, getConfigValue, setUserConfigValue } from "./shared/config";
-import { runDoctor } from "./operator/doctor";
-import { runSetup } from "./operator/setup";
-import { collectStatus } from "./operator/status";
-import {
-  formatConfigGet,
-  formatConfigList,
-  formatConfigSet,
-  formatDoctor,
-  formatSetup,
-  formatStatus,
-} from "./operator/format";
 
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
@@ -117,13 +98,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return result;
 }
 
-function getApiUrl(): string {
+async function getApiUrl(): Promise<string> {
+  const { loadConfig } = await import("./shared/config");
   const config = loadConfig({ validate: false });
   return `http://127.0.0.1:${config.brokerPort}/api/v1`;
 }
 
 async function apiRequest(endpoint: string, method = "GET", body?: unknown): Promise<unknown> {
-  const url = `${getApiUrl()}${endpoint}`;
+  const url = `${await getApiUrl()}${endpoint}`;
   const options: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -144,7 +126,11 @@ function outputJson(data: unknown, pretty = true): void {
   console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
 
-function requireCliPolicy(action: string, params: Record<string, unknown>, jsonOutput: boolean): void {
+async function requireCliPolicy(action: string, params: Record<string, unknown>, jsonOutput: boolean): Promise<void> {
+  const [{ MemoryStore }, { SessionManager, isPolicyAllowed }] = await Promise.all([
+    import("./runtime/memory_store"),
+    import("./session_manager"),
+  ]);
   const store = new MemoryStore({ filename: ":memory:" });
   try {
     const manager = new SessionManager({ memoryStore: store });
@@ -296,6 +282,10 @@ Environment:
 
 async function handleDoctor(args: ParsedArgs): Promise<void> {
   const jsonOutput = args.flags.json === "true";
+  const [{ runDoctor }, { formatDoctor }] = await Promise.all([
+    import("./operator/doctor"),
+    import("./operator/format"),
+  ]);
   const result = await runDoctor();
   if (jsonOutput) {
     outputJson(result.report, false);
@@ -307,6 +297,10 @@ async function handleDoctor(args: ParsedArgs): Promise<void> {
 
 async function handleSetup(args: ParsedArgs): Promise<void> {
   const jsonOutput = args.flags.json === "true";
+  const [{ runSetup }, { formatSetup }] = await Promise.all([
+    import("./operator/setup"),
+    import("./operator/format"),
+  ]);
   const result = await runSetup({
     nonInteractive: args.flags["non-interactive"] === "true",
     json: jsonOutput,
@@ -328,6 +322,13 @@ async function handleSetup(args: ParsedArgs): Promise<void> {
 async function handleConfig(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
+  const [
+    { getConfigEntries, getConfigValue, setUserConfigValue },
+    { formatConfigGet, formatConfigList, formatConfigSet },
+  ] = await Promise.all([
+    import("./shared/config"),
+    import("./operator/format"),
+  ]);
 
   switch (subcommand) {
     case "list": {
@@ -354,7 +355,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
         console.error("Error: config set requires <key> <value>");
         process.exit(1);
       }
-      requireCliPolicy("config_set", { key, value }, jsonOutput);
+      await requireCliPolicy("config_set", { key, value }, jsonOutput);
       const result = setUserConfigValue(key, value);
       if (jsonOutput) outputJson(result, false);
       else console.log(formatConfigSet(result));
@@ -369,6 +370,10 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 
 async function handleStatus(args: ParsedArgs): Promise<void> {
   const jsonOutput = args.flags.json === "true";
+  const [{ collectStatus }, { formatStatus }] = await Promise.all([
+    import("./operator/status"),
+    import("./operator/format"),
+  ]);
   const status = await collectStatus();
   if (jsonOutput) outputJson(status, false);
   else console.log(formatStatus(status));
@@ -496,27 +501,21 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
   }
 }
 
-// ── Daemon Cleanup Helpers (imported from shared module) ─────────────
+// ── Daemon Cleanup Helpers ──────────────────────────────────────────
 
-import {
-  cleanupStaleDaemonFiles,
-  stopDaemon,
-} from "./runtime/daemon_cleanup";
-
-/**
- * CLI-specific wrapper: clean up stale daemon-status.json for the
- * default (non-isolated) home directory.
- */
-function cleanupStaleDaemonStatus(): void {
+async function cleanupStaleDaemonStatus(): Promise<void> {
+  const { cleanupStaleDaemonFiles } = await import("./runtime/daemon_cleanup");
   cleanupStaleDaemonFiles();
 }
 
 async function handleDaemon(args: ParsedArgs): Promise<void> {
   const { subcommand, flags } = args;
   const jsonOutput = flags.json === "true";
+  const { getPidFilePath, getReportsDir } = await import("./shared/paths");
 
   switch (subcommand) {
     case "start": {
+      const { spawnDaemonProcess } = await import("./runtime/daemon_launch");
       const daemonProcess = spawnDaemonProcess({
         visible: flags.visible === "true",
         detached: true,
@@ -598,18 +597,19 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       if (!fs.existsSync(getPidFilePath())) {
         console.log("Daemon is not running (no PID file)");
         // Still clean up stale status file if daemon is gone
-        cleanupStaleDaemonStatus();
+        await cleanupStaleDaemonStatus();
         process.exit(1);
       }
 
       const pid = Number(fs.readFileSync(getPidFilePath(), "utf8").trim());
       try {
+        const { stopDaemon } = await import("./runtime/daemon_cleanup");
         await stopDaemon();
         console.log(`Daemon stopped (PID: ${pid})`);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ESRCH") {
           fs.unlinkSync(getPidFilePath());
-          cleanupStaleDaemonStatus();
+          await cleanupStaleDaemonStatus();
           console.log("Daemon was not running (stale PID file removed)");
         } else {
           // Do NOT delete the PID file on real errors (e.g., access denied).
@@ -627,7 +627,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
         // No PID file — daemon is not running. Also clean up stale
         // daemon-status.json that may claim "running" from a previous
         // crash/force-kill.
-        cleanupStaleDaemonStatus();
+        await cleanupStaleDaemonStatus();
         console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
         break;
       }
@@ -641,7 +641,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
         // PID file exists but process is dead — stale state.
         // Remove both the PID file and the stale daemon-status.json.
         fs.unlinkSync(getPidFilePath());
-        cleanupStaleDaemonStatus();
+        await cleanupStaleDaemonStatus();
         console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
       }
       break;
@@ -692,6 +692,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 async function handleProxy(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
+  const { loadProxyConfigs } = await import("./proxy_manager");
 
   switch (subcommand) {
     case "test": {
@@ -790,6 +791,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 async function handleMemory(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
+  const { MemoryStore } = await import("./runtime/memory_store");
 
   const store = new MemoryStore();
 
@@ -846,6 +848,7 @@ async function handleMemory(args: ParsedArgs): Promise<void> {
 async function handleSkill(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
+  const { getSkillsDataDir } = await import("./shared/paths");
 
   switch (subcommand) {
     case "list": {
@@ -1037,6 +1040,10 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 async function handleReport(args: ParsedArgs): Promise<void> {
   const { subcommand, flags } = args;
   const jsonOutput = flags.json === "true";
+  const [{ Telemetry }, { getReportsDir }] = await Promise.all([
+    import("./runtime/telemetry"),
+    import("./shared/paths"),
+  ]);
 
   switch (subcommand) {
     case "generate": {
@@ -1091,6 +1098,7 @@ async function handleReport(args: ParsedArgs): Promise<void> {
 async function handleCaptcha(args: ParsedArgs): Promise<void> {
   const { subcommand, flags } = args;
   const jsonOutput = flags.json === "true";
+  const { loadConfig } = await import("./shared/config");
 
   if (subcommand !== "test") {
     console.error(`Unknown captcha command: ${subcommand}`);
@@ -1302,6 +1310,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
     case "status": {
       try {
+        const { MemoryStore } = await import("./runtime/memory_store");
         const store = new MemoryStore();
         const connectionState = store.get("browser_connection:active");
         store.close();
@@ -1349,7 +1358,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
-          requireCliPolicy("browser_provider_use", { name }, jsonOutput);
+          await requireCliPolicy("browser_provider_use", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.select(name);
@@ -1389,7 +1398,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: --endpoint is required");
             process.exit(1);
           }
-          requireCliPolicy("browser_provider_add", { name, type: providerType, endpoint }, jsonOutput);
+          await requireCliPolicy("browser_provider_add", { name, type: providerType, endpoint }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const config: Record<string, unknown> = { name, type: providerType, endpoint };
@@ -1414,7 +1423,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             console.error("Error: Provider name is required");
             process.exit(1);
           }
-          requireCliPolicy("browser_provider_remove", { name }, jsonOutput);
+          await requireCliPolicy("browser_provider_remove", { name }, jsonOutput);
           const { ProviderRegistry } = await import("./providers/registry");
           const registry = new ProviderRegistry();
           const result = registry.remove(name);
@@ -1496,6 +1505,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           }
           pm.touchProfile(profile.id);
           // Store the active profile preference
+          const { MemoryStore } = await import("./runtime/memory_store");
           const store = new MemoryStore();
           store.set("browser_connection:active_profile", { id: profile.id, name: profile.name });
           store.close();
@@ -1551,7 +1561,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              process.exit(1);
           }
 
-          requireCliPolicy("browser_auth_export", {
+          await requireCliPolicy("browser_auth_export", {
             profileName: profileName ?? "default",
             outputFile,
             live: isLive,
@@ -1564,6 +1574,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             const { loadAuthSnapshot } = await import("./browser/auth_state");
             const { loadConfig } = await import("./shared/config");
             const { DefaultPolicyEngine } = await import("./policy/engine");
+            const { MemoryStore } = await import("./runtime/memory_store");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -1652,7 +1663,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
              process.exit(1);
           }
 
-          requireCliPolicy("browser_auth_import", {
+          await requireCliPolicy("browser_auth_import", {
             filePath,
             live: isLive,
             stored: isStored,
@@ -1665,6 +1676,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             const { saveAuthSnapshotToStore } = await import("./browser/auth_state");
             const { loadConfig } = await import("./shared/config");
             const { DefaultPolicyEngine } = await import("./policy/engine");
+            const { MemoryStore } = await import("./runtime/memory_store");
 
             const config = loadConfig({ validate: false });
             const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -2152,6 +2164,7 @@ async function ensureDaemonRunning(): Promise<string> {
   }
 
   // Return the broker URL from the cached runtime
+  const { loadConfig } = await import("./shared/config");
   const config = loadConfig({ validate: false });
   return `http://127.0.0.1:${config.brokerPort}`;
 }
@@ -2905,10 +2918,11 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         console.error("Error: Bundle ID is required");
         process.exit(1);
       }
-      requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput);
+      await requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput);
 
       try {
         const { loadDebugBundle } = await import("./observability/debug_bundle");
+        const { MemoryStore } = await import("./runtime/memory_store");
         const store = new MemoryStore();
         const bundle = loadDebugBundle(bundleId, store);
         store.close();
@@ -2937,7 +2951,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalConsoleCapture } = await import("./observability/console_capture");
         const capture = getGlobalConsoleCapture();
         const sessionId = flags.session ?? "default";
-        requireCliPolicy("debug_console_read", { sessionId }, jsonOutput);
+        await requireCliPolicy("debug_console_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {
@@ -2964,7 +2978,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         const { getGlobalNetworkCapture } = await import("./observability/network_capture");
         const capture = getGlobalNetworkCapture();
         const sessionId = flags.session ?? "default";
-        requireCliPolicy("debug_network_read", { sessionId }, jsonOutput);
+        await requireCliPolicy("debug_network_read", { sessionId }, jsonOutput);
         const entries = capture.getEntries(sessionId);
 
         if (jsonOutput) {

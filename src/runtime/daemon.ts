@@ -1624,6 +1624,9 @@ export class Daemon {
     if (skill.manifest.requiresFreshPage && connection) {
       // Create a fresh page from the existing Stagehand context
       const stagehand = connection.stagehand;
+      if (!stagehand.context.newPage) {
+        return null;
+      }
       page = await stagehand.context.newPage() as unknown as import("playwright").Page;
       freshPage = page; // Track so we can close it after execution
     } else if (connection) {

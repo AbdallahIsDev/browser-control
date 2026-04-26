@@ -1,4 +1,3 @@
-import { Stagehand, type Action, type Page as StagehandPage } from "@browserbasehq/stagehand";
 import type { Page as PlaywrightPage } from "playwright";
 import { z, type ZodTypeAny } from "zod";
 import { resolveDebugEndpointUrl } from "./core";
@@ -6,6 +5,54 @@ import { loadConfig, type BrowserControlConfig } from "../shared/config";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("stagehand");
+const STAGEHAND_MISSING_MESSAGE = "Stagehand support is not installed.\nRun: npm install @browserbasehq/stagehand";
+
+export type Action = {
+  selector?: string;
+  [key: string]: unknown;
+};
+export type StagehandPage = { url(): string } & Record<string, unknown>;
+
+export interface Stagehand {
+  context: {
+    pages(): StagehandPage[];
+    newPage?(): Promise<unknown>;
+  };
+  init(): Promise<void>;
+  close(): Promise<void>;
+  act(instruction: string, options: { page: StagehandPage }): Promise<void>;
+  observe(instruction: string, options: { page: StagehandPage }): Promise<Action[]>;
+  observe(options: { page: StagehandPage }): Promise<Action[]>;
+  extract<TSchema extends ZodTypeAny>(
+    instruction: string,
+    schema: TSchema,
+    options: { page: StagehandPage },
+  ): Promise<z.infer<TSchema>>;
+}
+
+type StagehandConstructor = new (options: Record<string, unknown>) => Stagehand;
+
+function isMissingStagehand(error: unknown): boolean {
+  const err = error as NodeJS.ErrnoException;
+  return err?.code === "MODULE_NOT_FOUND" && String(err.message ?? "").includes("@browserbasehq/stagehand");
+}
+
+function loadStagehandConstructor(): StagehandConstructor {
+  try {
+    // Optional dependency: do not import Stagehand unless a user actually uses it.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const moduleValue = require("@browserbasehq/stagehand") as { Stagehand?: StagehandConstructor };
+    if (!moduleValue.Stagehand) {
+      throw new Error("Stagehand package did not export Stagehand.");
+    }
+    return moduleValue.Stagehand;
+  } catch (error) {
+    if (isMissingStagehand(error)) {
+      throw new Error(STAGEHAND_MISSING_MESSAGE);
+    }
+    throw error;
+  }
+}
 
 export type AutomationPage = PlaywrightPage | StagehandPage;
 
@@ -43,6 +90,7 @@ export class StagehandManager {
       throw new Error(`Session "${id}" already exists.`);
     }
 
+    const Stagehand = loadStagehandConstructor();
     const cdpUrl = await getCdpWebSocketUrl(port);
     const appConfig = options.config ?? loadConfig({ validate: false });
     const openRouterApiKey = appConfig.openrouterApiKey;
@@ -164,6 +212,7 @@ export function getActiveStagehand(): Stagehand | null {
 
 /** Attach Stagehand to the existing Chrome debug session and active tab. */
 export async function connectStagehand(port: number, urlPattern: string, options: { config?: BrowserControlConfig } = {}): Promise<StagehandConnection> {
+  const Stagehand = loadStagehandConstructor();
   const cdpUrl = await getCdpWebSocketUrl(port);
   const appConfig = options.config ?? loadConfig({ validate: false });
   const openRouterApiKey = appConfig.openrouterApiKey;
