@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { detectShell, resolveNamedShell, type ShellInfo } from "./cross_platform";
 import { isPromptDetected, extractCwdFromPrompt } from "./prompt";
+import { redactEnv, redactCommandText } from "./serialize";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("terminal");
@@ -276,8 +277,8 @@ export class PtyTerminalSession implements ITerminalSession {
       commandOutput = this._outputBuffer;
     }
 
-    // Clean ANSI codes
-    const cleanOutput = stripAnsi(commandOutput);
+    // Clean ANSI codes and remove Browser Control marker/wrapper echo.
+    const cleanOutput = cleanPtyCommandOutput(stripAnsi(commandOutput), command);
 
     // Split into stdout/stderr (PTY merges them)
     const { stdout, stderr } = splitPtyOutput(cleanOutput, command);
@@ -322,12 +323,12 @@ export class PtyTerminalSession implements ITerminalSession {
       name: this.name,
       shell: this.shell,
       cwd: this._cwd,
-      env: { ...this.env },
+      env: redactEnv(this.env),
       status: this._status,
-      lastOutput: stripAnsi(this._outputBuffer.slice(-4096)),
+      lastOutput: cleanPtySessionOutput(stripAnsi(this._outputBuffer.slice(-4096))),
       promptDetected: isPromptDetected(this._outputBuffer, this.id),
       scrollbackLines: this._outputBuffer.split(/\r?\n/).length,
-      runningCommand: this._runningCommand,
+      runningCommand: this._runningCommand ? redactCommandText(this._runningCommand) : undefined,
       createdAt: this.createdAt,
       lastActivityAt: this._lastActivityAt,
       resumeMetadata: this.resumeMetadata,
@@ -671,9 +672,40 @@ function sleep(ms: number): Promise<void> {
  */
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+  return text.replace(/\x1b\[\??[0-9;]*[a-zA-Z]/g, "")
     .replace(/\x1b\][^\x07]*\x07/g, "")
     .replace(/\x1b[()#][a-zA-Z0-9]/g, "");
+}
+
+function cleanPtyCommandOutput(output: string, command: string): string {
+  return output
+    .replace(/^.*__BC_S_\d+__.*$/gm, "")
+    .replace(
+      /(?:^|\r?\n)(?:PS [^\r\n>]+>\s*)?>\s*& \{ [\s\S]*? \}; \$__bc_success = \$\?; \$__bc_exit = if \(\$null -ne \$LASTEXITCODE\) \{ \[int\]\$LASTEXITCODE \} elseif \(\$__bc_success\) \{ 0 \} else \{ 1 \}; Write-Output "__BC_E_\d+:\$__bc_exit"\s*/g,
+      "\n",
+    )
+    .replace(/^.*__BC_E_\d+:\d+.*$/gm, "")
+    .replace(/__BC_S_\d+__/g, "")
+    .replace(/__BC_E_\d+:\d+/g, "")
+    .replace(new RegExp(`^\\s*${escapeRegExp(command)}\\s*$`, "gm"), "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '"' && line.trim() !== "")
+    .join("\n")
+    .trim();
+}
+
+function cleanPtySessionOutput(output: string): string {
+  return output
+    .replace(/^.*__BC_S_\d+__.*$/gm, "")
+    .replace(/^.*__BC_E_\d+:\d+.*$/gm, "")
+    .replace(/^.*Write-Output "__BC_S_\d+__".*$/gm, "")
+    .replace(/^.*Write-Output "__BC_E_\d+:\$__bc_exit".*$/gm, "")
+    .replace(/__BC_S_\d+__/g, "")
+    .replace(/__BC_E_\d+:\d+/g, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

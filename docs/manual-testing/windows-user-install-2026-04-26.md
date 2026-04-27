@@ -361,6 +361,8 @@ Result:
 - `term list` showed daemon terminal sessions.
 - Using a real terminal id, `term exec`, `term read`, `term snapshot`, and `term close` succeeded.
 - Leaving `$termId="<PASTE_TERMINAL_ID_HERE>"` is user error, but now fails cleanly with `Invalid terminal session id: <PASTE_TERMINAL_ID_HERE>` and no native assertion crash.
+- `term exec` now returns clean command output instead of internal Browser Control marker/wrapper commands.
+- `term snapshot` now redacts secret-looking environment values before printing.
 
 ## Issues Found During Manual Testing
 
@@ -378,7 +380,8 @@ Result:
 - Live auth export could get stuck by re-attaching to Browser Control's own managed browser. Fixed by reconnecting to the active managed browser state first and releasing CLI handles.
 - Terminal commands with invalid placeholder ids could trigger `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` after a broker HTTP 400. Fixed by validating terminal ids before runtime calls and only invalidating broker runtime on transport failures.
 - Daemon terminal sessions opened in the package directory when `--cwd` was omitted. Fixed by passing caller cwd from the CLI.
-- `term snapshot` can expose full terminal environment, including secrets inherited from the caller. Treat snapshot output as sensitive until redaction is added.
+- `term snapshot` exposed full terminal environment, including secrets inherited from the caller. Fixed by redacting secret-looking env keys in snapshots.
+- Session-bound `term exec` printed internal marker/wrapper commands. Fixed by cleaning PTY command echo before returning stdout.
 
 ## Not Yet Manually Confirmed
 

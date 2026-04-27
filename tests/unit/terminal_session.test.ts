@@ -111,11 +111,32 @@ test("terminal_session: create, exec, snapshot, and close a real session", { tim
     const result = await session.exec(sessionEchoCommand(), { timeoutMs: 5000 });
     assert.equal(result.exitCode, 0);
     assert.ok(result.stdout.includes("session-hello"));
+    assert.doesNotMatch(result.stdout, /__BC_[SE]_/);
+    assert.doesNotMatch(result.stdout, /\$__bc_success|Write-Output/);
 
     const snapshot = await session.snapshot();
     assert.equal(snapshot.sessionId, session.id);
     assert.equal(snapshot.status, "idle");
     assert.ok(snapshot.cwd.length > 0);
+  } finally {
+    await manager.closeAll();
+  }
+});
+
+test("terminal_session: snapshot redacts secret environment values", { timeout: 20000 }, async () => {
+  const manager = new TerminalSessionManager();
+  const session = await manager.create({
+    env: {
+      NEXIUM_API_KEY: "secret-value",
+      NORMAL_ENV_VALUE: "safe-value",
+    },
+  });
+
+  try {
+    const snapshot = await session.snapshot();
+    assert.equal(snapshot.env.NEXIUM_API_KEY, "<redacted>");
+    assert.equal(snapshot.env.NORMAL_ENV_VALUE, "safe-value");
+    assert.notDeepStrictEqual(snapshot.env, session.env);
   } finally {
     await manager.closeAll();
   }
@@ -132,7 +153,7 @@ test("regression: test process exits cleanly after PTY session lifecycle", { tim
   const args = [
     "--require", "ts-node/register",
     "--require", "tsconfig-paths/register",
-    "--test", "terminal_session.test.ts",
+    "--test", "tests/unit/terminal_session.test.ts",
     "--test-name-pattern", "create, exec, snapshot, and close a real session",
   ];
 
