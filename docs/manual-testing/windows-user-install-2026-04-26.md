@@ -363,6 +363,7 @@ Result:
 - Leaving `$termId="<PASTE_TERMINAL_ID_HERE>"` is user error, but now fails cleanly with `Invalid terminal session id: <PASTE_TERMINAL_ID_HERE>` and no native assertion crash.
 - `term exec`, `term read`, and `term snapshot.lastOutput` now return clean command output instead of internal Browser Control marker/wrapper commands.
 - `term snapshot` now redacts secret-looking environment values before printing.
+- `skill list`, `skill validate`, `skill actions`, and `skill health` work without a running daemon and no longer print raw `fetch failed`.
 
 ## Issues Found During Manual Testing
 
@@ -382,6 +383,7 @@ Result:
 - Daemon terminal sessions opened in the package directory when `--cwd` was omitted. Fixed by passing caller cwd from the CLI.
 - `term snapshot` exposed full terminal environment, including secrets inherited from the caller. Fixed by redacting secret-looking env keys in snapshots.
 - Session-bound terminal output printed internal marker/wrapper commands. Fixed by separating the raw PTY buffer from the public terminal output buffer.
+- Skill info commands depended on the broker and printed raw `fetch failed` when the daemon was stopped. Fixed by loading skills locally for list/validate/actions/health and by supporting compiled `.js` skill files in packaged installs.
 
 ## Not Yet Manually Confirmed
 

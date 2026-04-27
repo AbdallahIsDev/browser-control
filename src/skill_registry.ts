@@ -314,6 +314,11 @@ export class SkillRegistry {
 
     const skills: Skill[] = [];
 
+    // CommonJS modules may export the skill directly via module.exports = skill.
+    if (isSkill(mod)) {
+      skills.push(mod);
+    }
+
     // Try default export first
     if (isSkill(mod.default)) {
       skills.push(mod.default);
@@ -400,7 +405,7 @@ export class SkillRegistry {
     }
   }
 
-  /** Auto-discover and load all .ts skill files from a directory. Also loads packaged skill subdirectories. */
+  /** Auto-discover and load skill files from a directory. Also loads packaged skill subdirectories. */
   async loadFromDirectory(dirPath: string): Promise<Skill[]> {
     const absoluteDir = path.resolve(dirPath);
     if (!fs.existsSync(absoluteDir)) {
@@ -418,12 +423,7 @@ export class SkillRegistry {
           const skill = await this.loadPackagedSkill(subDir);
           if (skill) allSkills.push(skill);
         }
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith(".ts") &&
-        !entry.name.endsWith(".test.ts") &&
-        !entry.name.endsWith(".d.ts")
-      ) {
+      } else if (entry.isFile() && isLoadableSkillFile(entry.name)) {
         const skills = await this.loadFromFile(path.join(absoluteDir, entry.name));
         allSkills.push(...skills);
       }
@@ -493,6 +493,15 @@ export class SkillRegistry {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+function isLoadableSkillFile(filename: string): boolean {
+  return (
+    (filename.endsWith(".ts") || filename.endsWith(".js")) &&
+    !filename.endsWith(".test.ts") &&
+    !filename.endsWith(".test.js") &&
+    !filename.endsWith(".d.ts")
+  );
+}
 
 function isSkill(value: unknown): value is Skill {
   if (!value || typeof value !== "object") return false;

@@ -261,7 +261,7 @@ describe.describe("SkillRegistry", () => {
 
     describe.it("loads skills from the skills/ directory", async () => {
       const registry = new SkillRegistry();
-      const skills = await registry.loadFromDirectory("./skills");
+      const skills = await registry.loadFromDirectory("./src/skills");
       // Should load the three built-in skills
       assert.ok(skills.length >= 1, "Expected at least 1 skill to be loaded");
       const names = registry.listNames();
@@ -273,10 +273,39 @@ describe.describe("SkillRegistry", () => {
 
     describe.it("does not double-load the same directory", async () => {
       const registry = new SkillRegistry();
-      await registry.loadFromDirectory("./skills");
+      await registry.loadFromDirectory("./src/skills");
       const countAfterFirst = registry.size();
-      await registry.loadFromDirectory("./skills");
+      await registry.loadFromDirectory("./src/skills");
       assert.equal(registry.size(), countAfterFirst);
+    });
+
+    describe.it("loads compiled .js skill files from a directory", async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-skill-js-"));
+      const skillPath = path.join(tempDir, "compiled_skill.js");
+      fs.writeFileSync(skillPath, `
+        module.exports = {
+          manifest: {
+            name: "compiled-skill",
+            version: "1.0.0",
+            description: "Compiled skill",
+            requiredEnv: [],
+            allowedDomains: []
+          },
+          setup: async () => {},
+          execute: async () => ({}),
+          teardown: async () => {},
+          healthCheck: async () => ({ healthy: true })
+        };
+      `);
+
+      try {
+        const registry = new SkillRegistry();
+        const skills = await registry.loadFromDirectory(tempDir);
+        assert.equal(skills.length, 1);
+        assert.equal(registry.has("compiled-skill"), true);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -291,7 +320,7 @@ describe.describe("SkillRegistry", () => {
 
     describe.it("loads a skill from a file", async () => {
       const registry = new SkillRegistry();
-      const skills = await registry.loadFromFile("./skills/framer_skill.ts");
+      const skills = await registry.loadFromFile("./src/skills/framer_skill.ts");
       assert.ok(skills.length >= 1);
       assert.ok(registry.has("framer"));
     });
@@ -301,7 +330,7 @@ describe.describe("SkillRegistry", () => {
     describe.it("tracks loaded files", async () => {
       const registry = new SkillRegistry();
       assert.deepEqual(registry.getLoadedFiles(), []);
-      await registry.loadFromFile("./skills/framer_skill.ts");
+      await registry.loadFromFile("./src/skills/framer_skill.ts");
       const files = registry.getLoadedFiles();
       assert.equal(files.length, 1);
       assert.ok(files[0].includes("framer_skill.ts"));

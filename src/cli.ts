@@ -163,6 +163,23 @@ async function apiRequest(endpoint: string, method = "GET", body?: unknown): Pro
   return response.json();
 }
 
+async function loadCliSkillRegistry(skillsDataDir?: string): Promise<import("./skill_registry").SkillRegistry> {
+  const { SkillRegistry } = await import("./skill_registry");
+  const registry = new SkillRegistry();
+  const dataDir = skillsDataDir ?? (await import("./shared/paths")).getSkillsDataDir();
+  const candidateDirs = [
+    path.join(__dirname, "skills"),
+    path.join(__dirname, "..", "skills"),
+    dataDir,
+  ];
+
+  for (const dir of Array.from(new Set(candidateDirs))) {
+    await registry.loadFromDirectory(dir);
+  }
+
+  return registry;
+}
+
 function outputJson(data: unknown, pretty = true): void {
   console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
@@ -913,7 +930,8 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
   switch (subcommand) {
     case "list": {
       try {
-        const result = await apiRequest("/skills") as Array<Record<string, unknown>>;
+        const registry = await loadCliSkillRegistry(getSkillsDataDir());
+        const result = registry.list() as unknown as Array<Record<string, unknown>>;
         if (jsonOutput) {
           outputJson(result, false);
         } else {
@@ -943,7 +961,16 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
         process.exit(1);
       }
       try {
-        const result = await apiRequest(`/skills/${name}/health`);
+        const registry = await loadCliSkillRegistry(getSkillsDataDir());
+        const skill = registry.get(name);
+        if (!skill) {
+          console.error(`Error: Skill "${name}" not found`);
+          process.exit(1);
+        }
+        const env = registry.validateEnv(name);
+        const result = env.valid
+          ? { healthy: true, details: "Required environment is configured." }
+          : { healthy: false, details: `Missing required env: ${env.missing.join(", ")}`, missingEnv: env.missing };
         outputJson(result, !jsonOutput);
       } catch (error) {
         console.error("Error:", (error as Error).message);
@@ -959,7 +986,8 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
         process.exit(1);
       }
       try {
-        const skills = await apiRequest("/skills") as Array<Record<string, unknown>>;
+        const registry = await loadCliSkillRegistry(getSkillsDataDir());
+        const skills = registry.list() as unknown as Array<Record<string, unknown>>;
         const skill = skills.find((s) => s.name === name);
         if (!skill) {
           console.error(`Error: Skill "${name}" not found`);
@@ -1039,10 +1067,8 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
         process.exit(1);
       }
 
-      const { SkillRegistry } = await import("./skill_registry");
       const { isPackagedSkillDir, loadPackagedSkillDir } = await import("./skill_yaml");
       const { validateManifest } = await import("./skill_registry");
-      const registry = new SkillRegistry();
 
       // Check if it's a path to a packaged skill
       if (isPackagedSkillDir(nameOrPath)) {
@@ -1056,9 +1082,10 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
         break;
       }
 
-      // Check if it's a registered skill name (via API)
+      // Check if it's a registered skill name (local registry)
       try {
-        const skills = await apiRequest("/skills") as Array<Record<string, unknown>>;
+        const registry = await loadCliSkillRegistry(getSkillsDataDir());
+        const skills = registry.list() as unknown as Array<Record<string, unknown>>;
         const skill = skills.find((s) => s.name === nameOrPath);
         if (!skill) {
           console.error(`Error: Skill "${nameOrPath}" not found (not a path or registered name)`);
