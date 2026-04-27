@@ -127,14 +127,14 @@ export class BrowserActions {
     const context = bm.getContext();
     if (context) {
       const pages = context.pages();
-      if (pages.length > 0) return pages[0];
+      if (pages.length > 0) return pages[pages.length - 1];
     }
     const browser = bm.getBrowser();
     if (browser) {
       const contexts = browser.contexts();
       if (contexts.length > 0) {
         const pages = contexts[0].pages();
-        if (pages.length > 0) return pages[0];
+        if (pages.length > 0) return pages[pages.length - 1];
       }
     }
     throw new Error("No active browser page. Use 'bc open <url>' or 'bc browser attach' first.");
@@ -227,7 +227,51 @@ export class BrowserActions {
   private async getConnectedPageForAction<T>(): Promise<Page | ActionResult<T>> {
     const pageOrErr = await this.ensureBrowserConnected();
     if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
+    await pageOrErr.bringToFront().catch(() => undefined);
     return pageOrErr;
+  }
+
+  private async closePage(page: Page): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const closePromise = page.close({ runBeforeUnload: false });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Timed out waiting for browser tab to close")), 5_000);
+        timer.unref?.();
+      });
+      await Promise.race([closePromise, timeoutPromise]);
+    } catch (error: unknown) {
+      await this.closePageViaCdp(page, error);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private async closePageViaCdp(page: Page, originalError: unknown): Promise<void> {
+    let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+    try {
+      client = await page.context().newCDPSession(page);
+      const info = await client.send("Target.getTargetInfo") as { targetInfo?: { targetId?: string } };
+      const targetId = info.targetInfo?.targetId;
+      if (!targetId) throw new Error("CDP target id is unavailable");
+      await client.send("Target.closeTarget", { targetId });
+      await page.waitForEvent("close", { timeout: 2_000 }).catch(() => undefined);
+      if (!page.isClosed()) {
+        throw new Error("CDP target close did not close the tab");
+      }
+    } catch {
+      throw originalError instanceof Error ? originalError : new Error(String(originalError));
+    } finally {
+      await client?.detach().catch(() => undefined);
+    }
+  }
+
+  private async ensureScreenshotViewport(page: Page): Promise<void> {
+    const viewport = page.viewportSize();
+    if (!viewport || viewport.width < 50 || viewport.height < 50) {
+      await page.setViewportSize({ width: 1280, height: 720 }).catch(() => undefined);
+    }
+    await page.bringToFront().catch(() => undefined);
   }
 
   private async failureWithDebug<T>(
@@ -337,7 +381,9 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr as ActionResult<{ url: string; title: string }>;
       const page = pageOrErr as Page;
 
+      await page.bringToFront().catch(() => undefined);
       await page.goto(resolvedUrl, { waitUntil: options.waitUntil ?? "domcontentloaded" });
+      await page.bringToFront().catch(() => undefined);
       const title = await page.title();
 
       log.info("Opened URL", { url: resolvedUrl, title, originalInput: options.url });
@@ -715,25 +761,35 @@ export class BrowserActions {
   }
 
   private async capturePageScreenshot(page: Page, outputPath: string, fullPage: boolean): Promise<void> {
+    await this.ensureScreenshotViewport(page);
     try {
       await page.screenshot({ path: outputPath, fullPage, timeout: 30_000 });
+      const fs = await import("node:fs");
+      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size >= 512) {
+        return;
+      }
+      await this.capturePageScreenshotViaCdp(page, outputPath, fullPage);
       return;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("Timeout")) throw error;
 
-      const fs = await import("node:fs");
-      let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
-      try {
-        client = await page.context().newCDPSession(page);
-        const result = await client.send("Page.captureScreenshot", {
-          format: "png",
-          captureBeyondViewport: fullPage,
-        });
-        fs.writeFileSync(outputPath, Buffer.from(result.data, "base64"));
-      } finally {
-        await client?.detach().catch(() => undefined);
-      }
+      await this.capturePageScreenshotViaCdp(page, outputPath, fullPage);
+    }
+  }
+
+  private async capturePageScreenshotViaCdp(page: Page, outputPath: string, fullPage: boolean): Promise<void> {
+    const fs = await import("node:fs");
+    let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+    try {
+      client = await page.context().newCDPSession(page);
+      const result = await client.send("Page.captureScreenshot", {
+        format: "png",
+        captureBeyondViewport: fullPage,
+      });
+      fs.writeFileSync(outputPath, Buffer.from(result.data, "base64"));
+    } finally {
+      await client?.detach().catch(() => undefined);
     }
   }
 
@@ -832,7 +888,7 @@ export class BrowserActions {
       const pageOrErr = await this.getConnectedPageForAction<{ closed: true }>();
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
-      await page.close();
+      await this.closePage(page);
 
       // Unbind browser from session when the tab is closed (Issue 3)
       this.unbindBrowserFromSession();

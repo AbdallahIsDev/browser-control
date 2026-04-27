@@ -34,6 +34,56 @@ function createUnavailableBrowserManager() {
   return { manager, attempts };
 }
 
+function createConnectedBrowserManager(pages: any[]) {
+  const context = {
+    pages: () => pages,
+  };
+  for (const page of pages) {
+    page.context = () => context;
+  }
+
+  return {
+    getContext: () => context,
+    getBrowser: () => ({
+      contexts: () => [context],
+    }),
+    isConnected: () => true,
+    getConnection: () => ({ id: "conn-test" }),
+    reconnectActiveManaged: async () => true,
+    attach: async () => {
+      throw new Error("attach should not be called");
+    },
+    launchManaged: async () => {
+      throw new Error("launch should not be called");
+    },
+  } as unknown as BrowserConnectionManager;
+}
+
+function createMockPage(url = "about:blank") {
+  const calls = {
+    bringToFront: 0,
+    close: 0,
+    goto: [] as string[],
+  };
+  let currentUrl = url;
+
+  return {
+    calls,
+    bringToFront: async () => {
+      calls.bringToFront += 1;
+    },
+    goto: async (nextUrl: string) => {
+      calls.goto.push(nextUrl);
+      currentUrl = nextUrl;
+    },
+    title: async () => "Mock Title",
+    url: () => currentUrl,
+    close: async () => {
+      calls.close += 1;
+    },
+  };
+}
+
 describe("BrowserActions", () => {
   let sessionManager: SessionManager;
   let browserActions: BrowserActions;
@@ -84,6 +134,31 @@ describe("BrowserActions", () => {
   });
 
   describe("open", () => {
+    it("targets the front-most tab when a restored profile has multiple pages", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const backgroundPage = createMockPage("https://background.example/");
+      const frontPage = createMockPage("chrome://newtab/");
+      const manager = createConnectedBrowserManager([backgroundPage, frontPage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.open({ url: "https://example.com" });
+
+        assert.equal(result.success, true);
+        assert.deepEqual(backgroundPage.calls.goto, []);
+        assert.deepEqual(frontPage.calls.goto, ["https://example.com"]);
+        assert.equal(frontPage.calls.bringToFront, 2);
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
     it("returns failure when no browser is connected and auto-connect cannot recover", async () => {
       const isolatedStore = new MemoryStore({ filename: ":memory:" });
       const { manager, attempts } = createUnavailableBrowserManager();
@@ -211,6 +286,31 @@ describe("BrowserActions", () => {
   });
 
   describe("close", () => {
+    it("closes the front-most tab when a restored profile has multiple pages", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const backgroundPage = createMockPage("https://background.example/");
+      const frontPage = createMockPage("chrome://newtab/");
+      const manager = createConnectedBrowserManager([backgroundPage, frontPage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.close();
+
+        assert.equal(result.success, true);
+        assert.equal(backgroundPage.calls.close, 0);
+        assert.equal(frontPage.calls.close, 1);
+        assert.equal(frontPage.calls.bringToFront, 1);
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
     it("returns failure when no browser is connected", async () => {
       const result = await browserActions.close();
 

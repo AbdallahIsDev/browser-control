@@ -184,6 +184,134 @@ Status:
 
 - User confirmed the Wikipedia browser test completed successfully.
 
+### Stable Local Services
+
+Commands tested:
+
+```powershell
+mkdir C:\Users\11\bc-user-test\site -Force
+Set-Content C:\Users\11\bc-user-test\site\index.html "<h1>Browser Control Service Test</h1><p>Hello from bc service.</p>"
+$server = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/site/index.html'))}).listen(3456,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+npx bc service register testsite --port 3456 --path /
+npx bc service list
+npx bc service resolve testsite
+npx bc open bc://testsite
+npx bc snapshot
+npx bc screenshot --output C:\Users\11\bc-user-test\service-test.png
+Test-Path C:\Users\11\bc-user-test\service-test.png
+npx bc service remove testsite
+Stop-Process -Id $server.Id -Force
+npx bc service list
+```
+
+Result:
+
+- Manual service registration succeeded.
+- `service list` showed `testsite`.
+- `service resolve testsite` returned `http://127.0.0.1:3456`.
+- `bc open bc://testsite` resolved and opened `http://127.0.0.1:3456/`.
+- Snapshot included heading `Browser Control Service Test`.
+- Screenshot saved to `service-test.png`.
+- Cleanup removed the service and stopped the test server.
+- `service list` returned `[]` after cleanup.
+
+### Stable Local Service Auto-Detect
+
+Commands tested:
+
+```powershell
+mkdir C:\Users\11\bc-user-test\vite-detect -Force
+@"
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  server: {
+    host: '127.0.0.1',
+    port: 4567
+  }
+})
+"@ | Set-Content C:\Users\11\bc-user-test\vite-detect\vite.config.js
+
+$viteServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end('<h1>Detected Vite Service</h1><p>Port 4567</p>')}).listen(4567,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+npx bc service register viteapp --detect --cwd C:\Users\11\bc-user-test\vite-detect
+npx bc service list
+npx bc service resolve viteapp
+npx bc open bc://viteapp
+npx bc snapshot
+npx bc screenshot --output C:\Users\11\bc-user-test\vite-detect.png
+Test-Path C:\Users\11\bc-user-test\vite-detect.png
+```
+
+Result:
+
+- `--detect --cwd` registered `viteapp` without passing `--port`.
+- Detected port was `4567` from `vite.config.js`.
+- `service resolve viteapp` returned `http://127.0.0.1:4567`.
+- `bc open bc://viteapp` resolved and opened `http://127.0.0.1:4567/`.
+- Snapshot included heading `Detected Vite Service`.
+- Browser showed `Detected Vite Service` and `Port 4567`.
+- Screenshot saved to `vite-detect.png`.
+
+### Browser Profiles And Profile Switching
+
+Commands tested:
+
+```powershell
+npx bc browser profile list
+npx bc browser profile create manual-profile
+npx bc browser profile list
+npx bc browser profile use manual-profile
+npx bc browser launch --profile=manual-profile
+npx bc open https://example.com
+npx bc browser status
+npx bc screenshot --output C:\Users\11\bc-user-test\manual-profile-example.png
+Test-Path C:\Users\11\bc-user-test\manual-profile-example.png
+npx bc close
+Get-Process chrome | Stop-Process -Force
+npx bc browser status
+```
+
+Result:
+
+- Profile list worked.
+- `manual-profile` was created as a named profile.
+- Profile list showed `manual-profile`.
+- Profile use set `manual-profile` active.
+- Managed browser launched with `Profile: manual-profile (named)`.
+- `bc open https://example.com` reconnected to the managed browser and opened the page.
+- Browser status showed `profileId: manual-profile`, `status: connected`, and `reachable: true`.
+- Screenshot saved to `manual-profile-example.png`.
+- `bc close` closed the tab.
+- Killing Chrome caused browser status to show `status: disconnected` and `reachable: false`.
+
+### Browser Auth Export And Import
+
+Commands tested after the named-profile fixes:
+
+```powershell
+npx bc browser profile use manual-profile
+npx bc browser launch --profile=manual-profile
+npx bc open https://example.com
+npx bc screenshot --output C:\Users\11\bc-user-test\manual-profile-regression.png
+npx bc browser auth export --live --profile=manual-profile --output C:\Users\11\bc-user-test\manual-profile-auth.json --yes
+Test-Path C:\Users\11\bc-user-test\manual-profile-auth.json
+npx bc browser auth import C:\Users\11\bc-user-test\manual-profile-auth.json --stored --profile=manual-profile --yes
+npx bc close
+npx bc browser status
+```
+
+Result:
+
+- Named profile launch restored multiple Chrome tabs.
+- `bc open https://example.com` targeted the active/front tab instead of a hidden restored tab.
+- Screenshot saved to `manual-profile-regression.png` and visually showed `Example Domain`.
+- Live auth export required explicit `--yes`, created `manual-profile-auth.json`, and exported 3 cookies.
+- Stored auth import required explicit `--yes` and saved the snapshot for `manual-profile`.
+- `bc close` returned `{ "closed": true }` without hanging.
+- Browser status changed to `disconnected` and `reachable: false` after the closed tab ended the managed browser.
+
 ## Issues Found During Manual Testing
 
 - CLI help originally pulled runtime modules and emitted dependency/security noise. Fixed by keeping help lightweight.
@@ -193,6 +321,11 @@ Status:
 - `tab list` originally returned blank titles. Fixed by reading each page title.
 - `daemon start` could feel stuck because it waited silently for readiness. Fixed with a shorter readiness probe.
 - Screenshot can timeout inside Playwright while waiting for screenshot internals. Added CDP fallback and temp-file output.
+- Named profiles with restored tabs could navigate a hidden/background tab while the visible tab stayed on New Tab. Fixed by targeting and foregrounding the newest/front tab for actions.
+- Named-profile screenshots could produce a 1x1 image when the CDP viewport was invalid. Fixed by normalizing tiny viewports and falling back to CDP capture for tiny screenshots.
+- `bc close` could hang on restored named-profile tabs. Fixed with a bounded close plus CDP target-close fallback.
+- `browser auth export --output` was ignored and high-risk auth commands had no explicit CLI confirmation path. Fixed with `--output` support and `--yes` confirmation.
+- Live auth export could get stuck by re-attaching to Browser Control's own managed browser. Fixed by reconnecting to the active managed browser state first and releasing CLI handles.
 
 ## Not Yet Manually Confirmed
 
@@ -203,28 +336,6 @@ npx bc mcp serve
 ```
 
 Needs a real MCP client test for tool discovery and calls.
-
-### Stable Local Services
-
-```powershell
-npx bc service register myapp --port 3000
-npx bc service list
-npx bc service resolve myapp
-npx bc open bc://myapp
-npx bc service remove myapp
-```
-
-Also test `--detect --cwd <project>` with a real Vite/Next/dev-server project.
-
-### Browser Profiles And Auth
-
-```powershell
-npx bc browser profile list
-npx bc browser profile create manual-profile
-npx bc browser profile use manual-profile
-npx bc browser auth export --stored --profile=manual-profile
-npx bc browser auth import <file> --stored
-```
 
 ### Remote Providers
 
@@ -298,4 +409,3 @@ npm install browser-control
 npx bc --help
 npx bc doctor
 ```
-

@@ -71,6 +71,33 @@ test("safe policy blocks stored browser auth export", () => {
   }
 });
 
+test("stored browser auth export honors --output after explicit confirmation", () => {
+  const home = makeHome();
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const outputPath = path.join(home, "manual-output.json");
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    const store = new MemoryStore();
+    saveAuthSnapshotToStore(store, "default", sampleSnapshot());
+    store.close();
+
+    const result = runCli(["browser", "auth", "export", "--stored", "--output", outputPath, "--yes"], {
+      BROWSER_CONTROL_HOME: home,
+      POLICY_PROFILE: "balanced",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.existsSync(outputPath), true);
+    const exported = JSON.parse(fs.readFileSync(outputPath, "utf8")) as AuthSnapshot;
+    assert.equal(exported.profileId, "default");
+    assert.equal(exported.cookies[0]?.name, "session");
+  } finally {
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("safe policy blocks stored browser auth import", () => {
   const home = makeHome();
   const previousHome = process.env.BROWSER_CONTROL_HOME;

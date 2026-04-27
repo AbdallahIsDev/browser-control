@@ -167,7 +167,12 @@ function outputJson(data: unknown, pretty = true): void {
   console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
 
-async function requireCliPolicy(action: string, params: Record<string, unknown>, jsonOutput: boolean): Promise<void> {
+async function requireCliPolicy(
+  action: string,
+  params: Record<string, unknown>,
+  jsonOutput: boolean,
+  confirmed = false,
+): Promise<void> {
   const [{ MemoryStore }, { SessionManager, isPolicyAllowed }] = await Promise.all([
     import("./runtime/memory_store"),
     import("./session_manager"),
@@ -177,8 +182,16 @@ async function requireCliPolicy(action: string, params: Record<string, unknown>,
     const manager = new SessionManager({ memoryStore: store });
     const policyEval = manager.evaluateAction(action, params);
     if (!isPolicyAllowed(policyEval)) {
+      if (confirmed && policyEval.policyDecision === "require_confirmation") {
+        return;
+      }
       if (jsonOutput) outputJson(policyEval, false);
-      else console.error(policyEval.error ?? "Policy denied.");
+      else {
+        console.error(policyEval.error ?? "Policy denied.");
+        if (policyEval.policyDecision === "require_confirmation") {
+          console.error("Rerun with --yes to confirm this high-risk action.");
+        }
+      }
       process.exit(1);
     }
   } finally {
@@ -235,8 +248,10 @@ Browser Lifecycle:
   browser profile create <name> [--type=named]                       Create a browser profile
   browser profile use <name>                                          Activate a browser profile
   browser profile delete <name>                                       Delete a browser profile
-  browser auth export [--live | --stored] [--profile=default]         Export auth state (cookies/storage)
-  browser auth import <file> [--live | --stored]                      Import auth state from file
+  browser auth export [--live | --stored] [--profile=default] [--output=<file>] [--yes]
+                                                                      Export auth state (cookies/storage)
+  browser auth import <file> [--live | --stored] [--profile=default] [--yes]
+                                                                      Import auth state from file
   run --skill=<name> --action=<action> [--params='{"key":"value"}']  Run a task
   schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<action> Schedule a task
   schedule list                                                      List scheduled tasks
@@ -1588,9 +1603,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       switch (authAction) {
         case "export": {
           const profileName = flags.profile;
-          const outputFile = positional[1] ?? `${profileName ?? "default"}-auth.json`;
+          const outputFile = flags.output ?? positional[1] ?? `${profileName ?? "default"}-auth.json`;
           const isLive = Boolean(flags.live);
           const isStored = Boolean(flags.stored);
+          const confirmed = flags.yes === "true" || flags.confirm === "true";
 
           if (!isLive && !isStored) {
              console.error("Error: You must specify either --live (to extract from the active browser) or --stored (to extract from offline memory snapshot).");
@@ -1606,7 +1622,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             outputFile,
             live: isLive,
             stored: isStored,
-          }, jsonOutput);
+          }, jsonOutput, confirmed);
 
           try {
             const { BrowserProfileManager } = await import("./browser/profiles");
@@ -1617,7 +1633,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             const { MemoryStore } = await import("./runtime/memory_store");
 
             const config = loadConfig({ validate: false });
-            const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+            const policyEngine = new DefaultPolicyEngine({ profileName: confirmed ? "trusted" : config.policyProfile });
             const manager = new BrowserConnectionManager({ policyEngine });
             const pm = new BrowserProfileManager();
             const store = new MemoryStore();
@@ -1647,9 +1663,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
               }
 
               console.log(`Connecting to active browser for profile "${activeProfileName}" on port ${activePort}...`);
-              await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
+              const reconnected = await manager.reconnectActiveManaged();
+              if (!reconnected) {
+                await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
+              }
               snapshot = await manager.exportAuth();
-              await manager.disconnect();
+              await manager.releaseCliHandles();
               console.log(`Successfully extracted live auth state from running browser.`);
             } else {
               const targetProfileName = profileName ?? "default";
@@ -1683,8 +1702,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
         case "import": {
           const filePath = positional[1];
+          const profileName = flags.profile;
           const isLive = Boolean(flags.live);
           const isStored = Boolean(flags.stored);
+          const confirmed = flags.yes === "true" || flags.confirm === "true";
 
           if (!filePath) {
              console.error("Error: File path is required");
@@ -1705,13 +1726,15 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
           await requireCliPolicy("browser_auth_import", {
             filePath,
+            profileName,
             live: isLive,
             stored: isStored,
-          }, jsonOutput);
+          }, jsonOutput, confirmed);
 
           try {
             const content = fs.readFileSync(filePath, "utf-8");
             const snapshot = JSON.parse(content);
+            const { BrowserProfileManager } = await import("./browser/profiles");
             const { BrowserConnectionManager } = await import("./browser/connection");
             const { saveAuthSnapshotToStore } = await import("./browser/auth_state");
             const { loadConfig } = await import("./shared/config");
@@ -1719,9 +1742,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
             const { MemoryStore } = await import("./runtime/memory_store");
 
             const config = loadConfig({ validate: false });
-            const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+            const policyEngine = new DefaultPolicyEngine({ profileName: confirmed ? "trusted" : config.policyProfile });
             const manager = new BrowserConnectionManager({ policyEngine });
-            const profileId = snapshot.profileId ?? "default";
+            const pm = new BrowserProfileManager();
+            let profileId = snapshot.profileId ?? "default";
+            if (profileName) {
+              const profile = pm.getProfileByName(profileName);
+              if (!profile) {
+                console.error(`Error: Profile "${profileName}" not found`);
+                process.exit(1);
+              }
+              profileId = profile.id;
+            }
+            const targetSnapshot = { ...snapshot, profileId };
             
             const store = new MemoryStore();
 
@@ -1745,19 +1778,22 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
               }
 
               console.log(`Connecting to active browser for profile "${profileId}" on port ${activePort}...`);
-              await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
-              await manager.importAuth(snapshot);
-              await manager.disconnect();
+              const reconnected = await manager.reconnectActiveManaged();
+              if (!reconnected) {
+                await manager.attach({ port: activePort, targetType: activeSession.targetType, actor: "human" });
+              }
+              await manager.importAuth(targetSnapshot);
+              await manager.releaseCliHandles();
               console.log(`Successfully injected auth state directly into live running browser context.`);
             } else {
               // Store only
-              saveAuthSnapshotToStore(store, profileId, snapshot);
+              saveAuthSnapshotToStore(store, profileId, targetSnapshot);
               console.log(`Stored offline auth snapshot updated for profile "${profileId}".`);
               console.log(`  (Note: The browser was not affected. This will apply next time the profile is launched as a restored session.)`);
             }
 
             store.close();
-            console.log(`  Cookies: ${snapshot.cookies?.length ?? 0}`);
+            console.log(`  Cookies: ${targetSnapshot.cookies?.length ?? 0}`);
           } catch (error) {
             console.error("Error:", (error as Error).message);
             process.exit(1);
