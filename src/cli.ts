@@ -330,7 +330,7 @@ Service Management:
   service remove <name>                                               Remove a service
 
 Debug:
-  debug bundle <id> [--output=<path>]                                 Retrieve a debug bundle
+  debug bundle <id> [--output=<path>] [--yes]                          Retrieve a debug bundle
   debug console [--session=<id>]                                      Show captured console entries
   debug network [--session=<id>]                                      Show captured network entries
 
@@ -3033,7 +3033,8 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
         console.error("Error: Bundle ID is required");
         process.exit(1);
       }
-      await requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput);
+      const confirmed = flags.yes === "true" || flags.confirm === "true";
+      await requireCliPolicy("debug_bundle_export", { bundleId, output: flags.output }, jsonOutput, confirmed);
 
       try {
         const { loadDebugBundle } = await import("./observability/debug_bundle");

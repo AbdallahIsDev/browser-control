@@ -141,6 +141,32 @@ test("safe policy blocks CLI debug bundle export", () => {
   }
 });
 
+test("CLI debug bundle export honors --yes confirmation", () => {
+  const home = makeHome();
+  try {
+    const result = runCli(
+      [
+        "debug",
+        "bundle",
+        "bundle-00000000-0000-4000-8000-000000000000",
+        "--output",
+        path.join(home, "debug-bundle.json"),
+        "--yes",
+      ],
+      {
+        BROWSER_CONTROL_HOME: home,
+        POLICY_PROFILE: "balanced",
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stdout, /Confirmation required|Rerun with --yes/);
+    assert.match(result.stderr, /not found/i);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("safe policy blocks CLI debug console evidence read", () => {
   const home = makeHome();
   try {
