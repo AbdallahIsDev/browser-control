@@ -25,6 +25,10 @@ function isProtocolStdoutReserved(): boolean {
   return process.env.BROWSER_CONTROL_STDIO_MODE === "mcp" || process.env.BROWSER_CONTROL_JSON_OUTPUT === "true";
 }
 
+function isJsonConsoleLoggingSuppressed(): boolean {
+  return process.env.BROWSER_CONTROL_JSON_OUTPUT === "true" && process.env.BROWSER_CONTROL_JSON_LOGS !== "stderr";
+}
+
 export interface LogRecord {
   timestamp: string;
   level: LogLevel;
@@ -77,6 +81,15 @@ export class Logger {
     };
 
     const line = this.formatRecord(record);
+
+    // JSON CLI mode is meant for machine parsing. Keep stdout/stderr free of
+    // logger noise unless callers explicitly opt into stderr logs.
+    if (isJsonConsoleLoggingSuppressed()) {
+      if (this.fileEnabled) {
+        this.writeToFile(line);
+      }
+      return;
+    }
 
     // In stdio MCP mode, stdout is reserved for protocol frames only.
     // Route all logs to stderr so MCP clients never see plain log lines

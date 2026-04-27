@@ -98,6 +98,29 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return result;
 }
 
+let jsonOutputWarningGuardInstalled = false;
+
+function installJsonOutputGuards(): void {
+  if (jsonOutputWarningGuardInstalled) return;
+  jsonOutputWarningGuardInstalled = true;
+
+  const emitWarning = process.emitWarning;
+  process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
+    const warningType = typeof args[0] === "string"
+      ? args[0]
+      : typeof args[0] === "object" && args[0] !== null && "type" in args[0]
+        ? String((args[0] as { type?: unknown }).type)
+        : undefined;
+    const message = typeof warning === "string" ? warning : warning.message;
+
+    if (warningType === "ExperimentalWarning" && message.includes("SQLite")) {
+      return;
+    }
+
+    return (emitWarning as (...innerArgs: unknown[]) => void).call(process, warning, ...args);
+  }) as typeof process.emitWarning;
+}
+
 async function isCdpEndpointReachable(endpoint: unknown): Promise<boolean> {
   if (typeof endpoint !== "string" || endpoint.length === 0) return false;
   try {
@@ -1869,6 +1892,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   const previousJsonOutputMode = process.env.BROWSER_CONTROL_JSON_OUTPUT;
   if (args.flags.json === "true") {
     process.env.BROWSER_CONTROL_JSON_OUTPUT = "true";
+    installJsonOutputGuards();
   }
 
   switch (args.command) {
