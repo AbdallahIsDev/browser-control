@@ -91,6 +91,28 @@ describe("FsActions", () => {
       assert.ok(readResult.recoveryGuidance);
       assert.ok(loadDebugBundle(readResult.debugBundleId, store));
     });
+
+    it("honors explicit confirmation for balanced-policy file writes", async () => {
+      const session = await sessionManager.create("fs-balanced-write", { policyProfile: "balanced" });
+      sessionManager.use(session.data!.id);
+      const filePath = path.join(tempDir, "confirmed-write.txt");
+
+      const blocked = await fsActions.write({
+        path: filePath,
+        content: "blocked",
+      });
+      assert.equal(blocked.success, false);
+      assert.equal(blocked.policyDecision, "require_confirmation");
+      assert.equal(fs.existsSync(filePath), false);
+
+      const confirmed = await fsActions.write({
+        path: filePath,
+        content: "confirmed",
+        confirmed: true,
+      });
+      assert.equal(confirmed.success, true);
+      assert.equal(fs.readFileSync(filePath, "utf-8"), "confirmed");
+    });
   });
 
   describe("ls", () => {
@@ -177,6 +199,25 @@ describe("FsActions", () => {
       assert.equal(result.success, false);
       assert.ok(result.error);
     });
+
+    it("honors explicit confirmation for balanced-policy moves", async () => {
+      const session = await sessionManager.create("fs-balanced-move", { policyProfile: "balanced" });
+      sessionManager.use(session.data!.id);
+      const srcPath = path.join(tempDir, "confirmed-move-src.txt");
+      const dstPath = path.join(tempDir, "confirmed-move-dst.txt");
+      fs.writeFileSync(srcPath, "move me");
+
+      const blocked = await fsActions.move({ src: srcPath, dst: dstPath });
+      assert.equal(blocked.success, false);
+      assert.equal(blocked.policyDecision, "require_confirmation");
+      assert.equal(fs.existsSync(srcPath), true);
+      assert.equal(fs.existsSync(dstPath), false);
+
+      const confirmed = await fsActions.move({ src: srcPath, dst: dstPath, confirmed: true });
+      assert.equal(confirmed.success, true);
+      assert.equal(fs.existsSync(srcPath), false);
+      assert.equal(fs.existsSync(dstPath), true);
+    });
   });
 
   describe("rm", () => {
@@ -216,6 +257,37 @@ describe("FsActions", () => {
 
       assert.equal(result.success, true);
       assert.ok(!fs.existsSync(filePath));
+    });
+
+    it("honors explicit confirmation for balanced-policy deletes", async () => {
+      const session = await sessionManager.create("fs-balanced-delete", { policyProfile: "balanced" });
+      sessionManager.use(session.data!.id);
+      const filePath = path.join(tempDir, "confirmed-delete.txt");
+      fs.writeFileSync(filePath, "delete me");
+
+      const blocked = await fsActions.rm({ path: filePath });
+      assert.equal(blocked.success, false);
+      assert.equal(blocked.policyDecision, "require_confirmation");
+      assert.equal(fs.existsSync(filePath), true);
+
+      const confirmed = await fsActions.rm({ path: filePath, confirmed: true });
+      assert.equal(confirmed.success, true);
+      assert.equal(fs.existsSync(filePath), false);
+    });
+
+    it("honors explicit confirmation for recursive deletes", async () => {
+      const dirPath = path.join(tempDir, "confirmed-rm-dir");
+      fs.mkdirSync(dirPath);
+      fs.writeFileSync(path.join(dirPath, "file.txt"), "inside");
+
+      const blocked = await fsActions.rm({ path: dirPath, recursive: true, force: true });
+      assert.equal(blocked.success, false);
+      assert.equal(blocked.policyDecision, "require_confirmation");
+      assert.equal(fs.existsSync(dirPath), true);
+
+      const confirmed = await fsActions.rm({ path: dirPath, recursive: true, force: true, confirmed: true });
+      assert.equal(confirmed.success, true);
+      assert.equal(fs.existsSync(dirPath), false);
     });
 
     it("returns failure for nonexistent path without force", async () => {

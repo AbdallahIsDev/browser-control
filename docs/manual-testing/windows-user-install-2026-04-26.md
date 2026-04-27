@@ -216,6 +216,33 @@ Result:
 - Cleanup removed the service and stopped the test server.
 - `service list` returned `[]` after cleanup.
 
+### Service Registry Lifecycle Without Running Service
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-service"
+npx bc service list
+npx bc service register test-api --port 4567 --protocol=http --path=/health --cwd=C:\Users\11\bc-user-test
+npx bc service list
+npx bc service resolve test-api
+npx bc service remove test-api
+npx bc service list
+```
+
+Result:
+
+- Empty service registry returned `[]`.
+- `service register test-api` succeeded and saved `port: 4567`, `protocol: http`, and `path: /health`.
+- `service list` showed `test-api`.
+- `service resolve test-api` returned `Service "test-api" is registered on port 4567 but is not responding.` because no HTTP server was running on port `4567`.
+- `service remove test-api` returned `{ "removed": true }`.
+- Final `service list` returned `[]`.
+
+Note:
+
+- This confirms registry add/list/remove behavior and confirms resolve validates liveness. Full resolve/open behavior is already confirmed by the stable local service tests with a live server.
+
 ### Stable Local Service Auto-Detect
 
 Commands tested:
@@ -311,6 +338,33 @@ Result:
 - Stored auth import required explicit `--yes` and saved the snapshot for `manual-profile`.
 - `bc close` returned `{ "closed": true }` without hanging.
 - Browser status changed to `disconnected` and `reachable: false` after the closed tab ended the managed browser.
+
+### Default Profile Browser Auth Export And Import
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-auth"
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item C:\Users\11\bc-user-test\auth-state.json -Force -ErrorAction SilentlyContinue
+
+npx bc open https://example.com
+npx bc browser auth export --live --profile=default --output=C:\Users\11\bc-user-test\auth-state.json --yes
+Test-Path C:\Users\11\bc-user-test\auth-state.json
+Get-Content C:\Users\11\bc-user-test\auth-state.json | Select-Object -First 20
+npx bc browser auth import C:\Users\11\bc-user-test\auth-state.json --stored --profile=default --yes
+npx bc close
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+```
+
+Result:
+
+- Managed browser launched and opened `https://example.com/` with title `Example Domain`.
+- Live auth export with `--yes` created `auth-state.json`.
+- Exported file contained `profileId: default`, empty cookies, empty storage, and `capturedAt`.
+- Stored auth import with `--yes` succeeded for `default`.
+- `bc close` returned `{ "closed": true }`.
+- This confirms auth export/import also works for the default profile, not only the named profile.
 
 ### Policy Commands
 
@@ -579,10 +633,14 @@ Result:
 - `skill validate framer` returned valid.
 - `skill actions framer` listed available actions.
 - `skill health framer` returned `healthy: false` because `OPENROUTER_API_KEY` is missing.
+- `run --skill=framer --action=openLayerPanel` without a daemon returned `Broker is not reachable at http://127.0.0.1:7788/api/v1. Run "bc daemon start" for daemon-backed commands.`
+- With daemon running, `run --skill=framer --action=openLayerPanel` returned a queued task object with `status: pending`.
+- Report generation/view after the queued run still showed zero completed steps/events.
 
 Note:
 
 - Framer skill is old and expected to need future reconfiguration for the latest Browser Control features.
+- Skill task enqueue is confirmed. Full skill execution completion still needs a usable skill/env configuration because the current Framer skill reports missing `OPENROUTER_API_KEY`.
 
 ### Debug Console, Network, And Bundle Confirmation
 
@@ -886,6 +944,51 @@ Result:
 - `fs rm a-moved.txt` was blocked by balanced policy with `require_confirmation`; destination already did not exist.
 - Recursive forced delete was blocked by balanced policy with `Recursive delete requires confirmation`; test directory remained.
 
+### Filesystem Confirmed Mutations
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-fs-yes-fixed"
+Remove-Item C:\Users\11\bc-user-test\fs-yes-fixed -Recurse -Force -ErrorAction SilentlyContinue
+mkdir C:\Users\11\bc-user-test\fs-yes-fixed -Force
+mkdir C:\Users\11\bc-user-test\fs-yes-fixed\nested -Force
+
+npx bc fs write C:\Users\11\bc-user-test\fs-yes-fixed\a.txt --content="alpha" --yes
+Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\a.txt
+npx bc fs move C:\Users\11\bc-user-test\fs-yes-fixed\a.txt C:\Users\11\bc-user-test\fs-yes-fixed\b.txt --yes
+Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\a.txt
+Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\b.txt
+npx bc fs rm C:\Users\11\bc-user-test\fs-yes-fixed\b.txt --yes
+Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\b.txt
+Set-Content C:\Users\11\bc-user-test\fs-yes-fixed\nested\c.txt "charlie"
+npx bc fs rm C:\Users\11\bc-user-test\fs-yes-fixed --recursive --force --yes
+Test-Path C:\Users\11\bc-user-test\fs-yes-fixed
+```
+
+Result before fix:
+
+- `fs write` was blocked by balanced policy with `require_confirmation`.
+- Because write was blocked, `fs read a.txt` failed with `File not found`.
+- `fs move ... --yes` was still blocked by balanced policy with `require_confirmation`; `--yes` was not honored for filesystem mutation confirmation.
+- `fs rm ... --yes` was still blocked by balanced policy with `require_confirmation`; `--yes` was not honored for file delete confirmation.
+- Recursive `fs rm --recursive --force --yes` was still blocked with `Recursive delete requires confirmation`; `--yes` was not honored for recursive delete confirmation.
+- Final directory still existed.
+
+Fix added:
+
+- Filesystem action options now carry an explicit `confirmed` flag.
+- `FsActions` allows only `require_confirmation` policy decisions through when `confirmed: true`.
+- CLI `fs write`, `fs move`, and `fs rm` now pass `--yes` / `--confirm` to the filesystem action layer.
+
+Result after fix:
+
+- `fs write --yes` created `a.txt`; `Test-Path` returned `True`.
+- `fs move --yes` moved `a.txt` to `b.txt`; source `False`, destination `True`.
+- `fs rm --yes` deleted `b.txt`; `Test-Path` returned `False`.
+- Recursive `fs rm --recursive --force --yes` deleted the directory; final `Test-Path` returned `False`.
+- Final user retest against `C:\Users\11\bc-user-test\.browser-control-fs-yes-final` confirmed the same pass results from the packaged tarball.
+
 ### JSON Output Mode
 
 Commands tested before fix:
@@ -1080,6 +1183,59 @@ Result after fix:
 - Remote custom provider follow-up actions failed after attach because reconnect only accepted local managed browser state. Fixed by reconnecting previously confirmed non-local attached state.
 - Schedule commands without daemon returned raw `fetch failed`. Fixed with a broker-not-reachable message that points to `bc daemon start`.
 - Schedule pause/resume/remove returned `404` because broker and daemon callback wiring only implemented create/list. Fixed by adding scheduler mutation routes and daemon callbacks.
+- Filesystem mutation commands (`fs write`, `fs move`, `fs rm`) ignored `--yes` under balanced policy. Fixed by passing explicit confirmation through the CLI and filesystem action layer.
+- Browserless websocket simulation connected but started with no active page, causing `bc open`, `snapshot`, `screenshot`, and `close` to fail. Fixed by creating a page when a Browserless launch/attach context has none.
+- Daemon-backed custom skill execution could fail because the daemon had no browser context/page for the skill. Fixed by reconnecting/attaching to the active managed browser and returning task errors through task status.
+
+## Newly Confirmed After Follow-Up Fixes
+
+### Browserless Provider Local Simulation
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-browserless-retest-fixed"
+$env:BROWSERLESS_ENDPOINT=(Get-Content C:\Users\11\bc-user-test\browserless-sim-ws.txt -Raw).Trim()
+Remove-Item Env:\BROWSERLESS_API_KEY -ErrorAction SilentlyContinue
+npx bc browser provider use browserless
+npx bc open https://example.com
+npx bc screenshot --output C:\Users\11\bc-user-test\browserless-fixed.png
+Test-Path C:\Users\11\bc-user-test\browserless-fixed.png
+npx bc browser provider use local
+```
+
+Result:
+
+- Local Playwright `chromium.launchServer()` websocket was used as a Browserless-compatible simulation endpoint.
+- Provider selection to `browserless` worked.
+- `bc open https://example.com` succeeded and returned title `Example Domain`.
+- Screenshot saved to `browserless-fixed.png`.
+- `Test-Path` returned `True`.
+- This confirms Browserless provider launch/connect behavior with a websocket endpoint. Real Browserless SaaS with real endpoint/key still needs separate confirmation.
+
+### Custom `wiki_smoke` Skill Execution
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-wiki-retest-fixed"
+$skillsDir="C:\Users\11\bc-user-test\node_modules\browser-control\dist\src\skills"
+npx bc open https://example.com
+npx bc daemon start
+npx bc skill list
+$run = npx bc run --skill=wiki_smoke --action=search --params='{"query":"OpenAI"}' | ConvertFrom-Json
+Start-Sleep -Seconds 12
+$status = Invoke-RestMethod "http://127.0.0.1:7788/api/v1/tasks/$($run.taskId)/status"
+$status | ConvertTo-Json -Depth 8
+npx bc daemon stop
+```
+
+Result:
+
+- `wiki_smoke@1.0.0` was discovered from `node_modules\browser-control\dist\src\skills`.
+- Task completed with `status: completed`.
+- Result returned `ok: true`, query `OpenAI`, URL `https://en.wikipedia.org/wiki/Special:Search?search=OpenAI`, and title `OpenAI - Wikipedia`.
+- This confirms daemon-backed custom skill execution completion with a simple packaged `.js` skill.
 
 ## Not Yet Manually Confirmed
 
@@ -1087,13 +1243,41 @@ Result after fix:
 
 Needs real `BROWSERLESS_ENDPOINT` and `BROWSERLESS_API_KEY`.
 
-### Skill Run And Tasks
+Placeholder test result:
 
-```powershell
-npx bc run --skill=<name> --action=<action>
-```
+- Provider selection to `browserless` worked.
+- `browser status --json` returned `{ "connected": false }` before connection.
+- Using placeholder values `PASTE_REAL_BROWSERLESS_ENDPOINT` and `PASTE_REAL_BROWSERLESS_API_KEY` failed cleanly with `Invalid endpoint: PASTE_REAL_BROWSERLESS_ENDPOINT`.
+- Screenshot was not created, as expected with fake credentials.
+- Provider was restored to `local` after the placeholder test.
+- Real Browserless provider workflow remains unconfirmed until real endpoint/key are available.
 
-Skill info commands, report commands, and schedule lifecycle are confirmed. Skill execution still needs dedicated tests.
+### Published Install
+
+Local tarball install simulation is confirmed. Real registry install is not confirmed.
+
+Local published-install simulation result:
+
+- `npm run build` completed.
+- `npm publish --dry-run` rebuilt the package and produced tarball details.
+- Dry-run reported package metadata problems:
+  - `bin[bc] script name cli.js was invalid and removed`
+  - `repository.url` was normalized
+  - `You cannot publish over the previously published versions: 1.0.0`
+- `npm pack --pack-destination C:\Users\11\bc-user-test\published-install-sim` created `browser-control-1.0.0.tgz`.
+- Fresh test project was created with `npm init -y`.
+- `npm install .\browser-control-1.0.0.tgz` completed after about 10 minutes.
+- Install added 118 packages, audited 119 packages, and reported `found 0 vulnerabilities`.
+- `npx bc --help` printed CLI help from the freshly installed package.
+- `npx bc status --json | ConvertFrom-Json` parsed successfully.
+- `npx bc doctor --json | ConvertFrom-Json` parsed successfully and returned `overall: degraded`, which is expected with daemon stopped / optional checks degraded.
+
+Status:
+
+- Local packed-artifact install is confirmed.
+- This was not a fully offline test: installing the local `.tgz` can still download package dependencies from npm unless they are already cached, and `npm publish --dry-run` queried the npm registry.
+- Real published install from npm registry remains unconfirmed.
+- Dry-run found publish metadata/version issues that must be fixed before real publish.
 
 ### Cross-Platform Install
 
@@ -1103,9 +1287,7 @@ Still needs install smoke tests on:
 - Linux
 - WSL
 
-### Published Install
-
-Still needs install tests from the final distribution channel:
+Final distribution channel test still needed after publish metadata/version issues are resolved:
 
 ```powershell
 npm install browser-control

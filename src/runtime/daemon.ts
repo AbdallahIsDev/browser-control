@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { chromium, type Browser } from "playwright";
 import { isDebugPortReady } from "../browser/core";
+import { BrowserConnectionManager } from "../browser/connection";
 import { HealthCheck, type HealthReport } from "./health_check";
 import { Logger, logger } from "../shared/logger";
 import { MemoryStore } from "./memory_store";
@@ -134,6 +136,10 @@ export class Daemon {
   private broker!: BrokerServerLike;
 
   private readonly stagehandManager = new StagehandManager();
+
+  private skillBrowserManager: BrowserConnectionManager | null = null;
+
+  private readonly skillBrowserClients: Browser[] = [];
 
   private readonly terminalManager = new TerminalSessionManager();
 
@@ -370,6 +376,11 @@ export class Daemon {
     await this.serializeTerminals();
     await this.terminalManager.closeAll();
     await this.stagehandManager.closeAll();
+    await this.skillBrowserManager?.releaseCliHandles().catch(() => {});
+    this.skillBrowserManager = null;
+    await Promise.all(this.skillBrowserClients.splice(0).map(async (browser) => {
+      await browser.close().catch(() => {});
+    }));
 
     // Save telemetry reports
     this.telemetry.saveReport("markdown");
@@ -537,6 +548,7 @@ export class Daemon {
       actor: "agent",
       profileName: this.policyEngine?.getActiveProfile(),
       explicitSession: params.explicitSession === true,
+      internalTask: true,
     });
 
     // Evaluate against policy
@@ -545,6 +557,7 @@ export class Daemon {
         sessionId: (params.sessionId as string) ?? "default",
         actor: "agent",
         explicitSession: params.explicitSession === true,
+        internalTask: true,
       });
 
       this.log.info("Policy evaluation for skill task", {
@@ -631,7 +644,7 @@ export class Daemon {
     this.executeSkillAsync(taskId, skillName, action, params);
   }
 
-  getTaskStatus(taskId: string): { id: string; status: "pending" | "running" | "completed" | "failed"; result?: unknown } | null {
+  getTaskStatus(taskId: string): { id: string; status: "pending" | "running" | "completed" | "failed"; result?: unknown; error?: string } | null {
     const record = this.taskStatuses.get(taskId);
     if (!record) {
       return null;
@@ -641,6 +654,7 @@ export class Daemon {
       id: record.id,
       status: record.status,
       ...(record.result !== undefined ? { result: record.result } : {}),
+      ...(record.error ? { error: record.error } : {}),
     };
   }
 
@@ -1653,7 +1667,85 @@ export class Daemon {
     } else if (connection) {
       page = connection.page as unknown as import("playwright").Page;
     } else {
-      return null;
+      const contextErrors: string[] = [];
+      const manager = this.getSkillBrowserManager();
+      let reconnected = await manager.reconnectActiveManaged();
+      if (!reconnected) {
+        const port = this.getActiveChromeDebugPort();
+        if (port) {
+          try {
+            await manager.attach({
+              port,
+              actor: "human",
+              confirmed: true,
+              sessionId: "default",
+            });
+            reconnected = true;
+          } catch (error: unknown) {
+            contextErrors.push(`manager attach failed: ${error instanceof Error ? error.message : String(error)}`);
+            this.log.warn("Skill browser attach fallback failed", {
+              port,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+
+      if (!reconnected) {
+        return null;
+      }
+
+      let browser = manager.getBrowser();
+      let browserContext = manager.getContext() ?? browser?.contexts()[0];
+      if (!browserContext) {
+        const port = this.getActiveChromeDebugPort();
+        if (port) {
+          try {
+            await manager.attach({
+              port,
+              actor: "human",
+              confirmed: true,
+              sessionId: "default",
+            });
+            browser = manager.getBrowser();
+            browserContext = manager.getContext() ?? browser?.contexts()[0];
+          } catch (error: unknown) {
+            contextErrors.push(`manager context attach failed: ${error instanceof Error ? error.message : String(error)}`);
+            this.log.warn("Skill browser context attach fallback failed", {
+              port,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+      if (!browserContext) {
+        const port = this.getActiveChromeDebugPort();
+        if (port) {
+          try {
+            const directBrowser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+            this.skillBrowserClients.push(directBrowser);
+            browserContext = directBrowser.contexts()[0] ?? await directBrowser.newContext();
+          } catch (error: unknown) {
+            contextErrors.push(`direct CDP failed: ${error instanceof Error ? error.message : String(error)}`);
+            this.log.warn("Skill browser direct CDP fallback failed", {
+              port,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+      if (!browserContext) {
+        throw new Error(
+          `No browser context available for skill "${skillName}". ${contextErrors.join("; ") || "No active browser context found."}`,
+        );
+      }
+
+      if (skill.manifest.requiresFreshPage) {
+        page = await browserContext.newPage();
+        freshPage = page;
+      } else {
+        page = browserContext.pages()[0] ?? await browserContext.newPage();
+      }
     }
 
     const context: SkillContext = {
@@ -1665,6 +1757,33 @@ export class Daemon {
     };
 
     return { context, freshPage };
+  }
+
+  private getSkillBrowserManager(): BrowserConnectionManager {
+    if (!this.skillBrowserManager) {
+      this.skillBrowserManager = new BrowserConnectionManager({
+        memoryStore: this.memoryStore,
+        ...(this.policyEngine ? { policyEngine: this.policyEngine } : {}),
+      });
+    }
+
+    return this.skillBrowserManager;
+  }
+
+  private getActiveChromeDebugPort(): number | null {
+    try {
+      const debugPath = getChromeDebugPath();
+      if (fs.existsSync(debugPath)) {
+        const metadata = JSON.parse(fs.readFileSync(debugPath, "utf8")) as { port?: number };
+        if (metadata.port) {
+          return metadata.port;
+        }
+      }
+    } catch {
+      // Fall back to configured port below.
+    }
+
+    return this.appConfig?.chromeDebugPort ?? this.config.port ?? 9222;
   }
 
   private async executeSkillAsync(

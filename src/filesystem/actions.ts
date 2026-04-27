@@ -26,7 +26,7 @@ import {
   type ListOptions,
   type DeleteOptions,
 } from "./operations";
-import type { SessionManager } from "../session_manager";
+import type { PolicyEvalResult, SessionManager } from "../session_manager";
 import { isPolicyAllowed } from "../session_manager";
 import {
   successResult,
@@ -60,6 +60,8 @@ export interface FsWriteOptions {
   content: string;
   /** Create parent directories (default: true). */
   createDirs?: boolean;
+  /** Explicit user confirmation for high-risk writes. */
+  confirmed?: boolean;
 }
 
 export interface FsListOptions {
@@ -76,6 +78,8 @@ export interface FsMoveOptions {
   src: string;
   /** Destination path. */
   dst: string;
+  /** Explicit user confirmation for high-risk moves. */
+  confirmed?: boolean;
 }
 
 export interface FsRmOptions {
@@ -85,6 +89,8 @@ export interface FsRmOptions {
   recursive?: boolean;
   /** Don't throw if path doesn't exist. */
   force?: boolean;
+  /** Explicit user confirmation for high-risk deletes. */
+  confirmed?: boolean;
 }
 
 export interface FsStatOptions {
@@ -144,6 +150,13 @@ export class FsActions {
     });
   }
 
+  private isAllowedOrConfirmed(
+    policyEval: PolicyEvalResult,
+    confirmed: boolean | undefined,
+  ): boolean {
+    return isPolicyAllowed(policyEval) || (confirmed === true && policyEval.policyDecision === "require_confirmation");
+  }
+
   // ── Actions ─────────────────────────────────────────────────────────
 
   /**
@@ -190,7 +203,7 @@ export class FsActions {
     const sessionId = this.getSessionId();
 
     const policyEval = this.context.sessionManager.evaluateAction("fs_write", { path: options.path });
-    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<FileWriteResult>;
+    if (!this.isAllowedOrConfirmed(policyEval, options.confirmed)) return policyEval as ActionResult<FileWriteResult>;
 
     try {
       const result = fsWriteFile(options.path, options.content, {
@@ -270,7 +283,7 @@ export class FsActions {
     const sessionId = this.getSessionId();
 
     const policyEval = this.context.sessionManager.evaluateAction("fs_move", { src: options.src, dst: options.dst });
-    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<MoveResult>;
+    if (!this.isAllowedOrConfirmed(policyEval, options.confirmed)) return policyEval as ActionResult<MoveResult>;
 
     try {
       const result = fsMoveFile(options.src, options.dst);
@@ -307,7 +320,7 @@ export class FsActions {
     const sessionId = this.getSessionId();
 
     const policyEval = this.context.sessionManager.evaluateAction("fs_delete", { path: options.path, recursive: options.recursive });
-    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<DeleteResult>;
+    if (!this.isAllowedOrConfirmed(policyEval, options.confirmed)) return policyEval as ActionResult<DeleteResult>;
 
     try {
       const deleteOpts: DeleteOptions = {

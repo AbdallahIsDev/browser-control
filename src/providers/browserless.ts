@@ -99,6 +99,9 @@ export class BrowserlessProvider implements BrowserProvider {
       browser,
       options.contextOptions ?? {},
     );
+    if (context.pages().length === 0) {
+      await context.newPage();
+    }
 
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;
@@ -141,7 +144,10 @@ export class BrowserlessProvider implements BrowserProvider {
     }
 
     const contexts = browser.contexts();
-    const context: BrowserContext | null = contexts.length > 0 ? contexts[0] : null;
+    const context: BrowserContext | null = contexts.length > 0 ? contexts[0] : await browser.newContext();
+    if (context.pages().length === 0) {
+      await context.newPage();
+    }
 
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;
