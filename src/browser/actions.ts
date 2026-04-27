@@ -127,14 +127,14 @@ export class BrowserActions {
     const context = bm.getContext();
     if (context) {
       const pages = context.pages();
-      if (pages.length > 0) return pages[pages.length - 1];
+      if (pages.length > 0) return pages[0];
     }
     const browser = bm.getBrowser();
     if (browser) {
       const contexts = browser.contexts();
       if (contexts.length > 0) {
         const pages = contexts[0].pages();
-        if (pages.length > 0) return pages[pages.length - 1];
+        if (pages.length > 0) return pages[0];
       }
     }
     throw new Error("No active browser page. Use 'bc open <url>' or 'bc browser attach' first.");
@@ -254,11 +254,11 @@ export class BrowserActions {
       const info = await client.send("Target.getTargetInfo") as { targetInfo?: { targetId?: string } };
       const targetId = info.targetInfo?.targetId;
       if (!targetId) throw new Error("CDP target id is unavailable");
-      await client.send("Target.closeTarget", { targetId });
-      await page.waitForEvent("close", { timeout: 2_000 }).catch(() => undefined);
-      if (!page.isClosed()) {
-        throw new Error("CDP target close did not close the tab");
+      const result = await client.send("Target.closeTarget", { targetId }) as { success?: boolean };
+      if (result.success === false) {
+        throw new Error("CDP target close was rejected");
       }
+      await page.waitForEvent("close", { timeout: 2_000 }).catch(() => undefined);
     } catch {
       throw originalError instanceof Error ? originalError : new Error(String(originalError));
     } finally {

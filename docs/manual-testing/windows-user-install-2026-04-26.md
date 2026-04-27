@@ -321,7 +321,7 @@ Result:
 - `tab list` originally returned blank titles. Fixed by reading each page title.
 - `daemon start` could feel stuck because it waited silently for readiness. Fixed with a shorter readiness probe.
 - Screenshot can timeout inside Playwright while waiting for screenshot internals. Added CDP fallback and temp-file output.
-- Named profiles with restored tabs could navigate a hidden/background tab while the visible tab stayed on New Tab. Fixed by targeting and foregrounding the newest/front tab for actions.
+- Named profiles with restored tabs could navigate a hidden/background tab while the visible tab stayed on New Tab. Fixed by targeting Playwright's front page for actions.
 - Named-profile screenshots could produce a 1x1 image when the CDP viewport was invalid. Fixed by normalizing tiny viewports and falling back to CDP capture for tiny screenshots.
 - `bc close` could hang on restored named-profile tabs. Fixed with a bounded close plus CDP target-close fallback.
 - `browser auth export --output` was ignored and high-risk auth commands had no explicit CLI confirmation path. Fixed with `--output` support and `--yes` confirmation.

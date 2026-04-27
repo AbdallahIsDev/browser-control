@@ -136,9 +136,9 @@ describe("BrowserActions", () => {
   describe("open", () => {
     it("targets the front-most tab when a restored profile has multiple pages", async () => {
       const isolatedStore = new MemoryStore({ filename: ":memory:" });
-      const backgroundPage = createMockPage("https://background.example/");
       const frontPage = createMockPage("chrome://newtab/");
-      const manager = createConnectedBrowserManager([backgroundPage, frontPage]);
+      const backgroundPage = createMockPage("https://background.example/");
+      const manager = createConnectedBrowserManager([frontPage, backgroundPage]);
 
       try {
         const isolatedSessionManager = new SessionManager({
@@ -288,9 +288,9 @@ describe("BrowserActions", () => {
   describe("close", () => {
     it("closes the front-most tab when a restored profile has multiple pages", async () => {
       const isolatedStore = new MemoryStore({ filename: ":memory:" });
-      const backgroundPage = createMockPage("https://background.example/");
       const frontPage = createMockPage("chrome://newtab/");
-      const manager = createConnectedBrowserManager([backgroundPage, frontPage]);
+      const backgroundPage = createMockPage("https://background.example/");
+      const manager = createConnectedBrowserManager([frontPage, backgroundPage]);
 
       try {
         const isolatedSessionManager = new SessionManager({
