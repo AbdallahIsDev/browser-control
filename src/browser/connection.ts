@@ -488,11 +488,11 @@ export class BrowserConnectionManager {
   }
 
   /**
-   * Reconnect to Browser Control's own persisted managed browser.
+   * Reconnect to Browser Control's own persisted browser connection.
    *
-   * This only trusts state previously persisted by Browser Control as a local
-   * managed/restored connection, so it does not downgrade arbitrary real-browser
-   * attach risk.
+   * Managed/restored local sessions are automation-owned. Non-local attached
+   * sessions are only reused when Browser Control previously persisted them
+   * after an explicit attach.
    */
   async reconnectActiveManaged(): Promise<boolean> {
     const active = this.memoryStore.get<{
@@ -507,18 +507,55 @@ export class BrowserConnectionManager {
       provider?: string;
     }>("browser_connection:active");
 
-    if (
-      !active
-      || active.status !== "connected"
-      || !active.cdpEndpoint
-      || active.provider !== "local"
-      || active.isRealBrowser
-      || (active.mode !== "managed" && active.mode !== "restored")
-    ) {
+    if (!active || active.status !== "connected" || !active.cdpEndpoint) {
+      return false;
+    }
+
+    const canReconnectLocalManaged = active.provider === "local"
+      && !active.isRealBrowser
+      && (active.mode === "managed" || active.mode === "restored");
+    const canReconnectProviderAttached = active.provider !== "local"
+      && active.isRealBrowser === true
+      && active.mode === "attached";
+
+    if (!canReconnectLocalManaged && !canReconnectProviderAttached) {
       return false;
     }
 
     try {
+      if (canReconnectProviderAttached && active.provider) {
+        const provider = this.resolveProvider(active.provider);
+        if (!provider.capabilities.supportsAttach) {
+          return false;
+        }
+
+        const result = await provider.attach({
+          cdpUrl: active.cdpEndpoint,
+          targetType: active.targetType,
+          config: this.providerRegistry.get(active.provider),
+        });
+        this.currentProvider = provider;
+        this.browser = result.browser;
+        this.context = result.context;
+        this.managedProcess = result.managedProcess ?? null;
+        const tabCount = getAllPages(result.browser).length;
+        this.connection = {
+          ...result.connection,
+          id: active.id ?? result.connection.id,
+          connectedAt: active.connectedAt ?? result.connection.connectedAt,
+          tabCount,
+          status: "connected",
+        };
+        this.persistConnectionState();
+        log.info("Reconnected to active attached browser", {
+          connectionId: this.connection.id,
+          endpoint: this.connection.cdpEndpoint,
+          provider: this.connection.provider,
+          tabs: tabCount,
+        });
+        return true;
+      }
+
       const profile = active.profileId
         ? this.profileManager.getProfile(active.profileId) ?? this.profileManager.getDefaultProfile()
         : this.profileManager.getDefaultProfile();
@@ -530,9 +567,9 @@ export class BrowserConnectionManager {
         persistSessionCookies: false,
       });
       const tabCount = getAllPages(browser).length;
-      this.connection = {
+      const connection: BrowserConnection = {
         id: active.id ?? `conn-${Date.now()}-${++this.connectionCounter}`,
-        mode: active.mode,
+        mode: active.mode === "restored" ? "restored" : "managed",
         profile,
         cdpEndpoint: active.cdpEndpoint,
         status: "connected",
@@ -542,10 +579,11 @@ export class BrowserConnectionManager {
         isRealBrowser: false,
         provider: "local",
       };
+      this.connection = connection;
       this.persistConnectionState();
       log.info("Reconnected to active managed browser", {
-        connectionId: this.connection.id,
-        endpoint: this.connection.cdpEndpoint,
+        connectionId: connection.id,
+        endpoint: connection.cdpEndpoint,
         tabs: tabCount,
       });
       return true;

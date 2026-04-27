@@ -421,6 +421,58 @@ describe("BrowserConnectionManager", () => {
         await manager.disconnect();
       }
     });
+
+    it("reconnects a previously confirmed custom provider attachment", async () => {
+      const registry = new ProviderRegistry(testHome);
+      const addResult = registry.add({
+        name: "my-remote",
+        type: "custom",
+        endpoint: "http://127.0.0.1:9336",
+      });
+      assert.equal(addResult.success, true);
+
+      const connectedEndpoints: string[] = [];
+      const fakeContext = {
+        pages: () => [],
+        close: async () => {},
+      };
+      const fakeBrowser = {
+        contexts: () => [fakeContext],
+        close: async () => {},
+      };
+      const originalConnectOverCDP = chromium.connectOverCDP;
+      (chromium as unknown as { connectOverCDP: (endpoint: string) => Promise<unknown> }).connectOverCDP = async (endpoint: string) => {
+        connectedEndpoints.push(endpoint);
+        return fakeBrowser;
+      };
+
+      const manager1 = new BrowserConnectionManager({
+        memoryStore: store,
+        policyEngine: trustedEngine,
+        providerRegistry: registry,
+      });
+      const manager2 = new BrowserConnectionManager({
+        memoryStore: store,
+        policyEngine: trustedEngine,
+        providerRegistry: registry,
+      });
+
+      try {
+        await manager1.attach({ provider: "my-remote", confirmed: true });
+
+        assert.equal(await manager2.reconnectActiveManaged(), true);
+        assert.equal(manager2.getConnection()?.provider, "my-remote");
+        assert.equal(manager2.getConnection()?.mode, "attached");
+        assert.deepEqual(connectedEndpoints, [
+          "http://127.0.0.1:9336",
+          "http://127.0.0.1:9336",
+        ]);
+      } finally {
+        (chromium as unknown as { connectOverCDP: typeof originalConnectOverCDP }).connectOverCDP = originalConnectOverCDP;
+        await manager1.disconnect();
+        await manager2.disconnect();
+      }
+    });
   });
 
   describe("Section 8 Guarantees", () => {

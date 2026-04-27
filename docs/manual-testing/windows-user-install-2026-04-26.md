@@ -980,6 +980,8 @@ Result after fix:
 - Network count for one fetch is `1`.
 - `HasConsoleError` returned `True`.
 - `HasApiTest` returned `True`.
+- A later attempted retest without starting the local HTTP server was invalid: `open` failed with `ERR_CONNECTION_REFUSED`, so console/network counts correctly stayed `0`.
+- Valid retest with the local server running again returned console count `1` and network count `1`.
 
 ## Custom Remote CDP Provider
 
@@ -1007,7 +1009,12 @@ Result after fix:
 
 - `browser attach --yes` connected to external Chrome on port `9334`.
 - `browser status` returned `mode: attached`, `status: connected`, `provider: custom9334`, `reachable: true`.
-- Full remote provider navigation/screenshot still needs a dedicated workflow test that keeps the external Chrome and provider active until cleanup.
+
+Follow-up result:
+
+- Full provider workflow initially still failed after attach because later CLI commands did not reconnect persisted custom attached browser state.
+- Fix added: persisted non-local attached connections can now be reconnected after a confirmed attach.
+- Retest with external Chrome on port `9337` passed: `open https://example.com` returned `Example Domain`, screenshot saved, and `Test-Path` returned `True`.
 
 ## Schedule Lifecycle
 
@@ -1070,23 +1077,15 @@ Result after fix:
 - Debug console/network commands returned empty output after events because each CLI process only read in-memory capture state. Fixed by starting CDP capture during browser actions, persisting entries, and loading persisted entries in debug commands.
 - Debug console could duplicate one browser console error because overlapping CDP events were persisted separately. Fixed with tolerant near-window deduplication.
 - `browser attach` under balanced policy had no `--yes` confirmation path. Fixed by adding explicit confirmation support.
+- Remote custom provider follow-up actions failed after attach because reconnect only accepted local managed browser state. Fixed by reconnecting previously confirmed non-local attached state.
 - Schedule commands without daemon returned raw `fetch failed`. Fixed with a broker-not-reachable message that points to `bc daemon start`.
 - Schedule pause/resume/remove returned `404` because broker and daemon callback wiring only implemented create/list. Fixed by adding scheduler mutation routes and daemon callbacks.
 
 ## Not Yet Manually Confirmed
 
-### Remote Provider Full Browser Workflow
+### Browserless Provider
 
-```powershell
-npx bc browser provider add test-custom --type=custom --endpoint=<cdp-url>
-npx bc browser provider use test-custom
-npx bc browser attach --provider=test-custom --cdp-url=<cdp-url> --yes
-npx bc open https://example.com
-npx bc screenshot --output <path>
-npx bc browser provider remove test-custom
-```
-
-Browserless needs real `BROWSERLESS_ENDPOINT` and `BROWSERLESS_API_KEY`.
+Needs real `BROWSERLESS_ENDPOINT` and `BROWSERLESS_API_KEY`.
 
 ### Skill Run And Tasks
 
