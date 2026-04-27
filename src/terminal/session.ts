@@ -50,6 +50,7 @@ export class PtyTerminalSession implements ITerminalSession {
   /** Whether close() has been called. Set only once, at the start of close(). */
   private _closed = false;
   private _outputBuffer = "";
+  private _publicOutputBuffer = "";
   private _outputResolve: ((data: string) => void) | null = null;
   private _runningCommand: string | undefined;
   private _lastActivityAt: string;
@@ -124,6 +125,9 @@ export class PtyTerminalSession implements ITerminalSession {
 
     this._onDataDisposable = this._process.onData((data: string) => {
       this._outputBuffer += data;
+      if (!this._runningCommand) {
+        this._publicOutputBuffer = appendBoundedOutput(this._publicOutputBuffer, cleanPtySessionOutput(stripAnsi(data)));
+      }
       this._lastActivityAt = new Date().toISOString();
 
       // Trim buffer to max size
@@ -217,6 +221,7 @@ export class PtyTerminalSession implements ITerminalSession {
 
     // Clear the output buffer
     this._outputBuffer = "";
+    this._publicOutputBuffer = "";
 
     // Write the command sequence
     if (this._process) {
@@ -282,6 +287,7 @@ export class PtyTerminalSession implements ITerminalSession {
 
     // Split into stdout/stderr (PTY merges them)
     const { stdout, stderr } = splitPtyOutput(cleanOutput, command);
+    this._publicOutputBuffer = appendBoundedOutput(this._publicOutputBuffer, [stdout, stderr].filter(Boolean).join("\n"));
 
     // Try to detect cwd from the full buffer
     const detectedCwd = extractCwdFromPrompt(this._outputBuffer);
@@ -313,8 +319,7 @@ export class PtyTerminalSession implements ITerminalSession {
   async read(maxBytes?: number): Promise<string> {
     this.assertNotClosed();
     const limit = maxBytes ?? DEFAULT_MAX_OUTPUT;
-    const output = this._outputBuffer.slice(-limit);
-    return stripAnsi(output);
+    return this._publicOutputBuffer.slice(-limit);
   }
 
   async snapshot(): Promise<TerminalSnapshot> {
@@ -325,7 +330,7 @@ export class PtyTerminalSession implements ITerminalSession {
       cwd: this._cwd,
       env: redactEnv(this.env),
       status: this._status,
-      lastOutput: cleanPtySessionOutput(stripAnsi(this._outputBuffer.slice(-4096))),
+      lastOutput: this._publicOutputBuffer.slice(-4096),
       promptDetected: isPromptDetected(this._outputBuffer, this.id),
       scrollbackLines: this._outputBuffer.split(/\r?\n/).length,
       runningCommand: this._runningCommand ? redactCommandText(this._runningCommand) : undefined,
@@ -449,6 +454,7 @@ export class PtyTerminalSession implements ITerminalSession {
   /** Inject output into the buffer (used for buffer restoration on resume). */
   injectOutput(output: string): void {
     this._outputBuffer = output;
+    this._publicOutputBuffer = cleanPtySessionOutput(stripAnsi(output));
   }
 
   /**
@@ -696,16 +702,29 @@ function cleanPtyCommandOutput(output: string, command: string): string {
 
 function cleanPtySessionOutput(output: string): string {
   return output
-    .replace(/^.*__BC_S_\d+__.*$/gm, "")
-    .replace(/^.*__BC_E_\d+:\d+.*$/gm, "")
-    .replace(/^.*Write-Output "__BC_S_\d+__".*$/gm, "")
-    .replace(/^.*Write-Output "__BC_E_\d+:\$__bc_exit".*$/gm, "")
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !(
+        /__BC_S_\d+__/.test(trimmed) ||
+        /__BC_E_\d+:\d+/.test(trimmed) ||
+        /\$__bc_success|\$__bc_exit/.test(trimmed) ||
+        /Write-Output\s+"__BC_[SE]_/.test(trimmed)
+      );
+    })
+    .join("\n")
     .replace(/__BC_S_\d+__/g, "")
     .replace(/__BC_E_\d+:\d+/g, "");
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function appendBoundedOutput(current: string, next: string): string {
+  if (!next) return current;
+  const output = current ? `${current}${next}` : next;
+  return output.length > DEFAULT_MAX_OUTPUT ? output.slice(-DEFAULT_MAX_OUTPUT) : output;
 }
 
 /**

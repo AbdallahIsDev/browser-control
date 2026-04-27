@@ -114,6 +114,11 @@ test("terminal_session: create, exec, snapshot, and close a real session", { tim
     assert.doesNotMatch(result.stdout, /__BC_[SE]_/);
     assert.doesNotMatch(result.stdout, /\$__bc_success|Write-Output/);
 
+    const readOutput = await session.read();
+    assert.ok(readOutput.includes("session-hello"));
+    assert.doesNotMatch(readOutput, /__BC_[SE]_/);
+    assert.doesNotMatch(readOutput, /\$__bc_success|Write-Output/);
+
     const snapshot = await session.snapshot();
     assert.equal(snapshot.sessionId, session.id);
     assert.equal(snapshot.status, "idle");
