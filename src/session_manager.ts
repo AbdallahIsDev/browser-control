@@ -884,10 +884,23 @@ export class SessionManager {
     // ensureDaemonRuntime() will re-probe and discover the daemon is down.
     if (this.brokerRuntime) return true;
 
+    // Terminal commands only need the terminal broker endpoint. The full
+    // /health check can be slow because it runs non-critical checks such as
+    // CDP, so probe terminal readiness first to avoid false auto-starts.
+    const initialConfig = loadConfig({ validate: false });
+    const initialBrokerUrl = `http://127.0.0.1:${initialConfig.brokerPort}`;
+    if (await probeTerminalReadiness(initialBrokerUrl)) {
+      this.brokerRuntime = new BrokerTerminalRuntime({
+        brokerUrl: initialBrokerUrl,
+        apiKey: initialConfig.brokerAuthKey ?? null,
+      });
+      return true;
+    }
+
     // Probe daemon health, then verify terminal readiness.
     // Two-stage probe prevents the race where /health responds but
     // the terminal broker path is not yet wired up.
-    const { running, brokerUrl } = await probeDaemonHealth();
+    const { running, brokerUrl } = await probeDaemonHealth(initialConfig);
     if (running) {
       // Verify terminal readiness before caching the runtime.
       // If the terminal endpoint isn't ready yet, wait briefly and retry.
@@ -982,20 +995,22 @@ export class SessionManager {
         // the health probe succeeded.
         const maxRetries = 30;
         const retryDelayMs = 1000;
+        const spawnedConfig = loadConfig({ validate: false });
+        const spawnedBrokerUrl = `http://127.0.0.1:${spawnedConfig.brokerPort}`;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          const termReady = await probeTerminalReadiness(spawnedBrokerUrl);
+          if (termReady) {
+            this.brokerRuntime = new BrokerTerminalRuntime({
+              brokerUrl: spawnedBrokerUrl,
+              apiKey: spawnedConfig.brokerAuthKey ?? null,
+            });
+            log.info("Daemon auto-started and terminal-ready", { brokerUrl: spawnedBrokerUrl });
+            return true;
+          }
+
           const healthResult = await probeDaemonHealth();
           if (healthResult.running) {
             // Stage 1 passed — broker is listening. Now verify terminal readiness.
-            const termReady = await probeTerminalReadiness(healthResult.brokerUrl);
-            if (termReady) {
-              const config = loadConfig({ validate: false });
-              this.brokerRuntime = new BrokerTerminalRuntime({
-                brokerUrl: healthResult.brokerUrl,
-                apiKey: config.brokerAuthKey ?? null,
-              });
-              log.info("Daemon auto-started and terminal-ready", { brokerUrl: healthResult.brokerUrl });
-              return true;
-            }
             // Health OK but terminal not ready yet — keep retrying
             log.info("Daemon health OK but terminal not ready yet", { attempt });
           }

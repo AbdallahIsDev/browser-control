@@ -740,6 +740,44 @@ describe("SessionManager", () => {
   // ── ensureDaemonRuntime ───────────────────────────────────────────
 
   describe("ensureDaemonRuntime", () => {
+    it("uses terminal readiness when daemon health is slow or unavailable", async () => {
+      const originalFetch = globalThis.fetch;
+      const requestedUrls: string[] = [];
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requestedUrls.push(url);
+        if (url.endsWith("/api/v1/health")) {
+          throw new Error("health timed out");
+        }
+        if (url.endsWith("/api/v1/term/sessions")) {
+          return new Response("[]", {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      }) as typeof fetch;
+
+      const freshStore = new MemoryStore({ filename: ":memory:" });
+      const freshManager = new SessionManager({ memoryStore: freshStore });
+
+      try {
+        const result = await freshManager.ensureDaemonRuntime({ autoStart: false });
+        assert.equal(result, true, "terminal-ready daemon should establish broker runtime even when health is slow");
+        assert.ok(
+          freshManager.getTerminalRuntime() instanceof BrokerTerminalRuntime,
+          "runtime should be broker-backed",
+        );
+        assert.ok(
+          requestedUrls.some((url) => url.endsWith("/api/v1/term/sessions")),
+          "terminal readiness endpoint should be probed",
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+        freshStore.close();
+      }
+    });
+
     it("returns false when daemon is not reachable and autoStart is disabled", async () => {
       // If a daemon is running on the default port, we can't test the
       // "not reachable" path — skip with a clear message.

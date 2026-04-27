@@ -616,11 +616,21 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       // Probe briefly so pasted command batches are not blocked for a long,
       // silent startup. Follow-up commands can still poll daemon status.
       const { probeDaemonHealth, probeTerminalReadiness } = await import("./session_manager");
+      const { loadConfig } = await import("./shared/config");
       let daemonReady = false;
       let daemonBrokerUrl = "";
       const maxRetries = 12;
       const retryDelayMs = 500;
+      const startupConfig = loadConfig({ validate: false });
+      const startupBrokerUrl = `http://127.0.0.1:${startupConfig.brokerPort}`;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        const directTermReady = await probeTerminalReadiness(startupBrokerUrl);
+        if (directTermReady) {
+          daemonReady = true;
+          daemonBrokerUrl = startupBrokerUrl;
+          break;
+        }
+
         const healthResult = await probeDaemonHealth();
         if (healthResult.running) {
           // Health OK — verify terminal readiness too
