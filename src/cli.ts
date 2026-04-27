@@ -2350,7 +2350,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
       case "open": {
         result = await terminalActions.open({
           shell: flags.shell,
-          cwd: flags.cwd,
+          cwd: flags.cwd ?? process.env.INIT_CWD ?? process.cwd(),
           name: flags.name,
         });
         break;

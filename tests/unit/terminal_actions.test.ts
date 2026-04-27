@@ -83,6 +83,35 @@ describe("TerminalActions", () => {
       assert.ok(result.recoveryGuidance);
       assert.ok(loadDebugBundle(result.debugBundleId, store));
     });
+
+    it("rejects placeholder session ids before calling the terminal runtime", async () => {
+      const calls: string[] = [];
+      const mockRuntime: TerminalRuntime = {
+        open: async () => ({ id: "mock-session", shell: "pwsh", cwd: dataHome, status: "idle" }),
+        exec: async (command) => {
+          calls.push(`exec:${command}`);
+          return { exitCode: 0, stdout: "", stderr: "", durationMs: 1, cwd: dataHome, timedOut: false };
+        },
+        type: async () => {},
+        read: async () => "",
+        snapshot: async () => ({ lines: [], cursorY: 0, cursorX: 0, width: 80, height: 24 }),
+        interrupt: async () => {},
+        close: async () => {},
+        list: async () => [],
+        resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+        status: async (sessionId) => ({ sessionId, status: "fresh" }),
+      };
+      const actions = new TerminalActions({ sessionManager, terminalRuntime: mockRuntime });
+
+      const result = await actions.exec({
+        command: "echo test",
+        sessionId: "<PASTE_TERMINAL_ID_HERE>",
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.error ?? "", /Invalid terminal session id: <PASTE_TERMINAL_ID_HERE>/);
+      assert.deepEqual(calls, []);
+    });
   });
 
   describe("type", () => {

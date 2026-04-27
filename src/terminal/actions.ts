@@ -23,6 +23,7 @@ import { collectFailureDebugMetadata } from "../observability/action_debug";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
 
 const log = logger.withComponent("terminal_actions");
+const TERMINAL_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 // ── Action Options ─────────────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export class TerminalActions {
     const runtime = this.context.terminalRuntime ?? this.context.sessionManager.getTerminalRuntime();
     if (!(runtime instanceof BrokerTerminalRuntime)) return;
     const message = error instanceof Error ? error.message : String(error);
-    if (/ECONNREFUSED|fetch failed|Broker API error|network error/i.test(message)) {
+    if (/ECONNREFUSED|ECONNRESET|EPIPE|fetch failed|network error|socket hang up/i.test(message)) {
       log.info("Invalidating stale broker runtime after connection failure");
       this.context.sessionManager.invalidateBrokerRuntime();
     }
@@ -239,6 +240,29 @@ export class TerminalActions {
   private getSessionId(): string {
     const session = this.context.sessionManager.getActiveSession();
     return session?.id ?? "default";
+  }
+
+  private async rejectInvalidTerminalSessionId<T>(
+    terminalSessionId: string | undefined,
+    policyEval: PolicyEvalResult,
+    action: string,
+  ): Promise<ActionResult<T> | null> {
+    if (!terminalSessionId || TERMINAL_SESSION_ID_PATTERN.test(terminalSessionId)) {
+      return null;
+    }
+
+    const sessionId = this.getSessionId();
+    const message = `Invalid terminal session id: ${terminalSessionId}`;
+    return this.failureWithDebug<T>(message, new Error(message), {
+      action,
+      path: policyEval.path,
+      sessionId,
+      ...(isPolicyAllowed(policyEval) ? {
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      } : {}),
+    });
   }
 
   private async failureWithDebug<T>(
@@ -345,6 +369,8 @@ export class TerminalActions {
     // Policy check
     const policyEval = this.context.sessionManager.evaluateAction("terminal_exec", { command: options.command });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<ExecResult>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<ExecResult>(options.sessionId, policyEval, "terminal_exec");
+    if (invalidSession) return invalidSession;
 
     try {
       if (options.sessionId) await this.ensureDaemonRuntimeReady();
@@ -392,6 +418,8 @@ export class TerminalActions {
 
     const policyEval = this.context.sessionManager.evaluateAction("terminal_write", { text: options.text });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ typed: string }>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<{ typed: string }>(options.sessionId, policyEval, "terminal_write");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -425,6 +453,8 @@ export class TerminalActions {
     // Read is low-risk but routes through policy for consistency
     const policyEval = this.context.sessionManager.evaluateAction("terminal_read", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ output: string }>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<{ output: string }>(options.sessionId, policyEval, "terminal_read");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -458,6 +488,8 @@ export class TerminalActions {
     // Snapshot is low-risk but routes through policy for consistency
     const policyEval = this.context.sessionManager.evaluateAction("terminal_snapshot", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<TerminalSnapshot | TerminalSnapshot[]>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<TerminalSnapshot | TerminalSnapshot[]>(options.sessionId, policyEval, "terminal_snapshot");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -492,6 +524,8 @@ export class TerminalActions {
     // Interrupt routes through policy for consistency
     const policyEval = this.context.sessionManager.evaluateAction("terminal_interrupt", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ interrupted: boolean }>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<{ interrupted: boolean }>(options.sessionId, policyEval, "terminal_interrupt");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -568,6 +602,8 @@ export class TerminalActions {
 
     const policyEval = this.context.sessionManager.evaluateAction("terminal_close", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ closed: boolean }>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<{ closed: boolean }>(options.sessionId, policyEval, "terminal_close");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -606,6 +642,8 @@ export class TerminalActions {
 
     const policyEval = this.context.sessionManager.evaluateAction("terminal_resume", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<unknown>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<unknown>(options.sessionId, policyEval, "terminal_resume");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();
@@ -638,6 +676,8 @@ export class TerminalActions {
 
     const policyEval = this.context.sessionManager.evaluateAction("terminal_status", { sessionId: options.sessionId });
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<unknown>;
+    const invalidSession = await this.rejectInvalidTerminalSessionId<unknown>(options.sessionId, policyEval, "terminal_status");
+    if (invalidSession) return invalidSession;
 
     try {
       await this.ensureDaemonRuntimeReady();

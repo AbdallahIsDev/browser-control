@@ -312,6 +312,56 @@ Result:
 - `bc close` returned `{ "closed": true }` without hanging.
 - Browser status changed to `disconnected` and `reachable: false` after the closed tab ended the managed browser.
 
+### Policy Commands
+
+Commands:
+
+```powershell
+npx bc policy list
+npx bc policy inspect balanced
+npx bc policy inspect trusted
+npx bc policy export balanced C:\Users\11\bc-user-test\balanced-policy.json
+Test-Path C:\Users\11\bc-user-test\balanced-policy.json
+npx bc fs write C:\Users\11\bc-user-test\policy-write-test.txt --content "blocked by balanced policy"
+Test-Path C:\Users\11\bc-user-test\policy-write-test.txt
+npx bc fs read C:\Users\11\bc-user-test\hello.txt
+npx bc term exec "echo policy-terminal-ok"
+```
+
+Result:
+
+- Built-in policy list returned `safe`, `balanced`, and `trusted`.
+- `balanced` and `trusted` inspection printed expected command, filesystem, browser, and low-level policy fields.
+- `policy export balanced` created `balanced-policy.json`.
+- Balanced policy correctly blocked direct `fs write` with `require_confirmation`; file was not created.
+- Low-risk `fs read` worked.
+- Moderate terminal one-shot command worked with audit logging.
+
+### Daemon-Backed Terminal Sessions
+
+Commands:
+
+```powershell
+npx bc daemon start
+npx bc term open --name manual-term --json
+npx bc term list
+$termId = "<real terminal id from term open/list>"
+npx bc term exec "echo daemon-terminal-ok" --session=$termId
+npx bc term read --session=$termId
+npx bc term snapshot --session=$termId
+npx bc term close --session=$termId
+npx bc daemon stop
+```
+
+Result:
+
+- `daemon start` returned and printed readiness instead of hanging.
+- `term open --json` created a daemon-backed terminal session and returned a terminal id.
+- Terminal cwd defaulted to the caller directory (`C:\Users\11\bc-user-test`), not package `dist\src`.
+- `term list` showed daemon terminal sessions.
+- Using a real terminal id, `term exec`, `term read`, `term snapshot`, and `term close` succeeded.
+- Leaving `$termId="<PASTE_TERMINAL_ID_HERE>"` is user error, but now fails cleanly with `Invalid terminal session id: <PASTE_TERMINAL_ID_HERE>` and no native assertion crash.
+
 ## Issues Found During Manual Testing
 
 - CLI help originally pulled runtime modules and emitted dependency/security noise. Fixed by keeping help lightweight.
@@ -326,6 +376,9 @@ Result:
 - `bc close` could hang on restored named-profile tabs. Fixed with a bounded close plus CDP target-close fallback.
 - `browser auth export --output` was ignored and high-risk auth commands had no explicit CLI confirmation path. Fixed with `--output` support and `--yes` confirmation.
 - Live auth export could get stuck by re-attaching to Browser Control's own managed browser. Fixed by reconnecting to the active managed browser state first and releasing CLI handles.
+- Terminal commands with invalid placeholder ids could trigger `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` after a broker HTTP 400. Fixed by validating terminal ids before runtime calls and only invalidating broker runtime on transport failures.
+- Daemon terminal sessions opened in the package directory when `--cwd` was omitted. Fixed by passing caller cwd from the CLI.
+- `term snapshot` can expose full terminal environment, including secrets inherited from the caller. Treat snapshot output as sensitive until redaction is added.
 
 ## Not Yet Manually Confirmed
 
@@ -347,29 +400,6 @@ npx bc browser provider remove test-custom
 ```
 
 Browserless needs real `BROWSERLESS_ENDPOINT` and `BROWSERLESS_API_KEY`.
-
-### Policy Flows
-
-```powershell
-npx bc policy list
-npx bc policy inspect balanced
-npx bc policy export balanced C:\Users\11\bc-user-test\balanced-policy.json
-npx bc policy import C:\Users\11\bc-user-test\balanced-policy.json
-```
-
-Also test expected denied/confirmation-required actions.
-
-### Daemon-Backed Terminal Sessions
-
-```powershell
-npx bc daemon start
-npx bc term open --name manual-term
-npx bc term list
-npx bc term exec "echo daemon-terminal"
-npx bc term read
-npx bc term close --session=<id>
-npx bc daemon stop
-```
 
 ### Skills, Tasks, Schedules, Reports
 

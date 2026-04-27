@@ -241,6 +241,7 @@ describe("CLI terminal exit regression (Section 5)", () => {
 
   it("bc term open --json returns success:true (daemon auto-starts)", async () => {
     const env = await createIsolatedEnv();
+    const callerCwd = process.cwd();
 
     const result = await runCliCommand(["term", "open", "--json"], env, EXIT_TIMEOUT_MS);
 
@@ -263,6 +264,7 @@ describe("CLI terminal exit regression (Section 5)", () => {
     assert.ok(data.id, "data must include terminal session id");
     assert.ok(data.shell, "data must include shell");
     assert.ok(data.status, "data must include status");
+    assert.equal(data.cwd, callerCwd, "term open should default to the caller working directory");
   });
 
   it("bc term exec --json 'node --version' succeeds", async () => {
@@ -329,6 +331,29 @@ describe("CLI terminal exit regression (Section 5)", () => {
     const closeParsed = parseActionResult(closeResult.output);
     assert.equal(closeParsed.success, true,
       `term close must return success:true. Got: ${JSON.stringify(closeParsed).slice(0, 300)}`);
+  });
+
+  it("bad session ID returns a clean broker error without native assertion crash", async () => {
+    const env = await createIsolatedEnv();
+
+    const openResult = await runCliCommand(["term", "open", "--json"], env, EXIT_TIMEOUT_MS);
+    assert.equal(openResult.timedOut, false, "term open must not hang");
+    assert.equal(openResult.exitCode, 0,
+      `term open must succeed. Output: ${openResult.output.slice(0, 300)}`);
+
+    const result = await runCliCommand(
+      ["term", "exec", "echo bad-id", "--session=missing-session-id", "--json"],
+      env,
+      EXIT_TIMEOUT_MS,
+    );
+
+    assert.equal(result.timedOut, false,
+      `bad-session exec must not hang. Output: ${result.output.slice(0, 500)}`);
+    assert.equal(result.exitCode, 0, "CLI action failures are reported in JSON without crashing the process");
+    const parsed = parseActionResult(result.output);
+    assert.equal(parsed.success, false, "bad-session exec should return success:false");
+    assert.match(result.output, /Session not found: missing-session-id/);
+    assert.doesNotMatch(result.output, /Assertion failed|UV_HANDLE_CLOSING/);
   });
 
   // ── API alignment test ────────────────────────────────────────────
