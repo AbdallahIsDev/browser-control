@@ -3046,6 +3046,18 @@ async function handleService(args: ParsedArgs): Promise<void> {
   }
 }
 
+function mergeObservabilityEntries<T extends { timestamp: string }>(...groups: T[][]): T[] {
+  const seen = new Set<string>();
+  const entries: T[] = [];
+  for (const entry of groups.flat()) {
+    const key = JSON.stringify(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push(entry);
+  }
+  return entries.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
 async function handleDebug(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
@@ -3089,10 +3101,21 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
     case "console": {
       try {
         const { getGlobalConsoleCapture } = await import("./observability/console_capture");
+        const { MemoryStore } = await import("./runtime/memory_store");
         const capture = getGlobalConsoleCapture();
         const sessionId = flags.session ?? "default";
         await requireCliPolicy("debug_console_read", { sessionId }, jsonOutput);
-        const entries = capture.getEntries(sessionId);
+        const store = new MemoryStore();
+        const entries = (() => {
+          try {
+            return mergeObservabilityEntries(
+              capture.loadFromStore(store, sessionId),
+              capture.getEntries(sessionId),
+            );
+          } finally {
+            store.close();
+          }
+        })();
 
         if (jsonOutput) {
           outputJson({ sessionId, entries }, false);
@@ -3116,10 +3139,21 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
     case "network": {
       try {
         const { getGlobalNetworkCapture } = await import("./observability/network_capture");
+        const { MemoryStore } = await import("./runtime/memory_store");
         const capture = getGlobalNetworkCapture();
         const sessionId = flags.session ?? "default";
         await requireCliPolicy("debug_network_read", { sessionId }, jsonOutput);
-        const entries = capture.getEntries(sessionId);
+        const store = new MemoryStore();
+        const entries = (() => {
+          try {
+            return mergeObservabilityEntries(
+              capture.loadFromStore(store, sessionId),
+              capture.getEntries(sessionId),
+            );
+          } finally {
+            store.close();
+          }
+        })();
 
         if (jsonOutput) {
           outputJson({ sessionId, entries }, false);

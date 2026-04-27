@@ -28,9 +28,17 @@ import { logger } from "../shared/logger";
 import { resolveServiceUrl, mightBeServiceRef } from "../services/resolver";
 import { ServiceRegistry, globalServiceRegistry } from "../services/registry";
 import { collectFailureDebugMetadata } from "../observability/action_debug";
+import { getGlobalConsoleCapture } from "../observability/console_capture";
+import { getGlobalNetworkCapture } from "../observability/network_capture";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
 
 const log = logger.withComponent("browser_actions");
+
+type ObservabilityCdpClient = {
+  on: (event: string, handler: (params: Record<string, unknown>) => void) => void;
+  off: (event: string, handler: (params: Record<string, unknown>) => void) => void;
+  send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+};
 
 // ── Action Options ─────────────────────────────────────────────────────
 
@@ -114,6 +122,7 @@ export interface ScreenshotOptions {
 export class BrowserActions {
   private readonly context: BrowserActionContext;
   private readonly refStore: RefStore;
+  private readonly observabilityClients = new Map<string, Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>>();
 
   constructor(context: BrowserActionContext) {
     this.context = context;
@@ -228,7 +237,42 @@ export class BrowserActions {
     const pageOrErr = await this.ensureBrowserConnected();
     if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
     await pageOrErr.bringToFront().catch(() => undefined);
+    await this.startObservability(pageOrErr, this.getSessionId());
     return pageOrErr;
+  }
+
+  private async startObservability(page: Page, sessionId: string): Promise<void> {
+    if (this.observabilityClients.has(sessionId)) return;
+
+    try {
+      const client = await page.context().newCDPSession(page);
+      await Promise.allSettled([
+        client.send("Runtime.enable", {}),
+        client.send("Console.enable", {}),
+        client.send("Network.enable", {}),
+      ]);
+      const captureClient: ObservabilityCdpClient = {
+        on: client.on.bind(client) as ObservabilityCdpClient["on"],
+        off: client.off.bind(client) as ObservabilityCdpClient["off"],
+        send: (method, params) => client.send(method as never, params as never),
+      };
+      getGlobalConsoleCapture().startCapture(sessionId, captureClient);
+      getGlobalNetworkCapture({ captureSuccess: true }).startCapture(sessionId, captureClient);
+      this.observabilityClients.set(sessionId, client);
+    } catch (error: unknown) {
+      log.warn(`Observability capture unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async persistObservability(sessionId: string, page?: Page, settleMs = 250): Promise<void> {
+    try {
+      await page?.waitForTimeout(settleMs).catch(() => undefined);
+      const store = this.context.sessionManager.getMemoryStore();
+      getGlobalConsoleCapture().persistToStore(store, sessionId);
+      getGlobalNetworkCapture({ captureSuccess: true }).persistToStore(store, sessionId);
+    } catch (error: unknown) {
+      log.warn(`Observability persistence failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private async closePage(page: Page): Promise<void> {
@@ -381,10 +425,12 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr as ActionResult<{ url: string; title: string }>;
       const page = pageOrErr as Page;
 
+      await this.startObservability(page, sessionId);
       await page.bringToFront().catch(() => undefined);
       await page.goto(resolvedUrl, { waitUntil: options.waitUntil ?? "domcontentloaded" });
       await page.bringToFront().catch(() => undefined);
       const title = await page.title();
+      await this.persistObservability(sessionId, page);
 
       log.info("Opened URL", { url: resolvedUrl, title, originalInput: options.url });
 
@@ -433,6 +479,7 @@ export class BrowserActions {
       this.refStore.setSnapshot(pageId, snap);
 
       log.info("Snapshot taken", { elements: snap.elements.length, pageUrl: snap.pageUrl });
+      await this.persistObservability(sessionId, page);
 
       return successResult(snap, {
         path: policyEval.path,
@@ -492,6 +539,7 @@ export class BrowserActions {
           timeout: options.timeoutMs ?? 5000,
           force: options.force,
         });
+        await this.persistObservability(sessionId, page);
         return successResult({ clicked: retry.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
       }
 
@@ -501,6 +549,7 @@ export class BrowserActions {
       });
 
       log.info("Clicked element", { target: options.target });
+      await this.persistObservability(sessionId, page);
 
       return successResult({ clicked: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -550,6 +599,7 @@ export class BrowserActions {
         }
         await retry.locator.fill(options.text, { timeout: options.timeoutMs ? Number(options.timeoutMs) : 5000 });
         if (options.commit) await retry.locator.press("Tab");
+        await this.persistObservability(sessionId, page);
         return successResult({ filled: retry.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
       }
 
@@ -557,6 +607,7 @@ export class BrowserActions {
       if (options.commit) await resolved.locator.press("Tab");
 
       log.info("Filled element", { target: options.target });
+      await this.persistObservability(sessionId, page);
 
       return successResult({ filled: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -599,6 +650,7 @@ export class BrowserActions {
       }
 
       await resolved.locator.hover({ timeout: options.timeoutMs ?? 5000 });
+      await this.persistObservability(sessionId, page);
 
       return successResult({ hovered: resolved.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -628,6 +680,7 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
       await page.keyboard.type(options.text, { delay: options.delayMs ?? 0 });
+      await this.persistObservability(sessionId, page);
 
       return successResult({ typed: options.text }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -657,6 +710,7 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
       await page.keyboard.press(options.key);
+      await this.persistObservability(sessionId, page);
 
       return successResult({ pressed: options.key }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -693,6 +747,7 @@ export class BrowserActions {
       } else {
         await page.mouse.wheel(delta, 0);
       }
+      await this.persistObservability(sessionId, page);
 
       return successResult({ scrolled: `${options.direction} ${amount}px` }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -745,6 +800,7 @@ export class BrowserActions {
       if (fs.existsSync(outputPath)) fs.rmSync(outputPath, { force: true });
       fs.renameSync(tempPath, outputPath);
       const stats = fs.statSync(outputPath);
+      await this.persistObservability(sessionId, page);
 
       return successResult({ path: outputPath, sizeBytes: stats.size }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -815,6 +871,7 @@ export class BrowserActions {
         url: p.url(),
         title: await p.title().catch(() => ""),
       })));
+      await this.persistObservability(sessionId, page);
 
       return successResult(tabs, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -860,6 +917,7 @@ export class BrowserActions {
       }
 
       await pages[index].bringToFront();
+      await this.persistObservability(sessionId, pages[index]);
 
       return successResult({ activeTab: tabId }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
@@ -888,6 +946,7 @@ export class BrowserActions {
       const pageOrErr = await this.getConnectedPageForAction<{ closed: true }>();
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
+      await this.persistObservability(sessionId, page);
       await this.closePage(page);
 
       // Unbind browser from session when the tab is closed (Issue 3)

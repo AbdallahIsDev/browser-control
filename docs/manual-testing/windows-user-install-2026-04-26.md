@@ -606,6 +606,106 @@ Result:
 - Fake bundle id returned `Bundle "test-debug-id" not found`.
 - Output file was not created because the bundle id was fake.
 
+### Debug Console And Network Event Capture
+
+Commands:
+
+```powershell
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+mkdir C:\Users\11\bc-user-test\debug-events-site -Force
+
+@"
+<!doctype html>
+<html>
+<head><title>BC Debug Events Test</title></head>
+<body>
+  <h1>BC Debug Events Test</h1>
+  <button id="event-button" onclick="console.error('bc-console-error-test'); fetch('/api/test?source=bc-debug').catch(() => {})">Emit Events</button>
+  <script>
+    console.log('bc-console-log-on-load');
+    fetch('/api/load?source=bc-debug').catch(() => {});
+  </script>
+</body>
+</html>
+"@ | Set-Content C:\Users\11\bc-user-test\debug-events-site\index.html
+
+$debugServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{if(req.url.startsWith('/api/')){res.setHeader('content-type','application/json');res.end(JSON.stringify({ok:true,url:req.url}))}else{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/debug-events-site/index.html'))}}).listen(7890,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+
+npx bc open http://127.0.0.1:7890
+Start-Sleep -Seconds 1
+npx bc click "#event-button"
+Start-Sleep -Seconds 1
+npx bc debug console
+npx bc debug network
+npx bc debug console --json 1> C:\Users\11\bc-user-test\debug-console.json 2> C:\Users\11\bc-user-test\debug-console.err
+npx bc debug network --json 1> C:\Users\11\bc-user-test\debug-network.json 2> C:\Users\11\bc-user-test\debug-network.err
+(Get-Content C:\Users\11\bc-user-test\debug-console.json -Raw | ConvertFrom-Json).entries.Count
+(Get-Content C:\Users\11\bc-user-test\debug-network.json -Raw | ConvertFrom-Json).entries.Count
+(Get-Content C:\Users\11\bc-user-test\debug-console.err -Raw).Length
+(Get-Content C:\Users\11\bc-user-test\debug-network.err -Raw).Length
+npx bc close
+Stop-Process -Id $debugServer.Id -Force
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+```
+
+Result before fix:
+
+- Page emitted console and network events.
+- `debug console` returned `0 total`.
+- `debug network` returned `0 total`.
+- JSON stderr stayed clean, but entries were empty.
+
+Fix added:
+
+- Browser actions now start CDP console/network capture on the active page.
+- Browser actions now persist captured observability entries to `MemoryStore`.
+- Debug console/network commands now load persisted entries so separate CLI invocations can read them.
+- Network capture is enabled for successful requests, not only failures, for debug observability.
+
+Result after fix:
+
+- `debug console --json` returned 2 entries.
+- Console entries included `bc-console-error-test`.
+- `debug network --json` returned 1 entry.
+- Network entries included `/api/test?source=bc-debug`.
+- Both JSON stderr files had length `0`.
+
+### Real Debug Bundle Creation And Export
+
+Commands:
+
+```powershell
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Remove-Item C:\Users\11\bc-user-test\real-debug-bundle.json -Force -ErrorAction SilentlyContinue
+
+npx bc open https://example.com
+npx bc click "#missing-button-for-debug-test"
+
+$bundleFile = Get-ChildItem C:\Users\11\bc-user-test\.browser-control\debug-bundles\bundle-*.json |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1
+
+$bundleId = [System.IO.Path]::GetFileNameWithoutExtension($bundleFile.Name)
+$bundleId
+
+npx bc debug bundle $bundleId --output C:\Users\11\bc-user-test\real-debug-bundle.json --yes
+Test-Path C:\Users\11\bc-user-test\real-debug-bundle.json
+Get-Content C:\Users\11\bc-user-test\real-debug-bundle.json | Select-Object -First 40
+npx bc close
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+```
+
+Result:
+
+- Browser opened `https://example.com/`.
+- Missing click target failed as intended with `Could not resolve click target`.
+- Newest debug bundle id was selected from `.browser-control\debug-bundles`.
+- `debug bundle <real-id> --yes` exported to `real-debug-bundle.json`.
+- `Test-Path` returned `True`.
+- Exported bundle included `bundleId`, `taskId: browser_click`, `sessionId`, policy decision, exception message, stack, retry summary, recovery guidance, browser URL/title, screenshot, and snapshot.
+
 ### Direct Browser Interaction Commands
 
 Commands:
@@ -832,6 +932,9 @@ Result after fix:
 - `fs read --json` stderr was empty.
 - `doctor --json` stdout parsed as JSON and returned overall `degraded`.
 - `doctor --json` stderr was empty.
+- Full retest confirmed `status`, `doctor`, `session list`, `fs stat`, `fs read`, `open`, `snapshot`, `tab list`, `screenshot`, and `close` all parse with `ConvertFrom-Json`.
+- Full retest confirmed every redirected stderr length was `0`.
+- `json-shot.png` was created and `Test-Path` returned `True`.
 
 ## Issues Found During Manual Testing
 
@@ -854,6 +957,7 @@ Result after fix:
 - Skill info commands depended on the broker and printed raw `fetch failed` when the daemon was stopped. Fixed by loading skills locally for list/validate/actions/health and by supporting compiled `.js` skill files in packaged installs.
 - `debug bundle --yes` was ignored and still required confirmation. Fixed by passing the parsed confirmation flag into debug bundle policy evaluation.
 - `--json` commands emitted logger lines and SQLite experimental warnings to stderr, making terminal copy/paste noisy for machine-output mode. Fixed by suppressing console logs in JSON mode and filtering the SQLite experimental warning.
+- Debug console/network commands returned empty output after events because each CLI process only read in-memory capture state. Fixed by starting CDP capture during browser actions, persisting entries, and loading persisted entries in debug commands.
 
 ## Not Yet Manually Confirmed
 
@@ -888,17 +992,6 @@ npx bc schedule remove <id>
 ```
 
 Skill info commands and report commands are confirmed. Skill execution and schedules still need dedicated tests.
-
-### Debug Bundles And Observability
-
-```powershell
-npx bc open <page-that-causes-console-or-network-events>
-npx bc debug console --session=<session-id>
-npx bc debug network --session=<session-id>
-npx bc debug bundle <real-debug-bundle-id> --output=<file> --yes
-```
-
-Console/network empty-state and `debug bundle --yes` confirmation are confirmed. Still needs a deliberately failing browser action to confirm real debug bundle creation and redaction.
 
 ### Cross-Platform Install
 
