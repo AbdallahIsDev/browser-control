@@ -350,10 +350,10 @@ Browser Lifecycle:
   term resume <sessionId>                                             Resume a session from persisted state
   term status <sessionId>                                             Show resume status for a session
   fs read <path> [--max-bytes=<n>]                                    Read a file
-  fs write <path> [--content=<text>]                                  Write to a file
+  fs write <path> [--content=<text>] [--yes]                           Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
-  fs move <src> <dst>                                                 Move/rename
-  fs rm <path> [--recursive] [--force]                                Delete file/dir
+  fs move <src> <dst> [--yes]                                          Move/rename
+  fs rm <path> [--recursive] [--force] [--yes]                         Delete file/dir
   fs stat <path>                                                      File metadata
 
 Service Management:
@@ -2569,6 +2569,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 export async function handleFs(args: ParsedArgs): Promise<void> {
   const { subcommand, positional, flags } = args;
   const jsonOutput = flags.json === "true";
+  const confirmed = flags.yes === "true" || flags.confirm === "true";
 
   const { SessionManager } = await import("./session_manager");
   const { FsActions } = await import("./filesystem/actions");
@@ -2608,6 +2609,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
           path: filePath,
           content: flags.content ?? "",
           createDirs: flags["create-dirs"] !== "false",
+          confirmed,
         });
         break;
       }
@@ -2629,7 +2631,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
           console.error("Error: Source and destination paths are required");
           process.exit(1);
         }
-        result = await fsActions.move({ src, dst });
+        result = await fsActions.move({ src, dst, confirmed });
         break;
       }
 
@@ -2643,6 +2645,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
           path: targetPath,
           recursive: flags.recursive === "true",
           force: flags.force === "true",
+          confirmed,
         });
         break;
       }
