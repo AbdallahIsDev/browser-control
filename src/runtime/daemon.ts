@@ -1532,6 +1532,27 @@ export class Daemon {
             nextRun: queueEntry?.nextRun ?? null,
           };
         },
+        pauseScheduledTask: async (id) => {
+          if (!this.scheduler.getQueue().some((entry) => entry.id === id)) {
+            return null;
+          }
+          this.scheduler.pause(id);
+          return this.scheduler.getQueue().find((entry) => entry.id === id) ?? null;
+        },
+        resumeScheduledTask: async (id) => {
+          if (!this.scheduler.getQueue().some((entry) => entry.id === id)) {
+            return null;
+          }
+          this.scheduler.resume(id);
+          return this.scheduler.getQueue().find((entry) => entry.id === id) ?? null;
+        },
+        removeScheduledTask: async (id) => {
+          if (!this.scheduler.getQueue().some((entry) => entry.id === id)) {
+            return false;
+          }
+          this.scheduler.unschedule(id);
+          return true;
+        },
         kill: async () => {
           await this.emergencyKill();
         },

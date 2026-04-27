@@ -121,6 +121,8 @@ export interface ConnectOptions {
   sessionId?: string;
   /** Provider to use for this connection */
   provider?: string;
+  /** Explicit user confirmation for high-risk CLI/browser operations */
+  confirmed?: boolean;
 }
 
 // ── Policy Action Definitions ───────────────────────────────────────
@@ -912,10 +914,12 @@ export class BrowserConnectionManager {
     }
 
     if (evaluation.decision === "require_confirmation") {
+      if (options.confirmed) {
+        return;
+      }
       throw new Error(
         `Browser action "${actionName}" requires confirmation (${evaluation.reason}). ` +
-        `Interactive confirmation is not implemented in the CLI yet. ` +
-        `This command cleanly fails when confirmation is required. Use a more permissive policy profile to proceed.`
+        `Rerun with --yes to confirm, or use a more permissive policy profile to proceed.`
       );
     }
   }

@@ -936,6 +936,116 @@ Result after fix:
 - Full retest confirmed every redirected stderr length was `0`.
 - `json-shot.png` was created and `Test-Path` returned `True`.
 
+## MCP Real Client
+
+Commands tested:
+
+```powershell
+$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-mcp"
+node C:\Users\11\bc-user-test\mcp-smoke.mjs
+```
+
+Result:
+
+- Real MCP SDK client connected over stdio.
+- Tool discovery returned `41` tools.
+- `bc_status` tool call returned `success: true`.
+- MCP process startup and real client tool call are confirmed.
+
+## Debug Console/Network Non-Empty Events
+
+Commands tested:
+
+```powershell
+npx bc open http://127.0.0.1:7892 --json
+npx bc click "#event-button" --json
+npx bc debug console --json
+npx bc debug network --json
+```
+
+Result before follow-up fix:
+
+- Console/network persistence worked.
+- Console returned non-empty entries.
+- Network returned non-empty entries.
+- Problem found: one `console.error("bc-console-error-test")` could appear twice because CDP surfaced the same event through overlapping sources.
+
+Fix added:
+
+- Console capture now deduplicates same-session, same-level, same-message entries within a short window, while tolerating one CDP event having source/line/column metadata and the duplicate missing that metadata.
+
+Result after fix:
+
+- Console count for one emitted error is `1`.
+- Network count for one fetch is `1`.
+- `HasConsoleError` returned `True`.
+- `HasApiTest` returned `True`.
+
+## Custom Remote CDP Provider
+
+Commands tested:
+
+```powershell
+npx bc browser provider add custom9334 --type=custom --endpoint=http://127.0.0.1:9334
+npx bc browser provider use custom9334
+npx bc browser attach --cdp-url=http://127.0.0.1:9334 --provider=custom9334 --yes
+npx bc browser status
+npx bc browser provider remove custom9334
+```
+
+Result before fix:
+
+- Provider add/use worked.
+- `browser attach` under `balanced` policy failed because high-risk browser attach required confirmation and CLI did not support confirmation for this command.
+- Follow-up `open`, `tab list`, and `screenshot` failed because custom providers cannot managed-launch and attach was blocked.
+
+Fix added:
+
+- `browser attach` now accepts `--yes` / `--confirm` and honors it for high-risk attach confirmation.
+
+Result after fix:
+
+- `browser attach --yes` connected to external Chrome on port `9334`.
+- `browser status` returned `mode: attached`, `status: connected`, `provider: custom9334`, `reachable: true`.
+- Full remote provider navigation/screenshot still needs a dedicated workflow test that keeps the external Chrome and provider active until cleanup.
+
+## Schedule Lifecycle
+
+Commands tested:
+
+```powershell
+npx bc daemon start
+npx bc schedule schedule-smoke --cron="*/5 * * * *" --skill=framer --action=openLayerPanel
+npx bc schedule list
+npx bc schedule pause schedule-smoke
+npx bc schedule list
+npx bc schedule resume schedule-smoke
+npx bc schedule list
+npx bc schedule remove schedule-smoke
+npx bc schedule list
+npx bc daemon stop
+```
+
+Result before fix:
+
+- Without daemon, schedule commands returned raw `fetch failed`.
+- With daemon, create/list worked, but pause/resume/remove returned broker `404`.
+
+Fix added:
+
+- Daemon-backed command failures now say the broker is not reachable and instruct to run `bc daemon start`.
+- Broker now exposes scheduler pause/resume/remove routes.
+- Daemon now wires scheduler pause/resume/remove callbacks into the broker.
+
+Result after fix:
+
+- Schedule create returned `id` and `nextRun`.
+- Pause returned `enabled: false` and `nextRun: null`.
+- List after pause showed disabled task.
+- Resume returned `enabled: true` and restored `nextRun`.
+- Remove returned `removed: true`.
+- Final list returned `[]`.
+
 ## Issues Found During Manual Testing
 
 - CLI help originally pulled runtime modules and emitted dependency/security noise. Fixed by keeping help lightweight.
@@ -958,40 +1068,33 @@ Result after fix:
 - `debug bundle --yes` was ignored and still required confirmation. Fixed by passing the parsed confirmation flag into debug bundle policy evaluation.
 - `--json` commands emitted logger lines and SQLite experimental warnings to stderr, making terminal copy/paste noisy for machine-output mode. Fixed by suppressing console logs in JSON mode and filtering the SQLite experimental warning.
 - Debug console/network commands returned empty output after events because each CLI process only read in-memory capture state. Fixed by starting CDP capture during browser actions, persisting entries, and loading persisted entries in debug commands.
+- Debug console could duplicate one browser console error because overlapping CDP events were persisted separately. Fixed with tolerant near-window deduplication.
+- `browser attach` under balanced policy had no `--yes` confirmation path. Fixed by adding explicit confirmation support.
+- Schedule commands without daemon returned raw `fetch failed`. Fixed with a broker-not-reachable message that points to `bc daemon start`.
+- Schedule pause/resume/remove returned `404` because broker and daemon callback wiring only implemented create/list. Fixed by adding scheduler mutation routes and daemon callbacks.
 
 ## Not Yet Manually Confirmed
 
-### MCP Client Integration
-
-```powershell
-npx bc mcp serve
-```
-
-Process startup is confirmed. Still needs a real MCP client test for tool discovery and tool calls.
-
-### Remote Providers
+### Remote Provider Full Browser Workflow
 
 ```powershell
 npx bc browser provider add test-custom --type=custom --endpoint=<cdp-url>
 npx bc browser provider use test-custom
-npx bc browser attach --provider=test-custom --cdp-url=<cdp-url>
+npx bc browser attach --provider=test-custom --cdp-url=<cdp-url> --yes
+npx bc open https://example.com
+npx bc screenshot --output <path>
 npx bc browser provider remove test-custom
 ```
 
 Browserless needs real `BROWSERLESS_ENDPOINT` and `BROWSERLESS_API_KEY`.
 
-### Skill Run, Tasks, And Schedules
+### Skill Run And Tasks
 
 ```powershell
 npx bc run --skill=<name> --action=<action>
-npx bc schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<action>
-npx bc schedule list
-npx bc schedule pause <id>
-npx bc schedule resume <id>
-npx bc schedule remove <id>
 ```
 
-Skill info commands and report commands are confirmed. Skill execution and schedules still need dedicated tests.
+Skill info commands, report commands, and schedule lifecycle are confirmed. Skill execution still needs dedicated tests.
 
 ### Cross-Platform Install
 

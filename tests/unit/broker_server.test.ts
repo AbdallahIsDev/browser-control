@@ -62,6 +62,14 @@ test("createBrokerServer rejects oversized JSON request bodies", async (t) => {
 test("createBrokerServer exposes runtime endpoints and WebSocket completion events", async (t) => {
   let broker!: BrokerServer;
   let scheduledBody: Record<string, unknown> | undefined;
+  const schedulerState = new Map<string, { id: string; name: string; nextRun: Date | null; enabled: boolean }>([
+    ["sched-1", {
+      id: "sched-1",
+      name: "Morning run",
+      nextRun: new Date("2026-04-14T08:00:00.000Z"),
+      enabled: true,
+    }],
+  ]);
   let killCalls = 0;
   const terminalCalls: Array<{ subcommand: string; payload: Record<string, unknown> }> = [];
 
@@ -111,6 +119,21 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
           nextRun: new Date("2026-04-14T08:00:00.000Z"),
         };
       },
+      pauseScheduledTask: async (id) => {
+        const entry = schedulerState.get(id);
+        if (!entry) return null;
+        entry.enabled = false;
+        entry.nextRun = null;
+        return entry;
+      },
+      resumeScheduledTask: async (id) => {
+        const entry = schedulerState.get(id);
+        if (!entry) return null;
+        entry.enabled = true;
+        entry.nextRun = new Date("2026-04-14T08:00:00.000Z");
+        return entry;
+      },
+      removeScheduledTask: async (id) => schedulerState.delete(id),
       kill: async () => {
         killCalls += 1;
       },
@@ -136,14 +159,7 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
         proxyUsage: {},
         actions: {},
       }),
-      getSchedulerQueue: async () => [
-        {
-          id: "sched-1",
-          name: "Morning run",
-          nextRun: new Date("2026-04-14T08:00:00.000Z"),
-          enabled: true,
-        },
-      ],
+      getSchedulerQueue: async () => Array.from(schedulerState.values()),
       handleTerminal: async (subcommand, payload) => {
         terminalCalls.push({ subcommand, payload });
         return { subcommand, sessionId: payload.sessionId };
@@ -278,6 +294,57 @@ test("createBrokerServer exposes runtime endpoints and WebSocket completion even
       enabled: true,
     },
   ]);
+
+  const pauseResponse = await fetch(`${baseUrl}/api/v1/scheduler/sched-1/pause`, {
+    method: "POST",
+    headers: {
+      "x-api-key": "runtime-key",
+    },
+  });
+  assert.equal(pauseResponse.status, 200);
+  assert.deepEqual(await pauseResponse.json(), {
+    id: "sched-1",
+    name: "Morning run",
+    nextRun: null,
+    enabled: false,
+  });
+
+  const resumeScheduledResponse = await fetch(`${baseUrl}/api/v1/scheduler/sched-1/resume`, {
+    method: "POST",
+    headers: {
+      "x-api-key": "runtime-key",
+    },
+  });
+  assert.equal(resumeScheduledResponse.status, 200);
+  assert.deepEqual(await resumeScheduledResponse.json(), {
+    id: "sched-1",
+    name: "Morning run",
+    nextRun: "2026-04-14T08:00:00.000Z",
+    enabled: true,
+  });
+
+  const removeScheduledResponse = await fetch(`${baseUrl}/api/v1/scheduler/sched-1`, {
+    method: "DELETE",
+    headers: {
+      "x-api-key": "runtime-key",
+    },
+  });
+  assert.equal(removeScheduledResponse.status, 200);
+  assert.deepEqual(await removeScheduledResponse.json(), {
+    id: "sched-1",
+    removed: true,
+  });
+
+  const missingScheduledResponse = await fetch(`${baseUrl}/api/v1/scheduler/missing/pause`, {
+    method: "POST",
+    headers: {
+      "x-api-key": "runtime-key",
+    },
+  });
+  assert.equal(missingScheduledResponse.status, 404);
+  assert.deepEqual(await missingScheduledResponse.json(), {
+    error: 'Scheduled task "missing" was not found.',
+  });
 
   const resumeResponse = await fetch(`${baseUrl}/api/v1/term/resume`, {
     method: "POST",
@@ -775,6 +842,9 @@ test("createBrokerServer routes skill tasks through daemon.submitSkillTask when 
       },
       getScheduler: () => ({
         schedule: () => {},
+        pause: () => {},
+        resume: () => {},
+        unschedule: () => {},
         getQueue: () => [],
       }),
       emergencyKill: async () => {},

@@ -141,7 +141,11 @@ export class ConsoleCapture {
     }
 
     const buffer = this.getBuffer(sessionId);
-    buffer.push(redactConsoleEntry(entry));
+    const redacted = redactConsoleEntry(entry);
+    if (this.isRecentDuplicate(buffer, redacted)) {
+      return;
+    }
+    buffer.push(redacted);
   }
 
   /**
@@ -204,6 +208,28 @@ export class ConsoleCapture {
       this.buffers.set(sessionId, buffer);
     }
     return buffer;
+  }
+
+  private isRecentDuplicate(buffer: RingBuffer<ConsoleEntry>, entry: ConsoleEntry): boolean {
+    const entryTime = Date.parse(entry.timestamp);
+    const recentEntries = buffer.toArray().slice(-10);
+    return recentEntries.some((existing) => {
+      const existingTime = Date.parse(existing.timestamp);
+      const closeInTime = Number.isFinite(entryTime) && Number.isFinite(existingTime)
+        ? Math.abs(entryTime - existingTime) <= 1000
+        : existing.timestamp === entry.timestamp;
+
+      return closeInTime
+        && existing.level === entry.level
+        && existing.message === entry.message
+        && this.optionalFieldMatches(existing.source, entry.source)
+        && this.optionalFieldMatches(existing.line, entry.line)
+        && this.optionalFieldMatches(existing.column, entry.column);
+    });
+  }
+
+  private optionalFieldMatches<T>(left: T | undefined, right: T | undefined): boolean {
+    return left === undefined || right === undefined || left === right;
   }
 
   private handleConsoleEvent(sessionId: string, params: Record<string, unknown>): void {

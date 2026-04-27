@@ -46,6 +46,33 @@ describe("ConsoleCapture", () => {
     assert.strictEqual(capture.getEntries("s1")[0].message, "fail");
   });
 
+  it("deduplicates the same console event emitted by multiple CDP domains", () => {
+    const capture = new ConsoleCapture();
+    capture.recordEntry("s1", {
+      level: "error",
+      message: "bc-console-error-test",
+      timestamp: "2026-04-27T14:16:06.100Z",
+      source: "console-api",
+      line: 1,
+      column: 211,
+      sessionId: "s1",
+    });
+    capture.recordEntry("s1", {
+      level: "error",
+      message: "bc-console-error-test",
+      timestamp: "2026-04-27T14:16:06.200Z",
+      sessionId: "s1",
+    });
+    capture.recordEntry("s1", {
+      level: "error",
+      message: "bc-console-error-test",
+      timestamp: "2026-04-27T14:16:08.000Z",
+      sessionId: "s1",
+    });
+
+    assert.strictEqual(capture.getEntries("s1").length, 2);
+  });
+
   it("isolates sessions", () => {
     const capture = new ConsoleCapture();
     capture.recordEntry("s1", { level: "log", message: "a", timestamp: "2024-01-01T00:00:00Z" });

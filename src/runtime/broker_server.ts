@@ -58,6 +58,9 @@ export interface BrokerServerCallbacks {
   scheduleTask?: (
     request: BrokerScheduleTaskRequest,
   ) => MaybePromise<{ id: string; nextRun?: Date | string | null }>;
+  pauseScheduledTask?: (id: string) => MaybePromise<BrokerSchedulerQueueEntry | null>;
+  resumeScheduledTask?: (id: string) => MaybePromise<BrokerSchedulerQueueEntry | null>;
+  removeScheduledTask?: (id: string) => MaybePromise<boolean>;
   kill?: () => MaybePromise<void>;
   getHealth?: () => MaybePromise<HealthReport>;
   getStats?: () => MaybePromise<TelemetrySummary | Record<string, unknown>>;
@@ -91,6 +94,9 @@ export interface BrokerServerOptions {
         cronExpression: string;
         enabled: boolean;
       }): void;
+      pause(id: string): void;
+      resume(id: string): void;
+      unschedule(id: string): void;
       getQueue(): BrokerSchedulerQueueEntry[];
     };
     emergencyKill(): Promise<void>;
@@ -287,6 +293,30 @@ function createCallbacksFromDaemon(
         nextRun: queueEntry?.nextRun ?? null,
       };
     },
+    pauseScheduledTask: async (id) => {
+      const scheduler = daemon.getScheduler();
+      if (!scheduler.getQueue().some((entry) => entry.id === id)) {
+        return null;
+      }
+      scheduler.pause(id);
+      return scheduler.getQueue().find((entry) => entry.id === id) ?? null;
+    },
+    resumeScheduledTask: async (id) => {
+      const scheduler = daemon.getScheduler();
+      if (!scheduler.getQueue().some((entry) => entry.id === id)) {
+        return null;
+      }
+      scheduler.resume(id);
+      return scheduler.getQueue().find((entry) => entry.id === id) ?? null;
+    },
+    removeScheduledTask: async (id) => {
+      const scheduler = daemon.getScheduler();
+      if (!scheduler.getQueue().some((entry) => entry.id === id)) {
+        return false;
+      }
+      scheduler.unschedule(id);
+      return true;
+    },
     kill: async () => {
       await daemon.emergencyKill();
     },
@@ -382,7 +412,7 @@ function setCorsHeaders(
     response.setHeader("Vary", "Origin");
   }
 
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
 }
 
@@ -640,12 +670,16 @@ function serializeTaskStatus(entry: BrokerTaskStatusEntry): Record<string, unkno
 function serializeSchedulerQueue(
   entries: BrokerSchedulerQueueEntry[],
 ): Array<Record<string, unknown>> {
-  return entries.map((entry) => ({
+  return entries.map(serializeSchedulerQueueEntry);
+}
+
+function serializeSchedulerQueueEntry(entry: BrokerSchedulerQueueEntry): Record<string, unknown> {
+  return {
     id: entry.id,
     name: entry.name,
     nextRun: entry.nextRun ? entry.nextRun.toISOString() : null,
     enabled: entry.enabled,
-  }));
+  };
 }
 
 function writeUpgradeError(socket: Duplex, statusCode: number, message: string): void {
@@ -866,6 +900,44 @@ export function createBrokerServer(options: BrokerServerOptions = {}): BrokerSer
       if (request.method === "GET" && pathname === "/api/v1/scheduler") {
         const queue = callbacks.getSchedulerQueue ? await callbacks.getSchedulerQueue() : [];
         writeJson(response, 200, serializeSchedulerQueue(queue));
+        return;
+      }
+
+      const schedulerActionMatch = /^\/api\/v1\/scheduler\/([^/]+)\/(pause|resume)$/u.exec(pathname);
+      if (request.method === "POST" && schedulerActionMatch) {
+        const id = decodeURIComponent(schedulerActionMatch[1] ?? "");
+        const action = schedulerActionMatch[2];
+        const update = action === "pause" ? callbacks.pauseScheduledTask : callbacks.resumeScheduledTask;
+        if (!update) {
+          writeJson(response, 503, { error: "Scheduler mutation callback is not configured." });
+          return;
+        }
+
+        const entry = await update(id);
+        if (!entry) {
+          writeJson(response, 404, { error: `Scheduled task "${id}" was not found.` });
+          return;
+        }
+
+        writeJson(response, 200, serializeSchedulerQueueEntry(entry));
+        return;
+      }
+
+      const schedulerRemoveMatch = /^\/api\/v1\/scheduler\/([^/]+)$/u.exec(pathname);
+      if (request.method === "DELETE" && schedulerRemoveMatch) {
+        const id = decodeURIComponent(schedulerRemoveMatch[1] ?? "");
+        if (!callbacks.removeScheduledTask) {
+          writeJson(response, 503, { error: "Scheduler mutation callback is not configured." });
+          return;
+        }
+
+        const removed = await callbacks.removeScheduledTask(id);
+        if (!removed) {
+          writeJson(response, 404, { error: `Scheduled task "${id}" was not found.` });
+          return;
+        }
+
+        writeJson(response, 200, { id, removed: true });
         return;
       }
 

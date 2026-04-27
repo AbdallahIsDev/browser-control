@@ -169,7 +169,8 @@ async function getApiUrl(): Promise<string> {
 }
 
 async function apiRequest(endpoint: string, method = "GET", body?: unknown): Promise<unknown> {
-  const url = `${await getApiUrl()}${endpoint}`;
+  const apiUrl = await getApiUrl();
+  const url = `${apiUrl}${endpoint}`;
   const options: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
@@ -178,7 +179,16 @@ async function apiRequest(endpoint: string, method = "GET", body?: unknown): Pro
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, options);
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("fetch failed") || message.includes("ECONNREFUSED")) {
+      throw new Error(`Broker is not reachable at ${apiUrl}. Run "bc daemon start" for daemon-backed commands.`);
+    }
+    throw error;
+  }
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "Unknown error");
     throw new Error(`API ${method} ${endpoint} failed with HTTP ${response.status}: ${errorBody}`);
@@ -276,7 +286,7 @@ Session:
   session status                                                     Show active session status
 
 Browser Lifecycle:
-  browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]
+  browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
@@ -1349,6 +1359,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       const cdpUrl = flags["cdp-url"] ?? undefined;
       const targetType = (flags["target-type"] ?? "chrome") as "chrome" | "chromium" | "electron";
       const provider = flags.provider ?? undefined;
+      const confirmed = flags.yes === "true" || flags.confirm === "true";
 
       try {
         const { BrowserConnectionManager } = await import("./browser/connection");
@@ -1365,6 +1376,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           targetType,
           actor: "human",
           provider,
+          confirmed,
         });
         if (jsonOutput) {
           outputJson(connection);
