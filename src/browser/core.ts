@@ -8,6 +8,7 @@ import { createStealthContext } from "../stealth";
 import type { Telemetry } from "../runtime/telemetry";
 import { getChromeDebugPath } from "../shared/paths";
 import { logger } from "../shared/logger";
+import { loadConfig } from "../shared/config";
 
 const log = logger.withComponent("browser_core");
 
@@ -31,6 +32,7 @@ export interface AutomationContextOptions {
   fingerprintSeed?: string;
   seed?: string;
   proxy?: ProxyConfig | BrowserContextOptions["proxy"];
+  viewport?: BrowserContextOptions["viewport"];
   memoryStore?: MemoryStore;
   sessionKey?: string;
   sessionTtlMs?: number;
@@ -365,6 +367,20 @@ function resolveContextProxy(
   return proxy;
 }
 
+function resolveAutomationViewport(
+  options: AutomationContextOptions,
+): BrowserContextOptions["viewport"] {
+  if (options.viewport !== undefined) {
+    return options.viewport;
+  }
+
+  const config = loadConfig({ env: options.env, validate: false });
+  return {
+    width: config.browserViewportWidth,
+    height: config.browserViewportHeight,
+  };
+}
+
 /** Connect to an already-running Chrome instance via CDP. */
 export async function connectBrowser(
   port = 9222,
@@ -380,6 +396,7 @@ export async function createAutomationContext(
 ): Promise<BrowserContext> {
   const env = options.env ?? process.env;
   const contextProxy = resolveContextProxy(options.proxy);
+  const viewport = resolveAutomationViewport(options);
   const stealthRequested = options.enableStealth
     ?? options.stealth
     ?? isStealthEnabled(env.ENABLE_STEALTH);
@@ -393,9 +410,10 @@ export async function createAutomationContext(
       userAgent: getFirstDefinedString(options.userAgent),
       fingerprintSeed: getFirstDefinedString(options.fingerprintSeed, options.seed),
       proxy: contextProxy,
+      viewport,
     });
   } else {
-    const contextOptions: Parameters<Browser["newContext"]>[0] = {};
+    const contextOptions: Parameters<Browser["newContext"]>[0] = { viewport };
     if (options.locale) {
       contextOptions.locale = options.locale;
     }
@@ -421,6 +439,13 @@ export async function createAutomationContext(
 export function getAllPages(browser: Browser, context?: BrowserContext): Page[] {
   const contexts = context ? [context] : browser.contexts();
   return contexts.flatMap((entry: BrowserContext) => entry.pages());
+}
+
+/** Ensure an automation-owned context has at least one page for actions to target. */
+export async function ensureContextHasPage(context: BrowserContext): Promise<Page> {
+  const existing = context.pages()[0];
+  if (existing) return existing;
+  return context.newPage();
 }
 
 /** Find the first page whose URL contains the provided pattern. */

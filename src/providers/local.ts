@@ -19,7 +19,7 @@ import {
   startWslBridgeIfNeeded,
   stopWslBridge,
 } from "../runtime/launch_browser";
-import { connectBrowser, createAutomationContext, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
+import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
@@ -84,6 +84,7 @@ export class LocalBrowserProvider implements BrowserProvider {
       persistSessionCookies: false,
     };
     const context = await createAutomationContext(browser, contextOpts);
+    await ensureContextHasPage(context);
     const tabCount = getAllPages(browser).length;
 
     const connection: BrowserConnection = {

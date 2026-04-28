@@ -9,6 +9,7 @@ import { getChromeDebugPath } from "../../src/paths";
 
 import {
   createAutomationContext,
+  ensureContextHasPage,
   findPageByUrl,
   getDebugEndpointCandidates,
   getOrOpenPage,
@@ -218,9 +219,11 @@ test("createAutomationContext uses a plain automation-owned context by default",
   } as unknown as BrowserContext;
   let newContextCalls = 0;
 
+  let lastContextOptions: Record<string, unknown> | undefined;
   const browser = {
-    newContext: async () => {
+    newContext: async (options?: Record<string, unknown>) => {
       newContextCalls += 1;
+      lastContextOptions = options;
       return context;
     },
   } as unknown as Browser;
@@ -230,6 +233,54 @@ test("createAutomationContext uses a plain automation-owned context by default",
   assert.equal(createdContext, context);
   assert.equal(newContextCalls, 1);
   assert.equal(addInitScriptCalls, 0);
+  assert.deepEqual(lastContextOptions, {
+    viewport: { width: 1365, height: 768 },
+  });
+});
+
+test("createAutomationContext reads viewport dimensions from env", async () => {
+  let lastContextOptions: Record<string, unknown> | undefined;
+  const context = {} as BrowserContext;
+  const browser = {
+    newContext: async (options?: Record<string, unknown>) => {
+      lastContextOptions = options;
+      return context;
+    },
+  } as unknown as Browser;
+
+  await createAutomationContext(browser, {
+    env: {
+      BROWSER_VIEWPORT_WIDTH: "1920",
+      BROWSER_VIEWPORT_HEIGHT: "1080",
+    },
+  });
+
+  assert.deepEqual(lastContextOptions, {
+    viewport: { width: 1920, height: 1080 },
+  });
+});
+
+test("createAutomationContext lets explicit viewport override config", async () => {
+  let lastContextOptions: Record<string, unknown> | undefined;
+  const context = {} as BrowserContext;
+  const browser = {
+    newContext: async (options?: Record<string, unknown>) => {
+      lastContextOptions = options;
+      return context;
+    },
+  } as unknown as Browser;
+
+  await createAutomationContext(browser, {
+    env: {
+      BROWSER_VIEWPORT_WIDTH: "1920",
+      BROWSER_VIEWPORT_HEIGHT: "1080",
+    },
+    viewport: { width: 1440, height: 900 },
+  });
+
+  assert.deepEqual(lastContextOptions, {
+    viewport: { width: 1440, height: 900 },
+  });
 });
 
 test("createAutomationContext enables stealth when requested through env", async () => {
@@ -264,6 +315,7 @@ test("createAutomationContext enables stealth when requested through env", async
     extraHTTPHeaders: {
       "Accept-Language": "en-US",
     },
+    viewport: { width: 1365, height: 768 },
   });
 });
 
@@ -360,7 +412,42 @@ test("createAutomationContext forwards proxy settings for plain automation conte
       username: "proxy-user",
       password: "proxy-pass",
     },
+    viewport: { width: 1365, height: 768 },
   });
+});
+
+test("ensureContextHasPage creates the first page inside the automation context", async () => {
+  const page = {} as Page;
+  let newPageCalls = 0;
+  const context = {
+    pages: () => [],
+    newPage: async () => {
+      newPageCalls += 1;
+      return page;
+    },
+  } as unknown as BrowserContext;
+
+  const result = await ensureContextHasPage(context);
+
+  assert.equal(result, page);
+  assert.equal(newPageCalls, 1);
+});
+
+test("ensureContextHasPage reuses an existing automation context page", async () => {
+  const page = {} as Page;
+  let newPageCalls = 0;
+  const context = {
+    pages: () => [page],
+    newPage: async () => {
+      newPageCalls += 1;
+      return {} as Page;
+    },
+  } as unknown as BrowserContext;
+
+  const result = await ensureContextHasPage(context);
+
+  assert.equal(result, page);
+  assert.equal(newPageCalls, 0);
 });
 
 test("findPageByUrl scopes page lookup to the provided context", () => {

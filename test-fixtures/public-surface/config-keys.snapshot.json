@@ -70,6 +70,26 @@
     },
     {
       "category": "browser",
+      "defaultValue": 1365,
+      "description": "Default viewport width for automation-owned browser contexts.",
+      "envVars": [
+        "BROWSER_VIEWPORT_WIDTH"
+      ],
+      "key": "browserViewportWidth",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": 768,
+      "description": "Default viewport height for automation-owned browser contexts.",
+      "envVars": [
+        "BROWSER_VIEWPORT_HEIGHT"
+      ],
+      "key": "browserViewportHeight",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
       "description": "User agent for automation-owned browser contexts.",
       "envVars": [
         "BROWSER_USER_AGENT"
@@ -312,6 +332,14 @@
     {
       "backedByConfigRegistry": true,
       "name": "BROWSER_USER_AGENT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_VIEWPORT_HEIGHT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_VIEWPORT_WIDTH"
     },
     {
       "backedByConfigRegistry": true,

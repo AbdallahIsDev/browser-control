@@ -53,6 +53,10 @@ export interface BrowserControlConfig {
   browserDebugUrl: string | undefined;
   /** Browser ownership mode (default: managed) */
   browserMode: "managed" | "attach";
+  /** Default automation-owned browser viewport width (default: 1365) */
+  browserViewportWidth: number;
+  /** Default automation-owned browser viewport height (default: 768) */
+  browserViewportHeight: number;
 
   // ── Stealth ─────────────────────────────────────────────────────
   /** Whether stealth mode is enabled (default: false) */
@@ -184,6 +188,8 @@ export type ConfigKey =
   | "chromePath"
   | "browserDebugUrl"
   | "browserMode"
+  | "browserViewportWidth"
+  | "browserViewportHeight"
   | "browserUserAgent"
   | "policyProfile"
   | "daemonVisible"
@@ -300,6 +306,8 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "chromePath", category: "browser", envVars: ["BROWSER_CHROME_PATH"], description: "Explicit Chrome executable path.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserDebugUrl", category: "browser", envVars: ["BROWSER_DEBUG_URL"], description: "Explicit CDP endpoint URL override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
   { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "managed", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
+  { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
+  { key: "browserViewportHeight", category: "browser", envVars: ["BROWSER_VIEWPORT_HEIGHT"], description: "Default viewport height for automation-owned browser contexts.", defaultValue: () => 768, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserUserAgent", category: "browser", envVars: ["BROWSER_USER_AGENT"], description: "User agent for automation-owned browser contexts.", defaultValue: () => undefined, parse: optionalString },
   { key: "policyProfile", category: "policy", envVars: ["POLICY_PROFILE"], description: "Default policy profile.", defaultValue: () => "balanced", parse: requiredString, validate: ensureAllowed(["safe", "balanced", "trusted"]) },
   { key: "daemonVisible", category: "daemon", envVars: ["DAEMON_VISIBLE"], description: "Whether daemon launches use a visible console window on Windows.", defaultValue: () => false, parse: booleanValue },
@@ -538,6 +546,8 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const chromePath = effective.chromePath as string | undefined;
   const browserDebugUrl = effective.browserDebugUrl as string | undefined;
   const browserMode = effective.browserMode as "managed" | "attach";
+  const browserViewportWidth = effective.browserViewportWidth as number;
+  const browserViewportHeight = effective.browserViewportHeight as number;
 
   // ── Stealth ─────────────────────────────────────────────────────
   const stealthEnabled = parseBoolean(env.ENABLE_STEALTH, false);
@@ -625,6 +635,8 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     chromePath,
     browserDebugUrl,
     browserMode,
+    browserViewportWidth,
+    browserViewportHeight,
 
     stealthEnabled,
     stealthLocale,

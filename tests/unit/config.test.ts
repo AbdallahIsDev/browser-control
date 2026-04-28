@@ -13,6 +13,8 @@ test("loadConfig returns sensible defaults with empty env", () => {
   assert.equal(config.brokerPort, 7788);
   assert.equal(config.chromeDebugPort, 9222);
   assert.equal(config.chromeBindAddress, "127.0.0.1");
+  assert.equal(config.browserViewportWidth, 1365);
+  assert.equal(config.browserViewportHeight, 768);
   assert.equal(config.browserlessEndpoint, undefined);
   assert.equal(config.browserlessApiKey, undefined);
   assert.equal(config.stealthEnabled, false);
@@ -42,6 +44,19 @@ test("loadConfig reads BROWSER_CONTROL_HOME", () => {
   assert.equal(config.dataHome, tmpDir);
   // Cleanup auto-created dir
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+
+test("loadConfig reads browser viewport dimensions", () => {
+  const config = loadConfig({
+    env: {
+      BROWSER_VIEWPORT_WIDTH: "1920",
+      BROWSER_VIEWPORT_HEIGHT: "1080",
+    },
+    validate: false,
+  });
+
+  assert.equal(config.browserViewportWidth, 1920);
+  assert.equal(config.browserViewportHeight, 1080);
 });
 
 test("loadConfig reads BROKER_PORT", () => {

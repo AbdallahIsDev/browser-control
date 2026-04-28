@@ -7,7 +7,7 @@ import type {
 } from "./interface";
 import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
-import { createAutomationContext, getAllPages } from "../browser/core";
+import { createAutomationContext, ensureContextHasPage, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import { stripSensitiveParams, sanitizeString } from "./utils";
@@ -99,9 +99,7 @@ export class BrowserlessProvider implements BrowserProvider {
       browser,
       options.contextOptions ?? {},
     );
-    if (context.pages().length === 0) {
-      await context.newPage();
-    }
+    await ensureContextHasPage(context);
 
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;

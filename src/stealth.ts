@@ -31,6 +31,7 @@ export interface StealthContextOptions {
   hardwareConcurrency?: number;
   deviceMemory?: number;
   proxy?: BrowserContextOptions["proxy"];
+  viewport?: BrowserContextOptions["viewport"];
 }
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -672,6 +673,9 @@ export async function createStealthContext(
   }
   if (options.proxy) {
     contextOptions.proxy = options.proxy;
+  }
+  if (options.viewport !== undefined) {
+    contextOptions.viewport = options.viewport;
   }
 
   const context = await browser.newContext(contextOptions);

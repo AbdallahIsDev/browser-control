@@ -32,6 +32,7 @@ import {
 import {
   connectBrowser,
   createAutomationContext,
+  ensureContextHasPage,
   resolveDebugEndpointUrl,
   getAllPages,
   type AutomationContextOptions,
@@ -312,6 +313,7 @@ export class BrowserConnectionManager {
         persistSessionCookies: false,
       };
       this.context = await createAutomationContext(browser, contextOpts);
+      await ensureContextHasPage(this.context);
 
       const tabCount = getAllPages(browser).length;
 
