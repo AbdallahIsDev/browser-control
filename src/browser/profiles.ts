@@ -68,6 +68,7 @@ export function getProfileRegistryPath(): string {
 
 const DEFAULT_SHARED_PROFILE_ID = "default";
 const DEFAULT_SHARED_PROFILE_NAME = "default";
+const DEFAULT_SHARED_PROFILE_DIR = "BrowserControlProfile";
 const ISOLATED_PROFILE_PREFIX = "isolated-";
 
 // ── Profile Registry ────────────────────────────────────────────────
@@ -276,11 +277,14 @@ export class BrowserProfileManager {
   // ── Helpers ─────────────────────────────────────────────────────
 
   private metadataToProfile(meta: ProfileMetadata): BrowserProfile {
+    const dataDir = meta.id === DEFAULT_SHARED_PROFILE_ID
+      ? path.join(getProfilesDir(), DEFAULT_SHARED_PROFILE_DIR)
+      : getProfileDataDir(meta.id);
     return {
       id: meta.id,
       name: meta.name,
       type: meta.type,
-      dataDir: getProfileDataDir(meta.id),
+      dataDir,
       createdAt: meta.createdAt,
       lastUsedAt: meta.lastUsedAt,
     };

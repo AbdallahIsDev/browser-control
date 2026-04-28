@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import type {
@@ -18,6 +18,7 @@ import {
   isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
+  sanitizeManagedProfile,
 } from "../runtime/launch_browser";
 import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
@@ -51,6 +52,7 @@ export class LocalBrowserProvider implements BrowserProvider {
     const chromePath = resolveChromePath(platform, process.env.BROWSER_CHROME_PATH);
     const userDataDir = profile.dataDir;
     fs.mkdirSync(userDataDir, { recursive: true });
+    sanitizeManagedProfile(userDataDir);
 
     const bindAddress = loadConfig({ validate: false }).chromeBindAddress;
     const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
@@ -79,13 +81,12 @@ export class LocalBrowserProvider implements BrowserProvider {
     const browser = await connectBrowser(port, { ignoreEnvOverrides: true });
     const cdpEndpoint = await resolveDebugEndpointUrl(port, { ignoreEnvOverrides: true });
 
-    const contextOpts = {
+    const context = browser.contexts()[0] ?? await createAutomationContext(browser, {
       ...options.contextOptions,
       persistSessionCookies: false,
-    };
-    const context = await createAutomationContext(browser, contextOpts);
+    });
     await ensureContextHasPage(context);
-    const tabCount = getAllPages(browser).length;
+    const tabCount = getAllPages(browser, context).length;
 
     const connection: BrowserConnection = {
       id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -162,7 +163,10 @@ export class LocalBrowserProvider implements BrowserProvider {
         const pid = result.managedProcess.pid;
         result.managedProcess.kill();
         if (process.platform === "win32" && pid) {
-          spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" });
+          spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
+            stdio: "ignore",
+            timeout: 5000,
+          });
         }
         const port = result.connection.cdpEndpoint
           ? Number(new URL(result.connection.cdpEndpoint).port)

@@ -31,6 +31,7 @@ import { collectFailureDebugMetadata } from "../observability/action_debug";
 import { getGlobalConsoleCapture } from "../observability/console_capture";
 import { getGlobalNetworkCapture } from "../observability/network_capture";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
+import { loadConfig } from "../shared/config";
 
 const log = logger.withComponent("browser_actions");
 
@@ -261,6 +262,20 @@ export class BrowserActions {
         if (reconnected) {
           this.bindBrowserToSession(bm);
         } else {
+          const browserMode = loadConfig({ validate: false }).browserMode;
+          if (browserMode === "managed") {
+            try {
+              await bm.launchManaged({ actor: "human" });
+              this.bindBrowserToSession(bm);
+            } catch (launchError: unknown) {
+              const launchMsg = launchError instanceof Error ? launchError.message : String(launchError);
+              return this.failureWithDebug(`No browser available and managed auto-launch failed: ${launchMsg}. Use 'bc browser launch' first.`, launchError, {
+                action: "browser_connect",
+                path: "a11y",
+                sessionId,
+              });
+            }
+          } else {
           try {
             await bm.attach({ actor: "human" });
             // Bind the browser connection into the session (Issue 3)
@@ -279,6 +294,7 @@ export class BrowserActions {
                 sessionId,
               });
             }
+          }
           }
         }
       }
@@ -453,18 +469,24 @@ export class BrowserActions {
       path: typeof import("node:path");
       fs: typeof import("node:fs");
       getDataHome: () => string;
-      getSessionScreenshotsDir: (sessionId: string) => string;
+      getSessionScreenshotsDir: (
+        sessionId: string,
+        dataHome?: string,
+        metadata?: { name?: string; createdAt?: string | Date },
+      ) => string;
     },
   ): string {
     const sessionId = this.getSessionId();
-    const outputDir = helpers.getSessionScreenshotsDir(sessionId);
+    const activeSession = this.context.sessionManager.getActiveSession();
+    const outputDir = helpers.getSessionScreenshotsDir(sessionId, undefined, activeSession
+      ? { name: activeSession.name, createdAt: activeSession.createdAt }
+      : undefined);
 
     if (!requestedPath) {
       helpers.fs.mkdirSync(outputDir, { recursive: true });
       return helpers.path.join(outputDir, `screenshot-${Date.now()}.png`);
     }
 
-    const activeSession = this.context.sessionManager.getActiveSession();
     const baseDir = activeSession?.workingDirectory ?? process.cwd();
     const resolvedPath = helpers.path.resolve(baseDir, requestedPath);
     const dataHome = helpers.getDataHome();

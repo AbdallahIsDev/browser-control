@@ -164,6 +164,76 @@ describe("BrowserConnectionManager", () => {
       const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
       await assert.doesNotReject(() => manager.disconnect());
     });
+
+    it("releaseCliHandles detaches Playwright without marking the managed browser disconnected", async () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      let disconnected: (() => void) | null = null;
+      const fakeBrowser = {
+        once: (_event: string, callback: () => void) => {
+          disconnected = callback;
+        },
+        close: async () => {
+          disconnected?.();
+        },
+      };
+      const connection: BrowserConnection = {
+        id: "conn-release-test",
+        mode: "managed",
+        profile: manager.getProfileManager().getDefaultProfile(),
+        cdpEndpoint: "http://127.0.0.1:9222",
+        status: "connected",
+        connectedAt: new Date().toISOString(),
+        tabCount: 1,
+        targetType: "chrome",
+        isRealBrowser: false,
+        provider: "local",
+      };
+
+      (manager as any).browser = fakeBrowser;
+      (manager as any).connection = connection;
+      (manager as any).watchBrowserDisconnect(fakeBrowser);
+      (manager as any).persistConnectionState();
+
+      await manager.releaseCliHandles();
+
+      assert.equal(connection.status, "connected");
+      assert.equal(store.get<{ status: string }>("browser_connection:active")?.status, "connected");
+    });
+
+    it("managed disconnect closes Chrome over CDP when the local process handle is gone", async () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const sentMethods: string[] = [];
+      const fakePage = {};
+      const fakeContext = {
+        pages: () => [fakePage],
+        newPage: async () => fakePage,
+        newCDPSession: async () => ({
+          send: async (method: string) => {
+            sentMethods.push(method);
+          },
+        }),
+      };
+      const connection: BrowserConnection = {
+        id: "conn-cdp-close-test",
+        mode: "managed",
+        profile: manager.getProfileManager().getDefaultProfile(),
+        cdpEndpoint: "http://127.0.0.1:9222",
+        status: "connected",
+        connectedAt: new Date().toISOString(),
+        tabCount: 1,
+        targetType: "chrome",
+        isRealBrowser: false,
+        provider: "local",
+      };
+
+      (manager as any).context = fakeContext;
+      (manager as any).connection = connection;
+
+      await manager.disconnect();
+
+      assert.deepEqual(sentMethods, ["Browser.close"]);
+      assert.equal(connection.status, "disconnected");
+    });
   });
 
   describe("policy integration", () => {
@@ -473,6 +543,22 @@ describe("BrowserConnectionManager", () => {
         await manager2.disconnect();
       }
     });
+
+    it("should use the persistent managed profile context without creating an extra page", async () => {
+      const port = 19999 + Math.floor(Math.random() * 1000);
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+
+      try {
+        const conn = await manager.launchManaged({ port });
+        const pages = manager.getContext()?.pages() ?? [];
+
+        assert.equal(conn.mode, "managed");
+        assert.equal(pages.length, 1);
+        assert.equal(conn.tabCount, 1);
+      } finally {
+        await manager.disconnect();
+      }
+    });
   });
 
   describe("Section 8 Guarantees", () => {
@@ -523,6 +609,14 @@ describe("BrowserConnectionManager", () => {
       } finally {
         await manager.disconnect();
       }
+    });
+
+    it("default managed profile uses BrowserControlProfile data dir", () => {
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+      const profile = manager.getProfileManager().getDefaultProfile();
+
+      assert.equal(profile.dataDir, path.join(testHome, "profiles", "BrowserControlProfile"));
+      assert.ok(!profile.dataDir.includes(path.join("Google", "Chrome")));
     });
 
     it("attached mode does not terminate existing browser on disconnect", async () => {

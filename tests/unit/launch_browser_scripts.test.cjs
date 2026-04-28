@@ -57,6 +57,7 @@ test("launcher module loads and exports expected helpers", () => {
   assert.equal(typeof launcher.waitForCdp, "function");
   assert.equal(typeof launcher.buildChromeArgs, "function");
   assert.equal(typeof launcher.writeDebugState, "function");
+  assert.equal(typeof launcher.sanitizeManagedProfile, "function");
   assert.equal(typeof launcher._main, "function");
 });
 
@@ -199,6 +200,61 @@ test("buildChromeArgs includes debugging port and user-data-dir", () => {
   assert.ok(args.includes("--user-data-dir=/tmp/test-profile"));
   assert.ok(args.includes("--remote-debugging-address=0.0.0.0"));
   assert.ok(args.includes("--no-first-run"));
+});
+
+test("buildChromeArgs disables extension contamination in managed automation profile", () => {
+  const args = launcher.buildChromeArgs({
+    port: 9222,
+    userDataDir: "/tmp/test-profile",
+    bindAddress: "127.0.0.1",
+  });
+
+  assert.ok(args.includes("--disable-extensions"));
+  assert.ok(args.includes("--disable-component-extensions-with-background-pages"));
+});
+
+test("sanitizeManagedProfile removes Planet Search prefs and extension files", () => {
+  const os = require("node:os");
+  const tmpProfile = fs.mkdtempSync(path.join(os.tmpdir(), "bc-sanitize-profile-"));
+  const defaultDir = path.join(tmpProfile, "Default");
+  const extDir = path.join(defaultDir, "Extensions", "kadaohckdkghfaclhjmkmplebcdcnfnp", "2.0.1_0");
+  fs.mkdirSync(extDir, { recursive: true });
+  fs.writeFileSync(path.join(extDir, "manifest.json"), JSON.stringify({
+    name: "Planet Search",
+    chrome_settings_overrides: {
+      search_provider: {
+        name: "Planet Search",
+        search_url: "https://planet-search.com/search/?q={searchTerms}",
+      },
+    },
+  }));
+  fs.writeFileSync(path.join(defaultDir, "Preferences"), JSON.stringify({
+    default_search_provider_data: {
+      mirrored_template_url_data: {
+        short_name: "Planet Search",
+        url: "https://planet-search.com/search/?q={searchTerms}",
+      },
+    },
+    homepage: "https://planet-search.com/",
+    extensions: {
+      settings: {
+        kadaohckdkghfaclhjmkmplebcdcnfnp: {
+          manifest: { name: "Planet Search" },
+        },
+      },
+    },
+  }));
+
+  try {
+    launcher.sanitizeManagedProfile(tmpProfile);
+    const prefs = JSON.parse(fs.readFileSync(path.join(defaultDir, "Preferences"), "utf8"));
+    assert.equal(prefs.default_search_provider_data, undefined);
+    assert.equal(prefs.homepage, undefined);
+    assert.deepEqual(prefs.extensions.settings, {});
+    assert.equal(fs.existsSync(path.join(defaultDir, "Extensions", "kadaohckdkghfaclhjmkmplebcdcnfnp")), false);
+  } finally {
+    fs.rmSync(tmpProfile, { recursive: true, force: true });
+  }
 });
 
 test("buildChromeArgs omits --remote-debugging-address when bindAddress is empty", () => {

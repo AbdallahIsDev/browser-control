@@ -4,6 +4,11 @@ import path from "node:path";
 
 const DEFAULT_HOME_NAME = ".browser-control";
 
+export interface RuntimeSessionMetadata {
+  name?: string;
+  createdAt?: string | Date;
+}
+
 export function getDataHome(): string {
   const override = process.env.BROWSER_CONTROL_HOME;
   if (override && override.trim()) {
@@ -64,12 +69,98 @@ export function getRuntimeDir(dataHome?: string): string {
   return path.join(dataHome ?? getDataHome(), "runtime");
 }
 
-export function getSessionRuntimeDir(sessionId: string, dataHome?: string): string {
-  return path.join(getRuntimeDir(dataHome), sessionId);
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-export function getSessionScreenshotsDir(sessionId: string, dataHome?: string): string {
-  return path.join(getSessionRuntimeDir(sessionId, dataHome), "screenshots");
+function formatLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function formatLocalHourMinute(date: Date): string {
+  return `${pad2(date.getHours())}-${pad2(date.getMinutes())}`;
+}
+
+function slugifyRuntimeName(name: string | undefined): string {
+  const slug = (name ?? "session")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
+  return slug || "session";
+}
+
+function shortSessionId(sessionId: string): string {
+  const compact = sessionId.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return compact.slice(0, 8) || "session";
+}
+
+function getRuntimeDate(metadata: RuntimeSessionMetadata): Date | null {
+  if (!metadata.createdAt) return null;
+  const date = metadata.createdAt instanceof Date ? metadata.createdAt : new Date(metadata.createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function getReadableSessionRuntimeDir(
+  sessionId: string,
+  dataHome: string | undefined,
+  metadata: RuntimeSessionMetadata,
+): string | null {
+  const date = getRuntimeDate(metadata);
+  if (!date) return null;
+
+  const dateDir = formatLocalDate(date);
+  const folderName = `${formatLocalHourMinute(date)}_${slugifyRuntimeName(metadata.name)}_${shortSessionId(sessionId)}`;
+  return path.join(getRuntimeDir(dataHome), dateDir, folderName);
+}
+
+function writeRuntimeManifest(
+  sessionId: string,
+  dir: string,
+  metadata: RuntimeSessionMetadata | undefined,
+): void {
+  if (!metadata) return;
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const manifestPath = path.join(dir, "manifest.json");
+  if (fs.existsSync(manifestPath)) return;
+
+  const createdAt = metadata.createdAt instanceof Date
+    ? metadata.createdAt.toISOString()
+    : metadata.createdAt;
+  const manifest = {
+    schemaVersion: 1,
+    sessionId,
+    name: metadata.name ?? null,
+    createdAt: createdAt ?? null,
+    folderName: path.basename(dir),
+    createdAtLocal: createdAt ? new Date(createdAt).toLocaleString() : null,
+  };
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+}
+
+export function getSessionRuntimeDir(
+  sessionId: string,
+  dataHome?: string,
+  metadata?: RuntimeSessionMetadata,
+): string {
+  const legacyDir = path.join(getRuntimeDir(dataHome), sessionId);
+  if (!metadata) return legacyDir;
+  if (fs.existsSync(legacyDir)) return legacyDir;
+
+  const readableDir = getReadableSessionRuntimeDir(sessionId, dataHome, metadata) ?? legacyDir;
+  writeRuntimeManifest(sessionId, readableDir, metadata);
+  return readableDir;
+}
+
+export function getSessionScreenshotsDir(
+  sessionId: string,
+  dataHome?: string,
+  metadata?: RuntimeSessionMetadata,
+): string {
+  return path.join(getSessionRuntimeDir(sessionId, dataHome, metadata), "screenshots");
 }
 
 export function getInteropDir(): string {

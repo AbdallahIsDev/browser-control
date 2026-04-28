@@ -31,7 +31,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
   return [
     {
       name: "bc_browser_open",
-      description: "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
+      description: "Open a URL in the browser. If no browser is connected, uses the configured browser mode: managed launches an automation-owned Chrome profile; attach connects to an existing browser.",
       inputSchema: buildSchema({
         url: { type: "string", description: "URL to navigate to." },
         waitUntil: { type: "string", description: "Navigation wait condition: 'load', 'domcontentloaded', 'networkidle', or 'commit'. Default: 'domcontentloaded'.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },

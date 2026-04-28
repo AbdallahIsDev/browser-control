@@ -245,13 +245,42 @@ describe("BrowserActions", () => {
 
         const result = await isolatedActions.open({ url: "https://example.com" });
 
-        assert.equal(attempts.attach, 1);
+        assert.equal(attempts.attach, 0);
         assert.equal(attempts.launchManaged, 1);
         assert.equal(result.success, false);
-        assert.ok(result.error?.includes("No browser available and auto-launch failed"));
+        assert.ok(result.error?.includes("No browser available and managed auto-launch failed"));
         assert.equal(result.path, "a11y");
       } finally {
         isolatedStore.close();
+      }
+    });
+
+    it("managed browser mode launches managed Chrome without first attaching to a user browser", async () => {
+      const originalMode = process.env.BROWSER_MODE;
+      process.env.BROWSER_MODE = "managed";
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const { manager, attempts } = createUnavailableBrowserManager();
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.open({ url: "https://example.com" });
+
+        assert.equal(attempts.attach, 0);
+        assert.equal(attempts.launchManaged, 1);
+        assert.equal(result.success, false);
+      } finally {
+        isolatedStore.close();
+        if (originalMode === undefined) {
+          delete process.env.BROWSER_MODE;
+        } else {
+          process.env.BROWSER_MODE = originalMode;
+        }
       }
     });
   });
@@ -261,7 +290,7 @@ describe("BrowserActions", () => {
       const result = await browserActions.takeSnapshot();
 
       assert.equal(result.success, false);
-      assert.ok(result.error?.includes("No browser available and auto-launch failed"));
+      assert.ok(result.error?.includes("No browser available and managed auto-launch failed"));
       assert.ok(result.debugBundleId);
       assert.ok(result.recoveryGuidance);
       assert.ok(loadDebugBundle(result.debugBundleId, store));
@@ -380,7 +409,16 @@ describe("BrowserActions", () => {
         const result = await isolatedActions.screenshot();
 
         assert.equal(result.success, true);
-        assert.ok(result.data?.path.includes(path.join(dataHome, "runtime", session.data!.id, "screenshots")));
+        const relativePath = path.relative(path.join(dataHome, "runtime"), result.data!.path).split(path.sep);
+        const createdAt = new Date(session.data!.createdAt);
+        const expectedDate = [
+          createdAt.getFullYear(),
+          String(createdAt.getMonth() + 1).padStart(2, "0"),
+          String(createdAt.getDate()).padStart(2, "0"),
+        ].join("-");
+        assert.equal(relativePath[0], expectedDate);
+        assert.match(relativePath[1], /^\d{2}-\d{2}_test_[a-z0-9]{8}$/);
+        assert.equal(relativePath[2], "screenshots");
         assert.equal(fs.existsSync(result.data!.path), true);
       } finally {
         isolatedStore.close();

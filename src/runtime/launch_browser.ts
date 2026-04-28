@@ -163,6 +163,8 @@ function buildChromeArgs(opts: { port: number; userDataDir: string; bindAddress:
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-mode",
+    "--disable-extensions",
+    "--disable-component-extensions-with-background-pages",
   ];
 
   if (opts.bindAddress && opts.bindAddress.trim()) {
@@ -170,6 +172,80 @@ function buildChromeArgs(opts: { port: number; userDataDir: string; bindAddress:
   }
 
   return args;
+}
+
+function containsSearchHijack(value: unknown): boolean {
+  if (typeof value === "string") {
+    return /planet-search|planet search|yahoo/i.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsSearchHijack(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((item) => containsSearchHijack(item));
+  }
+  return false;
+}
+
+function removeSearchHijackExtensions(defaultDir: string): void {
+  const extensionsDir = path.join(defaultDir, "Extensions");
+  if (!fs.existsSync(extensionsDir)) return;
+
+  for (const extensionId of fs.readdirSync(extensionsDir)) {
+    const extensionDir = path.join(extensionsDir, extensionId);
+    let shouldRemove = false;
+    try {
+      for (const version of fs.readdirSync(extensionDir)) {
+        const manifestPath = path.join(extensionDir, version, "manifest.json");
+        if (!fs.existsSync(manifestPath)) continue;
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as unknown;
+        if (containsSearchHijack(manifest)) {
+          shouldRemove = true;
+          break;
+        }
+      }
+    } catch {
+      continue;
+    }
+
+    if (shouldRemove) {
+      fs.rmSync(extensionDir, { recursive: true, force: true });
+    }
+  }
+}
+
+function sanitizeManagedProfile(userDataDir: string): void {
+  const defaultDir = path.join(userDataDir, "Default");
+  const preferencesPath = path.join(defaultDir, "Preferences");
+  removeSearchHijackExtensions(defaultDir);
+
+  if (!fs.existsSync(preferencesPath)) return;
+
+  try {
+    const prefs = JSON.parse(fs.readFileSync(preferencesPath, "utf8")) as Record<string, any>;
+    if (containsSearchHijack(prefs.default_search_provider) || containsSearchHijack(prefs.default_search_provider_data)) {
+      delete prefs.default_search_provider;
+      delete prefs.default_search_provider_data;
+      delete prefs.template_url_data;
+    }
+    if (containsSearchHijack(prefs.homepage)) {
+      delete prefs.homepage;
+      delete prefs.homepage_is_newtabpage;
+    }
+
+    const settings = prefs.extensions?.settings;
+    if (settings && typeof settings === "object") {
+      for (const [extensionId, setting] of Object.entries(settings)) {
+        if (containsSearchHijack(setting)) {
+          delete settings[extensionId];
+        }
+      }
+    }
+
+    fs.writeFileSync(preferencesPath, JSON.stringify(prefs));
+  } catch {
+    // Corrupt Chrome prefs should not block browser launch.
+  }
 }
 
 async function isPortListening(port: number, host: string, timeoutMs = 5000): Promise<boolean> {
@@ -450,6 +526,7 @@ async function main(): Promise<void> {
   // Resolve user data dir
   const userDataDir = resolveUserDataDir(platform);
   fs.mkdirSync(userDataDir, { recursive: true });
+  sanitizeManagedProfile(userDataDir);
 
   // Build Chrome args
   const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
@@ -500,6 +577,7 @@ export {
   stopWslBridge,
   waitForCdp,
   buildChromeArgs,
+  sanitizeManagedProfile,
   writeDebugState,
   getProfilesDir,
   type LaunchOptions,

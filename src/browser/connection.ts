@@ -28,6 +28,7 @@ import {
   isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
+  sanitizeManagedProfile,
 } from "../runtime/launch_browser";
 import {
   connectBrowser,
@@ -193,6 +194,8 @@ export class BrowserConnectionManager {
   private readonly providerRegistry: ProviderRegistry;
   private currentProvider: BrowserProvider | null = null;
   private readonly disconnectHandlers = new Set<(connection: BrowserConnection) => void>();
+  private releasingCliHandles = false;
+  private closingBrowserLifecycle = false;
 
   constructor(options: {
     memoryStore?: MemoryStore;
@@ -275,6 +278,7 @@ export class BrowserConnectionManager {
         const chromePath = resolveChromePath(platform, process.env.BROWSER_CHROME_PATH);
         const userDataDir = profile.dataDir;
         fs.mkdirSync(userDataDir, { recursive: true });
+        sanitizeManagedProfile(userDataDir);
 
         const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
 
@@ -306,19 +310,15 @@ export class BrowserConnectionManager {
       this.browser = browser;
       this.watchBrowserDisconnect(browser);
 
-      // Create automation context if needed
-      const contextOpts: AutomationContextOptions = {
+      this.context = browser.contexts()[0] ?? await createAutomationContext(browser, {
         ...options.contextOptions,
         memoryStore: this.memoryStore,
         sessionKey: options.sessionKey ?? `profile:${profile.id}`,
-        // Disable individual context persistence noise — BrowserConnectionManager
-        // handles its own high-level auth persistence on disconnect.
         persistSessionCookies: false,
-      };
-      this.context = await createAutomationContext(browser, contextOpts);
+      });
       await ensureContextHasPage(this.context);
 
-      const tabCount = getAllPages(browser).length;
+      const tabCount = getAllPages(browser, this.context).length;
 
       this.connection = {
         id: `conn-${Date.now()}-${++this.connectionCounter}`,
@@ -716,40 +716,25 @@ export class BrowserConnectionManager {
       }
     }
 
-    // Close context if we own it
-    if (this.context && this.connection.mode !== "attached") {
+    this.closingBrowserLifecycle = true;
+
+    if (this.connection.mode !== "attached") {
       try {
-        await this.context.close();
-      } catch {
-        // Context may already be closed
-      }
-    }
-
-    // Terminate managed browser process if we launched it
-    if (this.managedProcess && this.connection.mode !== "attached") {
-      try {
-        const pid = this.managedProcess.pid;
-        const port = this.connection.cdpEndpoint
-          ? Number(new URL(this.connection.cdpEndpoint).port)
-          : undefined;
-        log.info("Terminating managed browser process", { pid });
-
-        // Try graceful kill first
-        this.managedProcess.kill();
-
-        // On Windows, detached processes often need taskkill to clean up the tree
-        if (process.platform === "win32" && pid) {
-          spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" });
-        }
-
-        if (port) {
-          stopWslBridge(port);
-        }
+        await this.terminateManagedBrowserLifecycle();
       } catch (error: unknown) {
-        log.warn(`Failed to kill managed browser process: ${error instanceof Error ? error.message : String(error)}`);
+        log.warn(`Failed to close managed browser lifecycle: ${error instanceof Error ? error.message : String(error)}`);
       }
-      this.managedProcess = null;
     }
+
+    if (this.browser && this.connection.mode === "attached") {
+      try {
+        await this.browser.close();
+      } catch {
+        // Attached close detaches the Playwright client only.
+      }
+    }
+
+    this.closingBrowserLifecycle = false;
 
     this.browser = null;
     this.context = null;
@@ -758,6 +743,37 @@ export class BrowserConnectionManager {
     this.persistConnectionState();
     this.connection = null;
     this.currentProvider = null;
+  }
+
+  private async terminateManagedBrowserLifecycle(): Promise<void> {
+    const pid = this.managedProcess?.pid;
+    const port = this.connection?.cdpEndpoint
+      ? Number(new URL(this.connection.cdpEndpoint).port)
+      : undefined;
+
+    if (this.managedProcess) {
+      log.info("Terminating managed browser process", { pid });
+      this.managedProcess.kill();
+
+      if (process.platform === "win32" && pid) {
+        spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
+          stdio: "ignore",
+          timeout: 5000,
+        });
+      }
+    } else if (this.context) {
+      const page = this.context.pages()[0] ?? await this.context.newPage();
+      const session = await this.context.newCDPSession(page);
+      await session.send("Browser.close");
+    } else if (this.browser) {
+      await this.browser.close();
+    }
+
+    if (port) {
+      stopWslBridge(port);
+    }
+
+    this.managedProcess = null;
   }
 
   /**
@@ -769,9 +785,12 @@ export class BrowserConnectionManager {
   async releaseCliHandles(): Promise<void> {
     if (this.browser) {
       try {
+        this.releasingCliHandles = true;
         await this.browser.close();
       } catch (error: unknown) {
         log.warn(`Failed to close CLI browser client: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        this.releasingCliHandles = false;
       }
     }
 
@@ -793,12 +812,20 @@ export class BrowserConnectionManager {
   }
 
   private watchBrowserDisconnect(browser: Browser): void {
-    browser.once("disconnected", () => {
+    const maybeBrowser = browser as Browser & { once?: (event: string, handler: () => void) => void };
+    if (typeof maybeBrowser.once !== "function") {
+      return;
+    }
+    maybeBrowser.once("disconnected", () => {
       this.handleBrowserDisconnected();
     });
   }
 
   private handleBrowserDisconnected(): void {
+    if (this.releasingCliHandles || this.closingBrowserLifecycle) {
+      return;
+    }
+
     const connection = this.connection;
     if (!connection) {
       return;
