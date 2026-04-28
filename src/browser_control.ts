@@ -69,6 +69,7 @@ export interface BrowserNamespace {
   screenshot(options?: { outputPath?: string; fullPage?: boolean; target?: string }): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
   tabList(): Promise<ActionResult<Array<{ id: string; url: string; title: string }>>>;
   tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
+  tabClose(): Promise<ActionResult<{ closed: boolean }>>;
   close(): Promise<ActionResult<{ closed: boolean }>>;
   provider: ProviderNamespace;
 }
@@ -332,6 +333,7 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       screenshot: (o) => browserActions.screenshot(o),
       tabList: () => browserActions.tabList(),
       tabSwitch: (id) => browserActions.tabSwitch(id),
+      tabClose: () => browserActions.tabClose(),
       close: () => browserActions.close(),
       provider: providerNamespace,
     },

@@ -3,7 +3,7 @@
  *
  * Implements the canonical browser actions:
  *   open, snapshot, click, fill, hover, type, press, scroll, screenshot,
- *   tab list, tab switch, close
+ *   tab list, tab switch, tab close, close
  *
  * Uses:
  *   - Section 8 browser connection/session layer
@@ -1076,12 +1076,12 @@ export class BrowserActions {
   }
 
   /**
-   * Close the current browser tab.
+   * Close the current browser tab without ending the browser lifecycle.
    */
-  async close(): Promise<ActionResult<{ closed: boolean }>> {
+  async tabClose(): Promise<ActionResult<{ closed: boolean }>> {
     const sessionId = this.getSessionId();
 
-    const policyEval = this.context.sessionManager.evaluateAction("browser_close", {});
+    const policyEval = this.context.sessionManager.evaluateAction("browser_tab_close", {});
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ closed: boolean }>;
 
     try {
@@ -1091,13 +1091,41 @@ export class BrowserActions {
       await this.persistObservability(sessionId, page);
       await this.closePage(page);
 
-      // Unbind browser from session when the tab is closed (Issue 3)
+      return successResult({ closed: true }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return this.failureWithDebug(`Tab close failed: ${message}`, error, {
+        action: "browser_tab_close",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
+    }
+  }
+
+  /**
+   * Close the browser lifecycle for the active Browser Control session.
+   *
+   * Managed browsers are terminated. Attached browsers are detached rather
+   * than killed by BrowserConnectionManager.disconnect().
+   */
+  async close(): Promise<ActionResult<{ closed: boolean }>> {
+    const sessionId = this.getSessionId();
+
+    const policyEval = this.context.sessionManager.evaluateAction("browser_close", {});
+    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ closed: boolean }>;
+
+    try {
+      const bm = this.context.sessionManager.getBrowserManager();
+      await bm.disconnect();
       this.unbindBrowserFromSession();
 
       return successResult({ closed: true }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      return this.failureWithDebug(`Close failed: ${message}`, error, {
+      return this.failureWithDebug(`Browser close failed: ${message}`, error, {
         action: "browser_close",
         path: policyEval.path,
         sessionId,

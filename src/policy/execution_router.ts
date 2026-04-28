@@ -232,7 +232,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
         "browser_navigate", "browser_click", "browser_fill",
         "browser_hover", "browser_type", "browser_press",
         "browser_scroll", "browser_close", "browser_snapshot",
-        "browser_tab_list", "browser_tab_switch",
+        "browser_tab_list", "browser_tab_switch", "browser_tab_close",
       ];
       return browserActions.includes(action);
     },

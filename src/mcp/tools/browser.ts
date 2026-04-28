@@ -13,6 +13,7 @@
  *   - bc_browser_screenshot
  *   - bc_browser_tab_list
  *   - bc_browser_tab_switch
+ *   - bc_browser_tab_close
  *   - bc_browser_close
  *
  * All tools use the existing BrowserActions methods and preserve ref-based
@@ -211,8 +212,20 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
     },
 
     {
+      name: "bc_browser_tab_close",
+      description: "Close the current browser tab. Keeps the browser session and automation lifecycle alive.",
+      inputSchema: buildSchema({
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.tabClose();
+      },
+    },
+
+    {
       name: "bc_browser_close",
-      description: "Close the current browser tab.",
+      description: "Close the browser automation lifecycle. Managed Chrome is terminated; attached Chrome is detached without killing the user's browser.",
       inputSchema: buildSchema({
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }),

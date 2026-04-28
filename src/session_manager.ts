@@ -570,6 +570,9 @@ export class SessionManager {
       executionRouter: this.executionRouter,
     });
     this.terminalManager = options.terminalManager ?? new TerminalSessionManager();
+    this.browserManager.onDisconnected?.((connection) => {
+      this.unbindBrowserConnection(connection.id);
+    });
 
     // Reload persisted sessions from MemoryStore so that
     // separate CLI/API invocations see existing sessions.
@@ -1167,6 +1170,15 @@ export class SessionManager {
     if (state) {
       state.browserConnectionId = null;
       this.touchSession(sessionId);
+    }
+  }
+
+  private unbindBrowserConnection(connectionId: string): void {
+    for (const state of this.sessions.values()) {
+      if (state.browserConnectionId === connectionId) {
+        state.browserConnectionId = null;
+        this.touchSession(state.id);
+      }
     }
   }
 

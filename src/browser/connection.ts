@@ -192,6 +192,7 @@ export class BrowserConnectionManager {
   private connectionCounter = 0;
   private readonly providerRegistry: ProviderRegistry;
   private currentProvider: BrowserProvider | null = null;
+  private readonly disconnectHandlers = new Set<(connection: BrowserConnection) => void>();
 
   constructor(options: {
     memoryStore?: MemoryStore;
@@ -241,6 +242,7 @@ export class BrowserConnectionManager {
       this.context = result.context;
       this.connection = result.connection;
       this.managedProcess = result.managedProcess ?? null;
+      this.watchBrowserDisconnect(result.browser);
       this.persistConnectionState();
       return result.connection;
     }
@@ -302,6 +304,7 @@ export class BrowserConnectionManager {
       const cdpEndpoint = await resolveDebugEndpointUrl(port, { ignoreEnvOverrides: true });
 
       this.browser = browser;
+      this.watchBrowserDisconnect(browser);
 
       // Create automation context if needed
       const contextOpts: AutomationContextOptions = {
@@ -413,6 +416,7 @@ export class BrowserConnectionManager {
       this.context = result.context;
       this.connection = result.connection;
       this.managedProcess = result.managedProcess ?? null;
+      this.watchBrowserDisconnect(result.browser);
       this.persistConnectionState();
       return result.connection;
     }
@@ -439,6 +443,7 @@ export class BrowserConnectionManager {
         : await connectBrowser(port);
 
       this.browser = browser;
+      this.watchBrowserDisconnect(browser);
 
       // For attached mode, we don't create a new context — use existing ones
       const contexts = browser.contexts();
@@ -540,6 +545,7 @@ export class BrowserConnectionManager {
         this.browser = result.browser;
         this.context = result.context;
         this.managedProcess = result.managedProcess ?? null;
+        this.watchBrowserDisconnect(result.browser);
         const tabCount = getAllPages(result.browser).length;
         this.connection = {
           ...result.connection,
@@ -563,6 +569,7 @@ export class BrowserConnectionManager {
         : this.profileManager.getDefaultProfile();
       const browser = await chromium.connectOverCDP(active.cdpEndpoint);
       this.browser = browser;
+      this.watchBrowserDisconnect(browser);
       this.context = browser.contexts()[0] ?? await createAutomationContext(browser, {
         memoryStore: this.memoryStore,
         sessionKey: `profile:${profile.id}`,
@@ -775,6 +782,42 @@ export class BrowserConnectionManager {
 
     if (this.ownsMemoryStore) {
       this.memoryStore.close();
+    }
+  }
+
+  onDisconnected(handler: (connection: BrowserConnection) => void): () => void {
+    this.disconnectHandlers.add(handler);
+    return () => {
+      this.disconnectHandlers.delete(handler);
+    };
+  }
+
+  private watchBrowserDisconnect(browser: Browser): void {
+    browser.once("disconnected", () => {
+      this.handleBrowserDisconnected();
+    });
+  }
+
+  private handleBrowserDisconnected(): void {
+    const connection = this.connection;
+    if (!connection) {
+      return;
+    }
+
+    connection.status = "disconnected";
+    this.persistConnectionState();
+
+    this.browser = null;
+    this.context = null;
+    this.managedProcess = null;
+    this.currentProvider = null;
+
+    for (const handler of this.disconnectHandlers) {
+      try {
+        handler(connection);
+      } catch (error: unknown) {
+        log.warn(`Browser disconnect handler failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 

@@ -35,6 +35,9 @@ function createUnavailableBrowserManager() {
 }
 
 function createConnectedBrowserManager(pages: any[]) {
+  const calls = {
+    disconnect: 0,
+  };
   const context = {
     pages: () => pages,
     newCDPSession: async (page: any) => ({
@@ -70,7 +73,7 @@ function createConnectedBrowserManager(pages: any[]) {
     page.context = () => context;
   }
 
-  return {
+  const manager = {
     getContext: () => context,
     getBrowser: () => ({
       contexts: () => [context],
@@ -84,7 +87,12 @@ function createConnectedBrowserManager(pages: any[]) {
     launchManaged: async () => {
       throw new Error("launch should not be called");
     },
+    disconnect: async () => {
+      calls.disconnect += 1;
+    },
   } as unknown as BrowserConnectionManager;
+
+  return Object.assign(manager, { calls });
 }
 
 function createMockPage(url = "about:blank", options: { hasBrowserWindow?: boolean } = {}) {
@@ -447,7 +455,7 @@ describe("BrowserActions", () => {
     });
   });
 
-  describe("close", () => {
+  describe("tabClose", () => {
     it("closes the front-most tab when a restored profile has multiple pages", async () => {
       const isolatedStore = new MemoryStore({ filename: ":memory:" });
       const frontPage = createMockPage("chrome://newtab/");
@@ -462,7 +470,7 @@ describe("BrowserActions", () => {
         await isolatedSessionManager.create("test", { policyProfile: "balanced" });
         const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
 
-        const result = await isolatedActions.close();
+        const result = await isolatedActions.tabClose();
 
         assert.equal(result.success, true);
         assert.equal(backgroundPage.calls.close, 0);
@@ -472,7 +480,9 @@ describe("BrowserActions", () => {
         isolatedStore.close();
       }
     });
+  });
 
+  describe("close", () => {
     it("returns failure when no browser is connected", async () => {
       const result = await browserActions.close();
 
@@ -554,7 +564,61 @@ describe("BrowserActions", () => {
   // ── Issue 3: Browser actions bind browser state into session model ──
 
   describe("browser binding into session state", () => {
-    it("close action unbinds browser from session when browser was bound", async () => {
+    it("browser close disconnects lifecycle and unbinds browser from session", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const page = createMockPage("https://example.com/");
+      const manager = createConnectedBrowserManager([page]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const activeSession = isolatedSessionManager.getActiveSession();
+        assert.ok(activeSession);
+        isolatedSessionManager.bindBrowser(activeSession.id, "conn-test");
+
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+        const result = await isolatedActions.close();
+
+        assert.equal(result.success, true);
+        assert.equal(manager.calls.disconnect, 1);
+        assert.equal(page.calls.close, 0);
+        assert.equal(isolatedSessionManager.getSession(activeSession.id)!.browserConnectionId, null);
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
+    it("tab close closes only the active page and keeps browser bound", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const page = createMockPage("https://example.com/");
+      const manager = createConnectedBrowserManager([page]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const activeSession = isolatedSessionManager.getActiveSession();
+        assert.ok(activeSession);
+        isolatedSessionManager.bindBrowser(activeSession.id, "conn-test");
+
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+        const result = await isolatedActions.tabClose();
+
+        assert.equal(result.success, true);
+        assert.equal(page.calls.close, 1);
+        assert.equal(manager.calls.disconnect, 0);
+        assert.equal(isolatedSessionManager.getSession(activeSession.id)!.browserConnectionId, "conn-test");
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
+    it("close action fails cleanly when no browser manager disconnect exists", async () => {
       // Simulate a bound browser by manually binding it
       const activeSession = sessionManager.getActiveSession();
       assert.ok(activeSession, "should have an active session");
@@ -565,12 +629,8 @@ describe("BrowserActions", () => {
       assert.equal(bound!.browserConnectionId, "conn-test-123",
         "browser should be bound before close");
 
-      // close() will fail because no real browser page exists,
-      // but we verify the unbind helper works correctly
       const result = await browserActions.close();
 
-      // The close will fail (no real page), but the unbind attempt was made
-      // The important thing is that unbindBrowserFromSession is called
       assert.equal(result.success, false);
     });
 

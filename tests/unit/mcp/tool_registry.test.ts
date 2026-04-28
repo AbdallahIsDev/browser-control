@@ -48,6 +48,7 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_browser_screenshot"));
       assert.ok(names.includes("bc_browser_tab_list"));
       assert.ok(names.includes("bc_browser_tab_switch"));
+      assert.ok(names.includes("bc_browser_tab_close"));
       assert.ok(names.includes("bc_browser_close"));
 
       // Terminal tools
