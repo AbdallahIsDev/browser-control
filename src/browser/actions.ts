@@ -40,6 +40,12 @@ type ObservabilityCdpClient = {
   send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 };
 
+interface BrowserWindowTarget {
+  page: Page;
+  targetId: string;
+  windowId: number;
+}
+
 // ── Action Options ─────────────────────────────────────────────────────
 
 export interface BrowserActionContext {
@@ -149,6 +155,89 @@ export class BrowserActions {
     throw new Error("No active browser page. Use 'bc open <url>' or 'bc browser attach' first.");
   }
 
+  private getPages(): Page[] {
+    const bm = this.context.sessionManager.getBrowserManager();
+    const context = bm.getContext();
+    if (context) {
+      const pages = context.pages();
+      if (pages.length > 0) return pages;
+    }
+    const browser = bm.getBrowser();
+    if (browser) {
+      const contexts = browser.contexts();
+      if (contexts.length > 0) {
+        const pages = contexts[0].pages();
+        if (pages.length > 0) return pages;
+      }
+    }
+    return [];
+  }
+
+  private async getWindowTarget(page: Page): Promise<BrowserWindowTarget | null> {
+    let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+    try {
+      client = await page.context().newCDPSession(page);
+      const info = await client.send("Target.getTargetInfo") as { targetInfo?: { targetId?: string } };
+      const targetId = info.targetInfo?.targetId;
+      if (!targetId) return null;
+      const windowInfo = await client.send("Browser.getWindowForTarget", { targetId }) as {
+        windowId?: number;
+      };
+      if (typeof windowInfo.windowId !== "number") return null;
+      return { page, targetId, windowId: windowInfo.windowId };
+    } catch {
+      return null;
+    } finally {
+      await client?.detach?.().catch(() => undefined);
+    }
+  }
+
+  private async activateWindowTarget(target: BrowserWindowTarget): Promise<void> {
+    let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+    try {
+      client = await target.page.context().newCDPSession(target.page);
+      await client.send("Browser.setWindowBounds", {
+        windowId: target.windowId,
+        bounds: { windowState: "normal" },
+      }).catch(() => undefined);
+      await client.send("Target.activateTarget", { targetId: target.targetId }).catch(() => undefined);
+    } catch {
+      // Best-effort foregrounding only; Playwright bringToFront still follows.
+    } finally {
+      await client?.detach?.().catch(() => undefined);
+    }
+    await target.page.bringToFront().catch(() => undefined);
+  }
+
+  private async getWindowTargets(pages = this.getPages()): Promise<BrowserWindowTarget[]> {
+    const targets: BrowserWindowTarget[] = [];
+    for (const page of pages) {
+      const target = await this.getWindowTarget(page);
+      if (target) targets.push(target);
+    }
+    return targets;
+  }
+
+  private async getVisiblePages(pages = this.getPages()): Promise<Page[]> {
+    const targets = await this.getWindowTargets(pages);
+    return targets.length > 0 ? targets.map((target) => target.page) : pages;
+  }
+
+  private async getBestVisiblePage(preferred?: Page): Promise<Page> {
+    const pages = this.getPages();
+    const candidates = preferred ? [preferred, ...pages.filter((page) => page !== preferred)] : pages;
+    const targets = await this.getWindowTargets(candidates);
+    const target = targets[0];
+    if (target) {
+      await this.activateWindowTarget(target);
+      return target.page;
+    }
+    if (preferred) return preferred;
+    const fallback = pages[0];
+    if (fallback) return fallback;
+    return this.getPage();
+  }
+
   /**
    * Ensure a browser is connected. Attempts attach → launch in sequence.
    * Returns the page on success, or a failure ActionResult if no browser
@@ -236,9 +325,9 @@ export class BrowserActions {
   private async getConnectedPageForAction<T>(): Promise<Page | ActionResult<T>> {
     const pageOrErr = await this.ensureBrowserConnected();
     if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
-    await pageOrErr.bringToFront().catch(() => undefined);
-    await this.startObservability(pageOrErr, this.getSessionId());
-    return pageOrErr;
+    const page = await this.getBestVisiblePage(pageOrErr);
+    await this.startObservability(page, this.getSessionId());
+    return page;
   }
 
   private async startObservability(page: Page, sessionId: string): Promise<void> {
@@ -350,6 +439,49 @@ export class BrowserActions {
     });
   }
 
+  private isPathInside(childPath: string, parentPath: string, pathModule: typeof import("node:path")): boolean {
+    const child = pathModule.resolve(childPath);
+    const parent = pathModule.resolve(parentPath);
+    const relative = pathModule.relative(parent, child);
+    return relative === "" || (!relative.startsWith("..") && !pathModule.isAbsolute(relative));
+  }
+
+  private resolveScreenshotOutputPath(
+    requestedPath: string | undefined,
+    helpers: {
+      path: typeof import("node:path");
+      fs: typeof import("node:fs");
+      getDataHome: () => string;
+      getSessionScreenshotsDir: (sessionId: string) => string;
+    },
+  ): string {
+    const sessionId = this.getSessionId();
+    const outputDir = helpers.getSessionScreenshotsDir(sessionId);
+
+    if (!requestedPath) {
+      helpers.fs.mkdirSync(outputDir, { recursive: true });
+      return helpers.path.join(outputDir, `screenshot-${Date.now()}.png`);
+    }
+
+    const activeSession = this.context.sessionManager.getActiveSession();
+    const baseDir = activeSession?.workingDirectory ?? process.cwd();
+    const resolvedPath = helpers.path.resolve(baseDir, requestedPath);
+    const dataHome = helpers.getDataHome();
+
+    if (
+      activeSession?.workingDirectory
+      && this.isPathInside(resolvedPath, activeSession.workingDirectory, helpers.path)
+      && !this.isPathInside(resolvedPath, dataHome, helpers.path)
+    ) {
+      throw new Error(
+        `Refusing to write screenshot inside the session working directory: ${resolvedPath}. ` +
+        `Use the default runtime screenshots directory under ${outputDir}.`,
+      );
+    }
+
+    return resolvedPath;
+  }
+
   // ── Ref Resolution ──────────────────────────────────────────────────
 
   private async resolveTarget(target: string, page: Page): Promise<{ locator: import("playwright").Locator; description: string } | null> {
@@ -423,10 +555,9 @@ export class BrowserActions {
       // Auto-attach if no browser is connected yet
       const pageOrErr = await this.ensureBrowserConnected();
       if ("success" in pageOrErr) return pageOrErr as ActionResult<{ url: string; title: string }>;
-      const page = pageOrErr as Page;
+      const page = await this.getBestVisiblePage(pageOrErr as Page);
 
       await this.startObservability(page, sessionId);
-      await page.bringToFront().catch(() => undefined);
       await page.goto(resolvedUrl, { waitUntil: options.waitUntil ?? "domcontentloaded" });
       await page.bringToFront().catch(() => undefined);
       const title = await page.title();
@@ -778,11 +909,14 @@ export class BrowserActions {
       const page = pageOrErr;
       const fs = await import("node:fs");
       const path = await import("node:path");
-      const { getReportsDir } = await import("../shared/paths");
+      const { getDataHome, getSessionScreenshotsDir } = await import("../shared/paths");
 
-      const outputDir = getReportsDir();
-      fs.mkdirSync(outputDir, { recursive: true });
-      const outputPath = options.outputPath ?? path.join(outputDir, `screenshot-${Date.now()}.png`);
+      const outputPath = this.resolveScreenshotOutputPath(options.outputPath, {
+        path,
+        fs,
+        getDataHome,
+        getSessionScreenshotsDir,
+      });
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}.png`;
 
@@ -864,7 +998,7 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
       const context = page.context();
-      const pages = context.pages();
+      const pages = await this.getVisiblePages(context.pages());
 
       const tabs = await Promise.all(pages.map(async (p, i) => ({
         id: String(i),
@@ -902,7 +1036,9 @@ export class BrowserActions {
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
       const context = page.context();
-      const pages = context.pages();
+      const rawPages = context.pages();
+      const windowTargets = await this.getWindowTargets(rawPages);
+      const pages = windowTargets.length > 0 ? windowTargets.map((target) => target.page) : rawPages;
       const index = parseInt(tabId, 10);
 
       if (index < 0 || index >= pages.length) {
@@ -916,7 +1052,12 @@ export class BrowserActions {
         });
       }
 
-      await pages[index].bringToFront();
+      const windowTarget = windowTargets.find((target) => target.page === pages[index]);
+      if (windowTarget) {
+        await this.activateWindowTarget(windowTarget);
+      } else {
+        await pages[index].bringToFront();
+      }
       await this.persistObservability(sessionId, pages[index]);
 
       return successResult({ activeTab: tabId }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });

@@ -22,6 +22,7 @@ export function ensureDataHomeAtPath(home: string): string {
   const dirs = [
     home,
     path.join(home, "reports"),
+    path.join(home, "runtime"),
     path.join(home, "logs"),
     path.join(home, ".interop"),
     path.join(home, "config"),
@@ -57,6 +58,18 @@ export function getMemoryStorePath(): string {
 
 export function getReportsDir(): string {
   return path.join(getDataHome(), "reports");
+}
+
+export function getRuntimeDir(dataHome?: string): string {
+  return path.join(dataHome ?? getDataHome(), "runtime");
+}
+
+export function getSessionRuntimeDir(sessionId: string, dataHome?: string): string {
+  return path.join(getRuntimeDir(dataHome), sessionId);
+}
+
+export function getSessionScreenshotsDir(sessionId: string, dataHome?: string): string {
+  return path.join(getSessionRuntimeDir(sessionId, dataHome), "screenshots");
 }
 
 export function getInteropDir(): string {

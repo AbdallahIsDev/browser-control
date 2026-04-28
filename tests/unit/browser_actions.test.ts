@@ -37,6 +37,34 @@ function createUnavailableBrowserManager() {
 function createConnectedBrowserManager(pages: any[]) {
   const context = {
     pages: () => pages,
+    newCDPSession: async (page: any) => ({
+      on: () => undefined,
+      off: () => undefined,
+      detach: async () => undefined,
+      send: async (method: string, params?: Record<string, unknown>) => {
+        if (method === "Target.getTargetInfo") {
+          return { targetInfo: { targetId: page.targetId ?? page.url() } };
+        }
+        if (method === "Browser.getWindowForTarget") {
+          if (page.hasBrowserWindow === false) {
+            throw new Error("Browser window not found");
+          }
+          return {
+            windowId: page.windowId ?? 1,
+            bounds: { windowState: "normal" },
+          };
+        }
+        if (method === "Browser.setWindowBounds") {
+          page.calls.setWindowBounds += 1;
+          return {};
+        }
+        if (method === "Target.activateTarget") {
+          page.calls.activateTarget += 1;
+          return {};
+        }
+        return {};
+      },
+    }),
   };
   for (const page of pages) {
     page.context = () => context;
@@ -59,16 +87,21 @@ function createConnectedBrowserManager(pages: any[]) {
   } as unknown as BrowserConnectionManager;
 }
 
-function createMockPage(url = "about:blank") {
+function createMockPage(url = "about:blank", options: { hasBrowserWindow?: boolean } = {}) {
   const calls = {
     bringToFront: 0,
     close: 0,
     goto: [] as string[],
+    setWindowBounds: 0,
+    activateTarget: 0,
+    screenshot: 0,
   };
   let currentUrl = url;
 
   return {
     calls,
+    hasBrowserWindow: options.hasBrowserWindow,
+    targetId: `target-${Math.random().toString(36).slice(2)}`,
     bringToFront: async () => {
       calls.bringToFront += 1;
     },
@@ -78,6 +111,12 @@ function createMockPage(url = "about:blank") {
     },
     title: async () => "Mock Title",
     url: () => currentUrl,
+    viewportSize: () => ({ width: 1280, height: 720 }),
+    setViewportSize: async () => undefined,
+    screenshot: async (options: { path: string }) => {
+      calls.screenshot += 1;
+      fs.writeFileSync(options.path, Buffer.alloc(1024, 1));
+    },
     close: async () => {
       calls.close += 1;
     },
@@ -154,6 +193,31 @@ describe("BrowserActions", () => {
         assert.deepEqual(backgroundPage.calls.goto, []);
         assert.deepEqual(frontPage.calls.goto, ["https://example.com"]);
         assert.equal(frontPage.calls.bringToFront, 2);
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
+    it("skips hidden CDP targets and navigates the visible Chrome tab", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const hiddenPage = createMockPage("https://lichess.org/lzuTaBeK", { hasBrowserWindow: false });
+      const visiblePage = createMockPage("chrome://newtab/", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([hiddenPage, visiblePage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.open({ url: "https://example.com" });
+
+        assert.equal(result.success, true);
+        assert.deepEqual(hiddenPage.calls.goto, []);
+        assert.deepEqual(visiblePage.calls.goto, ["https://example.com"]);
+        assert.equal(visiblePage.calls.activateTarget > 0, true);
       } finally {
         isolatedStore.close();
       }
@@ -265,6 +329,55 @@ describe("BrowserActions", () => {
       assert.equal(result.success, false);
       assert.ok(result.error);
     });
+
+    it("rejects explicit screenshot paths inside the session working directory", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const visiblePage = createMockPage("https://example.com", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([visiblePage]);
+      const outputPath = path.join(dataHome, "..", "project-root-shot.png");
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        const workingDirectory = path.dirname(outputPath);
+        await isolatedSessionManager.create("test", { policyProfile: "balanced", workingDirectory });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.screenshot({ outputPath });
+
+        assert.equal(result.success, false);
+        assert.match(result.error ?? "", /Refusing to write screenshot inside the session working directory/);
+        assert.equal(fs.existsSync(outputPath), false);
+      } finally {
+        isolatedStore.close();
+        fs.rmSync(outputPath, { force: true });
+      }
+    });
+
+    it("stores default screenshots under the session runtime screenshots directory", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const visiblePage = createMockPage("https://example.com", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([visiblePage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        const session = await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.screenshot();
+
+        assert.equal(result.success, true);
+        assert.ok(result.data?.path.includes(path.join(dataHome, "runtime", session.data!.id, "screenshots")));
+        assert.equal(fs.existsSync(result.data!.path), true);
+      } finally {
+        isolatedStore.close();
+      }
+    });
   });
 
   describe("tabList", () => {
@@ -274,6 +387,29 @@ describe("BrowserActions", () => {
       assert.equal(result.success, false);
       assert.ok(result.error);
     });
+
+    it("lists only visible Chrome window tabs", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const hiddenPage = createMockPage("https://lichess.org/lzuTaBeK", { hasBrowserWindow: false });
+      const visiblePage = createMockPage("chrome://newtab/", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([hiddenPage, visiblePage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.tabList();
+
+        assert.equal(result.success, true);
+        assert.deepEqual(result.data?.map((tab) => tab.url), ["chrome://newtab/"]);
+      } finally {
+        isolatedStore.close();
+      }
+    });
   });
 
   describe("tabSwitch", () => {
@@ -282,6 +418,32 @@ describe("BrowserActions", () => {
 
       assert.equal(result.success, false);
       assert.ok(result.error);
+    });
+
+    it("switches by visible Chrome tab index, not hidden CDP target index", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const hiddenPage = createMockPage("https://lichess.org/lzuTaBeK", { hasBrowserWindow: false });
+      const visiblePage = createMockPage("chrome://newtab/", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([hiddenPage, visiblePage]);
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.tabSwitch("0");
+
+        assert.equal(result.success, true);
+        assert.equal(hiddenPage.calls.activateTarget, 0);
+        assert.equal(hiddenPage.calls.bringToFront, 0);
+        assert.equal(visiblePage.calls.activateTarget > 0, true);
+        assert.equal(visiblePage.calls.bringToFront > 0, true);
+      } finally {
+        isolatedStore.close();
+      }
     });
   });
 
