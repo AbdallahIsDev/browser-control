@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Page, Locator } from "playwright";
-import type { A11ySnapshot, A11yElement } from "../../a11y_snapshot";
-import { RefStore, getPageId, resolveRefLocator } from "../../ref_store";
+import type { A11ySnapshot, A11yElement } from "../../src/a11y_snapshot";
+import { RefStore, getPageId, resolveRefLocator } from "../../src/ref_store";
 
 function makeSnapshot(url: string, elements: Array<{ ref: string; role: string; name?: string }>): A11ySnapshot {
   return {

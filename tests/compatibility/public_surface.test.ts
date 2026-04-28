@@ -15,8 +15,8 @@ import {
   getPersistedFormatInventory,
   stableJson,
 } from "./public_surface";
-import { runCli } from "../../cli";
-import { failureResult, successResult, formatActionResult } from "../../action_result";
+import { runCli } from "../../src/cli";
+import { failureResult, successResult, formatActionResult } from "../../src/action_result";
 
 function readSnapshot(fileName: string): unknown {
   const filePath = path.join(PUBLIC_SURFACE_FIXTURE_DIR, fileName);

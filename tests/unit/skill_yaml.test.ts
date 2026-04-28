@@ -9,8 +9,8 @@ import {
   yamlToManifest,
   isPackagedSkillDir,
   loadPackagedSkillDir,
-} from "../../skill_yaml";
-import type { SkillYaml } from "../../skill_yaml";
+} from "../../src/skill_yaml";
+import type { SkillYaml } from "../../src/skill_yaml";
 
 // ── YAML Parsing ────────────────────────────────────────────────────
 

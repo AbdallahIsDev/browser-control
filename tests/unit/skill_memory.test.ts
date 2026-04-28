@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MemoryStore } from "../../memory_store";
-import { SkillMemoryStore } from "../../skill_memory";
+import { MemoryStore } from "../../src/memory_store";
+import { SkillMemoryStore } from "../../src/skill_memory";
 
 test("SkillMemoryStore prefixes keys with skill:{name}:", () => {
   const store = new MemoryStore({ filename: ":memory:" });

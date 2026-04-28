@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { getBrowserActionPositionals, parseArgs, runCli } from "../../cli";
+import { getBrowserActionPositionals, parseArgs, runCli } from "../../src/cli";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-cli-"));
@@ -66,7 +66,7 @@ test("bc --help does not import SQLite-backed runtime modules", () => {
       "ts-node/register",
       "--require",
       "tsconfig-paths/register",
-      "cli.ts",
+      "src/cli.ts",
       "--help",
     ], {
       cwd: process.cwd(),

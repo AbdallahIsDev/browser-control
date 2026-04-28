@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { A11ySnapshot } from "../../a11y_snapshot";
+import type { A11ySnapshot } from "../../src/a11y_snapshot";
 import {
   queryAll,
   queryFirst,
@@ -12,7 +12,7 @@ import {
   findLink,
   findHeading,
   findByDescription,
-} from "../../semantic_query";
+} from "../../src/semantic_query";
 
 const testSnapshot: A11ySnapshot = {
   pageUrl: "https://example.com",

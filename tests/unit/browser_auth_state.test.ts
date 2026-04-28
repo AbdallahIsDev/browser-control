@@ -8,7 +8,7 @@ import fs from "node:fs";
 const testHome = path.join(os.tmpdir(), `bc-test-auth-${Date.now()}`);
 process.env.BROWSER_CONTROL_HOME = testHome;
 
-import { MemoryStore } from "../../memory_store";
+import { MemoryStore } from "../../src/memory_store";
 import {
   saveAuthSnapshotToStore,
   loadAuthSnapshot,
@@ -16,7 +16,7 @@ import {
   listAuthSnapshots,
   type AuthSnapshot,
   type CookieRecord,
-} from "../../browser_auth_state";
+} from "../../src/browser_auth_state";
 
 describe("browser_auth_state", () => {
   let store: MemoryStore;

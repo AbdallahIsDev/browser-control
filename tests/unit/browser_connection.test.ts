@@ -9,8 +9,8 @@ import { chromium } from "playwright";
 const testHome = path.join(os.tmpdir(), `bc-test-conn-${Date.now()}`);
 process.env.BROWSER_CONTROL_HOME = testHome;
 
-import { MemoryStore } from "../../memory_store";
-import { DefaultPolicyEngine } from "../../policy_engine";
+import { MemoryStore } from "../../src/memory_store";
+import { DefaultPolicyEngine } from "../../src/policy_engine";
 import {
   BrowserConnectionManager,
   createConnectionManager,
@@ -18,8 +18,8 @@ import {
   type BrowserConnectionMode,
   type BrowserTargetType,
   type BrowserConnectionStatus,
-} from "../../browser_connection";
-import { BrowserProfileManager } from "../../browser_profiles";
+} from "../../src/browser_connection";
+import { BrowserProfileManager } from "../../src/browser_profiles";
 import { ProviderRegistry } from "../../src/providers/registry";
 
 describe("BrowserConnectionManager", () => {
@@ -119,7 +119,7 @@ describe("BrowserConnectionManager", () => {
 
   describe("launchManaged (actual managed browser)", () => {
     it("should launch and terminate a managed browser", async () => {
-      const { isChromeAlive } = await import("../../scripts/launch_browser");
+      const { isChromeAlive } = await import("../../src/runtime/launch_browser");
       const port = 19999 + Math.floor(Math.random() * 1000);
       const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
       
@@ -268,9 +268,9 @@ describe("BrowserConnectionManager", () => {
     it("should pass configured chromeBindAddress to Chrome launch args", async () => {
       const originalBind = process.env.BROWSER_BIND_ADDRESS;
       const childProcess = require("node:child_process") as typeof import("node:child_process");
-      const launcherPath = require.resolve("../../scripts/launch_browser");
+      const launcherPath = require.resolve("../../src/runtime/launch_browser");
       const connectionPath = require.resolve("../../browser_connection");
-      const launcher = require(launcherPath) as typeof import("../../scripts/launch_browser");
+      const launcher = require(launcherPath) as typeof import("../../src/runtime/launch_browser");
       const originalSpawn = childProcess.spawn;
       const originalResolveChromePath = launcher.resolveChromePath;
       const originalBuildChromeArgs = launcher.buildChromeArgs;
@@ -299,7 +299,7 @@ describe("BrowserConnectionManager", () => {
       (launcher as unknown as { getWslHostCandidates: unknown }).getWslHostCandidates = () => [];
 
       try {
-        const fresh = require(connectionPath) as typeof import("../../browser_connection");
+        const fresh = require(connectionPath) as typeof import("../../src/browser_connection");
         const manager = new fresh.BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
         await assert.rejects(() => manager.launchManaged({ port: 19998 }), /Failed to launch managed automation browser/);
         assert.equal(capturedBindAddress, "127.0.0.1");
@@ -526,7 +526,7 @@ describe("BrowserConnectionManager", () => {
     });
 
     it("attached mode does not terminate existing browser on disconnect", async () => {
-      const { isChromeAlive } = await import("../../scripts/launch_browser");
+      const { isChromeAlive } = await import("../../src/runtime/launch_browser");
       const { execSync } = await import("node:child_process");
       const port = 19999 + Math.floor(Math.random() * 1000);
       

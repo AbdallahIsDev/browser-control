@@ -3,7 +3,7 @@
 
 require("ts-node").register({ project: require("path").resolve(__dirname, "..", "tsconfig.json"), transpileOnly: true });
 
-const mod = require("./launch_browser");
+const mod = require("../src/runtime/launch_browser");
 
 if (require.main === module) {
   // Running directly — invoke main()

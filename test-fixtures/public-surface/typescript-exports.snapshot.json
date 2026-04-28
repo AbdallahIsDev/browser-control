@@ -3430,5 +3430,5 @@
       "name": "WriteFileOptions"
     }
   ],
-  "source": "index.ts"
+  "source": "src/index.ts"
 }

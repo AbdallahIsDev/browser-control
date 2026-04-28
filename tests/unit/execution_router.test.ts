@@ -6,8 +6,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ExecutionRouter, defaultRouter, type PathInferenceRule, type RiskAdjustmentRule } from "../../execution_router";
-import type { PolicyTaskIntent, ExecutionPath, RiskLevel, ExecutionContext, RoutedStep } from "../../policy";
+import { ExecutionRouter, defaultRouter, type PathInferenceRule, type RiskAdjustmentRule } from "../../src/execution_router";
+import type { PolicyTaskIntent, ExecutionPath, RiskLevel, ExecutionContext, RoutedStep } from "../../src/policy";
 
 test("default router instance is available", () => {
   assert.ok(defaultRouter);

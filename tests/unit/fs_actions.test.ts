@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { FsActions, type FsActionContext } from "../../fs_actions";
-import { SessionManager } from "../../session_manager";
-import { MemoryStore } from "../../memory_store";
+import { FsActions, type FsActionContext } from "../../src/fs_actions";
+import { SessionManager } from "../../src/session_manager";
+import { MemoryStore } from "../../src/memory_store";
 import { loadDebugBundle } from "../../src/observability/debug_bundle";
-import type { BrowserConnectionManager } from "../../browser_connection";
+import type { BrowserConnectionManager } from "../../src/browser_connection";
 
 function createUnavailableBrowserManager() {
   return {

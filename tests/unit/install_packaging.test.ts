@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { getConfigEntries } from "../../config";
+import { getConfigEntries } from "../../src/config";
 
 const root = process.cwd();
 
@@ -19,6 +19,17 @@ test("package bin points to an existing CLI shim", () => {
   const pkg = readPackageJson();
   assert.equal(pkg.bin?.bc, "./cli.js");
   assert.ok(fs.existsSync(path.join(root, pkg.bin.bc)), "bin target should exist");
+});
+
+test("package exports expose only the compiled public API", () => {
+  const pkg = readPackageJson();
+  assert.deepEqual(pkg.exports, {
+    ".": {
+      types: "./dist/index.d.ts",
+      require: "./dist/index.js",
+    },
+    "./package.json": "./package.json",
+  });
 });
 
 test("package files include runtime and onboarding docs but exclude local/test artifacts", () => {

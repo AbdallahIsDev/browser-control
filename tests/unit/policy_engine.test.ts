@@ -9,10 +9,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { DefaultPolicyEngine } from "../../policy_engine";
-import type { RoutedStep, ExecutionContext, ConfirmationHandler, PolicyEvaluationResult } from "../../policy";
-import { Logger } from "../../logger";
-import { getProfile, saveCustomProfile, TRUSTED_PROFILE, validateProfile } from "../../policy_profiles";
+import { DefaultPolicyEngine } from "../../src/policy_engine";
+import type { RoutedStep, ExecutionContext, ConfirmationHandler, PolicyEvaluationResult } from "../../src/policy";
+import { Logger } from "../../src/logger";
+import { getProfile, saveCustomProfile, TRUSTED_PROFILE, validateProfile } from "../../src/policy_profiles";
 
 test("initializes with the default balanced profile", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });

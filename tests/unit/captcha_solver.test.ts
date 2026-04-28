@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Page } from "playwright";
 
-import { CaptchaSolver } from "../../captcha_solver";
+import { CaptchaSolver } from "../../src/captcha_solver";
 
 test("CaptchaSolver uses 2Captcha createTask/getTaskResult flow for reCAPTCHA", async () => {
   const requests: Array<{ url: string; body: string }> = [];

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createBrowserControl } from "../../../browser_control";
+import { createBrowserControl } from "../../../src/browser_control";
 import { isValidDebugBundleId, loadDebugBundle } from "../../../src/observability/debug_bundle";
 import { createRunReport, finishRunReport, recordWorkflow, writeReliabilityReport } from "../support/reliability_report";
 import { scanForBrowserControlLeftovers, summarizeCleanupFailure } from "../support/process_cleanup";

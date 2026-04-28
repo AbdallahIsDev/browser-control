@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { captureTerminalBuffer, serializeTerminalSession, validateSerializedSession } from "../../terminal_serialize";
+import { captureTerminalBuffer, serializeTerminalSession, validateSerializedSession } from "../../src/terminal_serialize";
 
 function createMockSession(overrides: Record<string, unknown> = {}) {
   const now = new Date().toISOString();

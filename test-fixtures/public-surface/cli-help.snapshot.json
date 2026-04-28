@@ -275,10 +275,11 @@
             "cdp-url",
             "port",
             "provider",
-            "target-type"
+            "target-type",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>]"
+          "syntax": "browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]"
         },
         {
           "commandPath": [
@@ -414,14 +415,27 @@
             "auth",
             "export"
           ],
-          "description": "Export auth state (cookies/storage)",
+          "description": "",
           "flags": [
             "live",
+            "output",
             "profile",
-            "stored"
+            "stored",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "browser auth export [--live | --stored] [--profile=default]"
+          "syntax": "browser auth export [--live | --stored] [--profile=default] [--output=<file>] [--yes]"
+        },
+        {
+          "commandPath": [
+            "Export",
+            "auth",
+            "state"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Export auth state (cookies/storage)"
         },
         {
           "commandPath": [
@@ -429,13 +443,26 @@
             "auth",
             "import"
           ],
-          "description": "Import auth state from file",
+          "description": "",
           "flags": [
             "live",
-            "stored"
+            "profile",
+            "stored",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "browser auth import <file> [--live | --stored]"
+          "syntax": "browser auth import <file> [--live | --stored] [--profile=default] [--yes]"
+        },
+        {
+          "commandPath": [
+            "Import",
+            "auth",
+            "state"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Import auth state from file"
         },
         {
           "commandPath": [
@@ -960,10 +987,11 @@
           ],
           "description": "Write to a file",
           "flags": [
-            "content"
+            "content",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "fs write <path> [--content=<text>]"
+          "syntax": "fs write <path> [--content=<text>] [--yes]"
         },
         {
           "commandPath": [
@@ -984,9 +1012,11 @@
             "move"
           ],
           "description": "Move/rename",
-          "flags": [],
+          "flags": [
+            "yes"
+          ],
           "jsonSupport": false,
-          "syntax": "fs move <src> <dst>"
+          "syntax": "fs move <src> <dst> [--yes]"
         },
         {
           "commandPath": [
@@ -996,10 +1026,11 @@
           "description": "Delete file/dir",
           "flags": [
             "force",
-            "recursive"
+            "recursive",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "fs rm <path> [--recursive] [--force]"
+          "syntax": "fs rm <path> [--recursive] [--force] [--yes]"
         },
         {
           "commandPath": [
@@ -1074,10 +1105,11 @@
           ],
           "description": "Retrieve a debug bundle",
           "flags": [
-            "output"
+            "output",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "debug bundle <id> [--output=<path>]"
+          "syntax": "debug bundle <id> [--output=<path>] [--yes]"
         },
         {
           "commandPath": [

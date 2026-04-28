@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { getConfigEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../config";
+import { getConfigEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../src/config";
 
 // ── Config Loader: Defaults ──────────────────────────────────────────
 
@@ -319,7 +319,7 @@ test("tsconfig.build.json extends tsconfig.json and sets outDir", () => {
   const buildConfig = JSON.parse(fs.readFileSync(buildPath, "utf8"));
   assert.equal(buildConfig.extends, "./tsconfig.json");
   assert.equal(buildConfig.compilerOptions.outDir, "./dist");
-  assert.equal(buildConfig.compilerOptions.rootDir, "./");
+  assert.equal(buildConfig.compilerOptions.rootDir, "./src");
 
   // Should exclude test files
   const excludes = buildConfig.exclude;

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import test from "node:test";
 
-import { detectShell, resolveNamedShell, isWindowsPlatform, platformShellName } from "../../cross_platform";
-import { isPromptDetected, registerCustomPrompt, unregisterCustomPrompt, extractCwdFromPrompt } from "../../terminal_prompt";
-import { TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../terminal_session";
+import { detectShell, resolveNamedShell, isWindowsPlatform, platformShellName } from "../../src/cross_platform";
+import { isPromptDetected, registerCustomPrompt, unregisterCustomPrompt, extractCwdFromPrompt } from "../../src/terminal_prompt";
+import { TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../src/terminal_session";
 
 // Ensure clean state before each test group
 test.afterEach(async () => {

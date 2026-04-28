@@ -28,7 +28,7 @@ import {
   isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
-} from "../../scripts/launch_browser";
+} from "../runtime/launch_browser";
 import {
   connectBrowser,
   createAutomationContext,

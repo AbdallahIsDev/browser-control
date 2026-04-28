@@ -7,7 +7,7 @@ import test from "node:test";
 import { buildDoctorChecks, runDoctor } from "../../src/operator/doctor";
 import { runSetup } from "../../src/operator/setup";
 import { collectStatus } from "../../src/operator/status";
-import { loadUserConfig } from "../../config";
+import { loadUserConfig } from "../../src/config";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-"));

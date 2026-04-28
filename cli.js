@@ -36,7 +36,7 @@ if (!hasTsRuntime && fs.existsSync(distCli)) {
     transpileOnly: true,
   });
 
-  const cli = require("./cli.ts");
+  const cli = require("./src/cli.ts");
   module.exports = cli;
 
   // Run CLI if this file is executed directly

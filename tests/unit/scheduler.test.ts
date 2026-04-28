@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MemoryStore } from "../../memory_store";
-import { Scheduler, parseCron, type ScheduledTask } from "../../scheduler";
+import { MemoryStore } from "../../src/memory_store";
+import { Scheduler, parseCron, type ScheduledTask } from "../../src/scheduler";
 
 test("parseCron supports wildcards, steps, numbers, and lists", () => {
   const parsed = parseCron("*/15 1,13 * 1,6 1,3");

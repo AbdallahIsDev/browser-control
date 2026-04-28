@@ -4,9 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { MemoryStore } from "../../memory_store";
-import { Telemetry } from "../../telemetry";
-import { Daemon, type DaemonStatusRecord, type TaskIntent, type ResumePolicy } from "../../daemon";
+import { MemoryStore } from "../../src/memory_store";
+import { Telemetry } from "../../src/telemetry";
+import { Daemon, type DaemonStatusRecord, type TaskIntent, type ResumePolicy } from "../../src/daemon";
 
 function createTestConfig(overrides: Record<string, unknown> = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "daemon-test-"));
@@ -946,7 +946,7 @@ test("Daemon skill context uses scoped memory store", async () => {
     await daemon.start();
 
     // Verify that the SkillMemoryStore class is available
-    const { SkillMemoryStore } = await import("../../skill_memory");
+    const { SkillMemoryStore } = await import("../../src/skill_memory");
     const scoped = new SkillMemoryStore(store, "test-skill");
     scoped.set("myData", { count: 42 });
 

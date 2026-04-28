@@ -6,7 +6,7 @@ type ModuleLoad = (request: string, parent?: unknown, isMain?: boolean) => unkno
 
 test("missing Stagehand package reports the install command", async () => {
   const originalLoad = (Module as unknown as { _load: ModuleLoad })._load;
-  const stagehandCorePath = require.resolve("../../stagehand_core");
+  const stagehandCorePath = require.resolve("../../src/stagehand_core");
   delete require.cache[stagehandCorePath];
 
   (Module as unknown as { _load: ModuleLoad })._load = function patchedLoad(this: unknown, request: string, parent?: unknown, isMain?: boolean) {
@@ -19,7 +19,7 @@ test("missing Stagehand package reports the install command", async () => {
   };
 
   try {
-    const core = require("../../stagehand_core") as typeof import("../../stagehand_core");
+    const core = require("../../src/stagehand_core") as typeof import("../../src/stagehand_core");
     await assert.rejects(
       () => core.connectStagehand(9222, "", {
         config: {

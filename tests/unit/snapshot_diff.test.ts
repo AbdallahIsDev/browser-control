@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { A11ySnapshot } from "../../a11y_snapshot";
-import { diffSnapshots, formatDiffSummary } from "../../snapshot_diff";
+import type { A11ySnapshot } from "../../src/a11y_snapshot";
+import { diffSnapshots, formatDiffSummary } from "../../src/snapshot_diff";
 
 function snap(elements: Array<{ ref: string; role: string; name?: string; disabled?: boolean; checked?: boolean; expanded?: boolean; focused?: boolean; text?: string; level?: number }>, url = "https://example.com", title = "Test"): A11ySnapshot {
   return {

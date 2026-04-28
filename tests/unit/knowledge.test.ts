@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import type { KnowledgeFrontmatter, KnowledgeArtifact } from "../../knowledge_types";
+import type { KnowledgeFrontmatter, KnowledgeArtifact } from "../../src/knowledge_types";
 import {
   loadArtifact,
   saveArtifact,
@@ -14,18 +14,18 @@ import {
   findByDomain,
   findByName,
   pruneArtifact,
-} from "../../knowledge_store";
+} from "../../src/knowledge_store";
 import {
   validateArtifact,
   validateFile,
-} from "../../knowledge_validator";
+} from "../../src/knowledge_validator";
 import {
   queryKnowledge,
   searchDomainKnowledge,
   listKnownDomains,
   listInteractionSkillNames,
   getKnowledgeStats,
-} from "../../knowledge_query";
+} from "../../src/knowledge_query";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

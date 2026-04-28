@@ -33,7 +33,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import net from "node:net";
-import { stopDaemon } from "../../daemon_cleanup";
+import { stopDaemon } from "../../src/daemon_cleanup";
 
 // ── Isolated environment helpers ────────────────────────────────────
 
@@ -359,9 +359,9 @@ describe("CLI terminal exit regression (Section 5)", () => {
   // ── API alignment test ────────────────────────────────────────────
   // Verifies that createBrowserControl() follows the same ownership model
   it("createBrowserControl terminal.open follows same ownership model as CLI", async () => {
-    const { createBrowserControl } = await import("../../browser_control");
-    const { MemoryStore } = await import("../../memory_store");
-    const { BrokerTerminalRuntime, LocalTerminalRuntime } = await import("../../session_manager");
+    const { createBrowserControl } = await import("../../src/browser_control");
+    const { MemoryStore } = await import("../../src/memory_store");
+    const { BrokerTerminalRuntime, LocalTerminalRuntime } = await import("../../src/session_manager");
 
     const store = new MemoryStore({ filename: ":memory:" });
     const bc = createBrowserControl({ memoryStore: store, policyProfile: "balanced" });
@@ -376,7 +376,7 @@ describe("CLI terminal exit regression (Section 5)", () => {
     // or LocalTerminalRuntime (daemon not running) — but NOT undefined or null.
     assert.ok(runtime, "getTerminalRuntime() must return a runtime");
 
-    const { probeDaemonHealth } = await import("../../session_manager");
+    const { probeDaemonHealth } = await import("../../src/session_manager");
     const probe = await probeDaemonHealth();
 
     if (probe.running) {

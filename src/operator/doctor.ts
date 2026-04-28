@@ -8,7 +8,7 @@ import { ProviderRegistry } from "../providers/registry";
 import { loadProxyConfigs } from "../proxy_manager";
 import { detectShell, resolveNamedShell } from "../terminal/cross_platform";
 import { probeDaemonHealth } from "../session_manager";
-import { resolveChromePath } from "../../scripts/launch_browser";
+import { resolveChromePath } from "../runtime/launch_browser";
 import type { DoctorCheckResult, DoctorReport, DoctorRunResult } from "./types";
 
 export type DoctorCheck = () => Promise<DoctorCheckResult>;

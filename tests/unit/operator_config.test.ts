@@ -12,8 +12,8 @@ import {
   saveUserConfig,
   setUserConfigValue,
   validateConfigValue,
-} from "../../config";
-import { getConfigDir, getUserConfigPath } from "../../paths";
+} from "../../src/config";
+import { getConfigDir, getUserConfigPath } from "../../src/paths";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-config-"));

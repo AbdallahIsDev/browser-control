@@ -9,15 +9,15 @@ import {
   formatActionResult,
   policyDeniedResult,
   successResult,
-} from "../../action_result";
-import { getConfigEntries } from "../../config";
+} from "../../src/action_result";
+import { getConfigEntries } from "../../src/config";
 import {
   buildToolRegistry,
   getToolCategories,
 } from "../../src/mcp/tool_registry";
-import type { BrowserControlAPI } from "../../browser_control";
-import { createBrowserControl } from "../../browser_control";
-import { MemoryStore } from "../../memory_store";
+import type { BrowserControlAPI } from "../../src/browser_control";
+import { createBrowserControl } from "../../src/browser_control";
+import { MemoryStore } from "../../src/memory_store";
 import { actionResultToMcpResult, type McpTool } from "../../src/mcp/types";
 import {
   OBSERVABILITY_KEYS,
@@ -27,14 +27,14 @@ import {
   TERMINAL_BUFFER_KEY,
   TERMINAL_METADATA_KEY,
   TERMINAL_PENDING_KEY,
-} from "../../terminal_buffer_store";
+} from "../../src/terminal_buffer_store";
 import {
   validateSerializedSession,
-} from "../../terminal_serialize";
+} from "../../src/terminal_serialize";
 import type {
   SerializedTerminalSession,
   TerminalBufferRecord,
-} from "../../terminal_resume_types";
+} from "../../src/terminal_resume_types";
 
 export const PUBLIC_SURFACE_FIXTURE_DIR = path.join(
   process.cwd(),
@@ -81,7 +81,7 @@ export function stableJson(value: unknown): string {
 }
 
 async function extractCliHelpText(): Promise<string> {
-  const { runCli } = await import("../../cli");
+  const { runCli } = await import("../../src/cli");
   const writes: string[] = [];
   const originalLog = console.log;
   try {
@@ -104,7 +104,7 @@ async function runCliJson(command: string[]): Promise<unknown> {
   const originalHome = process.env.BROWSER_CONTROL_HOME;
   process.env.BROWSER_CONTROL_HOME = path.join(os.tmpdir(), "browser-control-public-surface-cli-json");
   try {
-    const { runCli } = await import("../../cli");
+    const { runCli } = await import("../../src/cli");
     console.log = (...args: unknown[]) => {
       writes.push(args.map(String).join(" "));
     };
@@ -393,8 +393,7 @@ function getMcpOutputShape(tool: McpTool): unknown {
 export function getTypeScriptExportInventory(): unknown {
   const program = ts.createProgram({
     rootNames: [
-      path.join(process.cwd(), "index.ts"),
-      path.join(process.cwd(), "browser_control.ts"),
+      path.join(process.cwd(), "src", "index.ts"),
       path.join(process.cwd(), "src", "browser_control.ts"),
     ],
     options: {
@@ -408,10 +407,10 @@ export function getTypeScriptExportInventory(): unknown {
     },
   });
   const checker = program.getTypeChecker();
-  const sourceFile = program.getSourceFile(path.join(process.cwd(), "index.ts"));
-  if (!sourceFile) throw new Error("Could not load index.ts for export inventory.");
+  const sourceFile = program.getSourceFile(path.join(process.cwd(), "src", "index.ts"));
+  if (!sourceFile) throw new Error("Could not load src/index.ts for export inventory.");
   const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
-  if (!moduleSymbol) throw new Error("Could not resolve index.ts module symbol.");
+  if (!moduleSymbol) throw new Error("Could not resolve src/index.ts module symbol.");
   const exports = checker.getExportsOfModule(moduleSymbol).map((symbol) => {
     const resolved = (symbol.flags & ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : symbol;
     return {
@@ -424,7 +423,7 @@ export function getTypeScriptExportInventory(): unknown {
     };
   });
   return {
-    source: "index.ts",
+    source: "src/index.ts",
     exports: exports.sort((a, b) => a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind)),
     createBrowserControl: getCreateBrowserControlInventory(program, checker),
   };

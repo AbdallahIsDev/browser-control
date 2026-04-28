@@ -4,8 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { Skill, SkillContext, SkillManifest } from "../../skill";
-import { SkillRegistry } from "../../skill_registry";
+import type { Skill, SkillContext, SkillManifest } from "../../src/skill";
+import { SkillRegistry } from "../../src/skill_registry";
 
 function createMockContext(): SkillContext {
   const mockScopedMemory = {
@@ -341,7 +341,7 @@ describe.describe("SkillRegistry", () => {
 
   describe.describe("validateManifest", () => {
     describe.it("returns valid for a correct manifest", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "good-skill",
         version: "1.0.0",
@@ -354,7 +354,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing name", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "",
         version: "1.0.0",
@@ -367,7 +367,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing version", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "",
@@ -380,7 +380,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing description", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -393,7 +393,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports non-array requiredEnv", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -406,7 +406,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports invalid action param types", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -416,7 +416,7 @@ describe.describe("SkillRegistry", () => {
         actions: [{
           name: "doThing",
           description: "Do a thing",
-          params: [{ name: "p1", type: "invalid-type" as unknown as import("../../skill").ActionParamType, required: true }],
+          params: [{ name: "p1", type: "invalid-type" as unknown as import("../../src/skill").ActionParamType, required: true }],
         }],
       });
       assert.equal(result.valid, false);
@@ -424,7 +424,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports duplicate action names", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -441,7 +441,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports non-string configSchema", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -455,7 +455,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("warns about missing action descriptions (non-string)", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -474,7 +474,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("warns about empty action descriptions", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../skill_registry");
+      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -505,7 +505,7 @@ describe.describe("SkillRegistry", () => {
 
     describe.it("skips invalid skills and returns false", () => {
       const registry = new SkillRegistry();
-      const badSkill: import("../../skill").Skill = {
+      const badSkill: import("../../src/skill").Skill = {
         manifest: { name: "", version: "1.0.0", description: "", requiredEnv: [], allowedDomains: [] },
         setup: async () => {},
         execute: async () => ({}),
@@ -553,7 +553,7 @@ describe.describe("SkillRegistry", () => {
   describe.describe("getActions", () => {
     describe.it("returns actions from a skill manifest", () => {
       const registry = new SkillRegistry();
-      const skill: import("../../skill").Skill = {
+      const skill: import("../../src/skill").Skill = {
         manifest: {
           name: "actioned",
           version: "1.0.0",
@@ -596,7 +596,7 @@ describe.describe("SkillRegistry", () => {
       const savedState = { lastAction: "publish", step: 3, mode: "batch" };
       let restoredState: Record<string, unknown> | null = null;
 
-      const skill: import("../../skill").Skill = {
+      const skill: import("../../src/skill").Skill = {
         manifest: {
           name: "stateful-skill",
           version: "1.0.0",
@@ -622,7 +622,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("skills without saveState/restoreState are safe", () => {
-      const skill: import("../../skill").Skill = {
+      const skill: import("../../src/skill").Skill = {
         manifest: {
           name: "stateless-skill",
           version: "1.0.0",
@@ -787,7 +787,7 @@ describe.describe("SkillRegistry", () => {
   describe.describe("backward compatibility", () => {
     describe.it("flat .ts skills without actions still load and execute", async () => {
       const registry = new SkillRegistry();
-      const skill: import("../../skill").Skill = {
+      const skill: import("../../src/skill").Skill = {
         manifest: {
           name: "legacy",
           version: "0.1.0",

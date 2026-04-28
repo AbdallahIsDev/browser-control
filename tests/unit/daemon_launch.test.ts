@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildDaemonSpawnOptions, resolveDaemonEntryPoint } from "../../daemon_launch";
+import { buildDaemonSpawnOptions, resolveDaemonEntryPoint } from "../../src/daemon_launch";
 
 test("buildDaemonSpawnOptions hides daemon windows by default on Windows", () => {
   const options = buildDaemonSpawnOptions({ cwd: process.cwd() }, "win32");

@@ -12,7 +12,7 @@ import {
   deletePath,
   statPath,
   FsError,
-} from "../../fs_operations";
+} from "../../src/fs_operations";
 
 test("fs_operations: readFile returns content and metadata", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-test-"));

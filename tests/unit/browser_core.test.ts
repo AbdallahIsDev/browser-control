@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Browser, BrowserContext, Page } from "playwright";
-import { MemoryStore } from "../../memory_store";
+import { MemoryStore } from "../../src/memory_store";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getChromeDebugPath } from "../../paths";
+import { getChromeDebugPath } from "../../src/paths";
 
 import {
   createAutomationContext,
@@ -17,7 +17,7 @@ import {
   smartClick,
   smartFill,
   type DebugInteropState,
-} from "../../browser_core";
+} from "../../src/browser_core";
 
 test("getDebugEndpointCandidates prefers explicit env override", () => {
   const candidates = getDebugEndpointCandidates(9222, {

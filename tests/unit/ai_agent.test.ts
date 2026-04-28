@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Page } from "playwright";
 
-import { AIAgent, GuardrailError } from "../../ai_agent";
-import type { AIGuardrails } from "../../ai_agent";
-import { loadConfig } from "../../config";
+import { AIAgent, GuardrailError } from "../../src/ai_agent";
+import type { AIGuardrails } from "../../src/ai_agent";
+import { loadConfig } from "../../src/config";
 
 /** Create a minimal mock page for testing */
 function createMockPage(overrides: Record<string, unknown> = {}): Page {

@@ -37,7 +37,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import net from "node:net";
-import { stopDaemon } from "../../daemon_cleanup";
+import { stopDaemon } from "../../src/daemon_cleanup";
 
 // ── Isolated environment helpers ────────────────────────────────────
 

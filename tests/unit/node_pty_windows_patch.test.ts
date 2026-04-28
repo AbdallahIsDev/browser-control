@@ -24,7 +24,7 @@ test("applyNodePtyWindowsForkPatch forces windowsHide for node-pty console list 
       return {} as ReturnType<typeof mutableChildProcess.fork>;
     };
 
-    const mod = await import("../../node_pty_windows_patch");
+    const mod = await import("../../src/node_pty_windows_patch");
     mod.applyNodePtyWindowsForkPatch();
 
     mutableChildProcess.fork("C:\\temp\\conpty_console_list_agent.js", ["123"], {});

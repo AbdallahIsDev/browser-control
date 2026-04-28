@@ -18,7 +18,7 @@ import {
   isWslCdpBridgeEnabled,
   startWslBridgeIfNeeded,
   stopWslBridge,
-} from "../../scripts/launch_browser";
+} from "../runtime/launch_browser";
 import { connectBrowser, createAutomationContext, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";

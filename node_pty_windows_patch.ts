@@ -1,1 +1,0 @@
-export * from "./src/node_pty_windows_patch";

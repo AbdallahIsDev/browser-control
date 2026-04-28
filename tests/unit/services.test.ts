@@ -23,8 +23,8 @@ import {
 import {
   getServicesDir,
   getServiceRegistryPath,
-} from "../../paths";
-import type { BrowserConnectionManager } from "../../browser_connection";
+} from "../../src/paths";
+import type { BrowserConnectionManager } from "../../src/browser_connection";
 
 function createNoopBrowserManager(): BrowserConnectionManager {
   return {} as BrowserConnectionManager;
@@ -501,9 +501,9 @@ describe("ServiceActions detect integration", () => {
   it("should register without --port when detection succeeds", async () => {
     fs.writeFileSync(path.join(tempDir, "vite.config.ts"), "export default { server: { port: 4321 } }");
 
-    const { ServiceActions } = await import("../../service_actions");
-    const { SessionManager } = await import("../../session_manager");
-    const { MemoryStore } = await import("../../memory_store");
+    const { ServiceActions } = await import("../../src/service_actions");
+    const { SessionManager } = await import("../../src/session_manager");
+    const { MemoryStore } = await import("../../src/memory_store");
 
     const store = new MemoryStore({ filename: ":memory:" });
     try {
@@ -528,9 +528,9 @@ describe("ServiceActions detect integration", () => {
   });
 
   it("should fail clearly when detection fails and no port is given", async () => {
-    const { ServiceActions } = await import("../../service_actions");
-    const { SessionManager } = await import("../../session_manager");
-    const { MemoryStore } = await import("../../memory_store");
+    const { ServiceActions } = await import("../../src/service_actions");
+    const { SessionManager } = await import("../../src/session_manager");
+    const { MemoryStore } = await import("../../src/memory_store");
 
     const store = new MemoryStore({ filename: ":memory:" });
     try {
@@ -555,9 +555,9 @@ describe("ServiceActions detect integration", () => {
   });
 
   it("should still register with explicit port when detection is not used", async () => {
-    const { ServiceActions } = await import("../../service_actions");
-    const { SessionManager } = await import("../../session_manager");
-    const { MemoryStore } = await import("../../memory_store");
+    const { ServiceActions } = await import("../../src/service_actions");
+    const { SessionManager } = await import("../../src/session_manager");
+    const { MemoryStore } = await import("../../src/memory_store");
 
     const store = new MemoryStore({ filename: ":memory:" });
     try {

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { createBrowserControl, type BrowserControlOptions } from "../../browser_control";
-import { MemoryStore } from "../../memory_store";
+import { createBrowserControl, type BrowserControlOptions } from "../../src/browser_control";
+import { MemoryStore } from "../../src/memory_store";
 
 describe("createBrowserControl", () => {
   let store: MemoryStore;

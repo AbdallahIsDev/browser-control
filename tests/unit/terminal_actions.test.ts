@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TerminalActions, type TerminalActionContext } from "../../terminal_actions";
-import { SessionManager, type TerminalRuntime, LocalTerminalRuntime } from "../../session_manager";
-import { MemoryStore } from "../../memory_store";
+import { TerminalActions, type TerminalActionContext } from "../../src/terminal_actions";
+import { SessionManager, type TerminalRuntime, LocalTerminalRuntime } from "../../src/session_manager";
+import { MemoryStore } from "../../src/memory_store";
 import { loadDebugBundle } from "../../src/observability/debug_bundle";
-import type { BrowserConnectionManager } from "../../browser_connection";
+import type { BrowserConnectionManager } from "../../src/browser_connection";
 
 function createUnavailableBrowserManager() {
   return {

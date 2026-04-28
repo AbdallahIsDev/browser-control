@@ -224,7 +224,7 @@ export async function stopDaemon(options: {
   port?: number;
 } = {}): Promise<void> {
   const { loadConfig } = await import("../shared/config");
-  const { stopWslBridge } = await import("../../scripts/launch_browser");
+  const { stopWslBridge } = await import("./launch_browser");
   const config = loadConfig({ validate: false });
   const homeDir = options.homeDir ?? getDataHome();
   const port = options.port ?? config.brokerPort;

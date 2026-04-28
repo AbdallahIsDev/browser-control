@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createBrowserControl } from "../../browser_control";
-import type { BrowserControlAPI } from "../../browser_control";
+import { createBrowserControl } from "../../src/browser_control";
+import type { BrowserControlAPI } from "../../src/browser_control";
 import { buildToolRegistry } from "../../src/mcp/tool_registry";
-import { MemoryStore } from "../../memory_store";
+import { MemoryStore } from "../../src/memory_store";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-api-"));

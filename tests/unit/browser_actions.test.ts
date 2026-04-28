@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BrowserActions, type BrowserActionContext } from "../../browser_actions";
-import { SessionManager, isPolicyAllowed } from "../../session_manager";
-import { MemoryStore } from "../../memory_store";
+import { BrowserActions, type BrowserActionContext } from "../../src/browser_actions";
+import { SessionManager, isPolicyAllowed } from "../../src/session_manager";
+import { MemoryStore } from "../../src/memory_store";
 import { ServiceRegistry } from "../../src/services/registry";
-import type { BrowserConnectionManager } from "../../browser_connection";
+import type { BrowserConnectionManager } from "../../src/browser_connection";
 import { loadDebugBundle } from "../../src/observability/debug_bundle";
 
 function createUnavailableBrowserManager() {
@@ -160,7 +160,7 @@ describe("BrowserActions", () => {
     });
 
     it("uses provided ref store", async () => {
-      const { RefStore } = await import("../../ref_store");
+      const { RefStore } = await import("../../src/ref_store");
       const customStore = new RefStore();
       const actions = new BrowserActions({ sessionManager, refStore: customStore });
       assert.ok(actions);

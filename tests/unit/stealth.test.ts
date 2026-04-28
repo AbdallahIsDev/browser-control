@@ -7,7 +7,7 @@ import {
   buildStealthInitScript,
   createStealthContext,
   resolveStealthConfig,
-} from "../../stealth";
+} from "../../src/stealth";
 
 test("resolveStealthConfig reads env defaults and normalizes booleans", () => {
   const config = resolveStealthConfig({

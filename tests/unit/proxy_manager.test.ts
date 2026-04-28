@@ -10,7 +10,7 @@ import {
   toPlaywrightProxySettings,
   validateProxyPool,
   type ProxyConfig,
-} from "../../proxy_manager";
+} from "../../src/proxy_manager";
 
 test("loadProxyConfigs reads proxies from file and PROXY_LIST", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "proxy-config-test-"));

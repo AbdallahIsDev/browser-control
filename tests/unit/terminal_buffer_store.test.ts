@@ -4,8 +4,8 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 
-import { TerminalBufferStore, TERMINAL_PENDING_KEY } from "../../terminal_buffer_store";
-import { MemoryStore } from "../../memory_store";
+import { TerminalBufferStore, TERMINAL_PENDING_KEY } from "../../src/terminal_buffer_store";
+import { MemoryStore } from "../../src/memory_store";
 
 function createTempStore(): { store: MemoryStore; cleanup: () => void } {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-test-"));

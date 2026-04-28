@@ -8,7 +8,7 @@ import {
   MemoryStore,
   restoreContextCookies,
   saveContextCookies,
-} from "../../memory_store";
+} from "../../src/memory_store";
 
 test("MemoryStore supports CRUD, TTL, prefix keys, and clear", () => {
   let now = 1_000;

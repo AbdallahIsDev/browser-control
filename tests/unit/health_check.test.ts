@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MemoryStore } from "../../memory_store";
-import { HealthCheck } from "../../health_check";
+import { MemoryStore } from "../../src/memory_store";
+import { HealthCheck } from "../../src/health_check";
 
 test("HealthCheck runAll derives healthy, degraded, and unhealthy states", async () => {
   const healthy = new HealthCheck({

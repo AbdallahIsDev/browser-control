@@ -29,7 +29,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import net from "node:net";
-import { stopDaemon, isPidAlive, killProcessTree } from "../../daemon_cleanup";
+import { stopDaemon, isPidAlive, killProcessTree } from "../../src/daemon_cleanup";
 
 // ── Isolated environment helpers ────────────────────────────────────
 

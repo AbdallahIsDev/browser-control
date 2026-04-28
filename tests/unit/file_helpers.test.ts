@@ -3,7 +3,7 @@ import describe from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DownloadManager, validateFilePath, getFileSize, listFiles, uploadFile, uploadFiles } from "../../file_helpers";
+import { DownloadManager, validateFilePath, getFileSize, listFiles, uploadFile, uploadFiles } from "../../src/file_helpers";
 
 /** Create a minimal mock page that supports waitForEvent("download") and click. */
 function createMockPageWithDownload(downloadFile: { name: string; content: string; dir: string }) {

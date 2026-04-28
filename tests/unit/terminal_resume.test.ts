@@ -5,7 +5,7 @@ import {
   decideResume,
   buildResumeResult,
   type ResumeDecision,
-} from "../../terminal_resume";
+} from "../../src/terminal_resume";
 
 function createMockSerialized(
   overrides: Record<string, unknown> = {},

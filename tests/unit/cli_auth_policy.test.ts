@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { MemoryStore } from "../../memory_store";
-import { loadAuthSnapshot, saveAuthSnapshotToStore, type AuthSnapshot } from "../../browser_auth_state";
+import { MemoryStore } from "../../src/memory_store";
+import { loadAuthSnapshot, saveAuthSnapshotToStore, type AuthSnapshot } from "../../src/browser_auth_state";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-auth-policy-"));

@@ -8,8 +8,8 @@ import {
   createBrokerServer,
   normalizeClientIp,
   type BrokerServer,
-} from "../../broker_server";
-import type { BrokerRunTaskRequest } from "../../broker_types";
+} from "../../src/broker_server";
+import type { BrokerRunTaskRequest } from "../../src/broker_types";
 
 async function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) {

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { Telemetry, childProcessApi, createTelegramAlertHandler, resolvePowershellCmd } from "../../telemetry";
+import { Telemetry, childProcessApi, createTelegramAlertHandler, resolvePowershellCmd } from "../../src/telemetry";
 
 test("Telemetry records events, builds a summary, and exports reports", () => {
   const telemetry = new Telemetry();

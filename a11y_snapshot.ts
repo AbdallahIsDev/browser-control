@@ -1,1 +1,0 @@
-export * from "./src/a11y_snapshot";

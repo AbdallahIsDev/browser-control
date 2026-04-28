@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getCdpWebSocketUrl, StagehandManager } from "../../stagehand_core";
+import { getCdpWebSocketUrl, StagehandManager } from "../../src/stagehand_core";
 
 test("getCdpWebSocketUrl uses the resolved debug base url", async () => {
   let requestedUrl = "";

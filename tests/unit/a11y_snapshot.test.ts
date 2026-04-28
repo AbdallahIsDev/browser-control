@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
-import type { A11ySnapshot } from "../../a11y_snapshot";
-import { formatSnapshotAsText, getInteractiveCount } from "../../a11y_snapshot";
-import { snapshot } from "../../a11y_snapshot";
-import { RefStore, resolveRefLocator } from "../../ref_store";
-import { resolveChromePath } from "../../scripts/launch_browser";
+import type { A11ySnapshot } from "../../src/a11y_snapshot";
+import { formatSnapshotAsText, getInteractiveCount } from "../../src/a11y_snapshot";
+import { snapshot } from "../../src/a11y_snapshot";
+import { RefStore, resolveRefLocator } from "../../src/ref_store";
+import { resolveChromePath } from "../../src/runtime/launch_browser";
 
 async function launchBrowser() {
   return chromium.launch({

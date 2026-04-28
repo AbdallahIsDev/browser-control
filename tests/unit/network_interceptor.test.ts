@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import describe from "node:test";
 import type { Page, Route, Response } from "playwright";
-import { NetworkInterceptor, captureJsonResponse, blockResource, mockResponse } from "../../network_interceptor";
+import { NetworkInterceptor, captureJsonResponse, blockResource, mockResponse } from "../../src/network_interceptor";
 
 /** Create a mock page with working route and event support. */
 function createMockPage(options: {
