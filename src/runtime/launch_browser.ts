@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath } from "../shared/paths";
+import { ensureDataHome, getChromeDebugPath, getInteropDir, getWslBridgePidPath, getProfilesDir } from "../shared/paths";
 
 interface LaunchOptions {
   port: number;
@@ -68,14 +68,10 @@ function resolveChromePath(platform: NodeJS.Platform, override?: string): string
 
 function resolveUserDataDir(platform: NodeJS.Platform): string {
   const profileName = "BrowserControlProfile";
-  switch (platform) {
-    case "win32":
-      return path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), "Google", "Chrome", profileName);
-    case "darwin":
-      return path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome", profileName);
-    default:
-      return path.join(os.homedir(), ".config", "google-chrome", profileName);
-  }
+  // Use Browser Control's isolated profiles directory, not Chrome's default user data directory.
+  // This prevents inheriting contaminated settings (e.g., "Planet Search" hijack) from
+  // the user's default Chrome profile.
+  return path.join(getProfilesDir(), profileName);
 }
 
 function isLikelyWsl(): boolean {
@@ -505,6 +501,7 @@ export {
   waitForCdp,
   buildChromeArgs,
   writeDebugState,
+  getProfilesDir,
   type LaunchOptions,
   type ChromeDebugState,
 };

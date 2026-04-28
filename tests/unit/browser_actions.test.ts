@@ -630,4 +630,105 @@ describe("BrowserActions", () => {
       }
     });
   });
+
+  // ── Screenshot Viewport Bug Tests ──────────────────────────────────
+
+  describe("screenshot viewport behavior", () => {
+    it("should NOT call setViewportSize when page.viewportSize() returns null (visible browser)", async () => {
+      // This tests the bug: ensureScreenshotViewport should not mutate visible browser
+      const setViewportSizeCalls: any[] = [];
+      const mockPage = {
+        viewportSize: () => null, // Visible browser returns null
+        setViewportSize: async (size: any) => {
+          setViewportSizeCalls.push(size);
+        },
+        bringToFront: async () => {},
+        context: () => ({
+          newCDPSession: async () => ({
+            send: async () => ({}),
+            detach: async () => {},
+          }),
+          pages: () => [mockPage],
+        }),
+        url: () => "https://example.com",
+      };
+
+      const actions = new BrowserActions({
+        sessionManager: sessionManager as any,
+      });
+
+      // Access private method via any cast to test it
+      await (actions as any).ensureScreenshotViewport(mockPage);
+
+      // The bug: this should be 0, but currently it's 1 because the code
+      // calls setViewportSize when viewport is null
+      assert.equal(
+        setViewportSizeCalls.length,
+        0,
+        "Should NOT call setViewportSize when viewportSize() is null (visible browser)",
+      );
+    });
+
+    it("should NOT call setViewportSize when page.viewportSize() returns a valid viewport", async () => {
+      const setViewportSizeCalls: any[] = [];
+      const mockPage = {
+        viewportSize: () => ({ width: 1920, height: 1080 }),
+        setViewportSize: async (size: any) => {
+          setViewportSizeCalls.push(size);
+        },
+        bringToFront: async () => {},
+        context: () => ({
+          newCDPSession: async () => ({
+            send: async () => ({}),
+            detach: async () => {},
+          }),
+          pages: () => [mockPage],
+        }),
+        url: () => "https://example.com",
+      };
+
+      const actions = new BrowserActions({
+        sessionManager: sessionManager as any,
+      });
+
+      await (actions as any).ensureScreenshotViewport(mockPage);
+
+      assert.equal(
+        setViewportSizeCalls.length,
+        0,
+        "Should NOT call setViewportSize when viewport is already set",
+      );
+    });
+
+    it("brings the page to front without mutating viewport state", async () => {
+      let broughtToFront = false;
+      const setViewportSizeCalls: any[] = [];
+      const mockPage = {
+        viewportSize: () => null,
+        setViewportSize: async (size: any) => {
+          setViewportSizeCalls.push(size);
+        },
+        bringToFront: async () => {
+          broughtToFront = true;
+        },
+        context: () => ({
+          newCDPSession: async () => ({
+            send: async () => ({}),
+            detach: async () => {},
+          }),
+          pages: () => [mockPage],
+        }),
+        url: () => "https://example.com",
+      };
+
+      const actions = new BrowserActions({
+        sessionManager: sessionManager as any,
+      });
+
+      await (actions as any).ensureScreenshotViewport(mockPage);
+
+      assert.equal(broughtToFront, true);
+      assert.equal(setViewportSizeCalls.length, 0);
+    });
+  });
 });

@@ -3,10 +3,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const repoRoot = path.resolve(__dirname, "..", "..");
+
 // ── Wrapper entry path tests ─────────────────────────────────────────
 
 test("launch_browser.bat invokes the .cjs shim, not the raw .ts file", () => {
-  const bat = fs.readFileSync(path.join(__dirname, "launch_browser.bat"), "utf8");
+  const bat = fs.readFileSync(path.join(repoRoot, "launch_browser.bat"), "utf8");
 
   assert.match(bat, /launch_browser\.cjs/);
   assert.doesNotMatch(bat, /node.*launch_browser\.ts/);
@@ -14,14 +16,14 @@ test("launch_browser.bat invokes the .cjs shim, not the raw .ts file", () => {
 });
 
 test("launch_browser.ps1 invokes the .cjs shim, not the raw .ts file", () => {
-  const ps1 = fs.readFileSync(path.join(__dirname, "launch_browser.ps1"), "utf8");
+  const ps1 = fs.readFileSync(path.join(repoRoot, "launch_browser.ps1"), "utf8");
 
   assert.match(ps1, /launch_browser\.cjs/);
   assert.doesNotMatch(ps1, /node.*launch_browser\.ts/);
 });
 
 test("scripts/launch_browser.sh invokes the .cjs shim, not the raw .ts file", () => {
-  const sh = fs.readFileSync(path.join(__dirname, "scripts", "launch_browser.sh"), "utf8");
+  const sh = fs.readFileSync(path.join(repoRoot, "scripts", "launch_browser.sh"), "utf8");
 
   assert.match(sh, /launch_browser\.cjs/);
   assert.doesNotMatch(sh, /node.*launch_browser\.ts/);
@@ -31,7 +33,7 @@ test("scripts/launch_browser.sh invokes the .cjs shim, not the raw .ts file", ()
 // ── CJS shim existence and structure ──────────────────────────────────
 
 test("scripts/launch_browser.cjs exists and bootstraps ts-node", () => {
-  const shim = fs.readFileSync(path.join(__dirname, "scripts", "launch_browser.cjs"), "utf8");
+  const shim = fs.readFileSync(path.join(repoRoot, "scripts", "launch_browser.cjs"), "utf8");
 
   assert.match(shim, /ts-node/);
   assert.match(shim, /require\(.*launch_browser/);
@@ -42,8 +44,8 @@ test("scripts/launch_browser.cjs exists and bootstraps ts-node", () => {
 
 let launcher;
 test("launcher module loads and exports expected helpers", () => {
-  require("ts-node").register({ project: path.join(__dirname, "tsconfig.json"), transpileOnly: true });
-  launcher = require(path.join(__dirname, "scripts", "launch_browser.ts"));
+  require("ts-node").register({ project: path.join(repoRoot, "tsconfig.json"), transpileOnly: true });
+  launcher = require(path.join(repoRoot, "src", "runtime", "launch_browser.ts"));
 
   assert.equal(typeof launcher.resolveChromePath, "function");
   assert.equal(typeof launcher.isLikelyWsl, "function");
@@ -149,6 +151,41 @@ test("WSL CDP bridge is disabled by default and requires explicit opt-in", () =>
   assert.equal(launcher.isWslCdpBridgeEnabled({ BROWSER_ENABLE_WSL_CDP_BRIDGE: "1" }), true);
 });
 
+// ── Profile Path Tests (Bug 2: Isolate Chrome profile) ─────────
+
+test("resolveUserDataDir uses Browser Control data home, not Chrome default paths", () => {
+  const os = require("node:os");
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-profile-test-"));
+  const origHome = process.env.BROWSER_CONTROL_HOME;
+  const origLocalAppData = process.env.LOCALAPPDATA;
+  process.env.BROWSER_CONTROL_HOME = tmpHome;
+  process.env.LOCALAPPDATA = path.join(os.tmpdir(), "fake-local-appdata");
+
+  try {
+    assert.equal(typeof launcher.getProfilesDir, "function");
+
+    const profilesDir = launcher.getProfilesDir();
+    assert.equal(profilesDir, path.join(tmpHome, "profiles"));
+
+    const userDataDir = launcher.resolveUserDataDir("win32");
+    assert.equal(userDataDir, path.join(tmpHome, "profiles", "BrowserControlProfile"));
+    assert.ok(!userDataDir.includes(path.join("Google", "Chrome")));
+    assert.ok(!userDataDir.startsWith(process.env.LOCALAPPDATA));
+  } finally {
+    if (origHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = origHome;
+    }
+    if (origLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = origLocalAppData;
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
 // ── buildChromeArgs ───────────────────────────────────────────────────
 
 test("buildChromeArgs includes debugging port and user-data-dir", () => {
@@ -249,7 +286,7 @@ test("writeDebugState sets wslPreferredUrl to null when no private candidates", 
 
 test("launcher shim rejects invalid port with validation error, not module error", async () => {
   const { execFile } = require("node:child_process");
-  const shimPath = path.join(__dirname, "scripts", "launch_browser.cjs");
+  const shimPath = path.join(repoRoot, "scripts", "launch_browser.cjs");
 
   const result = await new Promise((resolve) => {
     execFile(process.execPath, [shimPath, "0"], { timeout: 10000 }, (err, stdout, stderr) => {

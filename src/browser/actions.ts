@@ -400,10 +400,11 @@ export class BrowserActions {
   }
 
   private async ensureScreenshotViewport(page: Page): Promise<void> {
-    const viewport = page.viewportSize();
-    if (!viewport || viewport.width < 50 || viewport.height < 50) {
-      await page.setViewportSize({ width: 1280, height: 720 }).catch(() => undefined);
-    }
+    // Do NOT change the viewport for visible browsers (headful mode).
+    // page.viewportSize() returns null for visible browsers - changing it would
+    // mutate the real Chrome window layout (bug: forced 16:9 viewport).
+    // For headless browsers, Playwright already sets an appropriate viewport.
+    // Just ensure the page is brought to front for visibility.
     await page.bringToFront().catch(() => undefined);
   }
 
