@@ -1511,7 +1511,8 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
     case "drop": {
       const target = positional[0];
       // Support both --file and --files for compatibility
-      const filesRaw = flags.file ?? flags.files;
+      const fileValues = [flags.file, flags.files].filter((value): value is string => Boolean(value));
+      const filesRaw = fileValues.length > 0 ? fileValues.join("\0") : undefined;
       const dataRaw = flags.data;
       // Split on null character delimiter for repeated flags
       const files = filesRaw ? filesRaw.split("\0").map(f => f.trim()) : undefined;
