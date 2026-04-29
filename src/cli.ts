@@ -310,6 +310,8 @@ Operator:
                                                                       Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
+  dashboard status [--json]                                          Show dashboard state
+  dashboard open [--json]                                            Open local dashboard
 
 Browser Actions:
   open <url>                                                         Open a URL in the browser
@@ -395,6 +397,7 @@ Browser Lifecycle:
   term list                                                           List active sessions
   term resume <sessionId>                                             Resume a session from persisted state
   term status <sessionId>                                             Show resume status for a session
+  term view <sessionId> [--dashboard]                                 View terminal render state for dashboard
   fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>] [--yes]                           Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
@@ -2194,6 +2197,10 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleStatus(args);
       break;
 
+    case "dashboard":
+      await handleDashboard(args);
+      break;
+
     case "run":
       await handleRun(args);
       break;
@@ -2601,7 +2608,7 @@ async function ensureDaemonRunning(): Promise<string> {
  * separate CLI invocations.
  */
 const DAEMON_REQUIRED_TERM_COMMANDS = new Set([
-  "open", "type", "read", "snapshot", "interrupt", "close", "list", "resume", "status",
+  "open", "type", "read", "snapshot", "interrupt", "close", "list", "resume", "status", "view",
 ]);
 
 export async function handleTerm(args: ParsedArgs): Promise<void> {
@@ -2783,6 +2790,16 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
         break;
       }
 
+      case "view": {
+        const sessionId = positional[0] || flags.session;
+        if (!sessionId) {
+          console.error("Error: session ID is required for 'term view'");
+          process.exit(1);
+        }
+        result = await terminalActions.snapshot({ sessionId });
+        break;
+      }
+
       default:
         console.error(`Unknown term command: ${subcommand}`);
         process.exit(1);
@@ -2820,6 +2837,19 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
             console.log(`Preserved: metadata=${resumeData.preserved.metadata}, buffer=${resumeData.preserved.buffer}`);
             if (resumeData.lost.length > 0) {
               console.log(`Lost:    ${resumeData.lost.join(", ")}`);
+            }
+          } else if (subcommand === "view" && result.data) {
+            const { buildTerminalView } = await import("./terminal/render");
+            const view = buildTerminalView(result.data as import("./terminal/types").TerminalSnapshot);
+            if (flags.dashboard === "true" || flags.json === "true") {
+              outputJson(view, true);
+            } else {
+              console.log(`Browser Terminal View: ${view.title} (${view.status})`);
+              console.log(`Can accept input: ${view.canAcceptInput}`);
+              console.log(`Rows:`);
+              for (const row of view.rows) {
+                console.log(`  [${row.index.toString().padStart(4)}] ${row.text}`);
+              }
             }
           } else {
             outputJson(result.data, true);
@@ -2970,6 +3000,48 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
   } catch (error) {
     console.error("Error:", (error as Error).message);
     process.exit(1);
+  }
+}
+
+// ── Dashboard Handler (Section 28) ──────────────────────────────────
+
+async function handleDashboard(args: ParsedArgs): Promise<void> {
+  const { subcommand, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  switch (subcommand) {
+    case "status": {
+      try {
+        const { getDashboardState } = await import("./operator/dashboard");
+        const state = await getDashboardState();
+        outputJson(state, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+    case "open": {
+      try {
+        const { getDashboardState } = await import("./operator/dashboard");
+        const state = await getDashboardState();
+        if (jsonOutput) {
+          outputJson({ success: false, code: "not_bundled_yet", message: "Dashboard UI is not bundled in this environment yet.", state }, false);
+        } else {
+          console.error("Browser Control Pro Dashboard UI is not bundled in this environment yet.");
+          console.log("Current daemon status: " + state.system.daemon.state);
+        }
+        process.exit(1);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+    default:
+      console.error(`Unknown dashboard command: ${subcommand}`);
+      console.error("Available: status, open");
+      process.exit(1);
   }
 }
 

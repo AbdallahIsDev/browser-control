@@ -2,16 +2,25 @@
   "createBrowserControl": {
     "namespaces": {
       "browser": [
+        "attach",
         "click",
         "close",
+        "detach",
+        "downloads",
+        "drop",
         "fill",
+        "generateLocator",
+        "highlight",
         "hover",
+        "list",
         "open",
         "press",
         "provider",
+        "screencast",
         "screenshot",
         "scroll",
         "snapshot",
+        "tabClose",
         "tabList",
         "tabSwitch",
         "type"
@@ -26,7 +35,8 @@
         "console",
         "health",
         "listBundles",
-        "network"
+        "network",
+        "receipt"
       ],
       "fs": [
         "ls",
@@ -71,6 +81,7 @@
       "browserActions",
       "close",
       "config",
+      "dashboard",
       "debug",
       "fs",
       "fsActions",
@@ -89,6 +100,7 @@
         "browserActions": "BrowserActions",
         "close": "(): void",
         "config": "ConfigNamespace",
+        "dashboard": "DashboardNamespace",
         "debug": "DebugNamespace",
         "fs": "FsNamespace",
         "fsActions": "FsActions",
@@ -102,16 +114,25 @@
         "terminalActions": "TerminalActions"
       },
       "BrowserNamespace": {
+        "attach": "(options: { cdp?: string | undefined; endpoint?: string | undefined; port?: number | undefined; targetType?: string | undefined; }): Promise<ActionResult<{ attached: boolean; endpoint: string; }>>",
         "click": "(options: { target: string; timeoutMs?: number | undefined; force?: boolean | undefined; }): Promise<ActionResult<{ clicked: string; }>>",
         "close": "(): Promise<ActionResult<{ closed: boolean; }>>",
+        "detach": "(): Promise<ActionResult<BrowserDetachResult>>",
+        "downloads": "{ list(): Promise<ActionResult<ExtendedDownloadResult[]>>; }",
+        "drop": "(options: DropOptions): Promise<ActionResult<BrowserDropResult>>",
         "fill": "(options: { target: string; text: string; timeoutMs?: number | undefined; commit?: boolean | undefined; }): Promise<ActionResult<{ filled: string; }>>",
+        "generateLocator": "(target: string): Promise<ActionResult<{ candidates: LocatorCandidate[]; }>>",
+        "highlight": "(options: HighlightOptions): Promise<ActionResult<{ highlighted: string; }>>",
         "hover": "(options: { target: string; timeoutMs?: number | undefined; }): Promise<ActionResult<{ hovered: string; }>>",
+        "list": "(options?: { all?: boolean | undefined; } | undefined): Promise<ActionResult<AttachableBrowser[]>>",
         "open": "(options: { url: string; waitUntil?: \"load\" | \"domcontentloaded\" | \"networkidle\" | \"commit\" | undefined; }): Promise<ActionResult<{ url: string; title: string; }>>",
         "press": "(options: { key: string; }): Promise<ActionResult<{ pressed: string; }>>",
         "provider": "ProviderNamespace",
-        "screenshot": "(options?: { outputPath?: string | undefined; fullPage?: boolean | undefined; target?: string | undefined; } | undefined): Promise<ActionResult<{ path: string; sizeBytes: number; }>>",
+        "screencast": "ScreencastNamespace",
+        "screenshot": "(options?: { outputPath?: string | undefined; fullPage?: boolean | undefined; target?: string | undefined; annotate?: boolean | undefined; refs?: string[] | undefined; } | undefined): Promise<...>",
         "scroll": "(options: { direction: \"up\" | \"down\" | \"left\" | \"right\"; amount?: number | undefined; }): Promise<ActionResult<{ scrolled: string; }>>",
-        "snapshot": "(options?: { rootSelector?: string | undefined; } | undefined): Promise<ActionResult<A11ySnapshot>>",
+        "snapshot": "(options?: { rootSelector?: string | undefined; boxes?: boolean | undefined; } | undefined): Promise<ActionResult<A11ySnapshot>>",
+        "tabClose": "(): Promise<ActionResult<{ closed: boolean; }>>",
         "tabList": "(): Promise<ActionResult<{ id: string; url: string; title: string; }[]>>",
         "tabSwitch": "(tabId: string): Promise<ActionResult<{ activeTab: string; }>>",
         "type": "(options: { text: string; delayMs?: number | undefined; }): Promise<ActionResult<{ typed: string; }>>"
@@ -126,7 +147,8 @@
         "console": "(options?: { sessionId?: string | undefined; } | undefined): ConsoleEntry[]",
         "health": "(options?: { port?: number | undefined; } | undefined): Promise<HealthReport>",
         "listBundles": "(): { bundleId: string; taskId: string; assembledAt: string; partial: boolean; }[]",
-        "network": "(options?: { sessionId?: string | undefined; } | undefined): NetworkEntry[]"
+        "network": "(options?: { sessionId?: string | undefined; } | undefined): NetworkEntry[]",
+        "receipt": "(receiptId: string): DebugReceipt | null"
       },
       "FsNamespace": {
         "ls": "(options: { path: string; recursive?: boolean | undefined; extension?: string | undefined; }): Promise<ActionResult<ListResult>>",

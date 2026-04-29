@@ -115,6 +115,8 @@
       "consolePrefix": "obs:console:",
       "healthPrefix": "obs:health:",
       "networkPrefix": "obs:network:",
+      "receiptPrefix": "obs:receipt:",
+      "screencastPrefix": "obs:screencast:",
       "tracePrefix": "obs:trace:"
     },
     "terminal": {
