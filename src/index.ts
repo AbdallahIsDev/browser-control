@@ -611,8 +611,40 @@ export type {
   SessionNamespace,
   ServiceNamespace,
   ConfigNamespace,
+  WorkflowNamespace,
+  HarnessNamespace,
   BrowserControlAPI,
 } from "./browser_control";
+
+// ── Section 29: Workflow Graph and Self-Healing Harness ───────────────
+
+export type {
+  WorkflowGraph,
+  WorkflowNode,
+  WorkflowEdge,
+  WorkflowRun,
+  WorkflowNodeResult,
+  WorkflowRunStatus,
+  WorkflowNodeKind,
+  RetryPolicy,
+  WorkflowValidationResult,
+} from "./workflows/types";
+
+export { validateWorkflowGraph } from "./workflows/types";
+export { WorkflowStore } from "./workflows/store";
+export { WorkflowRuntime } from "./workflows/runtime";
+
+export type {
+  HarnessHelperManifest,
+  HelperValidationResult,
+  HelperValidationCheck,
+  SandboxProvider,
+  SandboxRunResult,
+} from "./harness/types";
+
+export { HarnessRegistry, getHarnessDir, getHarnessRegistryPath } from "./harness/registry";
+export { LocalTempSandbox } from "./harness/sandbox";
+export { buildWorkflowTools } from "./mcp/tools/workflow";
 
 // ── Section 7: MCP Integration Layer ───────────────────────────────────
 

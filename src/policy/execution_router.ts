@@ -247,6 +247,52 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "high",
   },
 
+  // ── Workflow path (Section 29) ────────────────────────────────────
+  {
+    matches: (action) => {
+      const workflowReadActions = ["workflow_status", "workflow_list"];
+      return workflowReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const workflowMutationActions = [
+        "workflow_run", "workflow_resume", "workflow_approve", "workflow_cancel",
+      ];
+      return workflowMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
+  // ── Harness path (Section 29) ───────────────────────────────────
+  {
+    matches: (action) => {
+      const harnessReadActions = ["harness_list", "harness_find", "harness_get"];
+      return harnessReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const harnessMutationActions = ["harness_register", "harness_validate", "harness_rollback"];
+      return harnessMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+  {
+    matches: (action) => {
+      const harnessExecActions = ["harness_activate", "harness_execute"];
+      return harnessExecActions.includes(action);
+    },
+    path: "command",
+    risk: "high",
+  },
+
   // ── Filesystem path (Section 12) ────────────────────────────────
   {
     matches: (action) => {

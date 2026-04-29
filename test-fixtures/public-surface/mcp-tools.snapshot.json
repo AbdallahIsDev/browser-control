@@ -1912,6 +1912,219 @@
       }
     },
     {
+      "category": "workflow",
+      "description": "Find registered helpers matching domain, task tag, or failure type.",
+      "inputSchema": {
+        "properties": {
+          "domain": {
+            "description": "Domain to match helpers against",
+            "type": "string"
+          },
+          "failureType": {
+            "description": "Failure type to match",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "taskTag": {
+            "description": "Task tag to match",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_harness_find_helper",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "List registered self-healing helpers.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_harness_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Rollback a registered helper to a previous version.",
+      "inputSchema": {
+        "properties": {
+          "helperId": {
+            "description": "Helper ID to rollback",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version to rollback to",
+            "type": "string"
+          }
+        },
+        "required": [
+          "helperId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "name": "bc_harness_rollback",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Validate a registered helper by ID. Returns validation checks and status.",
+      "inputSchema": {
+        "properties": {
+          "helperId": {
+            "description": "Helper ID to validate",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "helperId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_harness_validate_helper",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
       "category": "service",
       "description": "List all registered local services with their names, ports, protocols, and paths.",
       "inputSchema": {
@@ -2745,6 +2958,271 @@
         "type": "object"
       },
       "name": "bc_terminal_write",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Approve a paused workflow node and continue the workflow run.",
+      "inputSchema": {
+        "properties": {
+          "nodeId": {
+            "description": "Paused approval node ID",
+            "type": "string"
+          },
+          "runId": {
+            "description": "Workflow run ID to approve",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_workflow_approve",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Cancel a workflow run.",
+      "inputSchema": {
+        "properties": {
+          "runId": {
+            "description": "Workflow run ID to cancel",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_workflow_cancel",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Resume a paused or failed workflow run.",
+      "inputSchema": {
+        "properties": {
+          "runId": {
+            "description": "Workflow run ID to resume",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_workflow_resume",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Start a workflow from a graph definition (JSON). Returns the workflow run state.",
+      "inputSchema": {
+        "properties": {
+          "graph": {
+            "description": "JSON-encoded workflow graph definition",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "type": "object"
+      },
+      "name": "bc_workflow_run",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "workflow",
+      "description": "Get the status of a workflow run by run ID.",
+      "inputSchema": {
+        "properties": {
+          "runId": {
+            "description": "Workflow run ID",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_workflow_status",
       "outputShape": {
         "actionResultFields": [
           "success",

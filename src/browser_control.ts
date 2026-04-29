@@ -14,13 +14,13 @@
  *   const file = await bc.fs.read({ path: "/tmp/data.json" });
  */
 
-import { isPolicyAllowed, SessionManager, type SessionState, type SessionListEntry } from "./session_manager";
+import { isPolicyAllowed, SessionManager, type PolicyAllowResult, type SessionState, type SessionListEntry } from "./session_manager";
 import { DefaultPolicyEngine } from "./policy/engine";
 import { BrowserActions, type SnapshotOptions, type ClickOptions, type FillOptions, type HoverOptions, type TypeOptions, type PressOptions, type ScrollOptions, type ScreenshotOptions, type HighlightOptions, type LocatorCandidate, type BrowserActionContext, type DropOptions } from "./browser/actions";
 import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
 import { FsActions, type FsActionContext } from "./filesystem/actions";
 import { ServiceActions, type ServiceActionContext } from "./service_actions";
-import type { ActionResult } from "./shared/action_result";
+import { failureResult, successResult, type ActionResult } from "./shared/action_result";
 import type { A11ySnapshot } from "./a11y_snapshot";
 import type { ExecResult, TerminalSnapshot } from "./terminal/types";
 import type {
@@ -185,6 +185,25 @@ export interface DashboardNamespace {
   status(): Promise<import("./operator/dashboard").DashboardState>;
 }
 
+// ── Workflow Namespace (Section 29) ───────────────────────────────────
+
+export interface WorkflowNamespace {
+  run(graphJson: string): Promise<ActionResult>;
+  status(runId: string): ActionResult;
+  resume(runId: string): Promise<ActionResult>;
+  approve(runId: string, nodeId: string): ActionResult;
+  cancel(runId: string): ActionResult;
+}
+
+// ── Harness Namespace (Section 29) ────────────────────────────────────
+
+export interface HarnessNamespace {
+  list(): ActionResult;
+  find(query: { domain?: string; taskTag?: string; failureType?: string }): ActionResult;
+  validate(helperId: string): ActionResult;
+  rollback(helperId: string, version: string): ActionResult;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -200,6 +219,10 @@ export interface BrowserControlAPI {
   config: ConfigNamespace;
   /** Dashboard and UI rendering namespace (Section 28). */
   dashboard: DashboardNamespace;
+  /** Workflow graph runtime namespace (Section 29). */
+  workflow: WorkflowNamespace;
+  /** Self-healing harness namespace (Section 29). */
+  harness: HarnessNamespace;
   /** Collect operator-facing system status (Section 11). */
   status(): Promise<SystemStatus>;
   /** Access the underlying session manager for advanced use. */
@@ -369,6 +392,65 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     status: () => browserActions.screencastStatus(),
   };
 
+  const getActionSessionId = () => sessionManager.getActiveSession()?.id ?? "system";
+
+  const buildWorkflowRuntime = () => {
+    const { WorkflowStore } = require("./workflows/store");
+    const { WorkflowRuntime } = require("./workflows/runtime");
+    const { HarnessRegistry } = require("./harness/registry");
+    const store = new WorkflowStore(sessionManager.getMemoryStore());
+    return new WorkflowRuntime(store, {
+      sessionId: getActionSessionId(),
+      terminalExec: (command: string, timeoutMs?: number) => terminalActions.exec({ command, timeoutMs }),
+      fsRead: (path: string) => fsActions.read({ path }),
+      fsWrite: (path: string, content: string) => fsActions.write({ path, content }),
+      browserOpen: (url: string) => browserActions.open({ url }),
+      verificationExecute: async (input: Record<string, unknown>) => {
+        const actual = input.actual ?? input.expression;
+        const expected = input.expected;
+        const passed = input.passed === true || String(actual) === String(expected);
+        return passed
+          ? successResult({ actual, expected, passed }, { path: "command", sessionId: getActionSessionId() })
+          : failureResult(`Verification failed: expected "${String(expected)}" but got "${String(actual)}"`, {
+              path: "command",
+              sessionId: getActionSessionId(),
+            });
+      },
+      helperExecute: async (helperId: string) => {
+        const registry = new HarnessRegistry();
+        const helper = registry.get(helperId);
+        if (!helper) {
+          return failureResult(`Helper not found: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
+        }
+        if (!helper.activated) {
+          return failureResult(`Helper is not activated: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
+        }
+        const validation = registry.validate(helperId);
+        if (validation.status !== "passed") {
+          return failureResult(`Helper validation failed: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
+        }
+        return successResult({ helperId, helper, validation }, { path: "command", sessionId: getActionSessionId() });
+      },
+    });
+  };
+
+  const evaluateActionPolicy = <T>(action: string, params: Record<string, unknown>): { blocked: ActionResult<T>; policy?: never } | { blocked: null; policy: PolicyAllowResult } => {
+    const policyEval = sessionManager.evaluateAction(action, params);
+    if (!isPolicyAllowed(policyEval)) return { blocked: policyEval as ActionResult<T> };
+    return { blocked: null, policy: policyEval };
+  };
+
+  const attachPolicy = <T>(result: ActionResult<T>, policy: PolicyAllowResult): ActionResult<T> => {
+    return {
+      ...result,
+      path: policy.path,
+      sessionId: getActionSessionId(),
+      ...(policy.auditId ? { auditId: policy.auditId } : {}),
+      policyDecision: policy.policyDecision,
+      risk: policy.risk,
+    };
+  };
+
   return {
     browser: {
       open: (o) => browserActions.open(o),
@@ -481,6 +563,85 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
         const { getDashboardState } = await import("./operator/dashboard");
         return getDashboardState();
       }
+    },
+    workflow: {
+      run: async (graphJson: string) => {
+        const policy = evaluateActionPolicy("workflow_run", { graphJson });
+        if (policy.blocked) return policy.blocked;
+        const runtime = buildWorkflowRuntime();
+        let graph: unknown;
+        try {
+          graph = JSON.parse(graphJson);
+        } catch {
+          return attachPolicy(failureResult("Invalid workflow graph JSON", {
+            path: "command",
+            sessionId: getActionSessionId(),
+          }), policy.policy);
+        }
+        return attachPolicy(await runtime.run(graph as import("./workflows/types").WorkflowGraph), policy.policy);
+      },
+      status: (runId: string) => {
+        const policy = evaluateActionPolicy("workflow_status", { runId });
+        if (policy.blocked) return policy.blocked;
+        const runtime = buildWorkflowRuntime();
+        return attachPolicy(runtime.status(runId), policy.policy);
+      },
+      resume: async (runId: string) => {
+        const policy = evaluateActionPolicy("workflow_resume", { runId });
+        if (policy.blocked) return policy.blocked;
+        const runtime = buildWorkflowRuntime();
+        return attachPolicy(await runtime.resume(runId), policy.policy);
+      },
+      approve: (runId: string, nodeId: string) => {
+        const policy = evaluateActionPolicy("workflow_approve", { runId, nodeId });
+        if (policy.blocked) return policy.blocked;
+        const runtime = buildWorkflowRuntime();
+        return attachPolicy(runtime.approve(runId, nodeId), policy.policy);
+      },
+      cancel: (runId: string) => {
+        const policy = evaluateActionPolicy("workflow_cancel", { runId });
+        if (policy.blocked) return policy.blocked;
+        const runtime = buildWorkflowRuntime();
+        return attachPolicy(runtime.cancel(runId), policy.policy);
+      },
+    },
+    harness: {
+      list: () => {
+        const policy = evaluateActionPolicy("harness_list", {});
+        if (policy.blocked) return policy.blocked;
+        const { HarnessRegistry } = require("./harness/registry");
+        const registry = new HarnessRegistry();
+        return attachPolicy(successResult(registry.list(), { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      find: (query) => {
+        const policy = evaluateActionPolicy("harness_find", query);
+        if (policy.blocked) return policy.blocked;
+        const { HarnessRegistry } = require("./harness/registry");
+        const registry = new HarnessRegistry();
+        return attachPolicy(successResult(registry.find(query), { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      validate: (helperId: string) => {
+        const policy = evaluateActionPolicy("harness_validate", { helperId });
+        if (policy.blocked) return policy.blocked;
+        const { HarnessRegistry } = require("./harness/registry");
+        const registry = new HarnessRegistry();
+        const result = registry.validate(helperId);
+        if (result.status === "passed") {
+          return attachPolicy(successResult(result, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(`Validation failed for ${helperId}`, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      rollback: (helperId: string, version: string) => {
+        const policy = evaluateActionPolicy("harness_rollback", { helperId, version });
+        if (policy.blocked) return policy.blocked;
+        const { HarnessRegistry } = require("./harness/registry");
+        const registry = new HarnessRegistry();
+        const result = registry.rollback(helperId, version);
+        if (result.success) {
+          return attachPolicy(successResult(result, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(result.error ?? "Rollback failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
     },
     status: () => collectStatus(),
     get sessionManager() { return sessionManager; },

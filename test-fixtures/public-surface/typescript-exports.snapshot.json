@@ -85,6 +85,7 @@
       "debug",
       "fs",
       "fsActions",
+      "harness",
       "provider",
       "service",
       "serviceActions",
@@ -92,7 +93,8 @@
       "sessionManager",
       "status",
       "terminal",
-      "terminalActions"
+      "terminalActions",
+      "workflow"
     ],
     "typeSignatures": {
       "BrowserControlAPI": {
@@ -104,6 +106,7 @@
         "debug": "DebugNamespace",
         "fs": "FsNamespace",
         "fsActions": "FsActions",
+        "harness": "HarnessNamespace",
         "provider": "ProviderNamespace",
         "service": "ServiceNamespace",
         "serviceActions": "ServiceActions",
@@ -111,7 +114,8 @@
         "sessionManager": "SessionManager",
         "status": "(): Promise<SystemStatus>",
         "terminal": "TerminalNamespace",
-        "terminalActions": "TerminalActions"
+        "terminalActions": "TerminalActions",
+        "workflow": "WorkflowNamespace"
       },
       "BrowserNamespace": {
         "attach": "(options: { cdp?: string | undefined; endpoint?: string | undefined; port?: number | undefined; targetType?: string | undefined; }): Promise<ActionResult<{ attached: boolean; endpoint: string; }>>",
@@ -510,6 +514,13 @@
       ],
       "kind": "value",
       "name": "buildToolRegistry"
+    },
+    {
+      "declarations": [
+        "src/mcp/tools/workflow.ts"
+      ],
+      "kind": "value",
+      "name": "buildWorkflowTools"
     },
     {
       "declarations": [
@@ -1486,6 +1497,20 @@
     },
     {
       "declarations": [
+        "src/harness/registry.ts"
+      ],
+      "kind": "value",
+      "name": "getHarnessDir"
+    },
+    {
+      "declarations": [
+        "src/harness/registry.ts"
+      ],
+      "kind": "value",
+      "name": "getHarnessRegistryPath"
+    },
+    {
+      "declarations": [
         "src/knowledge/query.ts"
       ],
       "kind": "value",
@@ -1661,6 +1686,27 @@
     },
     {
       "declarations": [
+        "src/harness/types.ts"
+      ],
+      "kind": "type",
+      "name": "HarnessHelperManifest"
+    },
+    {
+      "declarations": [
+        "src/browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "HarnessNamespace"
+    },
+    {
+      "declarations": [
+        "src/harness/registry.ts"
+      ],
+      "kind": "type+value",
+      "name": "HarnessRegistry"
+    },
+    {
+      "declarations": [
         "src/runtime/health_check.ts"
       ],
       "kind": "type+value",
@@ -1686,6 +1732,20 @@
       ],
       "kind": "type",
       "name": "HealthStatus"
+    },
+    {
+      "declarations": [
+        "src/harness/types.ts"
+      ],
+      "kind": "type",
+      "name": "HelperValidationCheck"
+    },
+    {
+      "declarations": [
+        "src/harness/types.ts"
+      ],
+      "kind": "type",
+      "name": "HelperValidationResult"
     },
     {
       "declarations": [
@@ -1980,6 +2040,13 @@
       ],
       "kind": "type+value",
       "name": "LocalBrowserProvider"
+    },
+    {
+      "declarations": [
+        "src/harness/sandbox.ts"
+      ],
+      "kind": "type+value",
+      "name": "LocalTempSandbox"
     },
     {
       "declarations": [
@@ -2662,6 +2729,13 @@
     },
     {
       "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "RetryPolicy"
+    },
+    {
+      "declarations": [
         "src/observability/types.ts"
       ],
       "kind": "type",
@@ -2715,6 +2789,20 @@
       ],
       "kind": "value",
       "name": "SAFE_PROFILE"
+    },
+    {
+      "declarations": [
+        "src/harness/types.ts"
+      ],
+      "kind": "type",
+      "name": "SandboxProvider"
+    },
+    {
+      "declarations": [
+        "src/harness/types.ts"
+      ],
+      "kind": "type",
+      "name": "SandboxRunResult"
     },
     {
       "declarations": [
@@ -3432,6 +3520,13 @@
     },
     {
       "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "value",
+      "name": "validateWorkflowGraph"
+    },
+    {
+      "declarations": [
         "src/browser/core.ts"
       ],
       "kind": "value",
@@ -3443,6 +3538,83 @@
       ],
       "kind": "value",
       "name": "waitForElement"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowEdge"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowGraph"
+    },
+    {
+      "declarations": [
+        "src/browser_control.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowNamespace"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowNode"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowNodeKind"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowNodeResult"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowRun"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowRunStatus"
+    },
+    {
+      "declarations": [
+        "src/workflows/runtime.ts"
+      ],
+      "kind": "type+value",
+      "name": "WorkflowRuntime"
+    },
+    {
+      "declarations": [
+        "src/workflows/store.ts"
+      ],
+      "kind": "type+value",
+      "name": "WorkflowStore"
+    },
+    {
+      "declarations": [
+        "src/workflows/types.ts"
+      ],
+      "kind": "type",
+      "name": "WorkflowValidationResult"
     },
     {
       "declarations": [
