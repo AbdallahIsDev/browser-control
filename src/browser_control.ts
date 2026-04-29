@@ -179,6 +179,12 @@ export interface ConfigNamespace {
   set(key: string, value: unknown): ActionResult<ConfigSetResult>;
 }
 
+// ── Dashboard Namespace (Section 28) ──────────────────────────────────
+
+export interface DashboardNamespace {
+  status(): Promise<import("./operator/dashboard").DashboardState>;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -192,6 +198,8 @@ export interface BrowserControlAPI {
   debug: DebugNamespace;
   /** Runtime configuration namespace (Section 11). */
   config: ConfigNamespace;
+  /** Dashboard and UI rendering namespace (Section 28). */
+  dashboard: DashboardNamespace;
   /** Collect operator-facing system status (Section 11). */
   status(): Promise<SystemStatus>;
   /** Access the underlying session manager for advanced use. */
@@ -468,6 +476,12 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
     provider: providerNamespace,
     debug: debugNamespace,
     config: configNamespace,
+    dashboard: {
+      status: async () => {
+        const { getDashboardState } = await import("./operator/dashboard");
+        return getDashboardState();
+      }
+    },
     status: () => collectStatus(),
     get sessionManager() { return sessionManager; },
     get browserActions() { return browserActions; },

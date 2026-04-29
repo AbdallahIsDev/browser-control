@@ -93,6 +93,30 @@
           ],
           "jsonSupport": true,
           "syntax": "status [--json]"
+        },
+        {
+          "commandPath": [
+            "dashboard",
+            "status"
+          ],
+          "description": "Show dashboard state",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "dashboard status [--json]"
+        },
+        {
+          "commandPath": [
+            "dashboard",
+            "open"
+          ],
+          "description": "Open local dashboard",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "dashboard open [--json]"
         }
       ],
       "section": "Operator"
@@ -970,6 +994,18 @@
         },
         {
           "commandPath": [
+            "term",
+            "view"
+          ],
+          "description": "View terminal render state for dashboard",
+          "flags": [
+            "dashboard"
+          ],
+          "jsonSupport": false,
+          "syntax": "term view <sessionId> [--dashboard]"
+        },
+        {
+          "commandPath": [
             "fs",
             "read"
           ],
@@ -1134,6 +1170,16 @@
           ],
           "jsonSupport": false,
           "syntax": "debug network [--session=<id>]"
+        },
+        {
+          "commandPath": [
+            "debug",
+            "receipt"
+          ],
+          "description": "Get a debug receipt by ID (Section 26)",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "debug receipt <id>"
         }
       ],
       "section": "Debug"

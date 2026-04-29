@@ -3,6 +3,68 @@
   "tools": [
     {
       "category": "browser",
+      "description": "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (--cdp, --endpoint, or --port) and never falls back to launch.",
+      "inputSchema": {
+        "properties": {
+          "cdp": {
+            "description": "CDP endpoint URL (e.g., http://localhost:9222).",
+            "type": "string"
+          },
+          "endpoint": {
+            "description": "CDP endpoint URL alias (same as cdp).",
+            "type": "string"
+          },
+          "port": {
+            "description": "CDP port number.",
+            "type": "number"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "targetType": {
+            "description": "Target type hint: chrome, chromium, msedge, electron, or unknown.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_attach",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.",
       "inputSchema": {
         "properties": {
@@ -64,7 +126,7 @@
     },
     {
       "category": "browser",
-      "description": "Close the current browser tab.",
+      "description": "Close the browser automation lifecycle. Managed Chrome is terminated; attached Chrome is detached without killing the user's browser.",
       "inputSchema": {
         "properties": {
           "sessionId": {
@@ -76,6 +138,158 @@
         "type": "object"
       },
       "name": "bc_browser_close",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Detach from the current browser connection without closing attached browsers. For managed browsers, this is a no-op (use close instead). Returns structured detach result.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_detach",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "List recent downloads for the current session. Returns structured download information including filename, path, size, and status.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_downloads_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Drop files or data onto a page element. Supports file drop (local files) and data drop (MIME/value pairs like text/plain). Target can be a ref (@e3), CSS selector, or semantic text match.",
+      "inputSchema": {
+        "properties": {
+          "data": {
+            "description": "MIME/value pairs for clipboard-like data drop (e.g., text/plain=hello).",
+            "type": "array"
+          },
+          "files": {
+            "description": "Local file paths to drop.",
+            "type": "array"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element to drop onto: ref (@e3), CSS selector, or text match.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_drop",
       "outputShape": {
         "actionResultFields": [
           "success",
@@ -176,6 +390,122 @@
     },
     {
       "category": "browser",
+      "description": "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element ref (@e3), CSS selector, or text match to generate locators for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_generate_locator",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Highlight a target element visually on the page. Injects a temporary overlay that auto-removes after 5 seconds unless persist is true.",
+      "inputSchema": {
+        "properties": {
+          "hide": {
+            "description": "Whether to hide the highlight (if true, removes all highlights).",
+            "type": "boolean"
+          },
+          "persist": {
+            "description": "Whether to persist the highlight (default: false).",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "style": {
+            "description": "Custom CSS for highlight overlay.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element to highlight: ref (@e3), CSS selector, or text match.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_highlight",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match.",
       "inputSchema": {
         "properties": {
@@ -198,6 +528,56 @@
         "type": "object"
       },
       "name": "bc_browser_hover",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "List attachable browsers on the local system. Probes CDP endpoints and returns browser metadata including channel, endpoint, and attachment status.",
+      "inputSchema": {
+        "properties": {
+          "all": {
+            "description": "List all discovered browsers including those not currently attached.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_list",
       "outputShape": {
         "actionResultFields": [
           "success",
@@ -445,9 +825,180 @@
     },
     {
       "category": "browser",
+      "description": "Start a browser screencast recording. Opt-in recording with action timeline support.",
+      "inputSchema": {
+        "properties": {
+          "annotationPosition": {
+            "description": "Position for action labels: top-left, top, top-right, bottom-left, bottom, bottom-right.",
+            "enum": [
+              "top-left",
+              "top",
+              "top-right",
+              "bottom-left",
+              "bottom",
+              "bottom-right"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "Optional output file path for the screencast.",
+            "type": "string"
+          },
+          "retention": {
+            "description": "Retention policy: keep, delete-on-success, debug-only.",
+            "enum": [
+              "keep",
+              "delete-on-success",
+              "debug-only"
+            ],
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "showActions": {
+            "description": "Display visible action labels during recording.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_screencast_start",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Get the current screencast recording status.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_screencast_status",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Stop the current screencast recording and save the action timeline receipt.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_screencast_stop",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Take a screenshot of the page or a specific element.",
       "inputSchema": {
         "properties": {
+          "annotate": {
+            "description": "Annotate screenshot with ref labels and boxes for interactive elements.",
+            "type": "boolean"
+          },
           "fullPage": {
             "default": false,
             "description": "Capture the full page instead of just the viewport.",
@@ -455,6 +1006,10 @@
           },
           "outputPath": {
             "description": "File path to save the screenshot. Default: auto-generated in reports directory.",
+            "type": "string"
+          },
+          "refs": {
+            "description": "Comma-separated list of specific refs to annotate (if annotate is true). If omitted, annotates all interactive elements.",
             "type": "string"
           },
           "sessionId": {
@@ -570,6 +1125,10 @@
       "description": "Take an accessibility snapshot of the current page. Returns a structured representation with stable element refs (e.g., @e1, @e2) for semantic interaction. Use this before clicking or filling elements.",
       "inputSchema": {
         "properties": {
+          "boxes": {
+            "description": "Include element bounds with viewport metadata in the snapshot.",
+            "type": "boolean"
+          },
           "rootSelector": {
             "description": "Optional CSS selector to scope the snapshot to a subtree.",
             "type": "string"
@@ -583,6 +1142,52 @@
         "type": "object"
       },
       "name": "bc_browser_snapshot",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Close the current browser tab. Keeps the browser session and automation lifecycle alive.",
+      "inputSchema": {
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_tab_close",
       "outputShape": {
         "actionResultFields": [
           "success",

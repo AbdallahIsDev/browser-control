@@ -149,3 +149,39 @@ test("bc policy import --json writes clean parseable JSON", async () => {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("bc dashboard open fails honestly when not bundled", async () => {
+  const home = makeHome();
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    
+    // We expect process.exit(1) from the CLI, so we use spawnSync for safety instead of runCli directly
+    const result = spawnSync(process.execPath, [
+      "--require",
+      "ts-node/register",
+      "--require",
+      "tsconfig-paths/register",
+      "src/cli.ts",
+      "dashboard",
+      "open",
+      "--json"
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        BROWSER_CONTROL_HOME: home,
+      },
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 1, "Should exit with non-zero code");
+    const parsed = JSON.parse(result.stdout);
+    assert.strictEqual(parsed.success, false);
+    assert.strictEqual(parsed.code, "not_bundled_yet");
+  } finally {
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
