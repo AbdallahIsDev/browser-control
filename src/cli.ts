@@ -313,6 +313,18 @@ Operator:
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json]                                            Open local dashboard
 
+Workflow Graph (Section 29):
+  workflow run <graphPathOrName> [--json]                            Run a workflow graph
+  workflow status <runId> [--json]                                   Show workflow run status
+  workflow resume <runId> [--json]                                   Resume a workflow run
+  workflow approve <runId> <nodeId> [--json]                         Approve a workflow node
+  workflow cancel <runId> [--json]                                   Cancel a workflow run
+
+Self-Healing Harness (Section 29):
+  harness list [--json]                                              List registered helpers
+  harness validate <helperId> [--json]                               Validate a helper
+  harness rollback <helperId> <version> [--json]                     Rollback a helper
+
 Browser Actions:
   open <url>                                                         Open a URL in the browser
   snapshot                                                           Take an accessibility snapshot
@@ -2201,6 +2213,14 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleDashboard(args);
       break;
 
+    case "workflow":
+      await handleWorkflow(args);
+      break;
+
+    case "harness":
+      await handleHarness(args);
+      break;
+
     case "run":
       await handleRun(args);
       break;
@@ -3042,6 +3062,137 @@ async function handleDashboard(args: ParsedArgs): Promise<void> {
       console.error(`Unknown dashboard command: ${subcommand}`);
       console.error("Available: status, open");
       process.exit(1);
+  }
+}
+
+// ── Workflow & Harness Action Handlers (Section 29) ─────────────────────
+
+async function handleWorkflow(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+  const { createBrowserControl } = await import("./browser_control");
+  const bc = createBrowserControl();
+
+  try {
+    switch (subcommand) {
+      case "run": {
+        const graphPathOrName = positional[0];
+        if (!graphPathOrName) {
+          console.error("Error: graphPathOrName is required");
+          process.exit(1);
+        }
+        let graphJson = "";
+        try {
+          const fs = await import("node:fs");
+          const path = await import("node:path");
+          const target = path.resolve(graphPathOrName);
+          if (fs.existsSync(target)) {
+            graphJson = fs.readFileSync(target, "utf8");
+          } else {
+            graphJson = graphPathOrName;
+          }
+          // Validate JSON syntax before passing
+          JSON.parse(graphJson);
+        } catch {
+          console.error("Error: graphPathOrName must be a valid JSON string or path to a JSON file");
+          process.exit(1);
+        }
+        const result = await bc.workflow.run(graphJson);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "status": {
+        const runId = positional[0];
+        if (!runId) {
+          console.error("Error: runId is required");
+          process.exit(1);
+        }
+        const result = await bc.workflow.status(runId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "resume": {
+        const runId = positional[0];
+        if (!runId) {
+          console.error("Error: runId is required");
+          process.exit(1);
+        }
+        const result = await bc.workflow.resume(runId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "approve": {
+        const runId = positional[0];
+        const nodeId = positional[1];
+        if (!runId || !nodeId) {
+          console.error("Error: runId and nodeId are required");
+          process.exit(1);
+        }
+        const result = await bc.workflow.approve(runId, nodeId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "cancel": {
+        const runId = positional[0];
+        if (!runId) {
+          console.error("Error: runId is required");
+          process.exit(1);
+        }
+        const result = await bc.workflow.cancel(runId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      default:
+        console.error(`Unknown workflow command: ${subcommand}`);
+        console.error("Available: run, status, resume, approve, cancel");
+        process.exit(1);
+    }
+  } finally {
+    bc.close();
+  }
+}
+
+async function handleHarness(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+  const { createBrowserControl } = await import("./browser_control");
+  const bc = createBrowserControl();
+
+  try {
+    switch (subcommand) {
+      case "list": {
+        const result = await bc.harness.list();
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "validate": {
+        const helperId = positional[0];
+        if (!helperId) {
+          console.error("Error: helperId is required");
+          process.exit(1);
+        }
+        const result = await bc.harness.validate(helperId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "rollback": {
+        const helperId = positional[0];
+        const version = positional[1];
+        if (!helperId || !version) {
+          console.error("Error: helperId and version are required");
+          process.exit(1);
+        }
+        const result = await bc.harness.rollback(helperId, version);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      default:
+        console.error(`Unknown harness command: ${subcommand}`);
+        console.error("Available: list, validate, rollback");
+        process.exit(1);
+    }
+  } finally {
+    bc.close();
   }
 }
 

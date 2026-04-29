@@ -125,6 +125,112 @@
       "entries": [
         {
           "commandPath": [
+            "workflow",
+            "run"
+          ],
+          "description": "Run a workflow graph",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow run <graphPathOrName> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
+            "status"
+          ],
+          "description": "Show workflow run status",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow status <runId> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
+            "resume"
+          ],
+          "description": "Resume a workflow run",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow resume <runId> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
+            "approve"
+          ],
+          "description": "Approve a workflow node",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow approve <runId> <nodeId> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
+            "cancel"
+          ],
+          "description": "Cancel a workflow run",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow cancel <runId> [--json]"
+        }
+      ],
+      "section": "Workflow Graph (Section 29)"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
+            "harness",
+            "list"
+          ],
+          "description": "List registered helpers",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "harness list [--json]"
+        },
+        {
+          "commandPath": [
+            "harness",
+            "validate"
+          ],
+          "description": "Validate a helper",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "harness validate <helperId> [--json]"
+        },
+        {
+          "commandPath": [
+            "harness",
+            "rollback"
+          ],
+          "description": "Rollback a helper",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "harness rollback <helperId> <version> [--json]"
+        }
+      ],
+      "section": "Self-Healing Harness (Section 29)"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
             "open"
           ],
           "description": "Open a URL in the browser",
