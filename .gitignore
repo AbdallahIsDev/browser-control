@@ -22,10 +22,11 @@ docs/*
 !docs/troubleshooting.md
 !docs/specs/
 !docs/specs/**
+!docs/business/
+!docs/business/**
 !docs/architecture/
 !docs/architecture/**
-!docs/production-upgrade/
-!docs/production-upgrade/**
+docs/production-upgrade/
 reports/
 *.sqlite
 nul
@@ -37,3 +38,5 @@ output/
 *.log
 *.tsbuildinfo
 dist/
+
+.tmp-*

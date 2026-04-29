@@ -1055,6 +1055,65 @@ Result:
 - `bc_status` tool call returned `success: true`.
 - MCP process startup and real client tool call are confirmed.
 
+## Codex MCP Production Smoke
+
+Status:
+
+- Confirmed after linking the current checkout with `npm link` and registering Browser Control as a Codex MCP server.
+- Playwright MCP was disabled in Codex settings for this smoke test, so browser actions were attributed to Browser Control only.
+
+Codex MCP registration:
+
+```powershell
+cd C:\Users\11\browser-control
+npm run build
+npm link
+codex mcp add browser-control -- bc mcp serve
+codex mcp list
+bc browser provider use local
+bc browser launch --port=9222 --profile=default
+bc daemon start
+```
+
+Confirmed Codex prompt:
+
+```text
+Use browser-control MCP only.
+
+1. Call bc_status.
+2. Open https://example.com.
+3. Take a snapshot.
+4. Click "Learn more".
+5. Take a screenshot.
+6. Use terminal MCP to run: node --version.
+7. Use fs MCP to write a temp file under C:\Users\11\AppData\Local\Temp\bc-mcp-prod-test.txt, read it back, then delete it.
+8. Summarize each tool call success/failure.
+```
+
+Result:
+
+- Codex called `browser-control.bc_status` successfully.
+- Status reported daemon running, broker reachable at `http://127.0.0.1:7788`, provider `local`, policy `balanced`, and degraded health with no failures.
+- Codex called `browser-control.bc_browser_open` successfully for `https://example.com/`.
+- Browser open returned title `Example Domain`.
+- Codex called `browser-control.bc_browser_snapshot` successfully.
+- Snapshot included heading `Example Domain` and `Learn more` link ref `e5`.
+- Codex called `browser-control.bc_browser_click` successfully with target `@e5`.
+- Codex called `browser-control.bc_browser_screenshot` successfully.
+- Screenshot saved to `C:\Users\11\.browser-control\reports\screenshot-1777314968149.png` with size `93768` bytes.
+- Codex called terminal MCP successfully; `node --version` returned `v24.13.0`.
+- Initial `bc_fs_write` under the active balanced session was correctly blocked with `Confirmation required: Risk level "high" requires user confirmation`.
+- Codex recovered by creating a trusted Browser Control session scoped to `C:\Users\11\AppData\Local\Temp`.
+- Retried `bc_fs_write` succeeded and wrote `17` bytes to `bc-mcp-prod-test.txt`.
+- `bc_fs_read` succeeded and returned content `bc-mcp-prod-test\n`.
+- `bc_fs_delete` succeeded and deleted the temp file.
+
+Conclusion:
+
+- Codex can use Browser Control through MCP for browser, terminal, and filesystem actions.
+- Browser Control policy enforcement worked during the MCP test.
+- Codex handled the policy block by switching to a safer scoped session instead of falling back to shell.
+
 ## Debug Console/Network Non-Empty Events
 
 Commands tested:
