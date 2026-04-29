@@ -26,7 +26,8 @@ docs/*
 !docs/business/**
 !docs/architecture/
 !docs/architecture/**
-docs/production-upgrade/
+!docs/production-upgrade/
+!docs/production-upgrade/**
 reports/
 *.sqlite
 nul

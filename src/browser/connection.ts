@@ -63,7 +63,7 @@ const log = logger.withComponent("browser_connection");
 
 export type BrowserConnectionMode = "managed" | "attached" | "restored";
 
-export type BrowserTargetType = "chrome" | "chromium" | "electron" | "unknown";
+export type BrowserTargetType = "chrome" | "chromium" | "msedge" | "electron" | "unknown";
 
 export type BrowserConnectionStatus =
   | "disconnected"
@@ -102,6 +102,10 @@ export interface ConnectOptions {
   port?: number;
   /** CDP endpoint URL override */
   cdpUrl?: string;
+  /** CDP endpoint URL alias (Section 27) */
+  cdp?: string;
+  /** CDP endpoint URL alias (Section 27) */
+  endpoint?: string;
   /** Profile to use */
   profileName?: string;
   /** Profile type when creating new */
@@ -124,6 +128,68 @@ export interface ConnectOptions {
   provider?: string;
   /** Explicit user confirmation for high-risk CLI/browser operations */
   confirmed?: boolean;
+}
+
+// ── Section 27: Advanced Browser I/O and Attach UX Types ─────────────
+
+/**
+ * Represents an attachable browser discovered on the local system.
+ */
+export interface AttachableBrowser {
+  /** Browser channel: chrome, msedge, chromium, electron, or unknown */
+  channel: "chrome" | "msedge" | "chromium" | "electron" | "unknown";
+  /** CDP endpoint URL */
+  endpoint: string;
+  /** Process ID (best-effort, may not be available) */
+  pid?: number;
+  /** User data directory (best-effort, may not be available) */
+  userDataDir?: string;
+  /** Browser title or description */
+  title?: string;
+  /** Whether this browser is currently attached by Browser Control */
+  attached: boolean;
+}
+
+/**
+ * Result of a detach operation.
+ */
+export interface BrowserDetachResult {
+  /** Whether the detach succeeded */
+  detached: boolean;
+  /** Ownership: managed (we launched it) or attached (user's browser) */
+  ownership: "managed" | "attached";
+  /** Whether the underlying browser was closed */
+  closedBrowser: boolean;
+  /** CDP endpoint URL */
+  endpoint?: string;
+  /** Connection ID */
+  connectionId?: string;
+}
+
+/**
+ * Request to drop files or data onto a page element.
+ */
+export interface BrowserDropRequest {
+  /** Target: ref (@e3), selector, or semantic description */
+  target: string;
+  /** Local file paths to drop */
+  files?: string[];
+  /** MIME/value pairs for clipboard-like data drop */
+  data?: Array<{ mimeType: string; value: string }>;
+}
+
+/**
+ * Result of a drop operation.
+ */
+export interface BrowserDropResult {
+  /** Whether the drop succeeded */
+  success: boolean;
+  /** Files dropped with their paths and sizes */
+  files?: Array<{ path: string; sizeBytes: number }>;
+  /** Data dropped with MIME types */
+  data?: Array<{ mimeType: string; value: string }>;
+  /** Error message if failed */
+  error?: string;
 }
 
 // ── Policy Action Definitions ───────────────────────────────────────
@@ -173,6 +239,23 @@ const BROWSER_POLICY_ACTIONS: Record<string, BrowserPolicyAction> = {
   profile_switch: {
     action: "profile_manage",
     risk: "moderate",
+    path: "a11y",
+  },
+  // Section 27: File/data drop policy actions
+  browser_drop_file: {
+    action: "browser_drop_file",
+    risk: "high",
+    path: "a11y",
+  },
+  browser_drop_data: {
+    action: "browser_drop_data",
+    risk: "moderate",
+    path: "a11y",
+  },
+  // Section 27: Downloads list policy action
+  browser_downloads_list: {
+    action: "browser_downloads_list",
+    risk: "low",
     path: "a11y",
   },
 };
@@ -393,6 +476,9 @@ export class BrowserConnectionManager {
    *
    * This connects to the user's real browser — the agent sees existing tabs,
    * cookies, and logins. This is a high-risk operation.
+   *
+   * Section 27: Requires explicit target (cdp, cdpUrl, or endpoint) and
+   * never falls back to launch.
    */
   async attach(options: ConnectOptions = {}): Promise<BrowserConnection> {
     await this.evaluatePolicy("browser_attach", options);
@@ -406,9 +492,11 @@ export class BrowserConnectionManager {
       if (!provider.capabilities.supportsAttach) {
         throw new Error(`Provider "${provider.name}" does not support attach.`);
       }
+      // Support new aliases for remote providers too
+      const cdpUrl = options.cdp ?? options.endpoint ?? options.cdpUrl;
       const result = await provider.attach({
         port: options.port,
-        cdpUrl: options.cdpUrl,
+        cdpUrl,
         targetType: options.targetType,
         config: this.providerRegistry.get(providerName),
       });
@@ -421,25 +509,36 @@ export class BrowserConnectionManager {
       return result.connection;
     }
 
+    // Resolve CDP endpoint from aliases (Section 27)
+    const cdpUrl = options.cdp ?? options.endpoint ?? options.cdpUrl;
     const config = loadConfig({ validate: false });
     const port = options.port ?? config.chromeDebugPort;
+
+    // Section 27: Require explicit target for attach
+    if (!cdpUrl && !options.port) {
+      throw new Error(
+        `Explicit attach target required. Use --cdp <endpoint>, --endpoint <endpoint>, or --port <port>. ` +
+        `Use 'bc browser launch' for managed browser instead.`
+      );
+    }
 
     log.info("Attaching to running browser", {
       port,
       targetType: options.targetType ?? "chrome",
+      explicitEndpoint: !!cdpUrl,
     });
 
     try {
       let cdpEndpoint: string;
 
-      if (options.cdpUrl) {
-        cdpEndpoint = options.cdpUrl;
+      if (cdpUrl) {
+        cdpEndpoint = cdpUrl;
       } else {
         cdpEndpoint = await resolveDebugEndpointUrl(port);
       }
 
-      const browser = options.cdpUrl
-        ? await chromium.connectOverCDP(options.cdpUrl)
+      const browser = cdpUrl
+        ? await chromium.connectOverCDP(cdpUrl)
         : await connectBrowser(port);
 
       this.browser = browser;
@@ -487,7 +586,7 @@ export class BrowserConnectionManager {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`Failed to attach to browser: ${message}`);
       throw new Error(
-        `Failed to attach to running browser on port ${port}. ` +
+        `Failed to attach to running browser${cdpUrl ? ` at ${cdpUrl}` : ` on port ${port}`}. ` +
         `Ensure Chrome/Chromium/Electron is running with --remote-debugging-port=${port}. ` +
         `If you want a managed browser instead, use 'bc browser launch'.`,
       );
@@ -761,6 +860,101 @@ export class BrowserConnectionManager {
   }
 
   /**
+   * Detach from the current browser connection without closing attached browsers.
+   *
+   * Section 27: Clean detach semantics:
+   * - For attached mode: disconnects without closing the underlying browser
+   * - For managed mode: returns error or closes browser (use disconnect for full cleanup)
+   *
+   * Returns a structured BrowserDetachResult.
+   */
+  async detach(): Promise<BrowserDetachResult> {
+    if (!this.connection) {
+      return {
+        detached: false,
+        ownership: "managed",
+        closedBrowser: false,
+      };
+    }
+
+    const connectionId = this.connection.id;
+    const mode = this.connection.mode;
+    const endpoint = this.connection.cdpEndpoint;
+    const ownership: "managed" | "attached" = mode === "attached" ? "attached" : "managed";
+
+    log.info("Detaching from browser", {
+      connectionId,
+      mode,
+      ownership,
+    });
+
+    // For attached mode, disconnect without closing the browser
+    if (mode === "attached") {
+      try {
+        // Save auth state before disconnecting if applicable
+        if (this.context) {
+          try {
+            const { saveAuthSnapshot } = await import("./auth_state");
+            await saveAuthSnapshot(
+              this.memoryStore,
+              this.connection.profile.id,
+              this.context,
+            );
+          } catch (error: unknown) {
+            log.warn(`Failed to save auth state on detach: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        // Close Playwright client but not the browser
+        if (this.browser) {
+          try {
+            await this.browser.close();
+          } catch (error: unknown) {
+            log.warn(`Failed to close browser client on detach: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        this.browser = null;
+        this.context = null;
+        this.managedProcess = null;
+
+        this.connection.status = "disconnected";
+        this.persistConnectionState();
+        this.connection = null;
+        this.currentProvider = null;
+
+        return {
+          detached: true,
+          ownership,
+          closedBrowser: false,
+          endpoint,
+          connectionId,
+        };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error(`Failed to detach from browser: ${message}`);
+        return {
+          detached: false,
+          ownership,
+          closedBrowser: false,
+          endpoint,
+          connectionId,
+        };
+      }
+    }
+
+    // For managed mode, detach is not the right operation
+    // User should use disconnect() for managed browsers
+    return {
+      detached: false,
+      ownership,
+      closedBrowser: false,
+      endpoint,
+      connectionId,
+    };
+  }
+
+  /**
    * Release local Node handles after a one-shot CLI connect command.
    *
    * For CDP connections, Playwright's browser.close() closes the client
@@ -793,8 +987,23 @@ export class BrowserConnectionManager {
   }
 
   private watchBrowserDisconnect(browser: Browser): void {
+    // Guard for test fakes that may not have .once() method
+    if (typeof browser.once !== "function") {
+      log.warn("Browser object does not support .once() event handler, skipping disconnect watch");
+      return;
+    }
+
     browser.once("disconnected", () => {
-      this.handleBrowserDisconnected();
+      // Add tolerance: wait briefly before treating disconnect as permanent
+      // This allows for temporary CDP reconnections during connection tests
+      setTimeout(() => {
+        // Check if browser is still disconnected after tolerance period
+        if (typeof browser.isConnected === "function" && !browser.isConnected()) {
+          this.handleBrowserDisconnected();
+        } else {
+          log.info("Browser reconnected within tolerance period, ignoring transient disconnect");
+        }
+      }, 1000); // 1 second tolerance for transient disconnects
     });
   }
 

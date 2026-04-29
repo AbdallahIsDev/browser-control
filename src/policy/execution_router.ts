@@ -191,6 +191,61 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     path: "command",
     risk: "moderate",
   },
+  {
+    matches: (action) => action === "debug_receipt_export",
+    path: "command",
+    risk: "low",
+  },
+
+  // ── Screencast path (Section 26) ─────────────────────────────────
+  {
+    matches: (action) => {
+      const screencastMutationActions = ["browser_screencast_start", "browser_screencast_stop"];
+      return screencastMutationActions.includes(action);
+    },
+    path: "low_level",
+    risk: "moderate",
+  },
+  {
+    matches: (action) => action === "browser_screencast_status",
+    path: "command",
+    risk: "low",
+  },
+
+  // ── Advanced browser I/O and visual helpers (Sections 25 and 27) ──
+  {
+    matches: (action) => {
+      const browserReadActions = [
+        "browser_list",
+        "browser_detach",
+        "browser_generate_locator",
+        "browser_downloads_list",
+      ];
+      return browserReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => action === "browser_highlight",
+    path: "a11y",
+    risk: "low",
+  },
+  {
+    matches: (action) => action === "browser_attach",
+    path: "a11y",
+    risk: "high",
+  },
+  {
+    matches: (action) => action === "browser_drop_data",
+    path: "a11y",
+    risk: "moderate",
+  },
+  {
+    matches: (action) => action === "browser_drop_file",
+    path: "a11y",
+    risk: "high",
+  },
 
   // ── Filesystem path (Section 12) ────────────────────────────────
   {

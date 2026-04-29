@@ -52,6 +52,26 @@ test("parseArgs handles boolean flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("parseArgs handles existing space-separated value flags", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "run",
+    "--skill",
+    "navigation",
+    "--action",
+    "open",
+    "--params",
+    "{\"url\":\"https://example.com\"}",
+  ]);
+
+  assert.equal(result.command, "run");
+  assert.equal(result.flags.skill, "navigation");
+  assert.equal(result.flags.action, "open");
+  assert.equal(result.flags.params, "{\"url\":\"https://example.com\"}");
+  assert.deepEqual(result.positional, []);
+});
+
 test("parseArgs handles space-separated service flag values", () => {
   const result = parseArgs([
     "node",
@@ -154,6 +174,31 @@ test("parseArgs handles flags with equals in value", () => {
   ]);
   assert.equal(result.command, "run");
   assert.equal(result.flags.params, "{'key':'value=with=equals'}");
+});
+
+test("parseArgs collects repeated drop file and data flags without comma splitting", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "drop",
+    "@e1",
+    "--file",
+    "C:\\tmp\\one.txt",
+    "--file=C:\\tmp\\two.txt",
+    "--data",
+    "text/plain=hello,world",
+    "--data=application/json={\"url\":\"https://example.com?a=1\"}",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "drop");
+  assert.deepEqual(result.positional, ["@e1"]);
+  assert.equal(result.flags.file, "C:\\tmp\\one.txt\0C:\\tmp\\two.txt");
+  assert.equal(
+    result.flags.data,
+    "text/plain=hello,world\0application/json={\"url\":\"https://example.com?a=1\"}",
+  );
 });
 
 test("parseArgs handles multiple positional after subcommand", () => {

@@ -234,9 +234,16 @@ export function resolveRefBounds(
   store: RefStore,
   pageId: string,
   ref: string,
-): { x: number; y: number; width: number; height: number } | null {
+): { x: number; y: number; width: number; height: number; viewportWidth: number; viewportHeight: number; deviceScaleFactor?: number } | null {
   const element = store.lookup(pageId, ref);
-  return element?.bounds ?? null;
+  if (!element) {
+    return null;
+  }
+  if (!element.bounds) {
+    return null;
+  }
+  // Return the full ElementBounds with viewport metadata
+  return element.bounds;
 }
 
 /**

@@ -76,6 +76,12 @@ export interface BundleBuilderOptions {
   networkEntries?: NetworkEntry[];
   /** Optional: snapshot data (if already collected) */
   snapshot?: A11yElement[];
+  /** Optional: screencast/receipt metadata (Section 26) */
+  screencastPath?: string;
+  actionTimelinePath?: string;
+  annotatedScreenshotPath?: string;
+  lastFramePath?: string;
+  recordingPolicy?: "keep" | "delete-on-success" | "debug-only";
 }
 
 // ── Bundle Builder ─────────────────────────────────────────────────────
@@ -92,6 +98,11 @@ export async function buildDebugBundle(options: BundleBuilderOptions): Promise<D
         consoleEntries: options.consoleEntries,
         networkEntries: options.networkEntries,
         snapshot: options.snapshot,
+        screencastPath: options.screencastPath,
+        actionTimelinePath: options.actionTimelinePath,
+        annotatedScreenshotPath: options.annotatedScreenshotPath,
+        lastFramePath: options.lastFramePath,
+        recordingPolicy: options.recordingPolicy,
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -170,6 +181,11 @@ async function collectBrowserEvidence(
     consoleEntries?: ConsoleEntry[];
     networkEntries?: NetworkEntry[];
     snapshot?: A11yElement[];
+    screencastPath?: string;
+    actionTimelinePath?: string;
+    annotatedScreenshotPath?: string;
+    lastFramePath?: string;
+    recordingPolicy?: "keep" | "delete-on-success" | "debug-only";
   },
 ): Promise<DebugBundleBrowserEvidence> {
   const url = page.url();
@@ -227,6 +243,12 @@ async function collectBrowserEvidence(
     snapshot,
     consoleEntries: extras.consoleEntries ?? [],
     networkEntries: extras.networkEntries ?? [],
+    // Section 26: Screencast and debug receipt artifacts
+    screencastPath: extras.screencastPath,
+    actionTimelinePath: extras.actionTimelinePath,
+    annotatedScreenshotPath: extras.annotatedScreenshotPath,
+    lastFramePath: extras.lastFramePath,
+    recordingPolicy: extras.recordingPolicy,
   };
 }
 

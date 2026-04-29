@@ -47,14 +47,7 @@ export interface NetworkEntry {
 
 // ── Debug Bundle ───────────────────────────────────────────────────────
 
-export interface DebugBundleBrowserEvidence {
-  url: string;
-  title: string;
-  snapshot?: A11yElement[];
-  screenshot?: string; // base64 or file path
-  consoleEntries: ConsoleEntry[];
-  networkEntries: NetworkEntry[];
-}
+// DebugBundleBrowserEvidence is now defined below with Section 26 extensions
 
 export interface DebugBundleTerminalEvidence {
   sessionId: string;
@@ -172,10 +165,83 @@ export interface PerformanceTrace {
 
 // ── Observability Store Keys ───────────────────────────────────────────
 
+// ── Screencast (Section 26) ──────────────────────────────────────────────
+
+export type ScreencastStatus = "recording" | "stopped" | "failed";
+
+export interface ScreencastSession {
+  id: string;
+  browserSessionId: string;
+  pageId: string;
+  path: string;
+  startedAt: string;
+  stoppedAt?: string;
+  status: ScreencastStatus;
+  actionAnnotations: boolean;
+  retention: "keep" | "delete-on-success" | "debug-only";
+  mode: "native" | "frames" | "metadata-only";
+}
+
+export interface ScreencastOptions {
+  path?: string;
+  showActions?: boolean;
+  annotationPosition?: "top-left" | "top" | "top-right" | "bottom-left" | "bottom" | "bottom-right";
+  retention?: "keep" | "delete-on-success" | "debug-only";
+}
+
+export interface ActionReceiptEvent {
+  timestamp: string;
+  action: string;
+  target?: string;
+  url?: string;
+  title?: string;
+  policyDecision?: string;
+  risk?: string;
+  durationMs?: number;
+  artifactPath?: string;
+  success?: boolean;
+  error?: string;
+}
+
+export interface DebugReceipt {
+  taskId: string;
+  receiptId: string;
+  status: "success" | "failure" | "partial";
+  startedAt: string;
+  completedAt: string;
+  artifacts: Array<{ kind: string; path: string; sizeBytes?: number }>;
+  timelinePath?: string;
+  screencastPath?: string;
+  annotatedScreenshotPath?: string;
+  lastFramePath?: string;
+  recordingPolicy?: "keep" | "delete-on-success" | "debug-only";
+}
+
+// Extend DebugBundleBrowserEvidence with screencast/receipt artifact fields (Section 26)
+
+export interface DebugBundleBrowserEvidence {
+  url: string;
+  title: string;
+  snapshot?: A11yElement[];
+  screenshot?: string; // base64 or file path
+  consoleEntries: ConsoleEntry[];
+  networkEntries: NetworkEntry[];
+  // Section 26: Screencast and debug receipt artifacts
+  screencastPath?: string;
+  actionTimelinePath?: string;
+  annotatedScreenshotPath?: string;
+  lastFramePath?: string;
+  recordingPolicy?: "keep" | "delete-on-success" | "debug-only";
+}
+
+// ── Observability Store Keys ───────────────────────────────────────────
+
 export const OBSERVABILITY_KEYS = {
   consolePrefix: "obs:console:",
   networkPrefix: "obs:network:",
   bundlePrefix: "obs:bundle:",
   tracePrefix: "obs:trace:",
   healthPrefix: "obs:health:",
+  screencastPrefix: "obs:screencast:",
+  receiptPrefix: "obs:receipt:",
 } as const;

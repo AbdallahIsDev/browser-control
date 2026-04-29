@@ -16,7 +16,7 @@
 
 import { isPolicyAllowed, SessionManager, type SessionState, type SessionListEntry } from "./session_manager";
 import { DefaultPolicyEngine } from "./policy/engine";
-import { BrowserActions, type BrowserActionContext } from "./browser/actions";
+import { BrowserActions, type SnapshotOptions, type ClickOptions, type FillOptions, type HoverOptions, type TypeOptions, type PressOptions, type ScrollOptions, type ScreenshotOptions, type HighlightOptions, type LocatorCandidate, type BrowserActionContext, type DropOptions } from "./browser/actions";
 import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
 import { FsActions, type FsActionContext } from "./filesystem/actions";
 import { ServiceActions, type ServiceActionContext } from "./service_actions";
@@ -43,6 +43,9 @@ import {
 } from "./shared/config";
 import { collectStatus } from "./operator/status";
 import type { SystemStatus } from "./operator/types";
+import type { ScreencastOptions, ScreencastSession, DebugReceipt } from "./observability/types";
+import type { AttachableBrowser, BrowserDetachResult, BrowserDropResult } from "./browser/connection";
+import type { ExtendedDownloadResult } from "./browser/file_helpers";
 
 // ── Options ──────────────────────────────────────────────────────────
 
@@ -55,23 +58,47 @@ export interface BrowserControlOptions {
   memoryStore?: import("./runtime/memory_store").MemoryStore;
 }
 
+// ── Screencast Namespace (Section 26) ─────────────────────────────────────
+
+export interface ScreencastNamespace {
+  start(options?: ScreencastOptions): Promise<ActionResult<{ session: ScreencastSession }>>;
+  stop(): Promise<ActionResult<{ session: ScreencastSession; receiptId?: string; timelinePath?: string }>>;
+  status(): Promise<ActionResult<{ session: ScreencastSession | null }>>;
+}
+
 // ── Browser Namespace ────────────────────────────────────────────────
 
 export interface BrowserNamespace {
   open(options: { url: string; waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit" }): Promise<ActionResult<{ url: string; title: string }>>;
-  snapshot(options?: { rootSelector?: string }): Promise<ActionResult<A11ySnapshot>>;
+  snapshot(options?: { rootSelector?: string; boxes?: boolean }): Promise<ActionResult<A11ySnapshot>>;
   click(options: { target: string; timeoutMs?: number; force?: boolean }): Promise<ActionResult<{ clicked: string }>>;
   fill(options: { target: string; text: string; timeoutMs?: number; commit?: boolean }): Promise<ActionResult<{ filled: string }>>;
   hover(options: { target: string; timeoutMs?: number }): Promise<ActionResult<{ hovered: string }>>;
   type(options: { text: string; delayMs?: number }): Promise<ActionResult<{ typed: string }>>;
   press(options: { key: string }): Promise<ActionResult<{ pressed: string }>>;
   scroll(options: { direction: "up" | "down" | "left" | "right"; amount?: number }): Promise<ActionResult<{ scrolled: string }>>;
-  screenshot(options?: { outputPath?: string; fullPage?: boolean; target?: string }): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
+  screenshot(options?: { outputPath?: string; fullPage?: boolean; target?: string; annotate?: boolean; refs?: string[] }): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
+  highlight(options: HighlightOptions): Promise<ActionResult<{ highlighted: string }>>;
+  generateLocator(target: string): Promise<ActionResult<{ candidates: LocatorCandidate[] }>>;
   tabList(): Promise<ActionResult<Array<{ id: string; url: string; title: string }>>>;
   tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
   tabClose(): Promise<ActionResult<{ closed: boolean }>>;
   close(): Promise<ActionResult<{ closed: boolean }>>;
   provider: ProviderNamespace;
+  /** Screencast recording namespace (Section 26). */
+  screencast: ScreencastNamespace;
+  /** Section 27: Browser discovery and attach UX. */
+  list(options?: { all?: boolean }): Promise<ActionResult<AttachableBrowser[]>>;
+  /** Section 27: Explicit attach to CDP endpoint. */
+  attach(options: { cdp?: string; endpoint?: string; port?: number; targetType?: string }): Promise<ActionResult<{ attached: boolean; endpoint: string }>>;
+  /** Section 27: Clean detach without closing attached browsers. */
+  detach(): Promise<ActionResult<BrowserDetachResult>>;
+  /** Section 27: Drop files or data onto page elements. */
+  drop(options: DropOptions): Promise<ActionResult<BrowserDropResult>>;
+  /** Section 27: List recent downloads. */
+  downloads: {
+    list(): Promise<ActionResult<ExtendedDownloadResult[]>>;
+  };
 }
 
 // ── Terminal Namespace ───────────────────────────────────────────────
@@ -140,6 +167,8 @@ export interface DebugNamespace {
   network(options?: { sessionId?: string }): import("./observability/types").NetworkEntry[];
   /** List available debug bundles. */
   listBundles(): Array<{ bundleId: string; taskId: string; assembledAt: string; partial: boolean }>;
+  /** Get a debug receipt by ID (Section 26). */
+  receipt(receiptId: string): DebugReceipt | null;
 }
 
 // ── Config Namespace ──────────────────────────────────────────────────
@@ -318,6 +347,18 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       const { listDebugBundles } = require("./observability/debug_bundle");
       return listDebugBundles(sessionManager.getMemoryStore());
     },
+    receipt: (receiptId) => {
+      requireDebugPolicy("debug_receipt_export", { receiptId });
+      const { getGlobalScreencastRecorder } = require("./observability/screencast");
+      const recorder = getGlobalScreencastRecorder(sessionManager.getMemoryStore());
+      return recorder.loadReceipt(receiptId);
+    },
+  };
+
+  const screencastNamespace: ScreencastNamespace = {
+    start: (options) => browserActions.screencastStart(options),
+    stop: () => browserActions.screencastStop(),
+    status: () => browserActions.screencastStatus(),
   };
 
   return {
@@ -331,11 +372,67 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
       press: (o) => browserActions.press(o),
       scroll: (o) => browserActions.scroll(o),
       screenshot: (o) => browserActions.screenshot(o),
+      highlight: (o) => browserActions.highlight(o),
+      generateLocator: (target) => browserActions.generateLocator(target),
       tabList: () => browserActions.tabList(),
       tabSwitch: (id) => browserActions.tabSwitch(id),
       tabClose: () => browserActions.tabClose(),
       close: () => browserActions.close(),
       provider: providerNamespace,
+      screencast: screencastNamespace,
+      // Section 27: Browser discovery and attach UX
+      list: async (options) => {
+        const policyEval = sessionManager.evaluateAction("browser_list", options ?? {});
+        if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<AttachableBrowser[]>;
+        const localProvider = new (await import("./providers/local")).LocalBrowserProvider();
+        const browsers = await localProvider.discoverBrowsers(options);
+        return {
+          success: true,
+          path: policyEval.path,
+          sessionId: sessionManager.getActiveSession()?.id ?? "default",
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
+          data: browsers,
+          completedAt: new Date().toISOString(),
+        };
+      },
+      attach: async (options) => {
+        const bm = sessionManager.getBrowserManager();
+        const cdpUrl = options.cdp ?? options.endpoint;
+        const result = await bm.attach({
+          cdpUrl,
+          port: options.port,
+          targetType: options.targetType as any,
+        });
+        return {
+          success: true,
+          path: "a11y",
+          sessionId: sessionManager.getActiveSession()?.id ?? "default",
+          data: { attached: true, endpoint: result.cdpEndpoint },
+          completedAt: new Date().toISOString(),
+        };
+      },
+      detach: async () => {
+        const policyEval = sessionManager.evaluateAction("browser_detach", {});
+        if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<BrowserDetachResult>;
+        const bm = sessionManager.getBrowserManager();
+        const result = await bm.detach();
+        return {
+          success: result.detached,
+          path: policyEval.path,
+          sessionId: sessionManager.getActiveSession()?.id ?? "default",
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
+          data: result,
+          completedAt: new Date().toISOString(),
+        };
+      },
+      drop: (options) => browserActions.drop(options),
+      downloads: {
+        list: () => browserActions.downloadsList(),
+      },
     },
     terminal: {
       open: (o) => terminalActions.open(o),

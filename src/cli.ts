@@ -17,42 +17,70 @@ const VALUE_FLAGS = new Set([
   "action",
   "amount",
   "api-key",
+  "browser-mode",
+  "browserless-api-key",
+  "browserless-endpoint",
   "cdp-url",
   "chrome-bind-address",
   "chrome-debug-port",
+  "chrome-path",
+  "command",
+  "confirm",
   "content",
   "cron",
   "cwd",
+  "data",
+  "daemon-socket",
+  "debug-endpoint",
   "delay",
   "endpoint",
   "ext",
+  "file",
+  "files",
+  "format",
+  "health-check-interval",
+  "help",
+  "key",
   "kind",
+  "list",
   "max-bytes",
+  "message",
+  "mime-type",
   "name",
   "output",
   "params",
   "path",
+  "pattern",
   "policy",
   "port",
   "priority",
   "profile",
-  "browser-mode",
-  "browserless-api-key",
-  "browserless-endpoint",
   "protocol",
   "provider",
+  "query",
+  "region",
+  "retention",
   "root-selector",
+  "screenshot-path",
   "session",
   "shell",
-  "terminal-shell",
+  "show-actions",
   "skill",
+  "style",
   "target",
   "target-type",
+  "terminal-shell",
   "timeout",
   "timeoutMs",
   "type",
+  "url",
+  "value",
   "wait-until",
+  "annotation-position",
 ]);
+
+// Flags that can be repeated and should be collected as arrays
+const REPEATED_FLAGS = new Set(["file", "files", "data"]);
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = argv.slice(2);
@@ -73,9 +101,27 @@ export function parseArgs(argv: string[]): ParsedArgs {
       if (eqIndex !== -1) {
         const key = flagPart.slice(0, eqIndex);
         const value = flagPart.slice(eqIndex + 1);
-        result.flags[key] = value;
+        // Handle repeated flags by appending with null character delimiter
+        if (REPEATED_FLAGS.has(key)) {
+          if (result.flags[key]) {
+            result.flags[key] = `${result.flags[key]}\0${value}`;
+          } else {
+            result.flags[key] = value;
+          }
+        } else {
+          result.flags[key] = value;
+        }
       } else if (VALUE_FLAGS.has(flagPart) && args[i + 1] && !args[i + 1].startsWith("-")) {
-        result.flags[flagPart] = args[i + 1];
+        // Handle repeated flags with space-separated values
+        if (REPEATED_FLAGS.has(flagPart)) {
+          if (result.flags[flagPart]) {
+            result.flags[flagPart] = `${result.flags[flagPart]}\0${args[i + 1]}`;
+          } else {
+            result.flags[flagPart] = args[i + 1];
+          }
+        } else {
+          result.flags[flagPart] = args[i + 1];
+        }
         i++;
       } else {
         result.flags[flagPart] = "true";
@@ -366,6 +412,7 @@ Debug:
   debug bundle <id> [--output=<path>] [--yes]                          Retrieve a debug bundle
   debug console [--session=<id>]                                      Show captured console entries
   debug network [--session=<id>]                                      Show captured network entries
+  debug receipt <id>                                                  Get a debug receipt by ID (Section 26)
 
 MCP:
   mcp serve                                                           Start MCP stdio server
@@ -1355,9 +1402,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
   switch (subcommand) {
     case "attach": {
+      // Section 27: Support --cdp and --endpoint aliases
       const port = flags.port ? Number(flags.port) : undefined;
-      const cdpUrl = flags["cdp-url"] ?? undefined;
-      const targetType = (flags["target-type"] ?? "chrome") as "chrome" | "chromium" | "electron";
+      const cdpUrl = flags.cdp ?? flags.endpoint ?? flags["cdp-url"] ?? undefined;
+      const targetType = (flags["target-type"] ?? "chrome") as "chrome" | "chromium" | "msedge" | "electron" | "unknown";
       const provider = flags.provider ?? undefined;
       const confirmed = flags.yes === "true" || flags.confirm === "true";
 
@@ -1365,7 +1413,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
         const { BrowserConnectionManager } = await import("./browser/connection");
         const { loadConfig } = await import("./shared/config");
         const { DefaultPolicyEngine } = await import("./policy/engine");
-        
+
         const config = loadConfig({ validate: false });
         const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
         const manager = new BrowserConnectionManager({ policyEngine });
@@ -1388,6 +1436,191 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
           console.log(`  Status:   ${connection.status}`);
         }
         await manager.releaseCliHandles();
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    // Section 27: Browser discovery and attach UX
+    case "list": {
+      const all = flags.all === "true";
+      try {
+        const { createBrowserControl } = await import("./browser_control");
+        const bc = createBrowserControl();
+        const result = await bc.browser.list({ all });
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          if (!result.success) {
+            console.error(`List failed: ${result.error}`);
+            process.exit(1);
+          }
+          const browsers = result.data ?? [];
+          if (browsers.length === 0) {
+            console.log("No attachable browsers found.");
+          } else {
+            console.log(`Found ${browsers.length} attachable browser(s):`);
+            for (const b of browsers) {
+              const marker = b.attached ? " (attached)" : "";
+              console.log(`  ${b.channel}${marker}`);
+              console.log(`    Endpoint: ${b.endpoint}`);
+              if (b.title) console.log(`    Title: ${b.title}`);
+              if (b.pid) console.log(`    PID: ${b.pid}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    // Section 27: Clean detach
+    case "detach": {
+      try {
+        const { createBrowserControl } = await import("./browser_control");
+        const bc = createBrowserControl();
+        const result = await bc.browser.detach();
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          if (!result.success || !result.data) {
+            console.error(`Detach failed: ${result.error ?? "not applicable"}`);
+            process.exit(1);
+          }
+          if (result.data.detached) {
+            console.log(`Detached from browser`);
+            console.log(`  Ownership: ${result.data.ownership}`);
+            console.log(`  Closed browser: ${result.data.closedBrowser}`);
+            if (result.data.endpoint) console.log(`  Endpoint: ${result.data.endpoint}`);
+          } else {
+            console.log(`Detach failed or not applicable (mode: ${result.data.ownership})`);
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    // Section 27: File/data drop
+    case "drop": {
+      const target = positional[0];
+      // Support both --file and --files for compatibility
+      const filesRaw = flags.file ?? flags.files;
+      const dataRaw = flags.data;
+      // Split on null character delimiter for repeated flags
+      const files = filesRaw ? filesRaw.split("\0").map(f => f.trim()) : undefined;
+      const dataArray = dataRaw ? dataRaw.split("\0").map(d => d.trim()) : undefined;
+      const confirmed = flags.yes === "true" || flags.confirm === "true";
+
+      if (!target) {
+        console.error("Error: Target is required");
+        process.exit(1);
+      }
+      if (!files && !dataArray) {
+        console.error("Error: Either --file/--files or --data is required");
+        process.exit(1);
+      }
+
+      try {
+        const { createBrowserControl } = await import("./browser_control");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
+
+        const config = loadConfig({ validate: false });
+        const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+        const bc = createBrowserControl({ policyProfile: config.policyProfile });
+
+        // Parse data if provided (format: mimeType=value, split on first = only)
+        const parsedData = dataArray?.map((d: string) => {
+          const eqIndex = d.indexOf("=");
+          if (eqIndex === -1) {
+            // If no =, treat entire string as value with default MIME type
+            return { mimeType: "text/plain", value: d };
+          }
+          const mimeType = d.slice(0, eqIndex);
+          const value = d.slice(eqIndex + 1);
+          return { mimeType, value };
+        });
+
+        const result = await bc.browser.drop({
+          target,
+          files,
+          data: parsedData,
+        });
+
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          if (result.success) {
+            console.log(`Drop successful`);
+            if (result.data?.files) {
+              console.log(`  Files dropped: ${result.data.files.length}`);
+              for (const f of result.data.files) {
+                console.log(`    ${f.path} (${f.sizeBytes} bytes)`);
+              }
+            }
+            if (result.data?.data) {
+              console.log(`  Data items dropped: ${result.data.data.length}`);
+              for (const d of result.data.data) {
+                console.log(`    ${d.mimeType}: ${d.value.substring(0, 50)}${d.value.length > 50 ? "..." : ""}`);
+              }
+            }
+          } else {
+            console.error(`Drop failed: ${result.error}`);
+            process.exit(1);
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
+    // Section 27: Downloads list
+    case "downloads": {
+      const downloadsAction = positional[0];
+      if (downloadsAction !== "list") {
+        console.error(`Unknown downloads command: ${downloadsAction}`);
+        console.error("Available: list");
+        process.exit(1);
+      }
+
+      try {
+        const { createBrowserControl } = await import("./browser_control");
+        const { loadConfig } = await import("./shared/config");
+        const { DefaultPolicyEngine } = await import("./policy/engine");
+
+        const config = loadConfig({ validate: false });
+        const policyEngine = new DefaultPolicyEngine({ profileName: config.policyProfile });
+        const bc = createBrowserControl({ policyProfile: config.policyProfile });
+
+        const result = await bc.browser.downloads.list();
+
+        if (jsonOutput) {
+          outputJson(result);
+        } else {
+          if (result.success) {
+            console.log(`Downloads: ${result.data?.length ?? 0}`);
+            if (result.data && result.data.length > 0) {
+              for (const d of result.data) {
+                console.log(`  ${d.suggestedFilename ?? d.path}`);
+                if (d.path) console.log(`    Path: ${d.path}`);
+                if (d.sizeBytes) console.log(`    Size: ${d.sizeBytes} bytes`);
+                console.log(`    Status: ${d.status}`);
+              }
+            }
+          } else {
+            console.error(`Downloads list failed: ${result.error}`);
+            process.exit(1);
+          }
+        }
       } catch (error) {
         console.error("Error:", (error as Error).message);
         process.exit(1);
@@ -1881,9 +2114,45 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
       break;
     }
 
+    case "highlight": {
+      const target = positional[0];
+      if (!target) {
+        console.error("Error: Target (ref, selector, or text) is required");
+        process.exit(1);
+      }
+      await requireCliPolicy("browser_highlight", { target }, jsonOutput, flags.yes === "true" || flags.confirm === "true");
+      try {
+        const { createBrowserControl } = await import("./browser_control");
+        const { formatActionResult } = await import("./shared/action_result");
+        const bc = createBrowserControl();
+        const result = await bc.browser.highlight({
+          target,
+          style: flags.style,
+          persist: flags.persist === "true",
+          hide: flags.hide === "true",
+        });
+        if (jsonOutput) {
+          outputJson(formatActionResult(result), false);
+        } else {
+          if (result.success) {
+            console.log(`Highlighted: ${target}`);
+            if (result.warning) console.warn(`Warning: ${result.warning}`);
+          } else {
+            console.error(`Error: ${result.error}`);
+            if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
+            process.exit(1);
+          }
+        }
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
     default:
       console.error(`Unknown browser command: ${subcommand}`);
-      console.error("Available: attach, launch, status, profile, auth");
+      console.error("Available: attach, launch, status, profile, auth, highlight");
       process.exit(1);
   }
 }
@@ -2003,6 +2272,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 
     case "close":
       await handleBrowserAction("close", args);
+      break;
+
+    case "locator":
+      await handleLocator(args);
       break;
 
     // ── Session commands (Section 5) ────────────────────────────────
@@ -2737,6 +3010,7 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
       case "snapshot": {
         result = await browserActions.takeSnapshot({
           rootSelector: flags["root-selector"],
+          boxes: flags.boxes === "true",
         });
         break;
       }
@@ -2821,10 +3095,13 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
       }
 
       case "screenshot": {
+        const refs = flags.refs ? (flags.refs as string).split(",").map(r => r.trim()) : undefined;
         result = await browserActions.screenshot({
           outputPath: flags.output,
           fullPage: flags["full-page"] === "true",
           target: flags.target,
+          annotate: flags.annotate === "true",
+          refs,
         });
         break;
       }
@@ -2852,6 +3129,26 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
         break;
       }
 
+      case "screencast": {
+        const screencastAction = args.subcommand;
+        if (screencastAction === "start") {
+          const options: import("./observability/types").ScreencastOptions = {};
+          if (flags.path) options.path = flags.path as string;
+          if (flags["show-actions"] === "true") options.showActions = true;
+          if (flags["annotation-position"]) options.annotationPosition = flags["annotation-position"] as any;
+          if (flags.retention) options.retention = flags.retention as any;
+          result = await browserActions.screencastStart(options);
+        } else if (screencastAction === "stop") {
+          result = await browserActions.screencastStop();
+        } else if (screencastAction === "status") {
+          result = await browserActions.screencastStatus();
+        } else {
+          console.error("Error: Unknown screencast command. Use 'screencast start', 'screencast stop', or 'screencast status'");
+          process.exit(1);
+        }
+        break;
+      }
+
       default:
         console.error(`Unknown browser action: ${action}`);
         process.exit(1);
@@ -2871,6 +3168,50 @@ async function handleBrowserAction(action: string, args: ParsedArgs): Promise<vo
           if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
           process.exit(1);
         }
+      }
+    }
+  } catch (error) {
+    console.error("Error:", (error as Error).message);
+    process.exit(1);
+  }
+}
+
+// ── Locator Handler (Section 25) ────────────────────────────────────────
+
+async function handleLocator(args: ParsedArgs): Promise<void> {
+  const { positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+
+  const target = positional[0];
+  if (!target) {
+    console.error("Error: Target (ref, selector, or text) is required");
+    process.exit(1);
+  }
+
+  const { createBrowserControl } = await import("./browser_control");
+  const { formatActionResult } = await import("./shared/action_result");
+
+  try {
+    const bc = createBrowserControl();
+    const result = await bc.browser.generateLocator(target);
+
+    if (jsonOutput) {
+      outputJson(formatActionResult(result), false);
+    } else {
+      if (result.success) {
+        console.log(`Locator candidates for: ${target}`);
+        const candidates = result.data?.candidates as any[];
+        if (candidates) {
+          for (const candidate of candidates) {
+            console.log(`  [${candidate.confidence}] ${candidate.kind}: ${candidate.value}`);
+            console.log(`    Reason: ${candidate.reason}`);
+          }
+        }
+        if (result.warning) console.warn(`Warning: ${result.warning}`);
+      } else {
+        console.error(`Error: ${result.error}`);
+        if (result.policyDecision) console.error(`Policy: ${result.policyDecision}`);
+        process.exit(1);
       }
     }
   } catch (error) {
@@ -3191,9 +3532,39 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
       break;
     }
 
+    case "receipt": {
+      const receiptId = positional[0];
+      if (!receiptId) {
+        console.error("Error: Receipt ID is required");
+        process.exit(1);
+      }
+      await requireCliPolicy("debug_receipt_export", { receiptId }, jsonOutput);
+      try {
+        const { getGlobalScreencastRecorder } = await import("./observability/screencast");
+        const { MemoryStore } = await import("./runtime/memory_store");
+        const store = new MemoryStore();
+        let receipt: import("./observability/types").DebugReceipt | null;
+        try {
+          const recorder = getGlobalScreencastRecorder(store);
+          receipt = recorder.loadReceipt(receiptId);
+        } finally {
+          store.close();
+        }
+        if (!receipt) {
+          console.error(`Error: Receipt not found: ${receiptId}`);
+          process.exit(1);
+        }
+        outputJson(receipt, !jsonOutput);
+      } catch (error) {
+        console.error("Error:", (error as Error).message);
+        process.exit(1);
+      }
+      break;
+    }
+
     default:
       console.error(`Unknown debug command: ${subcommand}`);
-      console.error("Available: bundle <id>, console [--session=<id>], network [--session=<id>]");
+      console.error("Available: bundle <id>, console [--session=<id>], network [--session=<id>], receipt <id>");
       process.exit(1);
   }
 }

@@ -72,6 +72,10 @@ export function getSessionScreenshotsDir(sessionId: string, dataHome?: string): 
   return path.join(getSessionRuntimeDir(sessionId, dataHome), "screenshots");
 }
 
+export function getSessionDownloadsDir(sessionId: string, dataHome?: string): string {
+  return path.join(getSessionRuntimeDir(sessionId, dataHome), "downloads");
+}
+
 export function getInteropDir(): string {
   return path.join(getDataHome(), ".interop");
 }
@@ -176,4 +180,41 @@ export function ensureObservabilityDir(dataHome?: string): string {
   const dir = getObservabilityDir(dataHome);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+// ── Screencast and Debug Receipts (Section 26) ─────────────────────
+
+/** Directory for session screencast artifacts */
+export function getSessionScreencastDir(sessionId: string, dataHome?: string): string {
+  return path.join(getObservabilityDir(dataHome), "screencasts", sessionId);
+}
+
+/** Ensure session screencast directory exists */
+export function ensureSessionScreencastDir(sessionId: string, dataHome?: string): string {
+  const dir = getSessionScreencastDir(sessionId, dataHome);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Directory for session debug receipt artifacts */
+export function getSessionReceiptDir(sessionId: string, dataHome?: string): string {
+  return path.join(getObservabilityDir(dataHome), "receipts", sessionId);
+}
+
+/** Ensure session receipt directory exists */
+export function ensureSessionReceiptDir(sessionId: string, dataHome?: string): string {
+  const dir = getSessionReceiptDir(sessionId, dataHome);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Validate that a user-provided output path is safe (no traversal, within data home) */
+export function isSafeArtifactPath(userPath: string, dataHome?: string): boolean {
+  if (!userPath || typeof userPath !== "string") return false;
+  const resolved = path.resolve(userPath);
+  const home = dataHome ?? getDataHome();
+  const resolvedHome = path.resolve(home);
+  const relative = path.relative(resolvedHome, resolved);
+  // Disallow traversal outside data home and absolute paths outside data home
+  return !relative.startsWith("..") && !path.isAbsolute(relative);
 }

@@ -7,7 +7,7 @@ import type {
   ProviderAttachOptions,
   ActiveConnection,
 } from "./interface";
-import type { BrowserConnection, BrowserTargetType } from "../browser/connection";
+import type { BrowserConnection, BrowserTargetType, AttachableBrowser } from "../browser/connection";
 import {
   resolveChromePath,
   buildChromeArgs,
@@ -19,7 +19,7 @@ import {
   startWslBridgeIfNeeded,
   stopWslBridge,
 } from "../runtime/launch_browser";
-import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveDebugEndpointUrl, getAllPages } from "../browser/core";
+import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveDebugEndpointUrl, getAllPages, getDebugEndpointCandidates } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
@@ -180,5 +180,108 @@ export class LocalBrowserProvider implements BrowserProvider {
     const lower = cdpEndpoint.toLowerCase();
     if (lower.includes("electron")) return "electron";
     return "chrome";
+  }
+
+  /**
+   * Discover attachable browsers on the local system.
+   *
+   * Probes CDP endpoints and queries /json/version and /json/list to find
+   * running browsers. Returns clear empty result when none found.
+   *
+   * Section 27: Advanced Browser I/O and Attach UX
+   * - When --all is true, probes common CDP ports (9222-9229) for more discovery
+   */
+  async discoverBrowsers(options: { all?: boolean } = {}): Promise<AttachableBrowser[]> {
+    const config = loadConfig({ validate: false });
+    const results: AttachableBrowser[] = [];
+
+    // Determine ports to probe
+    const portsToProbe = options.all
+      ? [9222, 9223, 9224, 9225, 9226, 9227, 9228, 9229] // Common CDP ports
+      : [config.chromeDebugPort];
+
+    for (const port of portsToProbe) {
+      const candidates = getDebugEndpointCandidates(port);
+
+      for (const endpoint of candidates) {
+        try {
+          // Query /json/version to get browser info
+          const versionResponse = await fetch(`${endpoint}/json/version`, {
+            signal: AbortSignal.timeout(3000),
+          });
+
+          if (!versionResponse.ok) {
+            continue;
+          }
+
+          const versionData = await versionResponse.json() as {
+            "Browser": string;
+            "Protocol-Version": string;
+            "User-Agent": string;
+            "webSocketDebuggerUrl": string;
+            "V8-Version": string;
+          };
+
+          // Infer channel from browser product string
+          const channel = this.inferChannel(versionData["Browser"]);
+
+          // Query /json/list to get tab info (optional)
+          let title: string | undefined;
+          try {
+            const listResponse = await fetch(`${endpoint}/json/list`, {
+              signal: AbortSignal.timeout(3000),
+            });
+            if (listResponse.ok) {
+              const listData = await listResponse.json() as Array<{
+                id: string;
+                title: string;
+                url: string;
+                type: string;
+              }>;
+              if (listData.length > 0) {
+                title = listData[0].title;
+              }
+            }
+          } catch {
+            // /json/list is optional, ignore failures
+          }
+
+          // Avoid duplicates by endpoint
+          if (!results.some(r => r.endpoint === endpoint)) {
+            results.push({
+              channel,
+              endpoint,
+              title,
+              attached: false, // We don't know if it's attached without checking connection state
+            });
+          }
+        } catch {
+          // Endpoint not reachable, continue to next candidate
+          continue;
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Infer browser channel from the browser product string.
+   */
+  private inferChannel(browserProduct: string): "chrome" | "msedge" | "chromium" | "electron" | "unknown" {
+    const lower = browserProduct.toLowerCase();
+    if (lower.includes("edg") || lower.includes("edge")) {
+      return "msedge";
+    }
+    if (lower.includes("chrome")) {
+      return "chrome";
+    }
+    if (lower.includes("chromium")) {
+      return "chromium";
+    }
+    if (lower.includes("electron")) {
+      return "electron";
+    }
+    return "unknown";
   }
 }

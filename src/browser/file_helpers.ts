@@ -13,6 +13,26 @@ export interface DownloadResult {
   sizeBytes: number;
 }
 
+// ── Section 27: Extended Download Result ───────────────────────────────
+
+/**
+ * Extended download result with URL, status, and error information.
+ */
+export interface ExtendedDownloadResult {
+  /** URL the download was initiated from */
+  url: string;
+  /** Suggested filename from the download */
+  suggestedFilename?: string;
+  /** Final path where the download was saved */
+  path?: string;
+  /** Size in bytes of the downloaded file */
+  sizeBytes?: number;
+  /** Download status */
+  status: "completed" | "failed" | "canceled";
+  /** Error message if the download failed */
+  error?: string;
+}
+
 export class DownloadManager {
   private readonly defaultDir: string;
   private readonly pendingDownloads = new Map<string, Promise<DownloadResult>>();

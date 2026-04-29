@@ -15,7 +15,7 @@ function makeHome(): string {
 function runCli(args: string[], env: NodeJS.ProcessEnv) {
   return spawnSync(
     process.execPath,
-    ["--require", "ts-node/register", "--require", "tsconfig-paths/register", "cli.ts", ...args],
+    ["--require", "ts-node/register", "--require", "tsconfig-paths/register", "src/cli.ts", ...args],
     {
       cwd: process.cwd(),
       env: { ...process.env, ...env },
@@ -50,6 +50,38 @@ test("debug console --json reads persisted observability entries", () => {
     assert.equal(parsed.sessionId, "default");
     assert.equal(parsed.entries.length, 1);
     assert.equal(parsed.entries[0].message, "bc-console-error-test");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("debug receipt --json reads persisted screencast receipt", () => {
+  const home = makeHome();
+  const store = new MemoryStore({ filename: path.join(home, "memory.sqlite") });
+  const receiptId = "receipt-cli-store-test";
+  try {
+    store.set(`${OBSERVABILITY_KEYS.receiptPrefix}${receiptId}`, {
+      taskId: "task-cli-store-test",
+      receiptId,
+      status: "success",
+      startedAt: "2026-04-27T14:02:52.000Z",
+      completedAt: "2026-04-27T14:03:02.000Z",
+      artifacts: [],
+      recordingPolicy: "keep",
+    });
+    store.close();
+
+    const result = runCli(["debug", "receipt", receiptId, "--json"], {
+      BROWSER_CONTROL_HOME: home,
+      POLICY_PROFILE: "balanced",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr.trim(), "");
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.receiptId, receiptId);
+    assert.equal(parsed.taskId, "task-cli-store-test");
+    assert.equal(parsed.status, "success");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

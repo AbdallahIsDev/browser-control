@@ -17,6 +17,23 @@ const log = logger.withComponent("a11y_snapshot");
 
 // ── Core Types ──────────────────────────────────────────────────────
 
+export interface ElementBounds {
+  /** X coordinate relative to viewport */
+  x: number;
+  /** Y coordinate relative to viewport */
+  y: number;
+  /** Width in pixels */
+  width: number;
+  /** Height in pixels */
+  height: number;
+  /** Viewport width when bounds were captured */
+  viewportWidth: number;
+  /** Viewport height when bounds were captured */
+  viewportHeight: number;
+  /** Device scale factor (DPR) when bounds were captured */
+  deviceScaleFactor?: number;
+}
+
 export interface A11yElement {
   /** Compact ref like "e1", "e2". Unique within a snapshot. */
   ref: string;
@@ -36,8 +53,8 @@ export interface A11yElement {
   expanded?: boolean;
   /** Whether the element currently has focus */
   focused?: boolean;
-  /** Bounding box if available */
-  bounds?: { x: number; y: number; width: number; height: number };
+  /** Bounding box if available (includes viewport metadata) */
+  bounds?: ElementBounds;
   /** Refs of child elements (for hierarchy) */
   children?: string[];
   /** CSS selector fallback for interaction */
@@ -60,7 +77,7 @@ export interface A11ySnapshot {
 // ── Interactive / Meaningful Roles ──────────────────────────────────
 
 /** Roles we care about for agent interaction */
-const INTERACTIVE_ROLES = new Set([
+export const INTERACTIVE_ROLES = new Set([
   "button",
   "link",
   "textbox",
@@ -137,10 +154,12 @@ const STRUCTURAL_ROLES = new Set([
  *   captures the full page; rootSelector filtering is not supported
  *   in the primary path. If you need subtree-scoped snapshots,
  *   prefer the DOM fallback (e.g., on pages with no a11y tree).
+ * @param options.boxes - If true, includes element bounds with viewport metadata.
+ *   Bounds are only captured in the DOM fallback path. Default: false.
  */
 export async function snapshot(
   page: Page,
-  options: { sessionId?: string; rootSelector?: string } = {},
+  options: { sessionId?: string; rootSelector?: string; boxes?: boolean } = {},
 ): Promise<A11ySnapshot> {
   const startedAt = Date.now();
   let pageUrl: string;
@@ -164,10 +183,15 @@ export async function snapshot(
   // Fallback: DOM-based synthetic extraction (rootSelector is honored here)
   if (elements.length === 0) {
     log.info("A11y tree empty, falling back to DOM-based synthetic snapshot");
-    elements = await snapshotFromDOM(page, options.rootSelector);
+    elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
   } else if (options.rootSelector) {
     // Note: rootSelector was requested but not applied to the CDP path
     log.info("rootSelector is only applied in DOM fallback mode; CDP path captured full page");
+  } else if (options.boxes) {
+    // Boxes requested but CDP path doesn't support bounds extraction yet
+    // Re-run with DOM fallback to get bounds
+    log.info("Boxes requested, re-running snapshot with DOM fallback for bounds");
+    elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
   }
 
   const elapsed = Date.now() - startedAt;
@@ -464,9 +488,26 @@ function normalizeCDPRole(cdpRole: string): string {
 async function snapshotFromDOM(
   page: Page,
   rootSelector?: string,
+  boxes?: boolean,
 ): Promise<A11yElement[]> {
   try {
     const rootScope = rootSelector ?? "body";
+
+    // Capture viewport metadata if boxes are requested
+    // For headful/attached browsers, page.viewportSize() may be null, so collect
+    // innerWidth, innerHeight, and devicePixelRatio inside page.evaluate
+    let viewportInfo: { width: number; height: number; deviceScaleFactor: number } | undefined;
+    if (boxes) {
+      try {
+        viewportInfo = await page.evaluate(() => ({
+          width: window.innerWidth,
+          height: window.innerHeight,
+          deviceScaleFactor: window.devicePixelRatio,
+        }));
+      } catch {
+        // Viewport capture failed, bounds will be omitted
+      }
+    }
 
     const rawElements = await page.evaluate((scope: string) => {
       const root = document.querySelector(scope);
@@ -729,8 +770,16 @@ async function snapshotFromDOM(
       if (raw.checked != null) {
         element.checked = raw.checked;
       }
-      if (raw.rect) {
-        element.bounds = raw.rect;
+      if (raw.rect && boxes && viewportInfo) {
+        element.bounds = {
+          x: raw.rect.x,
+          y: raw.rect.y,
+          width: raw.rect.width,
+          height: raw.rect.height,
+          viewportWidth: viewportInfo.width,
+          viewportHeight: viewportInfo.height,
+          deviceScaleFactor: viewportInfo.deviceScaleFactor,
+        };
       }
       if (raw.selector) {
         element.selector = raw.selector;
@@ -787,6 +836,17 @@ export function formatSnapshotAsText(snapshot: A11ySnapshot): string {
     }
 
     parts.push(`[ref=@${el.ref}]`);
+
+    // Add box metadata if bounds are present
+    if (el.bounds) {
+      const { x, y, width, height } = el.bounds;
+      // Round to integers for cleaner output
+      const bx = Math.round(x);
+      const by = Math.round(y);
+      const bw = Math.round(width);
+      const bh = Math.round(height);
+      meta.push(`box=${bx},${by},${bw},${bh}`);
+    }
 
     if (meta.length > 0) {
       parts.push(`(${meta.join(", ")})`);
