@@ -47,7 +47,7 @@ export function createMcpGoldenHarness(): McpGoldenHarness {
 
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"],
+    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", path.join(process.cwd(), "src", "cli.ts"), "mcp", "serve"],
     cwd: process.cwd(),
     env,
     stderr: "pipe",
@@ -65,7 +65,7 @@ export function createMcpGoldenHarness(): McpGoldenHarness {
     transport,
     client,
     async readStartupStdout(ms: number): Promise<string> {
-      const child = spawn(process.execPath, ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"], {
+      const child = spawn(process.execPath, ["-r", "ts-node/register", "-r", "tsconfig-paths/register", path.join(process.cwd(), "src", "cli.ts"), "mcp", "serve"], {
         cwd: process.cwd(),
         env,
         stdio: ["pipe", "pipe", "pipe"],

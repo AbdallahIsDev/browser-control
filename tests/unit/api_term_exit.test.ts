@@ -140,9 +140,9 @@ function runScriptFile(
     // module resolution (CommonJS, paths, etc.) works from the temp directory.
     const tsconfigPath = path.join(process.cwd(), "tsconfig.json");
     const childEnv = { ...process.env, ...env };
-    const child = spawn("npx", ["ts-node", "--project", tsconfigPath, scriptPath], {
+    const child = spawn(process.execPath, [require.resolve("ts-node/dist/bin.js"), "--project", tsconfigPath, scriptPath], {
       cwd: process.cwd(),
-      shell: true,
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
       ...(process.platform === "win32" ? { windowsHide: true } : {}),
@@ -236,7 +236,9 @@ describe("API terminal process-lifecycle regression (Section 5)", () => {
     // on Windows with multiline inline scripts.
     // CRITICAL: set process.env BEFORE any dynamic imports so that
     // loadConfig() reads the isolated BROWSER_CONTROL_HOME and BROKER_PORT.
-    const projectRoot = process.cwd().replace(/\\/g, "/"); // forward slashes for TS
+    const browserControlModule = path.join(process.cwd(), "src", "browser_control");
+    const memoryStoreModule = path.join(process.cwd(), "src", "memory_store");
+    const sessionManagerModule = path.join(process.cwd(), "src", "session_manager");
     const scriptPath = writeTempScript(`
 // Set isolated env vars BEFORE any imports — loadConfig() reads process.env
 process.env.BROWSER_CONTROL_HOME = ${JSON.stringify(env.BROWSER_CONTROL_HOME)};
@@ -245,9 +247,9 @@ process.env.BROWSER_DEBUG_PORT = ${JSON.stringify(env.BROWSER_DEBUG_PORT)};
 process.env.LOG_FILE = "false";
 
 async function main() {
-  const { createBrowserControl } = await import("${projectRoot}/browser_control");
-  const { MemoryStore } = await import("${projectRoot}/memory_store");
-  const { BrokerTerminalRuntime, LocalTerminalRuntime } = await import("${projectRoot}/session_manager");
+  const { createBrowserControl } = require(${JSON.stringify(browserControlModule)});
+  const { MemoryStore } = require(${JSON.stringify(memoryStoreModule)});
+  const { BrokerTerminalRuntime, LocalTerminalRuntime } = require(${JSON.stringify(sessionManagerModule)});
 
   const store = new MemoryStore({ filename: ":memory:" });
   const bc = createBrowserControl({ memoryStore: store, policyProfile: "balanced" });
@@ -359,7 +361,9 @@ main().catch((e) => {
 
     // Simpler test: verify the runtime type directly in an isolated child process
     // CRITICAL: set process.env BEFORE any dynamic imports
-    const projectRoot = process.cwd().replace(/\\/g, "/");
+    const browserControlModule = path.join(process.cwd(), "src", "browser_control");
+    const memoryStoreModule = path.join(process.cwd(), "src", "memory_store");
+    const sessionManagerModule = path.join(process.cwd(), "src", "session_manager");
     const scriptPath = writeTempScript(`
 // Set isolated env vars BEFORE any imports
 process.env.BROWSER_CONTROL_HOME = ${JSON.stringify(env.BROWSER_CONTROL_HOME)};
@@ -368,9 +372,9 @@ process.env.BROWSER_DEBUG_PORT = ${JSON.stringify(env.BROWSER_DEBUG_PORT)};
 process.env.LOG_FILE = "false";
 
 async function main() {
-  const { createBrowserControl } = await import("${projectRoot}/browser_control");
-  const { MemoryStore } = await import("${projectRoot}/memory_store");
-  const { BrokerTerminalRuntime, LocalTerminalRuntime, probeDaemonHealth } = await import("${projectRoot}/session_manager");
+  const { createBrowserControl } = require(${JSON.stringify(browserControlModule)});
+  const { MemoryStore } = require(${JSON.stringify(memoryStoreModule)});
+  const { BrokerTerminalRuntime, LocalTerminalRuntime, probeDaemonHealth } = require(${JSON.stringify(sessionManagerModule)});
 
   const store = new MemoryStore({ filename: ":memory:" });
   const bc = createBrowserControl({ memoryStore: store, policyProfile: "balanced" });

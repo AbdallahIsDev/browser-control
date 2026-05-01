@@ -341,7 +341,7 @@ describe.describe("SkillRegistry", () => {
 
   describe.describe("validateManifest", () => {
     describe.it("returns valid for a correct manifest", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "good-skill",
         version: "1.0.0",
@@ -354,7 +354,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing name", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "",
         version: "1.0.0",
@@ -367,7 +367,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing version", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "",
@@ -380,7 +380,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports missing description", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -393,7 +393,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports non-array requiredEnv", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -406,7 +406,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports invalid action param types", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -424,7 +424,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports duplicate action names", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -441,7 +441,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("reports non-string configSchema", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -455,7 +455,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("warns about missing action descriptions (non-string)", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",
@@ -474,7 +474,7 @@ describe.describe("SkillRegistry", () => {
     });
 
     describe.it("warns about empty action descriptions", () => {
-      const { validateManifest } = require("../../skill_registry") as typeof import("../../src/skill_registry");
+      const { validateManifest } = require("../../src/skill_registry") as typeof import("../../src/skill_registry");
       const result = validateManifest({
         name: "skill",
         version: "1.0.0",

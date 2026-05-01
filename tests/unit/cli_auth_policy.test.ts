@@ -15,7 +15,7 @@ function makeHome(): string {
 function runCli(args: string[], env: NodeJS.ProcessEnv) {
   return spawnSync(
     process.execPath,
-    ["--require", "ts-node/register", "--require", "tsconfig-paths/register", "cli.ts", ...args],
+    ["--require", "ts-node/register", "--require", "tsconfig-paths/register", path.join(process.cwd(), "src", "cli.ts"), ...args],
     {
       cwd: process.cwd(),
       env: { ...process.env, ...env },

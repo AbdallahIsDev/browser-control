@@ -175,9 +175,15 @@ function runCliCommand(
 ): Promise<{ output: string; exitCode: number | null; timedOut: boolean }> {
   return new Promise((resolve) => {
     const childEnv = { ...process.env, ...env };
-    const child = spawn("npx", ["ts-node", "cli.ts", ...args], {
+    const child = spawn(process.execPath, [
+      require.resolve("ts-node/dist/bin.js"),
+      "--project",
+      path.join(process.cwd(), "tsconfig.json"),
+      path.join(process.cwd(), "src", "cli.ts"),
+      ...args,
+    ], {
       cwd: process.cwd(),
-      shell: true,
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
       ...(process.platform === "win32" ? { windowsHide: true } : {}),

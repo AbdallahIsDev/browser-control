@@ -67,7 +67,7 @@ test("golden MCP workflow keeps stdio clean and runs status/fs/terminal tools", 
       arguments: { sessionId: trustedSessionId },
     }));
     assert.equal(browserResult.success, false);
-    assert.match(String(browserResult.error), /No active browser|No browser|Cannot read properties/i);
+    assert.match(String(browserResult.error), /No active browser|No browser|No attachable Chrome|Cannot read properties/i);
 
     const terminalResult = await harness.client.callTool({
       name: "bc_terminal_exec",

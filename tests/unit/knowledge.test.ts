@@ -37,22 +37,33 @@ function createTempKnowledgeHome(): string {
   return tmp;
 }
 
-/** Patch process.env.BROWSER_CONTROL_HOME so paths.ts resolves to our temp dir. */
+function clearKnowledgeModuleCache(): void {
+  for (const modulePath of [
+    "../../src/shared/paths",
+    "../../src/knowledge_store",
+    "../../src/knowledge_query",
+    "../../src/knowledge/store",
+    "../../src/knowledge/query",
+  ]) {
+    try {
+      delete require.cache[require.resolve(modulePath)];
+    } catch {
+      // Module may not be loaded in this test process.
+    }
+  }
+}
+
+/** Patch process.env.BROWSER_CONTROL_HOME so path helpers resolve to our temp dir. */
 function withTempHome<T>(tmp: string, fn: () => T): T {
   const old = process.env.BROWSER_CONTROL_HOME;
   process.env.BROWSER_CONTROL_HOME = tmp;
-  // Force path module re-read by clearing require cache
-  delete require.cache[require.resolve("./paths")];
-  delete require.cache[require.resolve("./knowledge_store")];
-  delete require.cache[require.resolve("./knowledge_query")];
+  clearKnowledgeModuleCache();
   try {
     return fn();
   } finally {
     if (old === undefined) delete process.env.BROWSER_CONTROL_HOME;
     else process.env.BROWSER_CONTROL_HOME = old;
-    delete require.cache[require.resolve("./paths")];
-    delete require.cache[require.resolve("./knowledge_store")];
-    delete require.cache[require.resolve("./knowledge_query")];
+    clearKnowledgeModuleCache();
   }
 }
 

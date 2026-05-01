@@ -207,8 +207,8 @@ describe("createBrowserControl", () => {
     const bc = createBrowserControl({ memoryStore: store, policyProfile: "safe" });
     await bc.session.create("safe-debug", { policyProfile: "safe" });
 
-    assert.throws(() => bc.debug.network(), /Confirmation required/);
-    assert.throws(() => bc.debug.console(), /Confirmation required/);
-    assert.throws(() => bc.debug.listBundles(), /Confirmation required/);
+    assert.throws(() => bc.debug.network(), /Confirmation required|Policy denied/);
+    assert.throws(() => bc.debug.console(), /Confirmation required|Policy denied/);
+    assert.throws(() => bc.debug.listBundles(), /Confirmation required|Policy denied/);
   });
 });

@@ -42,8 +42,12 @@ test("browser feature live workflow drives spatial, screencast, drop, screenshot
   }
 
   const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const previousMode = process.env.BROWSER_MODE;
+  const previousLaunchProfile = process.env.BROWSER_LAUNCH_PROFILE;
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-browser-features-live-"));
   process.env.BROWSER_CONTROL_HOME = home;
+  process.env.BROWSER_MODE = "managed";
+  process.env.BROWSER_LAUNCH_PROFILE = "isolated";
   resetGlobalScreencastRecorder();
 
   const store = new MemoryStore({ filename: path.join(home, "memory.sqlite") });
@@ -177,6 +181,16 @@ test("browser feature live workflow drives spatial, screencast, drop, screenshot
       delete process.env.BROWSER_CONTROL_HOME;
     } else {
       process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    if (previousMode === undefined) {
+      delete process.env.BROWSER_MODE;
+    } else {
+      process.env.BROWSER_MODE = previousMode;
+    }
+    if (previousLaunchProfile === undefined) {
+      delete process.env.BROWSER_LAUNCH_PROFILE;
+    } else {
+      process.env.BROWSER_LAUNCH_PROFILE = previousLaunchProfile;
     }
     try {
       fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });

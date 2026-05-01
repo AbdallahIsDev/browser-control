@@ -4,7 +4,7 @@ import { once } from "node:events";
 import http from "node:http";
 import test from "node:test";
 
-const { startTcpBridge } = require("../../wsl_cdp_bridge");
+const { startTcpBridge } = require("../../wsl_cdp_bridge.cjs");
 
 test("startTcpBridge forwards HTTP requests to the upstream debug endpoint", async (t) => {
   const upstream = http.createServer((_req, res) => {
