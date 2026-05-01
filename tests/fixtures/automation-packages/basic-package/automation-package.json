@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1",
+  "name": "basic-test-package",
+  "version": "1.0.0",
+  "description": "A basic test package for Section 30",
+  "browserControlVersion": "^1.0.0",
+  "permissions": [
+    {
+      "kind": "terminal",
+      "commands": ["echo"]
+    }
+  ],
+  "workflows": [
+    "workflows/test-workflow.json"
+  ],
+  "evals": [
+    "evals/test-eval.json"
+  ]
+}

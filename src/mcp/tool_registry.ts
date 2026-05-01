@@ -22,6 +22,7 @@ import { buildServiceTools } from "./tools/service";
 import { buildProviderTools } from "./tools/provider";
 import { buildStatusTools } from "./tools/status";
 import { buildWorkflowTools } from "./tools/workflow";
+import { buildPackageTools } from "./tools/package";
 
 const SHORT_TOOL_ALIASES: Record<string, string> = {
   bc_status: "status",
@@ -100,6 +101,7 @@ export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
     ...buildDebugTools(api),
     ...buildServiceTools(api),
     ...buildWorkflowTools(api),
+    ...buildPackageTools(api),
   ]);
 }
 
@@ -117,5 +119,6 @@ export function getToolCategories(api: BrowserControlAPI): Record<string, string
     debug: withShortAliases(buildDebugTools(api)).map((t) => t.name),
     service: withShortAliases(buildServiceTools(api)).map((t) => t.name),
     workflow: withShortAliases(buildWorkflowTools(api)).map((t) => t.name),
+    package: withShortAliases(buildPackageTools(api)).map((t) => t.name),
   };
 }

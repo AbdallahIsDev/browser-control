@@ -293,6 +293,27 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
     risk: "high",
   },
 
+  // ── Package path (Section 30) ───────────────────────────────────
+  {
+    matches: (action) => {
+      const packageReadActions = ["package_list", "package_info"];
+      return packageReadActions.includes(action);
+    },
+    path: "command",
+    risk: "low",
+  },
+  {
+    matches: (action) => {
+      const packageMutationActions = [
+        "package_install", "package_remove", "package_update",
+        "package_run", "package_eval", "package_grant"
+      ];
+      return packageMutationActions.includes(action);
+    },
+    path: "command",
+    risk: "moderate",
+  },
+
   // ── Filesystem path (Section 12) ────────────────────────────────
   {
     matches: (action) => {

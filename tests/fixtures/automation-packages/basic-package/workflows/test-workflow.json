@@ -1,0 +1,16 @@
+{
+  "id": "test-workflow",
+  "name": "Test Workflow",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "node-1",
+      "kind": "terminal",
+      "name": "Echo Test",
+      "input": {
+        "command": "echo \"Hello, package world\""
+      }
+    }
+  ],
+  "edges": []
+}

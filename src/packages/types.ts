@@ -1,0 +1,118 @@
+/**
+ * Package System Types
+ * 
+ * Defines the core interfaces for automation packages, including manifests,
+ * installation state, permissions, and evaluations.
+ */
+
+// ── Permissions ───────────────────────────────────────────────────────
+
+export type PackagePermissionKind = "browser" | "filesystem" | "terminal" | "network" | "helper";
+
+export interface BrowserPermission {
+  kind: "browser";
+  domains: string[];
+}
+
+export interface FilesystemPermission {
+  kind: "filesystem";
+  paths: string[];
+  access: "read" | "write" | "read-write";
+}
+
+export interface TerminalPermission {
+  kind: "terminal";
+  commands: string[];
+}
+
+export interface NetworkPermission {
+  kind: "network";
+  domains: string[];
+}
+
+export interface HelperPermission {
+  kind: "helper";
+  helperIds: string[];
+}
+
+export type PackagePermission =
+  | BrowserPermission
+  | FilesystemPermission
+  | TerminalPermission
+  | NetworkPermission
+  | HelperPermission;
+
+export interface PackagePermissionDecision {
+  permission: PackagePermission;
+  granted: boolean;
+  reason?: string;
+}
+
+// ── Manifest ──────────────────────────────────────────────────────────
+
+export interface AutomationPackageManifest {
+  schemaVersion: "1";
+  name: string;
+  version: string;
+  description: string;
+  browserControlVersion: string;
+  permissions: PackagePermission[];
+  configSchema?: unknown;
+  uiSpec?: string;
+  workflows?: string[];
+  helpers?: string[];
+  evals?: string[];
+  entrypoints?: Record<string, string>;
+  provenance?: {
+    source?: string;
+    license?: string;
+    homepage?: string;
+  };
+}
+
+// ── Evaluation ────────────────────────────────────────────────────────
+
+export interface PackageEvalDefinition {
+  id: string;
+  name: string;
+  workflow: string;
+  expectedStatus: "completed" | "failed";
+  timeoutMs?: number;
+}
+
+export interface PackageEvalResult {
+  evalId: string;
+  name: string;
+  status: "passed" | "failed" | "skipped";
+  durationMs: number;
+  error?: string;
+  artifacts?: string[];
+}
+
+export interface PackageEvalSummary {
+  runAt: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  durationMs: number;
+}
+
+// ── Installation Registry ─────────────────────────────────────────────
+
+export interface InstalledAutomationPackage {
+  name: string;
+  version: string;
+  source: string;
+  installedPath: string;
+  installedAt: string;
+  updatedAt: string;
+  enabled: boolean;
+  permissions: PackagePermissionDecision[];
+  validationStatus: "valid" | "invalid" | "warning";
+  validationErrors: string[];
+  workflows: string[];
+  helpers: string[];
+  evals: string[];
+  lastEvalResult?: PackageEvalSummary;
+}

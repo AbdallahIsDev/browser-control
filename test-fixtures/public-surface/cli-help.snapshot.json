@@ -231,6 +231,107 @@
       "entries": [
         {
           "commandPath": [
+            "package",
+            "install"
+          ],
+          "description": "Install a package from local directory",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package install <source> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "list"
+          ],
+          "description": "List installed packages",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package list [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "info"
+          ],
+          "description": "Show package info",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package info <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "remove"
+          ],
+          "description": "Remove an installed package",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package remove <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "update"
+          ],
+          "description": "Update an installed package",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package update <name> [source] [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "grant"
+          ],
+          "description": "Grant a declared package permission",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package grant <name> <permission-kind-or-index> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "run"
+          ],
+          "description": "Run a package workflow",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package run <name> <workflow> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "eval"
+          ],
+          "description": "Evaluate a package",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package eval <name> [--json]"
+        }
+      ],
+      "section": "Automation Packages (Section 30)"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
             "open"
           ],
           "description": "Open a URL in the browser",
