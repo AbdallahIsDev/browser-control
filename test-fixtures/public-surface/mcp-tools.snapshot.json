@@ -2230,6 +2230,7 @@
       "category": "package",
       "description": "Evaluate an installed automation package",
       "inputSchema": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string"
@@ -2277,6 +2278,7 @@
       "category": "package",
       "description": "Grant a declared automation package permission by kind or index",
       "inputSchema": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string"
@@ -2328,6 +2330,7 @@
       "category": "package",
       "description": "Get info about an installed automation package",
       "inputSchema": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string"
@@ -2375,6 +2378,7 @@
       "category": "package",
       "description": "List installed automation packages",
       "inputSchema": {
+        "additionalProperties": false,
         "properties": {},
         "required": [],
         "type": "object"
@@ -2416,6 +2420,7 @@
       "category": "package",
       "description": "Run a workflow from an installed package",
       "inputSchema": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string"
