@@ -21,7 +21,7 @@ function createHarness(): Harness {
 
   const transport = new StdioClientTransport({
     command: "node",
-    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"],
+    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "src/cli.ts", "mcp", "serve"],
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -73,7 +73,7 @@ describe("MCP stdio server", () => {
     const port = String(30000 + Math.floor(Math.random() * 10000));
     const child = spawn(
       "node",
-      ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"],
+      ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "src/cli.ts", "mcp", "serve"],
       {
         cwd: process.cwd(),
         env: {

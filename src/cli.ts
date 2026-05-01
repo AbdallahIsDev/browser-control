@@ -325,6 +325,16 @@ Self-Healing Harness (Section 29):
   harness validate <helperId> [--json]                               Validate a helper
   harness rollback <helperId> <version> [--json]                     Rollback a helper
 
+Automation Packages (Section 30):
+  package install <source> [--json]                                  Install a package from local directory
+  package list [--json]                                              List installed packages
+  package info <name> [--json]                                       Show package info
+  package remove <name> [--json]                                     Remove an installed package
+  package update <name> [source] [--json]                            Update an installed package
+  package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
+  package run <name> <workflow> [--json]                             Run a package workflow
+  package eval <name> [--json]                                       Evaluate a package
+
 Browser Actions:
   open <url>                                                         Open a URL in the browser
   snapshot                                                           Take an accessibility snapshot
@@ -2221,6 +2231,10 @@ export async function runCli(argv = process.argv): Promise<void> {
       await handleHarness(args);
       break;
 
+    case "package":
+      await handlePackage(args);
+      break;
+
     case "run":
       await handleRun(args);
       break;
@@ -3189,6 +3203,103 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
       default:
         console.error(`Unknown harness command: ${subcommand}`);
         console.error("Available: list, validate, rollback");
+        process.exit(1);
+    }
+  } finally {
+    bc.close();
+  }
+}
+
+async function handlePackage(args: ParsedArgs): Promise<void> {
+  const { subcommand, positional, flags } = args;
+  const jsonOutput = flags.json === "true";
+  const { createBrowserControl } = await import("./browser_control");
+  const bc = createBrowserControl();
+
+  try {
+    switch (subcommand) {
+      case "install": {
+        const source = positional[0];
+        if (!source) {
+          console.error("Error: package source path is required");
+          process.exit(1);
+        }
+        const result = await bc.package.install(source);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "list": {
+        const result = await bc.package.list();
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "info": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: package name is required");
+          process.exit(1);
+        }
+        const result = await bc.package.info(name);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "remove": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: package name is required");
+          process.exit(1);
+        }
+        const result = await bc.package.remove(name);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "update": {
+        const name = positional[0];
+        const source = positional[1];
+        if (!name) {
+          console.error("Error: package name is required");
+          process.exit(1);
+        }
+        const result = await bc.package.update(name, source);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "grant": {
+        const name = positional[0];
+        const permissionRef = positional[1];
+        if (!name || !permissionRef) {
+          console.error("Error: package name and permission kind or index are required");
+          process.exit(1);
+        }
+        const ref = /^\d+$/.test(permissionRef) ? Number(permissionRef) : permissionRef;
+        const result = bc.package.grantPermission(name, ref);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "run": {
+        const name = positional[0];
+        const workflowNameOrId = positional[1];
+        if (!name || !workflowNameOrId) {
+          console.error("Error: package name and workflow are required");
+          process.exit(1);
+        }
+        const result = await bc.package.run(name, workflowNameOrId);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      case "eval": {
+        const name = positional[0];
+        if (!name) {
+          console.error("Error: package name is required");
+          process.exit(1);
+        }
+        const result = await bc.package.eval(name);
+        outputJson(result, !jsonOutput);
+        break;
+      }
+      default:
+        console.error(`Unknown package command: ${subcommand}`);
+        console.error("Available: install, list, info, remove, update, grant, run, eval");
         process.exit(1);
     }
   } finally {

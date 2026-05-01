@@ -54,6 +54,8 @@ export interface BrowserControlOptions {
   policyProfile?: string;
   /** Working directory for filesystem context. */
   workingDirectory?: string;
+  /** Custom data home directory (Section 30). */
+  dataHome?: string;
   /** Memory store instance (for testing / dependency injection). */
   memoryStore?: import("./runtime/memory_store").MemoryStore;
 }
@@ -204,6 +206,19 @@ export interface HarnessNamespace {
   rollback(helperId: string, version: string): ActionResult;
 }
 
+// ── Package Namespace (Section 30) ────────────────────────────────────
+
+export interface PackageNamespace {
+  install(source: string): Promise<ActionResult<import("./packages/types").InstalledAutomationPackage>>;
+  list(): ActionResult<import("./packages/types").InstalledAutomationPackage[]>;
+  info(name: string): ActionResult<import("./packages/types").InstalledAutomationPackage>;
+  remove(name: string): ActionResult<{ removed: boolean }>;
+  update(name: string, source?: string): Promise<ActionResult<import("./packages/types").InstalledAutomationPackage>>;
+  grantPermission(name: string, permissionRef: string | number): ActionResult<{ granted: boolean }>;
+  run(name: string, workflowNameOrId: string): Promise<ActionResult>;
+  eval(name: string): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -223,6 +238,8 @@ export interface BrowserControlAPI {
   workflow: WorkflowNamespace;
   /** Self-healing harness namespace (Section 29). */
   harness: HarnessNamespace;
+  /** Automation packages namespace (Section 30). */
+  package: PackageNamespace;
   /** Collect operator-facing system status (Section 11). */
   status(): Promise<SystemStatus>;
   /** Access the underlying session manager for advanced use. */
@@ -641,6 +658,90 @@ export function createBrowserControl(options: BrowserControlOptions = {}): Brows
           return attachPolicy(successResult(result, { path: "command", sessionId: getActionSessionId() }), policy.policy);
         }
         return attachPolicy(failureResult(result.error ?? "Rollback failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+    },
+    package: {
+      install: async (source: string) => {
+        const policy = evaluateActionPolicy("package_install", { source });
+        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
+        const { PackageRegistry } = await import("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        const result = registry.install(source);
+        if (result.success && result.package) {
+          return attachPolicy(successResult(result.package, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(result.error ?? "Install failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      list: () => {
+        const policy = evaluateActionPolicy("package_list", {});
+        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage[]>;
+        const { PackageRegistry } = require("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        return attachPolicy(successResult(registry.list(), { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      info: (name: string) => {
+        const policy = evaluateActionPolicy("package_info", { name });
+        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
+        const { PackageRegistry } = require("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        const pkg = registry.get(name);
+        if (pkg) {
+          return attachPolicy(successResult(pkg, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(`Package not found: ${name}`, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      remove: (name: string) => {
+        const policy = evaluateActionPolicy("package_remove", { name });
+        if (policy.blocked) return policy.blocked as ActionResult<{ removed: boolean }>;
+        const { PackageRegistry } = require("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        const result = registry.remove(name);
+        if (result.success) {
+          return attachPolicy(successResult({ removed: true }, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(result.error ?? "Remove failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      update: async (name: string, source?: string) => {
+        const policy = evaluateActionPolicy("package_update", { name, source });
+        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
+        const { PackageRegistry } = await import("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        const result = registry.update(name, source);
+        if (result.success && result.package) {
+          return attachPolicy(successResult(result.package, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(result.error ?? "Update failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      grantPermission: (name: string, permissionRef: string | number) => {
+        const policy = evaluateActionPolicy("package_grant", { name, permissionRef });
+        if (policy.blocked) return policy.blocked as ActionResult<{ granted: boolean }>;
+        const { PackageRegistry } = require("./packages/registry");
+        const registry = new PackageRegistry(options.dataHome);
+        const result = registry.grantPermission(name, permissionRef);
+        if (result.success) {
+          return attachPolicy(successResult({ granted: true }, { path: "command", sessionId: getActionSessionId() }), policy.policy);
+        }
+        return attachPolicy(failureResult(result.error ?? "Grant failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
+      },
+      run: async (name: string, workflowNameOrId: string) => {
+        const policy = evaluateActionPolicy("package_run", { name, workflowNameOrId });
+        if (policy.blocked) return policy.blocked as ActionResult;
+        const { PackageRegistry } = await import("./packages/registry");
+        const { PackageRunner } = await import("./packages/runner");
+        const registry = new PackageRegistry(options.dataHome);
+        const runner = new PackageRunner(registry, sessionManager.getMemoryStore(), getActionSessionId(), buildWorkflowRuntime());
+        const result = await runner.runWorkflow(name, workflowNameOrId);
+        return attachPolicy(result, policy.policy);
+      },
+      eval: async (name: string) => {
+        const policy = evaluateActionPolicy("package_eval", { name });
+        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").PackageEvalResult[]>;
+        const { PackageRegistry } = await import("./packages/registry");
+        const { PackageEval } = await import("./packages/eval");
+        const registry = new PackageRegistry(options.dataHome);
+        const evaluator = new PackageEval(registry, sessionManager.getMemoryStore(), getActionSessionId(), buildWorkflowRuntime());
+        const result = await evaluator.evaluate(name);
+        return attachPolicy(result, policy.policy);
       },
     },
     status: () => collectStatus(),

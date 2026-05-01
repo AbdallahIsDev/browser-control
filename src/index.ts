@@ -646,6 +646,24 @@ export { HarnessRegistry, getHarnessDir, getHarnessRegistryPath } from "./harnes
 export { LocalTempSandbox } from "./harness/sandbox";
 export { buildWorkflowTools } from "./mcp/tools/workflow";
 
+// ── Section 30: Automation Packages and Evals ─────────────────────────
+
+export type {
+  AutomationPackageManifest,
+  PackagePermission,
+  PackagePermissionKind,
+  InstalledAutomationPackage,
+  PackageEvalDefinition,
+  PackageEvalResult,
+  PackageEvalSummary,
+} from "./packages/types";
+
+export type { ManifestValidationResult as PackageManifestValidationResult } from "./packages/manifest";
+export { validatePackageManifest } from "./packages/manifest";
+export { PackageRegistry, getPackagesDir, getPackageRegistryPath, getInstalledPackageDir } from "./packages/registry";
+export { PackageRunner } from "./packages/runner";
+export { PackageEval } from "./packages/eval";
+
 // ── Section 7: MCP Integration Layer ───────────────────────────────────
 
 export { createMcpServer, startMcpServer } from "./mcp/server";

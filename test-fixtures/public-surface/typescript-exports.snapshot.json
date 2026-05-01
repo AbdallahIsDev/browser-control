@@ -86,6 +86,7 @@
       "fs",
       "fsActions",
       "harness",
+      "package",
       "provider",
       "service",
       "serviceActions",
@@ -107,6 +108,7 @@
         "fs": "FsNamespace",
         "fsActions": "FsActions",
         "harness": "HarnessNamespace",
+        "package": "PackageNamespace",
         "provider": "ProviderNamespace",
         "service": "ServiceNamespace",
         "serviceActions": "ServiceActions",
@@ -283,6 +285,13 @@
       ],
       "kind": "type",
       "name": "AutomationContextOptions"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "AutomationPackageManifest"
     },
     {
       "declarations": [
@@ -1511,6 +1520,13 @@
     },
     {
       "declarations": [
+        "src/packages/registry.ts"
+      ],
+      "kind": "value",
+      "name": "getInstalledPackageDir"
+    },
+    {
+      "declarations": [
         "src/knowledge/query.ts"
       ],
       "kind": "value",
@@ -1571,6 +1587,20 @@
       ],
       "kind": "value",
       "name": "getOrOpenPage"
+    },
+    {
+      "declarations": [
+        "src/packages/registry.ts"
+      ],
+      "kind": "value",
+      "name": "getPackageRegistryPath"
+    },
+    {
+      "declarations": [
+        "src/packages/registry.ts"
+      ],
+      "kind": "value",
+      "name": "getPackagesDir"
     },
     {
       "declarations": [
@@ -1760,6 +1790,13 @@
       ],
       "kind": "value",
       "name": "importAuthSnapshot"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "InstalledAutomationPackage"
     },
     {
       "declarations": [
@@ -2180,6 +2217,69 @@
       ],
       "kind": "value",
       "name": "openStylePanel"
+    },
+    {
+      "declarations": [
+        "src/packages/eval.ts"
+      ],
+      "kind": "type+value",
+      "name": "PackageEval"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "PackageEvalDefinition"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "PackageEvalResult"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "PackageEvalSummary"
+    },
+    {
+      "declarations": [
+        "src/packages/manifest.ts"
+      ],
+      "kind": "type",
+      "name": "PackageManifestValidationResult"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "PackagePermission"
+    },
+    {
+      "declarations": [
+        "src/packages/types.ts"
+      ],
+      "kind": "type",
+      "name": "PackagePermissionKind"
+    },
+    {
+      "declarations": [
+        "src/packages/registry.ts"
+      ],
+      "kind": "type+value",
+      "name": "PackageRegistry"
+    },
+    {
+      "declarations": [
+        "src/packages/runner.ts"
+      ],
+      "kind": "type+value",
+      "name": "PackageRunner"
     },
     {
       "declarations": [
@@ -3503,6 +3603,13 @@
       ],
       "kind": "value",
       "name": "validateManifest"
+    },
+    {
+      "declarations": [
+        "src/packages/manifest.ts"
+      ],
+      "kind": "value",
+      "name": "validatePackageManifest"
     },
     {
       "declarations": [

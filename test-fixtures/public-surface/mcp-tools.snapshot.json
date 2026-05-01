@@ -2125,6 +2125,243 @@
       }
     },
     {
+      "category": "package",
+      "description": "Evaluate an installed automation package",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "bc_package_eval",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "package",
+      "description": "Grant a declared automation package permission by kind or index",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissionRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "permissionRef"
+        ],
+        "type": "object"
+      },
+      "name": "bc_package_grant",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "package",
+      "description": "Get info about an installed automation package",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "bc_package_info",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "package",
+      "description": "List installed automation packages",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_package_list",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "package",
+      "description": "Run a workflow from an installed package",
+      "inputSchema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "workflowNameOrId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "workflowNameOrId"
+        ],
+        "type": "object"
+      },
+      "name": "bc_package_run",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
       "category": "service",
       "description": "List all registered local services with their names, ports, protocols, and paths.",
       "inputSchema": {
