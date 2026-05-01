@@ -30,7 +30,7 @@ bc.browser.hover({ target: "@e3" });
 bc.browser.type({ text: "hello" });
 bc.browser.press({ key: "Enter" });
 bc.browser.scroll({ direction: "down", amount: 300 });
-bc.browser.screenshot({ outputPath: "page.png" });
+bc.browser.screenshot(); // default: .browser-control/runtime/.../screenshots/
 bc.browser.tabList();
 bc.browser.tabSwitch("0");
 bc.browser.close();

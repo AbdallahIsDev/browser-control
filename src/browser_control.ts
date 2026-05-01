@@ -16,7 +16,7 @@
 
 import { isPolicyAllowed, SessionManager, type PolicyAllowResult, type SessionState, type SessionListEntry } from "./session_manager";
 import { DefaultPolicyEngine } from "./policy/engine";
-import { BrowserActions, type SnapshotOptions, type ClickOptions, type FillOptions, type HoverOptions, type TypeOptions, type PressOptions, type ScrollOptions, type ScreenshotOptions, type HighlightOptions, type LocatorCandidate, type BrowserActionContext, type DropOptions } from "./browser/actions";
+import { BrowserActions, type SnapshotOptions, type ClickOptions, type FillOptions, type HoverOptions, type TypeOptions, type PressOptions, type ScrollOptions, type ScreenshotOptions, type HighlightOptions, type LocatorCandidate, type BrowserActionContext, type DropOptions, type BrowserCloseResult } from "./browser/actions";
 import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
 import { FsActions, type FsActionContext } from "./filesystem/actions";
 import { ServiceActions, type ServiceActionContext } from "./service_actions";
@@ -83,7 +83,7 @@ export interface BrowserNamespace {
   tabList(): Promise<ActionResult<Array<{ id: string; url: string; title: string }>>>;
   tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
   tabClose(): Promise<ActionResult<{ closed: boolean }>>;
-  close(): Promise<ActionResult<{ closed: boolean }>>;
+  close(): Promise<ActionResult<BrowserCloseResult>>;
   provider: ProviderNamespace;
   /** Screencast recording namespace (Section 26). */
   screencast: ScreencastNamespace;

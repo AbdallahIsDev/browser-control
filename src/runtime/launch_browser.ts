@@ -1,4 +1,4 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +20,8 @@ interface ChromeDebugState {
   wslHostCandidates: string[];
   updatedAt: string;
 }
+
+type LaunchProfileMode = "system" | "isolated";
 
 const CHROME_CANDIDATES: Record<string, string[]> = {
   win32: [
@@ -66,12 +68,57 @@ function resolveChromePath(platform: NodeJS.Platform, override?: string): string
   );
 }
 
-function resolveUserDataDir(platform: NodeJS.Platform): string {
-  const profileName = "BrowserControlProfile";
-  // Use Browser Control's isolated profiles directory, not Chrome's default user data directory.
-  // This prevents inheriting contaminated settings (e.g., "Planet Search" hijack) from
-  // the user's default Chrome profile.
-  return path.join(getProfilesDir(), profileName);
+function resolveLaunchProfileMode(env: NodeJS.ProcessEnv = process.env): LaunchProfileMode {
+  const raw = env.BROWSER_LAUNCH_PROFILE?.trim().toLowerCase();
+  if (raw === "isolated" || raw === "browser-control") return "isolated";
+  if (raw === "system" || raw === "default" || raw === "chrome") return "system";
+  return "system";
+}
+
+function resolveSystemChromeUserDataDir(platform: NodeJS.Platform, env: NodeJS.ProcessEnv = process.env): string {
+  if (platform === "win32") {
+    const localAppData = env.LOCALAPPDATA;
+    if (!localAppData) {
+      throw new Error("LOCALAPPDATA is required to locate the Windows Chrome user profile.");
+    }
+    return path.join(localAppData, "Google", "Chrome", "User Data");
+  }
+  if (platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome");
+  }
+  return path.join(os.homedir(), ".config", "google-chrome");
+}
+
+function resolveIsolatedUserDataDir(): string {
+  return path.join(getProfilesDir(), "BrowserControlProfile");
+}
+
+function resolveUserDataDir(platform: NodeJS.Platform, env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = env.BROWSER_USER_DATA_DIR?.trim();
+  if (explicit) return explicit;
+  return resolveLaunchProfileMode(env) === "isolated"
+    ? resolveIsolatedUserDataDir()
+    : resolveSystemChromeUserDataDir(platform, env);
+}
+
+function isChromeProfileInUse(userDataDir: string): boolean {
+  return ["SingletonLock", "SingletonCookie", "SingletonSocket"].some((name) =>
+    fs.existsSync(path.join(userDataDir, name)),
+  );
+}
+
+function isChromeProcessRunning(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform !== "win32") return false;
+  try {
+    const result = spawnSync("tasklist", ["/FI", "IMAGENAME eq chrome.exe", "/NH"], {
+      encoding: "utf8",
+      timeout: 5000,
+      windowsHide: true,
+    });
+    return /chrome\.exe/i.test(`${result.stdout}\n${result.stderr}`);
+  } catch {
+    return false;
+  }
 }
 
 function isLikelyWsl(): boolean {
@@ -133,16 +180,9 @@ function getWslHostCandidatesFromWindows(): string[] {
     }
   } catch { /* ignore */ }
 
-  // 2. Probe the WSL gateway via wsl.exe
-  try {
-    const output = execSync(
-      'wsl.exe -e sh -lc "ip route | sed -n \'s/^default via //p\' | cut -d\' \' -f1 | head -n 1"',
-      { encoding: "utf8", timeout: 5000 },
-    ).trim();
-    add(output);
-  } catch { /* ignore */ }
-
-  // 3. Read nameservers from WSL resolv.conf via wsl.exe
+  // 2. Read nameservers from WSL resolv.conf via wsl.exe. On mirrored WSL
+  // networking this is often the Windows host bridge address, while the
+  // default gateway may be the LAN router and not bindable from Windows.
   try {
     const output = execSync(
       'wsl.exe -e sh -lc "sed -n \'s/^nameserver //p\' /etc/resolv.conf"',
@@ -151,6 +191,15 @@ function getWslHostCandidatesFromWindows(): string[] {
     for (const line of output.split(/\r?\n/)) {
       add(line.trim());
     }
+  } catch { /* ignore */ }
+
+  // 3. Probe the WSL gateway via wsl.exe as a lower-priority fallback.
+  try {
+    const output = execSync(
+      'wsl.exe -e sh -lc "ip route | sed -n \'s/^default via //p\' | cut -d\' \' -f1 | head -n 1"',
+      { encoding: "utf8", timeout: 5000 },
+    ).trim();
+    add(output);
   } catch { /* ignore */ }
 
   return [...seen];
@@ -233,6 +282,32 @@ function isWslCdpBridgeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return value === "1" || value === "true" || value === "yes" || value === "on";
 }
 
+async function canListenOnHost(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.listen({ host, port }, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+function resolveWslBridgeScriptPath(startDir = __dirname): string {
+  const candidates = [
+    path.resolve(startDir, "..", "..", "wsl_cdp_bridge.cjs"),
+    path.resolve(startDir, "..", "wsl_cdp_bridge.cjs"),
+    path.resolve(startDir, "wsl_cdp_bridge.cjs"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
 /** Discover WSL-reachable IPs from inside WSL (original behavior). */
 function getWslHostCandidatesFromWsl(): string[] {
   const seen = new Set<string>();
@@ -306,16 +381,16 @@ async function startWslBridgeIfNeeded(
 ): Promise<void> {
   if (wslHostCandidates.length === 0) return;
 
-  const listenHost = wslHostCandidates[0];
-  const bridgeUrl = `http://${listenHost}:${port}/json`;
   const bridgePidPath = getWslBridgePidPath(port);
 
   // Check if bridge is already working
-  try {
-    const response = await fetch(bridgeUrl, { signal: AbortSignal.timeout(2000) });
-    if (response.ok) return; // bridge already working
-  } catch {
-    // bridge not running
+  for (const host of wslHostCandidates) {
+    try {
+      const response = await fetch(`http://${host}:${port}/json`, { signal: AbortSignal.timeout(2000) });
+      if (response.ok) return; // bridge already working
+    } catch {
+      // bridge not running on this candidate
+    }
   }
 
   if (fs.existsSync(bridgePidPath)) {
@@ -340,6 +415,20 @@ async function startWslBridgeIfNeeded(
     return;
   }
 
+  let listenHost: string | null = null;
+  for (const host of wslHostCandidates) {
+    if (await canListenOnHost(host, port)) {
+      listenHost = host;
+      break;
+    }
+  }
+
+  if (!listenHost) {
+    console.warn(`No WSL bridge candidate could bind port ${port}. Tried: ${wslHostCandidates.join(", ")}`);
+    return;
+  }
+
+  const bridgeUrl = `http://${listenHost}:${port}/json`;
   console.log(`Starting WSL CDP bridge on ${listenHost}:${port}...`);
   const bridgeProcess = spawn(
     process.execPath,
@@ -438,8 +527,7 @@ async function main(): Promise<void> {
       console.log(`SUCCESS: Chrome debug session ready on port ${port}`);
 
       if (needsBridge) {
-        const bridgeScript = path.resolve(__dirname, "..", "wsl_cdp_bridge.cjs");
-        await startWslBridgeIfNeeded(port, wslHostCandidates, bridgeScript);
+        await startWslBridgeIfNeeded(port, wslHostCandidates, resolveWslBridgeScriptPath());
       }
       return;
     }
@@ -450,12 +538,21 @@ async function main(): Promise<void> {
   // Resolve user data dir
   const userDataDir = resolveUserDataDir(platform);
   fs.mkdirSync(userDataDir, { recursive: true });
+  const launchProfileMode = resolveLaunchProfileMode();
+
+  if (launchProfileMode === "system" && (isChromeProfileInUse(userDataDir) || isChromeProcessRunning(platform))) {
+    throw new Error(
+      `Chrome's system profile is already running without a reachable CDP port ${port}. ` +
+      `Close all Chrome windows, then run this launcher once so the real profile starts with remote debugging. ` +
+      `For an isolated automation profile instead, set BROWSER_LAUNCH_PROFILE=isolated.`,
+    );
+  }
 
   // Build Chrome args
   const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
 
   // Launch Chrome
-  console.log(`Launching Chrome with --remote-debugging-port=${port}...`);
+  console.log(`Launching Chrome with --remote-debugging-port=${port} using ${launchProfileMode} profile: ${userDataDir}`);
   const chromeProcess = spawn(chromePath, chromeArgs, {
     detached: true,
     stdio: "ignore",
@@ -476,8 +573,7 @@ async function main(): Promise<void> {
   // WSL CDP bridge exposes an unauthenticated debugging port on a private
   // interface, so it is explicit opt-in only.
   if (needsBridge) {
-    const bridgeScript = path.resolve(__dirname, "..", "wsl_cdp_bridge.cjs");
-    await startWslBridgeIfNeeded(port, wslHostCandidates, bridgeScript);
+    await startWslBridgeIfNeeded(port, wslHostCandidates, resolveWslBridgeScriptPath());
   }
 }
 
@@ -488,6 +584,11 @@ export { main as _main };
 export {
   resolveChromePath,
   resolveUserDataDir,
+  resolveLaunchProfileMode,
+  resolveSystemChromeUserDataDir,
+  resolveIsolatedUserDataDir,
+  isChromeProfileInUse,
+  isChromeProcessRunning,
   isLikelyWsl,
   isPrivateIpv4,
   isWslAvailableFromWindows,
@@ -496,6 +597,8 @@ export {
   getWslHostCandidatesFromWindows,
   isChromeAlive,
   isWslCdpBridgeEnabled,
+  resolveWslBridgeScriptPath,
+  canListenOnHost,
   startWslBridgeIfNeeded,
   stopWslBridge,
   waitForCdp,

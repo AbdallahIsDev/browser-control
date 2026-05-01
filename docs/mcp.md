@@ -2,6 +2,12 @@
 
 Browser Control exposes its action surface as an MCP stdio server.
 
+Browser Control exposes short tool aliases such as `status`, `open`, `snapshot`, `click`, `fill`, and `screenshot`. Legacy `bc_*` tool names remain supported.
+
+Some clients prefix tool names with the MCP server name. In those clients, name the server `bc` if you want surfaced names like `mcp_bc_status` and `mcp_bc_open`.
+
+MCP tool inputs are strict. Unknown parameters are rejected before handlers run, for example `expression` on `bc_browser_scroll` fails closed instead of being ignored.
+
 ## Start Server
 
 MCP client config:
@@ -9,7 +15,7 @@ MCP client config:
 ```json
 {
   "mcpServers": {
-    "browser-control": {
+    "bc": {
       "command": "bc",
       "args": ["mcp", "serve"]
     }
@@ -47,6 +53,7 @@ MCP marks failed tool results as errors.
 
 Status:
 
+- `status`
 - `bc_status`
 
 Session:
@@ -58,6 +65,11 @@ Session:
 
 Browser:
 
+- `open`
+- `snapshot`
+- `click`
+- `fill`
+- `screenshot`
 - `bc_browser_open`
 - `bc_browser_snapshot`
 - `bc_browser_click`
@@ -69,6 +81,7 @@ Browser:
 - `bc_browser_screenshot`
 - `bc_browser_tab_list`
 - `bc_browser_tab_switch`
+- `bc_browser_tab_close`
 - `bc_browser_close`
 
 Provider:
@@ -78,6 +91,8 @@ Provider:
 
 Terminal:
 
+- `terminal_open`
+- `terminal_exec`
 - `bc_terminal_open`
 - `bc_terminal_exec`
 - `bc_terminal_read`
@@ -91,6 +106,9 @@ Terminal:
 
 Filesystem:
 
+- `fs_read`
+- `fs_write`
+- `fs_list`
 - `bc_fs_read`
 - `bc_fs_write`
 - `bc_fs_list`
@@ -100,6 +118,8 @@ Filesystem:
 
 Debug:
 
+- `debug_health`
+- `debug_failure_bundle`
 - `bc_debug_health`
 - `bc_debug_failure_bundle`
 - `bc_debug_get_console`
@@ -111,6 +131,14 @@ Service:
 - `bc_service_resolve`
 
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
+
+`bc_browser_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_browser_tab_close` to close the current tab.
+
+Browser Control intentionally does not expose an arbitrary JavaScript console/eval MCP tool. Use accessibility actions, snapshots, debug read tools, network/console capture, or registered helpers. Arbitrary JS can read page data and mutate logged-in sessions, so agents must not invent eval tools.
+
+For Browser Control validation, use Browser Control MCP/CLI/API only. Do not fall back to a client built-in browser when validating Browser Control behavior.
+
+Click/fill/hover actions re-check actionability for refs. If a ref points at a custom radio/checkbox whose real input is visually hidden, Browser Control prefers the associated visible `<label>` when one is present. If a stale ref is retried after a DOM update, Browser Control refreshes the snapshot and re-resolves by the previous element's role/name instead of blindly reusing the old ref number. For duplicate text behind modals, semantic text resolution prefers dialog/modal content before background page matches.
 
 ## Common Inputs
 

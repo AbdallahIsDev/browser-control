@@ -58,7 +58,9 @@ Sensitive values are redacted in config output.
 | `chromeBindAddress` | `BROWSER_BIND_ADDRESS` | `127.0.0.1` |
 | `chromePath` | `BROWSER_CHROME_PATH` | unset |
 | `browserDebugUrl` | `BROWSER_DEBUG_URL` | unset |
-| `browserMode` | `BROWSER_MODE` | `managed` |
+| `browserMode` | `BROWSER_MODE` | `attach` |
+| `browserLaunchProfile` | `BROWSER_LAUNCH_PROFILE` | `system` |
+| `browserUserDataDir` | `BROWSER_USER_DATA_DIR` | unset |
 | `browserUserAgent` | `BROWSER_USER_AGENT` | unset |
 | `policyProfile` | `POLICY_PROFILE` | `balanced` |
 | `daemonVisible` | `DAEMON_VISIBLE` | `false` |

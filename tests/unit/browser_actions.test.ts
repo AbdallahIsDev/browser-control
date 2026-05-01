@@ -14,6 +14,7 @@ function createUnavailableBrowserManager() {
   const attempts = {
     attach: 0,
     launchManaged: 0,
+    attachOptions: [] as Array<{ port?: number; actor?: string }>,
   };
 
   const manager = {
@@ -21,8 +22,9 @@ function createUnavailableBrowserManager() {
     getBrowser: () => null,
     isConnected: () => false,
     getConnection: () => null,
-    attach: async () => {
+    attach: async (options?: { port?: number; actor?: string }) => {
       attempts.attach += 1;
+      attempts.attachOptions.push(options ?? {});
       throw new Error("attach unavailable in test");
     },
     launchManaged: async () => {
@@ -125,6 +127,7 @@ function createMockPage(url = "about:blank", options: { hasBrowserWindow?: boole
       calls.screenshot += 1;
       fs.writeFileSync(options.path, Buffer.alloc(1024, 1));
     },
+    evaluate: async () => [],
     close: async () => {
       calls.close += 1;
     },
@@ -137,11 +140,14 @@ describe("BrowserActions", () => {
   let store: MemoryStore;
   let dataHome: string;
   let originalHome: string | undefined;
+  let originalBrowserMode: string | undefined;
 
   beforeEach(async () => {
     originalHome = process.env.BROWSER_CONTROL_HOME;
+    originalBrowserMode = process.env.BROWSER_MODE;
     dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-browser-actions-test-"));
     process.env.BROWSER_CONTROL_HOME = dataHome;
+    delete process.env.BROWSER_MODE;
     store = new MemoryStore({ filename: ":memory:" });
     sessionManager = new SessionManager({
       memoryStore: store,
@@ -157,6 +163,11 @@ describe("BrowserActions", () => {
       delete process.env.BROWSER_CONTROL_HOME;
     } else {
       process.env.BROWSER_CONTROL_HOME = originalHome;
+    }
+    if (originalBrowserMode === undefined) {
+      delete process.env.BROWSER_MODE;
+    } else {
+      process.env.BROWSER_MODE = originalBrowserMode;
     }
     fs.rmSync(dataHome, { recursive: true, force: true });
   });
@@ -231,9 +242,36 @@ describe("BrowserActions", () => {
       }
     });
 
-    it("returns failure when no browser is connected and auto-connect cannot recover", async () => {
+    it("does not auto-launch a managed Chrome when default attach mode cannot connect", async () => {
       const isolatedStore = new MemoryStore({ filename: ":memory:" });
       const { manager, attempts } = createUnavailableBrowserManager();
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.open({ url: "https://example.com" });
+
+        assert.equal(attempts.attach, 1);
+        assert.equal(attempts.attachOptions[0]?.port, 9222);
+        assert.equal(attempts.launchManaged, 0);
+        assert.equal(result.success, false);
+        assert.ok(result.error?.includes("Browser mode is attach"));
+        assert.ok(result.error?.includes("will not launch a separate managed Chrome"));
+        assert.equal(result.path, "a11y");
+      } finally {
+        isolatedStore.close();
+      }
+    });
+
+    it("launches managed Chrome only when browser mode is explicitly managed", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const { manager, attempts } = createUnavailableBrowserManager();
+      process.env.BROWSER_MODE = "managed";
 
       try {
         const isolatedSessionManager = new SessionManager({
@@ -249,8 +287,8 @@ describe("BrowserActions", () => {
         assert.equal(attempts.launchManaged, 1);
         assert.equal(result.success, false);
         assert.ok(result.error?.includes("No browser available and auto-launch failed"));
-        assert.equal(result.path, "a11y");
       } finally {
+        delete process.env.BROWSER_MODE;
         isolatedStore.close();
       }
     });
@@ -261,7 +299,7 @@ describe("BrowserActions", () => {
       const result = await browserActions.takeSnapshot();
 
       assert.equal(result.success, false);
-      assert.ok(result.error?.includes("No browser available and auto-launch failed"));
+      assert.ok(result.error?.includes("Browser mode is attach"));
       assert.ok(result.debugBundleId);
       assert.ok(result.recoveryGuidance);
       assert.ok(loadDebugBundle(result.debugBundleId, store));
@@ -275,6 +313,59 @@ describe("BrowserActions", () => {
       assert.equal(result.success, false);
       // Either no page or policy check failure
       assert.ok(result.error);
+    });
+
+    it("scrolls locator into view and retries once after outside-viewport click failure", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const page = createMockPage("https://lichess.org", { hasBrowserWindow: true });
+      const manager = createConnectedBrowserManager([page]);
+      const calls = {
+        resolves: 0,
+        firstScroll: 0,
+        firstClick: 0,
+        secondScroll: 0,
+        secondClick: 0,
+      };
+
+      const firstLocator = {
+        scrollIntoViewIfNeeded: async () => { calls.firstScroll += 1; },
+        click: async () => {
+          calls.firstClick += 1;
+          throw new Error("Element is outside of the viewport");
+        },
+      };
+      const secondLocator = {
+        scrollIntoViewIfNeeded: async () => { calls.secondScroll += 1; },
+        click: async () => { calls.secondClick += 1; },
+      };
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        (isolatedActions as any).resolveTarget = async () => {
+          calls.resolves += 1;
+          return calls.resolves === 1
+            ? { locator: firstLocator, description: "radio Stockfish level 5" }
+            : { locator: secondLocator, description: "radio Stockfish level 5" };
+        };
+
+        const result = await isolatedActions.click({ target: "@e5" });
+
+        assert.equal(result.success, true);
+        assert.equal(calls.resolves, 2);
+        assert.equal(calls.firstScroll, 1);
+        assert.equal(calls.firstClick, 1);
+        assert.equal(calls.secondScroll, 1);
+        assert.equal(calls.secondClick, 1);
+        assert.equal(page.calls.bringToFront > 0, true);
+      } finally {
+        isolatedStore.close();
+      }
     });
   });
 
@@ -380,7 +471,11 @@ describe("BrowserActions", () => {
         const result = await isolatedActions.screenshot();
 
         assert.equal(result.success, true);
-        assert.ok(result.data?.path.includes(path.join(dataHome, "runtime", session.data!.id, "screenshots")));
+        assert.ok(result.data?.path.includes(path.join(dataHome, "runtime")));
+        assert.ok(result.data?.path.includes("test"));
+        assert.ok(result.data?.path.includes("screenshots"));
+        const manifestPath = path.join(path.dirname(path.dirname(result.data!.path)), "manifest.json");
+        assert.equal(fs.existsSync(manifestPath), true);
         assert.equal(fs.existsSync(result.data!.path), true);
       } finally {
         isolatedStore.close();
@@ -488,6 +583,39 @@ describe("BrowserActions", () => {
 
       assert.equal(result.success, false);
       assert.ok(result.error);
+    });
+
+    it("reports attached browser close as detach, not killed Chrome", async () => {
+      const isolatedStore = new MemoryStore({ filename: ":memory:" });
+      const page = createMockPage("https://example.com/");
+      const manager = createConnectedBrowserManager([page]);
+      (manager as any).getConnection = () => ({
+        id: "conn-attached",
+        mode: "attached",
+        cdpEndpoint: "http://127.0.0.1:9222",
+      });
+
+      try {
+        const isolatedSessionManager = new SessionManager({
+          memoryStore: isolatedStore,
+          browserManager: manager,
+        });
+        await isolatedSessionManager.create("test", { policyProfile: "balanced" });
+        const isolatedActions = new BrowserActions({ sessionManager: isolatedSessionManager });
+
+        const result = await isolatedActions.close();
+
+        assert.equal(result.success, true);
+        assert.deepEqual(result.data, {
+          detached: true,
+          closedBrowser: false,
+          mode: "attached",
+          connectionId: "conn-attached",
+          endpoint: "http://127.0.0.1:9222",
+        });
+      } finally {
+        isolatedStore.close();
+      }
     });
   });
 

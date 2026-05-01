@@ -126,10 +126,10 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
           "browser.cdp",
           "CDP Attachability",
           "browser",
-          config.browserMode === "attach" ? "fail" : "warn",
+          "warn",
           `CDP port ${config.chromeDebugPort} is not reachable.`,
-          "Run bc browser launch, launch_browser.bat, or configure BROWSER_DEBUG_URL when browser automation is needed.",
-          config.browserMode === "attach",
+          "Close Chrome and run launch_browser.bat, or configure BROWSER_DEBUG_URL when browser automation is needed.",
+          false,
         );
     },
     async () => {

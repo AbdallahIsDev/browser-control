@@ -26,6 +26,8 @@ import {
   getWslHostCandidates,
   isChromeAlive,
   isWslCdpBridgeEnabled,
+  isLikelyWsl,
+  resolveWslBridgeScriptPath,
   startWslBridgeIfNeeded,
   stopWslBridge,
 } from "../runtime/launch_browser";
@@ -34,6 +36,7 @@ import {
   createAutomationContext,
   ensureContextHasPage,
   resolveDebugEndpointUrl,
+  getDebugEndpointCandidates,
   getAllPages,
   type AutomationContextOptions,
 } from "./core";
@@ -58,6 +61,44 @@ import { ProviderConfigError } from "../providers/errors";
 import type { BrowserProvider, ActiveConnection } from "../providers/interface";
 
 const log = logger.withComponent("browser_connection");
+
+function isLoopbackEndpoint(endpoint: string): boolean {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    return host === "localhost" || host.startsWith("127.");
+  } catch {
+    return false;
+  }
+}
+
+export function attachEndpointCandidates(
+  cdpUrl: string | undefined,
+  port: number,
+  fallbackCandidates = getDebugEndpointCandidates(port),
+): string[] {
+  if (!cdpUrl) return [];
+  const candidates = [cdpUrl];
+  if (isLoopbackEndpoint(cdpUrl)) {
+    for (const candidate of fallbackCandidates) {
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+function wslAttachHelp(port: number): string {
+  if (!isLikelyWsl()) return "";
+  return " Running in WSL. To control visible Windows Chrome, start the Windows launcher with " +
+    "`BROWSER_ENABLE_WSL_CDP_BRIDGE=1` and attach again. Example from WSL: " +
+    `/mnt/c/Windows/System32/cmd.exe /C "set BROWSER_ENABLE_WSL_CDP_BRIDGE=1&& ` +
+    `C:\\Users\\11\\browser-control\\launch_browser.bat ${port}", then ` +
+    `node cli.js browser attach --port=${port} --yes`;
+}
+
+function wslChromeLaunchHelp(): string {
+  if (!isLikelyWsl()) return "";
+  return " Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run `node cli.js browser attach --port=9222`.";
+}
 
 // ── Connection Types ────────────────────────────────────────────────
 
@@ -377,8 +418,7 @@ export class BrowserConnectionManager {
         writeDebugState({ port, bindAddress, wslHostCandidates });
 
         if (needsBridge) {
-          const bridgeScript = path.resolve(__dirname, "..", "wsl_cdp_bridge.cjs");
-          await startWslBridgeIfNeeded(port, wslHostCandidates, bridgeScript);
+          await startWslBridgeIfNeeded(port, wslHostCandidates, resolveWslBridgeScriptPath());
         }
       }
 
@@ -464,9 +504,10 @@ export class BrowserConnectionManager {
       this.connection = null;
       this.managedProcess = null;
       log.error(`Failed to launch managed browser: ${message}`);
+      const wslHelp = wslChromeLaunchHelp();
       throw new Error(
         `Failed to launch managed automation browser on port ${port}. ` +
-        `Ensure Chrome can start or use 'bc browser launch' / 'launch_browser.bat ${port}'.`,
+        (wslHelp ? `${wslHelp}` : `Ensure Chrome can start or use 'bc browser launch' / 'launch_browser.bat ${port}'.`),
       );
     }
   }
@@ -529,17 +570,28 @@ export class BrowserConnectionManager {
     });
 
     try {
-      let cdpEndpoint: string;
+      let cdpEndpoint: string | undefined;
+      let browser: Browser | undefined;
 
       if (cdpUrl) {
-        cdpEndpoint = cdpUrl;
+        let lastError: unknown;
+        for (const candidate of attachEndpointCandidates(cdpUrl, port)) {
+          try {
+            browser = await chromium.connectOverCDP(candidate);
+            cdpEndpoint = candidate;
+            lastError = undefined;
+            break;
+          } catch (error: unknown) {
+            lastError = error;
+          }
+        }
+        if (lastError) throw lastError;
+        if (!browser) throw new Error("No attach endpoint candidates were available.");
       } else {
         cdpEndpoint = await resolveDebugEndpointUrl(port);
+        browser = await connectBrowser(port);
       }
-
-      const browser = cdpUrl
-        ? await chromium.connectOverCDP(cdpUrl)
-        : await connectBrowser(port);
+      if (!cdpEndpoint) throw new Error("No attach endpoint candidates were available.");
 
       this.browser = browser;
       this.watchBrowserDisconnect(browser);
@@ -588,7 +640,7 @@ export class BrowserConnectionManager {
       throw new Error(
         `Failed to attach to running browser${cdpUrl ? ` at ${cdpUrl}` : ` on port ${port}`}. ` +
         `Ensure Chrome/Chromium/Electron is running with --remote-debugging-port=${port}. ` +
-        `If you want a managed browser instead, use 'bc browser launch'.`,
+        `If you want a managed browser instead, use 'bc browser launch'.${wslAttachHelp(port)}`,
       );
     }
   }
@@ -620,11 +672,14 @@ export class BrowserConnectionManager {
     const canReconnectLocalManaged = active.provider === "local"
       && !active.isRealBrowser
       && (active.mode === "managed" || active.mode === "restored");
+    const canReconnectLocalAttached = active.provider === "local"
+      && active.isRealBrowser === true
+      && active.mode === "attached";
     const canReconnectProviderAttached = active.provider !== "local"
       && active.isRealBrowser === true
       && active.mode === "attached";
 
-    if (!canReconnectLocalManaged && !canReconnectProviderAttached) {
+    if (!canReconnectLocalManaged && !canReconnectLocalAttached && !canReconnectProviderAttached) {
       return false;
     }
 
@@ -658,6 +713,40 @@ export class BrowserConnectionManager {
           connectionId: this.connection.id,
           endpoint: this.connection.cdpEndpoint,
           provider: this.connection.provider,
+          tabs: tabCount,
+        });
+        return true;
+      }
+
+      if (canReconnectLocalAttached) {
+        const browser = await chromium.connectOverCDP(active.cdpEndpoint);
+        this.browser = browser;
+        this.watchBrowserDisconnect(browser);
+        this.context = browser.contexts()[0] ?? null;
+        const tabCount = getAllPages(browser).length;
+        this.connection = {
+          id: active.id ?? `conn-${Date.now()}-${++this.connectionCounter}`,
+          mode: "attached",
+          profile: {
+            id: "attached",
+            name: "attached-browser",
+            type: "shared",
+            dataDir: "",
+            createdAt: new Date().toISOString(),
+            lastUsedAt: new Date().toISOString(),
+          },
+          cdpEndpoint: active.cdpEndpoint,
+          status: "connected",
+          connectedAt: active.connectedAt ?? new Date().toISOString(),
+          tabCount,
+          targetType: active.targetType ?? this.detectTargetType(active.cdpEndpoint),
+          isRealBrowser: true,
+          provider: "local",
+        };
+        this.persistConnectionState();
+        log.info("Reconnected to active local attached browser", {
+          connectionId: this.connection.id,
+          endpoint: this.connection.cdpEndpoint,
           tabs: tabCount,
         });
         return true;
@@ -961,6 +1050,10 @@ export class BrowserConnectionManager {
    * connection while leaving the remote Chrome process running.
    */
   async releaseCliHandles(): Promise<void> {
+    // A one-shot CLI attach/launch intentionally leaves the persisted browser
+    // connection usable for the next CLI command. Closing the Playwright client
+    // may emit "disconnected"; suppress that local client event here.
+    this.connection = null;
     if (this.browser) {
       try {
         await this.browser.close();

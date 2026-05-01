@@ -1264,6 +1264,10 @@ export class SessionManager {
       const activeMarker = this.memoryStore.get<{ id: string }>("session:active");
       if (activeMarker?.id && this.sessions.has(activeMarker.id)) {
         this.activeSessionId = activeMarker.id;
+        const activeState = this.sessions.get(activeMarker.id);
+        if (activeState) {
+          try { this.policyEngine.setProfile(activeState.policyProfile); } catch { /* best-effort */ }
+        }
       }
 
       if (this.sessions.size > 0) {

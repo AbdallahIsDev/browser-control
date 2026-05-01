@@ -28,10 +28,14 @@ export function buildSessionTools(api: BrowserControlAPI): McpTool[] {
         workingDirectory: { type: "string", description: "Filesystem working directory for this session. Default: current working directory." },
       }, ["name"]),
       handler: async (params) => {
-        return api.session.create(params.name as string, {
+        const result = await api.session.create(params.name as string, {
           policyProfile: params.policyProfile as string | undefined,
           workingDirectory: params.workingDirectory as string | undefined,
         });
+        if (result.success && result.data?.id) {
+          api.session.use(result.data.id);
+        }
+        return result;
       },
     },
 

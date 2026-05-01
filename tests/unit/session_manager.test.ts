@@ -1,5 +1,8 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { SessionManager, isPolicyAllowed, LocalTerminalRuntime, DaemonTerminalRuntime, BrokerTerminalRuntime, probeDaemonHealth, type SessionState, type SessionListEntry, type TerminalRuntime } from "../../src/session_manager";
 import { MemoryStore } from "../../src/memory_store";
 import { loadConfig } from "../../src/config";
@@ -552,6 +555,22 @@ describe("SessionManager", () => {
         }`);
 
       syncStore.close();
+    });
+
+    it("loadPersistedSessions syncs the policy engine to the active session profile", async () => {
+      const dbPath = path.join(os.tmpdir(), `bc-session-profile-${Date.now()}-${Math.random()}.sqlite`);
+      const firstStore = new MemoryStore({ filename: dbPath });
+      const firstManager = new SessionManager({ memoryStore: firstStore });
+      await firstManager.create("trusted-persisted", { policyProfile: "trusted" });
+      firstManager.close();
+
+      const secondStore = new MemoryStore({ filename: dbPath });
+      const secondManager = new SessionManager({ memoryStore: secondStore });
+
+      assert.equal(secondManager.getPolicyEngine().getActiveProfile(), "trusted");
+
+      secondManager.close();
+      fs.rmSync(dbPath, { force: true });
     });
   });
 

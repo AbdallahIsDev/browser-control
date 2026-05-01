@@ -66,7 +66,7 @@ or:
 $env:BROWSER_DEBUG_PORT = "9223"
 ```
 
-In a source checkout, `launch_browser.bat 9222 127.0.0.1` still exists for Windows local-only CDP launch and writes CDP metadata under `.interop/chrome-debug.json`.
+In a source checkout, `launch_browser.bat 9222 127.0.0.1` still exists for Windows local-only CDP launch and writes CDP metadata under `.interop/chrome-debug.json`. The launcher defaults to `BROWSER_LAUNCH_PROFILE=system`, which starts the real Chrome profile. If that profile is already running without CDP, close Chrome first or set `BROWSER_LAUNCH_PROFILE=isolated` for a separate automation profile.
 
 ## Degraded Mode
 

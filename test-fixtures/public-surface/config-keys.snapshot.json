@@ -60,12 +60,31 @@
     },
     {
       "category": "browser",
-      "defaultValue": "managed",
+      "defaultValue": "attach",
       "description": "Browser ownership mode.",
       "envVars": [
         "BROWSER_MODE"
       ],
       "key": "browserMode",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": "system",
+      "description": "Visible launcher profile mode.",
+      "envVars": [
+        "BROWSER_LAUNCH_PROFILE"
+      ],
+      "key": "browserLaunchProfile",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "description": "Explicit Chrome user-data-dir for visible launcher.",
+      "envVars": [
+        "BROWSER_USER_DATA_DIR"
+      ],
+      "key": "browserUserDataDir",
       "sensitive": false
     },
     {
@@ -327,11 +346,19 @@
     },
     {
       "backedByConfigRegistry": true,
+      "name": "BROWSER_LAUNCH_PROFILE"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "BROWSER_MODE"
     },
     {
       "backedByConfigRegistry": true,
       "name": "BROWSER_USER_AGENT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_USER_DATA_DIR"
     },
     {
       "backedByConfigRegistry": true,

@@ -32,20 +32,26 @@ describe("MCP Tool Registry", () => {
 
       // Session tools
       assert.ok(names.includes("bc_session_create"));
+      assert.ok(names.includes("session_create"));
       assert.ok(names.includes("bc_session_list"));
       assert.ok(names.includes("bc_session_select"));
       assert.ok(names.includes("bc_session_status"));
 
       // Browser tools
       assert.ok(names.includes("bc_browser_open"));
+      assert.ok(names.includes("open"));
       assert.ok(names.includes("bc_browser_snapshot"));
+      assert.ok(names.includes("snapshot"));
       assert.ok(names.includes("bc_browser_click"));
+      assert.ok(names.includes("click"));
       assert.ok(names.includes("bc_browser_fill"));
+      assert.ok(names.includes("fill"));
       assert.ok(names.includes("bc_browser_hover"));
       assert.ok(names.includes("bc_browser_type"));
       assert.ok(names.includes("bc_browser_press"));
       assert.ok(names.includes("bc_browser_scroll"));
       assert.ok(names.includes("bc_browser_screenshot"));
+      assert.ok(names.includes("screenshot"));
       assert.ok(names.includes("bc_browser_tab_list"));
       assert.ok(names.includes("bc_browser_tab_switch"));
       assert.ok(names.includes("bc_browser_tab_close"));
@@ -53,7 +59,9 @@ describe("MCP Tool Registry", () => {
 
       // Terminal tools
       assert.ok(names.includes("bc_terminal_open"));
+      assert.ok(names.includes("terminal_open"));
       assert.ok(names.includes("bc_terminal_exec"));
+      assert.ok(names.includes("terminal_exec"));
       assert.ok(names.includes("bc_terminal_read"));
       assert.ok(names.includes("bc_terminal_write"));
       assert.ok(names.includes("bc_terminal_interrupt"));
@@ -65,6 +73,7 @@ describe("MCP Tool Registry", () => {
 
       // Filesystem tools
       assert.ok(names.includes("bc_fs_read"));
+      assert.ok(names.includes("fs_read"));
       assert.ok(names.includes("bc_fs_write"));
       assert.ok(names.includes("bc_fs_list"));
       assert.ok(names.includes("bc_fs_move"));
@@ -73,6 +82,7 @@ describe("MCP Tool Registry", () => {
 
       // Debug tools
       assert.ok(names.includes("bc_debug_health"));
+      assert.ok(names.includes("debug_health"));
 
       // Service tools (Section 14)
       assert.ok(names.includes("bc_service_list"));
@@ -98,6 +108,7 @@ describe("MCP Tool Registry", () => {
       for (const tool of tools) {
         assert.equal(tool.inputSchema.type, "object", `Tool ${tool.name} schema type must be 'object'`);
         assert.ok(typeof tool.inputSchema.properties === "object", `Tool ${tool.name} must have properties`);
+        assert.equal(tool.inputSchema.additionalProperties, false, `Tool ${tool.name} must reject unknown params`);
       }
     });
   });

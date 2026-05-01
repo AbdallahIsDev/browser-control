@@ -204,6 +204,19 @@ function escapeSelectorValue(value: string): string {
   return value.replace(/"/g, "'").replace(/\n/g, " ").replace(/\t/g, " ").trim().slice(0, 100);
 }
 
+function escapeCssAttributeValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function idFromSimpleSelector(selector: string | undefined): string | null {
+  if (!selector) return null;
+  const trimmed = selector.trim();
+  const idMatch = /^#([A-Za-z0-9_-]+)$/.exec(trimmed);
+  if (idMatch) return idMatch[1];
+  const attrMatch = /^\[id=["']?([^"'\]]+)["']?\]$/.exec(trimmed);
+  return attrMatch?.[1] ?? null;
+}
+
 export async function resolveRefLocator(
   store: RefStore,
   pageId: string,
@@ -292,6 +305,25 @@ async function buildLocatorFromElement(
   page: Page,
   element: A11yElement,
 ): Promise<import("playwright").Locator | null> {
+  // Radios/checkboxes are often real inputs visually hidden offscreen while
+  // labels are the actual click target. Prefer the label when present.
+  if (element.role === "radio" || element.role === "checkbox") {
+    const id = idFromSimpleSelector(element.selector);
+    if (id) {
+      const label = page.locator(`label[for="${escapeCssAttributeValue(id)}"]`);
+      if (await label.count() === 1) {
+        return label;
+      }
+    }
+
+    if (element.name) {
+      const label = page.locator("label").filter({ hasText: element.name }).first();
+      if (await label.count() > 0) {
+        return label;
+      }
+    }
+  }
+
   // Phase 1: Semantic candidates (highest priority)
   if (element.role && element.name) {
     const locator = page.getByRole(element.role as Parameters<Page["getByRole"]>[0], {

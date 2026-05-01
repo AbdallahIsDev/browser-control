@@ -13,6 +13,7 @@ import { MemoryStore } from "../../src/memory_store";
 import { DefaultPolicyEngine } from "../../src/policy_engine";
 import {
   BrowserConnectionManager,
+  attachEndpointCandidates,
   createConnectionManager,
   type BrowserConnection,
   type BrowserConnectionMode,
@@ -114,6 +115,29 @@ describe("BrowserConnectionManager", () => {
           return true;
         },
       );
+    });
+  });
+
+  describe("attachEndpointCandidates", () => {
+    it("adds discovered WSL/bridge candidates after explicit localhost CDP URL", () => {
+      const candidates = attachEndpointCandidates("http://127.0.0.1:9222", 9222, [
+        "http://172.20.32.1:9222",
+        "http://localhost:9222",
+      ]);
+
+      assert.deepEqual(candidates, [
+        "http://127.0.0.1:9222",
+        "http://172.20.32.1:9222",
+        "http://localhost:9222",
+      ]);
+    });
+
+    it("does not broaden non-loopback explicit CDP endpoints", () => {
+      const candidates = attachEndpointCandidates("http://10.0.0.8:9222", 9222, [
+        "http://172.20.32.1:9222",
+      ]);
+
+      assert.deepEqual(candidates, ["http://10.0.0.8:9222"]);
     });
   });
 
@@ -471,6 +495,44 @@ describe("BrowserConnectionManager", () => {
         (chromium as unknown as { connectOverCDP: typeof originalConnectOverCDP }).connectOverCDP = originalConnectOverCDP;
         await manager1.disconnect();
         await manager2.disconnect();
+      }
+    });
+
+    it("reconnects a previously attached local browser for later CLI actions", async () => {
+      store.set("browser_connection:active", {
+        id: "local-attached",
+        mode: "attached",
+        profileId: "attached",
+        cdpEndpoint: "http://127.0.0.1:19224",
+        status: "connected",
+        connectedAt: new Date().toISOString(),
+        targetType: "chrome",
+        isRealBrowser: true,
+        provider: "local",
+      });
+
+      let connectedEndpoint = "";
+      const fakeContext = { pages: () => [] };
+      const fakeBrowser = {
+        contexts: () => [fakeContext],
+        once: () => {},
+        isConnected: () => true,
+      };
+      const originalConnectOverCDP = chromium.connectOverCDP;
+      (chromium as unknown as { connectOverCDP: (endpoint: string) => Promise<unknown> }).connectOverCDP = async (endpoint: string) => {
+        connectedEndpoint = endpoint;
+        return fakeBrowser;
+      };
+
+      const manager = new BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
+
+      try {
+        assert.equal(await manager.reconnectActiveManaged(), true);
+        assert.equal(connectedEndpoint, "http://127.0.0.1:19224");
+        assert.equal(manager.getConnection()?.mode, "attached");
+        assert.equal(manager.getConnection()?.isRealBrowser, true);
+      } finally {
+        (chromium as unknown as { connectOverCDP: typeof originalConnectOverCDP }).connectOverCDP = originalConnectOverCDP;
       }
     });
   });

@@ -120,7 +120,7 @@
       "BrowserNamespace": {
         "attach": "(options: { cdp?: string | undefined; endpoint?: string | undefined; port?: number | undefined; targetType?: string | undefined; }): Promise<ActionResult<{ attached: boolean; endpoint: string; }>>",
         "click": "(options: { target: string; timeoutMs?: number | undefined; force?: boolean | undefined; }): Promise<ActionResult<{ clicked: string; }>>",
-        "close": "(): Promise<ActionResult<{ closed: boolean; }>>",
+        "close": "(): Promise<ActionResult<BrowserCloseResult>>",
         "detach": "(): Promise<ActionResult<BrowserDetachResult>>",
         "downloads": "{ list(): Promise<ActionResult<ExtendedDownloadResult[]>>; }",
         "drop": "(options: DropOptions): Promise<ActionResult<BrowserDropResult>>",

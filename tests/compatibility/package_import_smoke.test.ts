@@ -47,3 +47,9 @@ test("published CLI shim can show help after build", () => {
   assert.match(output, /Browser Control CLI/);
   assert.match(output, /mcp serve/);
 });
+
+test("package exposes bc binary", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
+
+  assert.equal(manifest.bin.bc, "./cli.js");
+});

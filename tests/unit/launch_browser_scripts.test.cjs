@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -20,6 +21,13 @@ test("launch_browser.ps1 invokes the .cjs shim, not the raw .ts file", () => {
 
   assert.match(ps1, /launch_browser\.cjs/);
   assert.doesNotMatch(ps1, /node.*launch_browser\.ts/);
+});
+
+test("launch_browser.ps1 uses Windows PowerShell 5.1-compatible nested Join-Path", () => {
+  const ps1 = fs.readFileSync(path.join(repoRoot, "launch_browser.ps1"), "utf8");
+
+  assert.match(ps1, /Join-Path \(Join-Path \$scriptDir "scripts"\) "launch_browser\.cjs"/);
+  assert.doesNotMatch(ps1, /Join-Path \$scriptDir "scripts" "launch_browser\.cjs"/);
 });
 
 test("scripts/launch_browser.sh invokes the .cjs shim, not the raw .ts file", () => {
@@ -57,7 +65,33 @@ test("launcher module loads and exports expected helpers", () => {
   assert.equal(typeof launcher.waitForCdp, "function");
   assert.equal(typeof launcher.buildChromeArgs, "function");
   assert.equal(typeof launcher.writeDebugState, "function");
+  assert.equal(typeof launcher.resolveWslBridgeScriptPath, "function");
+  assert.equal(typeof launcher.resolveLaunchProfileMode, "function");
+  assert.equal(typeof launcher.resolveSystemChromeUserDataDir, "function");
+  assert.equal(typeof launcher.resolveIsolatedUserDataDir, "function");
+  assert.equal(typeof launcher.isChromeProfileInUse, "function");
+  assert.equal(typeof launcher.isChromeProcessRunning, "function");
   assert.equal(typeof launcher._main, "function");
+});
+
+test("resolveWslBridgeScriptPath finds repo-root bridge from source runtime directory", () => {
+  const resolved = launcher.resolveWslBridgeScriptPath(path.join(repoRoot, "src", "runtime"));
+  assert.equal(resolved, path.join(repoRoot, "wsl_cdp_bridge.cjs"));
+});
+
+test("resolveWslBridgeScriptPath finds package-root bridge from dist runtime directory", () => {
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-bridge-path-"));
+  try {
+    const runtimeDir = path.join(packageRoot, "dist", "runtime");
+    fs.mkdirSync(runtimeDir, { recursive: true });
+    const bridge = path.join(packageRoot, "wsl_cdp_bridge.cjs");
+    fs.writeFileSync(bridge, "");
+
+    const resolved = launcher.resolveWslBridgeScriptPath(runtimeDir);
+    assert.equal(resolved, bridge);
+  } finally {
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
 });
 
 // ── isPrivateIpv4 ─────────────────────────────────────────────────────
@@ -151,9 +185,28 @@ test("WSL CDP bridge is disabled by default and requires explicit opt-in", () =>
   assert.equal(launcher.isWslCdpBridgeEnabled({ BROWSER_ENABLE_WSL_CDP_BRIDGE: "1" }), true);
 });
 
-// ── Profile Path Tests (Bug 2: Isolate Chrome profile) ─────────
+// ── Profile Path Tests ─────────
 
-test("resolveUserDataDir uses Browser Control data home, not Chrome default paths", () => {
+test("resolveUserDataDir uses system Chrome profile by default for visible launcher", () => {
+  const origLocalAppData = process.env.LOCALAPPDATA;
+  process.env.LOCALAPPDATA = path.join(os.tmpdir(), "fake-local-appdata");
+
+  try {
+    assert.equal(launcher.resolveLaunchProfileMode({}), "system");
+    assert.equal(
+      launcher.resolveUserDataDir("win32", { LOCALAPPDATA: process.env.LOCALAPPDATA }),
+      path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "User Data"),
+    );
+  } finally {
+    if (origLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = origLocalAppData;
+    }
+  }
+});
+
+test("resolveUserDataDir keeps isolated Browser Control profile as explicit opt-in", () => {
   const os = require("node:os");
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-profile-test-"));
   const origHome = process.env.BROWSER_CONTROL_HOME;
@@ -167,7 +220,7 @@ test("resolveUserDataDir uses Browser Control data home, not Chrome default path
     const profilesDir = launcher.getProfilesDir();
     assert.equal(profilesDir, path.join(tmpHome, "profiles"));
 
-    const userDataDir = launcher.resolveUserDataDir("win32");
+    const userDataDir = launcher.resolveUserDataDir("win32", { BROWSER_LAUNCH_PROFILE: "isolated" });
     assert.equal(userDataDir, path.join(tmpHome, "profiles", "BrowserControlProfile"));
     assert.ok(!userDataDir.includes(path.join("Google", "Chrome")));
     assert.ok(!userDataDir.startsWith(process.env.LOCALAPPDATA));
@@ -184,6 +237,22 @@ test("resolveUserDataDir uses Browser Control data home, not Chrome default path
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+test("isChromeProfileInUse detects Chrome singleton files", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-profile-lock-test-"));
+  try {
+    assert.equal(launcher.isChromeProfileInUse(tmpDir), false);
+    fs.writeFileSync(path.join(tmpDir, "SingletonLock"), "");
+    assert.equal(launcher.isChromeProfileInUse(tmpDir), true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("isChromeProcessRunning is false for non-Windows platforms", () => {
+  assert.equal(launcher.isChromeProcessRunning("linux"), false);
+  assert.equal(launcher.isChromeProcessRunning("darwin"), false);
 });
 
 // ── buildChromeArgs ───────────────────────────────────────────────────

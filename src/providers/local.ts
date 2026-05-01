@@ -16,6 +16,7 @@ import {
   getWslHostCandidates,
   isChromeAlive,
   isWslCdpBridgeEnabled,
+  resolveWslBridgeScriptPath,
   startWslBridgeIfNeeded,
   stopWslBridge,
 } from "../runtime/launch_browser";
@@ -72,8 +73,7 @@ export class LocalBrowserProvider implements BrowserProvider {
     writeDebugState({ port, bindAddress, wslHostCandidates });
 
     if (needsBridge) {
-      const bridgeScript = path.resolve(__dirname, "..", "wsl_cdp_bridge.cjs");
-      await startWslBridgeIfNeeded(port, wslHostCandidates, bridgeScript);
+      await startWslBridgeIfNeeded(port, wslHostCandidates, resolveWslBridgeScriptPath());
     }
 
     const browser = await connectBrowser(port, { ignoreEnvOverrides: true });

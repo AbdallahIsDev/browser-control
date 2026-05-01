@@ -676,6 +676,24 @@ async function cleanupStaleDaemonStatus(): Promise<void> {
   cleanupStaleDaemonFiles();
 }
 
+function readRecentFile(pathname: string, maxBytes = 4000): string {
+  try {
+    if (!fs.existsSync(pathname)) return "";
+    const stat = fs.statSync(pathname);
+    const start = Math.max(0, stat.size - maxBytes);
+    const fd = fs.openSync(pathname, "r");
+    try {
+      const buffer = Buffer.alloc(stat.size - start);
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+      return buffer.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
 async function handleDaemon(args: ParsedArgs): Promise<void> {
   const { subcommand, flags } = args;
   const jsonOutput = flags.json === "true";
@@ -684,9 +702,15 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
   switch (subcommand) {
     case "start": {
       const { spawnDaemonProcess } = await import("./runtime/daemon_launch");
+      const { getLogsDir } = await import("./shared/paths");
+      const logsDir = getLogsDir();
+      fs.mkdirSync(logsDir, { recursive: true });
+      const daemonLogPath = path.join(logsDir, "daemon-start.log");
+      const daemonLogFd = fs.openSync(daemonLogPath, "a");
       const daemonProcess = spawnDaemonProcess({
         visible: flags.visible === "true",
         detached: true,
+        stdio: ["ignore", "ignore", daemonLogFd],
       });
 
       const errorChunks: Buffer[] = [];
@@ -703,12 +727,13 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       });
 
       if (exited) {
-        const errorOutput = Buffer.concat(errorChunks).toString("utf8");
-        console.error("Daemon failed to start:", errorOutput || "Process exited immediately");
+        const errorOutput = Buffer.concat(errorChunks).toString("utf8") || readRecentFile(daemonLogPath);
+        console.error("Daemon failed to start:", errorOutput || `Process exited immediately. Log: ${daemonLogPath}`);
         // Clean up the child process handle — daemon is already dead,
         // but the stderr pipe and listeners still hold references.
         daemonProcess.stderr?.destroy();
         daemonProcess.removeAllListeners();
+        fs.closeSync(daemonLogFd);
         process.exit(1);
       }
 
@@ -718,6 +743,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
       // preventing the CLI process from exiting (the cold-start hang bug).
       daemonProcess.stderr?.destroy();
       daemonProcess.removeAllListeners();
+      fs.closeSync(daemonLogFd);
       const interopDir = path.dirname(getPidFilePath());
       if (!fs.existsSync(interopDir)) {
         fs.mkdirSync(interopDir, { recursive: true });
@@ -755,12 +781,19 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
           // Health OK but terminal not ready — keep retrying
         }
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        if (daemonProcess.exitCode !== null || daemonProcess.killed) {
+          const errorOutput = readRecentFile(daemonLogPath);
+          console.error("Daemon exited before becoming ready.");
+          if (errorOutput) console.error(errorOutput);
+          console.error(`Log: ${daemonLogPath}`);
+          process.exit(1);
+        }
       }
 
       if (daemonReady) {
         console.log(`Daemon started with PID: ${daemonProcess.pid} (ready at ${daemonBrokerUrl})`);
       } else {
-        console.log(`Daemon started with PID: ${daemonProcess.pid} (health endpoint not yet reachable — may still be initializing)`);
+        console.log(`Daemon started with PID: ${daemonProcess.pid} (not ready yet at ${startupBrokerUrl}; log: ${daemonLogPath})`);
       }
       break;
     }

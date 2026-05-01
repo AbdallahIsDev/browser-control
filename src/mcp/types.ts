@@ -29,6 +29,7 @@ export interface JSONSchema {
     default?: unknown;
   }>;
   required?: string[];
+  additionalProperties?: false;
 }
 
 /**
@@ -127,7 +128,41 @@ export function buildSchema(
     type: "object",
     properties,
     required,
+    additionalProperties: false,
   };
+}
+
+export function validateToolParams(toolName: string, schema: JSONSchema, params: Record<string, unknown>): string | null {
+  const allowed = Object.keys(schema.properties);
+
+  for (const key of Object.keys(params)) {
+    if (!Object.prototype.hasOwnProperty.call(schema.properties, key)) {
+      return `Unknown parameter '${key}' for tool '${toolName}'. Allowed: ${allowed.join(", ")}.`;
+    }
+  }
+
+  for (const key of schema.required ?? []) {
+    if (params[key] === undefined) {
+      return `Missing required parameter '${key}' for tool '${toolName}'.`;
+    }
+  }
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    const property = schema.properties[key];
+    if (!property) continue;
+
+    if (property.enum && !property.enum.includes(String(value))) {
+      return `Invalid value '${String(value)}' for parameter '${key}' on tool '${toolName}'. Allowed: ${property.enum.join(", ")}.`;
+    }
+
+    const actualType = Array.isArray(value) ? "array" : typeof value;
+    if (property.type !== actualType) {
+      return `Invalid type for parameter '${key}' on tool '${toolName}': expected ${property.type}, got ${actualType}.`;
+    }
+  }
+
+  return null;
 }
 
 // ── Error Normalization ────────────────────────────────────────────────

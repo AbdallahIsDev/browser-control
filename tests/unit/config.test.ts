@@ -13,6 +13,9 @@ test("loadConfig returns sensible defaults with empty env", () => {
   assert.equal(config.brokerPort, 7788);
   assert.equal(config.chromeDebugPort, 9222);
   assert.equal(config.chromeBindAddress, "127.0.0.1");
+  assert.equal(config.browserMode, "attach");
+  assert.equal(config.browserLaunchProfile, "system");
+  assert.equal(config.browserUserDataDir, undefined);
   assert.equal(config.browserViewportWidth, 1365);
   assert.equal(config.browserViewportHeight, 768);
   assert.equal(config.browserlessEndpoint, undefined);
@@ -274,6 +277,9 @@ test(".env.example exists and documents key env vars", () => {
     "BROWSER_BIND_ADDRESS",
     "BROWSER_CHROME_PATH",
     "BROWSER_DEBUG_URL",
+    "BROWSER_MODE",
+    "BROWSER_LAUNCH_PROFILE",
+    "BROWSER_USER_DATA_DIR",
     "BROWSERLESS_ENDPOINT",
     "BROWSERLESS_API_KEY",
     "ENABLE_STEALTH",

@@ -13,6 +13,11 @@ interface Harness {
   client: Client;
 }
 
+type ToolCallResult = {
+  isError?: boolean;
+  content: Array<{ type: string; text: string }>;
+};
+
 const harnesses = new Set<Harness>();
 
 function createHarness(): Harness {
@@ -21,7 +26,7 @@ function createHarness(): Harness {
 
   const transport = new StdioClientTransport({
     command: "node",
-    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"],
+    args: ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.js", "mcp", "serve"],
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -73,7 +78,7 @@ describe("MCP stdio server", () => {
     const port = String(30000 + Math.floor(Math.random() * 10000));
     const child = spawn(
       "node",
-      ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.ts", "mcp", "serve"],
+      ["-r", "ts-node/register", "-r", "tsconfig-paths/register", "cli.js", "mcp", "serve"],
       {
         cwd: process.cwd(),
         env: {
@@ -109,5 +114,33 @@ describe("MCP stdio server", () => {
 
     assert.ok(result.tools.some((tool) => tool.name === "bc_browser_open"));
     assert.ok(result.tools.some((tool) => tool.name === "bc_session_status"));
+  });
+
+  it("rejects unknown and invalid tool parameters before handlers run", async () => {
+    const harness = createHarness();
+
+    await harness.client.connect(harness.transport);
+
+    const unknown = await harness.client.callTool({
+      name: "bc_browser_scroll",
+      arguments: { direction: "down", expression: "window.scrollBy(0, 500)" },
+    }) as ToolCallResult;
+    assert.equal(unknown.isError, true);
+    assert.match(unknown.content[0].text, /Unknown parameter 'expression' for tool 'bc_browser_scroll'/);
+    assert.match(unknown.content[0].text, /Allowed: direction, amount, sessionId/);
+
+    const missing = await harness.client.callTool({
+      name: "bc_browser_scroll",
+      arguments: { amount: 500 },
+    }) as ToolCallResult;
+    assert.equal(missing.isError, true);
+    assert.match(missing.content[0].text, /Missing required parameter 'direction' for tool 'bc_browser_scroll'/);
+
+    const invalid = await harness.client.callTool({
+      name: "bc_browser_scroll",
+      arguments: { direction: "sideways" },
+    }) as ToolCallResult;
+    assert.equal(invalid.isError, true);
+    assert.match(invalid.content[0].text, /Invalid value 'sideways' for parameter 'direction' on tool 'bc_browser_scroll'/);
   });
 });

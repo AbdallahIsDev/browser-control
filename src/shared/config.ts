@@ -51,8 +51,12 @@ export interface BrowserControlConfig {
   chromePath: string | undefined;
   /** Explicit CDP URL override (optional) */
   browserDebugUrl: string | undefined;
-  /** Browser ownership mode (default: managed) */
+  /** Browser ownership mode (default: attach) */
   browserMode: "managed" | "attach";
+  /** Visible launcher profile mode (default: system) */
+  browserLaunchProfile: "system" | "isolated";
+  /** Explicit Chrome user-data-dir for visible launcher */
+  browserUserDataDir: string | undefined;
   /** Default automation-owned browser viewport width (default: 1365) */
   browserViewportWidth: number;
   /** Default automation-owned browser viewport height (default: 768) */
@@ -188,6 +192,8 @@ export type ConfigKey =
   | "chromePath"
   | "browserDebugUrl"
   | "browserMode"
+  | "browserLaunchProfile"
+  | "browserUserDataDir"
   | "browserViewportWidth"
   | "browserViewportHeight"
   | "browserUserAgent"
@@ -305,7 +311,9 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "chromeBindAddress", category: "browser", envVars: ["BROWSER_BIND_ADDRESS"], description: "Chrome debug bind address.", defaultValue: () => "127.0.0.1", parse: requiredString },
   { key: "chromePath", category: "browser", envVars: ["BROWSER_CHROME_PATH"], description: "Explicit Chrome executable path.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserDebugUrl", category: "browser", envVars: ["BROWSER_DEBUG_URL"], description: "Explicit CDP endpoint URL override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
-  { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "managed", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
+  { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "attach", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
+  { key: "browserLaunchProfile", category: "browser", envVars: ["BROWSER_LAUNCH_PROFILE"], description: "Visible launcher profile mode.", defaultValue: () => "system", parse: requiredString, validate: ensureAllowed(["system", "isolated"]) },
+  { key: "browserUserDataDir", category: "browser", envVars: ["BROWSER_USER_DATA_DIR"], description: "Explicit Chrome user-data-dir for visible launcher.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserViewportHeight", category: "browser", envVars: ["BROWSER_VIEWPORT_HEIGHT"], description: "Default viewport height for automation-owned browser contexts.", defaultValue: () => 768, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserUserAgent", category: "browser", envVars: ["BROWSER_USER_AGENT"], description: "User agent for automation-owned browser contexts.", defaultValue: () => undefined, parse: optionalString },
@@ -546,6 +554,8 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const chromePath = effective.chromePath as string | undefined;
   const browserDebugUrl = effective.browserDebugUrl as string | undefined;
   const browserMode = effective.browserMode as "managed" | "attach";
+  const browserLaunchProfile = effective.browserLaunchProfile as "system" | "isolated";
+  const browserUserDataDir = effective.browserUserDataDir as string | undefined;
   const browserViewportWidth = effective.browserViewportWidth as number;
   const browserViewportHeight = effective.browserViewportHeight as number;
 
@@ -635,6 +645,8 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     chromePath,
     browserDebugUrl,
     browserMode,
+    browserLaunchProfile,
+    browserUserDataDir,
     browserViewportWidth,
     browserViewportHeight,
 

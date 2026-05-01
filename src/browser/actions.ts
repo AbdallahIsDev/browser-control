@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { snapshot, type A11ySnapshot, type A11yElement, INTERACTIVE_ROLES } from "../a11y_snapshot";
 import { RefStore, getPageId, resolveRefLocator } from "../ref_store";
 import { globalRefStore } from "./core";
@@ -36,7 +36,8 @@ import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
 import type { ScreencastOptions, ScreencastSession, ActionReceiptEvent } from "../observability/types";
 import { getGlobalScreencastRecorder } from "../observability/screencast";
 import { validateFilePath, getFileSize, type ExtendedDownloadResult } from "./file_helpers";
-import { getSessionDownloadsDir } from "../shared/paths";
+import { ensureStructuredSessionRuntimeDir, getSessionDownloadsDir } from "../shared/paths";
+import { loadConfig } from "../shared/config";
 
 const log = logger.withComponent("browser_actions");
 
@@ -151,6 +152,16 @@ export interface LocatorCandidate {
   value: string;
   confidence: "high" | "medium" | "low";
   reason: string;
+}
+
+type ResolvedTarget = { locator: Locator; description: string };
+
+export interface BrowserCloseResult {
+  detached: boolean;
+  closedBrowser: boolean;
+  mode: "attached" | "managed" | "restored" | "none";
+  connectionId?: string;
+  endpoint?: string;
 }
 
 // ── Section 27: File/Data Drop Options ─────────────────────────────────────
@@ -280,7 +291,8 @@ export class BrowserActions {
   }
 
   /**
-   * Ensure a browser is connected. Attempts attach → launch in sequence.
+   * Ensure a browser is connected. Attempts attach first.
+   * Managed launch is only used when browserMode is explicitly managed.
    * Returns the page on success, or a failure ActionResult if no browser
    * could be obtained.
    *
@@ -302,11 +314,24 @@ export class BrowserActions {
         if (reconnected) {
           this.bindBrowserToSession(bm);
         } else {
+          const config = loadConfig({ validate: false });
           try {
-            await bm.attach({ actor: "human" });
+            await bm.attach({ actor: "human", port: config.chromeDebugPort });
             // Bind the browser connection into the session (Issue 3)
             this.bindBrowserToSession(bm);
-          } catch {
+          } catch (attachError: unknown) {
+            if (config.browserMode !== "managed") {
+              const attachMsg = attachError instanceof Error ? attachError.message : String(attachError);
+              return this.failureWithDebug(
+                `No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach, so Browser Control will not launch a separate managed Chrome. Close all Chrome windows, run launch_browser.bat ${config.chromeDebugPort}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated.`,
+                attachError,
+                {
+                  action: "browser_connect",
+                  path: "a11y",
+                  sessionId,
+                },
+              );
+            }
             // Attach failed — try launching managed browser
             try {
               await bm.launchManaged({ actor: "human" });
@@ -527,14 +552,19 @@ export class BrowserActions {
     },
   ): string {
     const sessionId = this.getSessionId();
-    const outputDir = helpers.getSessionScreenshotsDir(sessionId);
+    const activeSession = this.context.sessionManager.getActiveSession();
+    const outputDir = activeSession
+      ? helpers.path.join(
+        ensureStructuredSessionRuntimeDir(activeSession, helpers.getDataHome()),
+        "screenshots",
+      )
+      : helpers.getSessionScreenshotsDir(sessionId);
 
     if (!requestedPath) {
       helpers.fs.mkdirSync(outputDir, { recursive: true });
       return helpers.path.join(outputDir, `screenshot-${Date.now()}.png`);
     }
 
-    const activeSession = this.context.sessionManager.getActiveSession();
     const baseDir = activeSession?.workingDirectory ?? process.cwd();
     const resolvedPath = helpers.path.resolve(baseDir, requestedPath);
     const dataHome = helpers.getDataHome();
@@ -555,10 +585,26 @@ export class BrowserActions {
 
   // ── Ref Resolution ──────────────────────────────────────────────────
 
-  private async resolveTarget(target: string, page: Page): Promise<{ locator: import("playwright").Locator; description: string } | null> {
+  private isRefTarget(target: string): boolean {
+    return target.startsWith("@") || /^e\d+$/.test(target);
+  }
+
+  private findReplacementRef(previous: A11yElement | undefined, snap: A11ySnapshot): string | null {
+    if (!previous) return null;
+    const matches = snap.elements.filter((element) =>
+      element.role === previous.role
+      && (previous.name ? element.name === previous.name : element.name === previous.name)
+      && (previous.text ? element.text === previous.text : true)
+    );
+    if (matches.length === 0) return null;
+    // Prefer the last match. Modal/dialog content is usually appended after
+    // the page body, so this avoids falling back to a background duplicate.
+    return matches[matches.length - 1].ref;
+  }
+
+  private async resolveTarget(target: string, page: Page): Promise<ResolvedTarget | null> {
     // Check if target is a ref (@e3 or e3)
-    const isRef = target.startsWith("@") || /^e\d+$/.test(target);
-    if (isRef) {
+    if (this.isRefTarget(target)) {
       const pageId = getPageId(page.url(), this.getSessionId());
       const result = await resolveRefLocator(this.refStore, pageId, page, target);
       if (result) {
@@ -578,6 +624,26 @@ export class BrowserActions {
       // Not a valid selector
     }
 
+    // Try text within an active dialog/modal before global text. Pages often
+    // keep a duplicate background button behind a modal overlay.
+    const modalTextLocator = page
+      .locator("dialog, [role='dialog'], .snab-dialog, .snab-modal, .modal")
+      .getByText(target, { exact: true })
+      .first();
+    const modalTextCount = await modalTextLocator.count();
+    if (modalTextCount > 0) {
+      return { locator: modalTextLocator, description: `dialog text: ${target}` };
+    }
+
+    const modalButtonLocator = page
+      .locator("dialog, [role='dialog'], .snab-dialog, .snab-modal, .modal")
+      .getByRole("button", { name: target, exact: true })
+      .first();
+    const modalButtonCount = await modalButtonLocator.count();
+    if (modalButtonCount > 0) {
+      return { locator: modalButtonLocator, description: `dialog button: ${target}` };
+    }
+
     // Try as a semantic text match
     const textLocator = page.getByText(target).first();
     const textCount = await textLocator.count();
@@ -586,6 +652,66 @@ export class BrowserActions {
     }
 
     return null;
+  }
+
+  private isRetriableLocatorActionError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /outside of the viewport|not visible|detached|stale|element is not attached|target closed/i.test(message);
+  }
+
+  private async refreshSnapshotAndResolve(target: string, page: Page, sessionId: string): Promise<ResolvedTarget | null> {
+    const oldPageId = getPageId(page.url(), sessionId);
+    const previous = this.isRefTarget(target) ? this.refStore.lookup(oldPageId, target) : undefined;
+    const snap = await snapshot(page, { sessionId });
+    const pageId = getPageId(page.url(), sessionId);
+    this.refStore.setSnapshot(pageId, snap);
+    if (this.isRefTarget(target)) {
+      const replacementRef = this.findReplacementRef(previous, snap);
+      if (replacementRef) {
+        const replacement = await this.resolveTarget(`@${replacementRef}`, page);
+        if (replacement) return replacement;
+      }
+    }
+    return this.resolveTarget(target, page);
+  }
+
+  private async prepareLocatorAction(page: Page, locator: Locator, timeoutMs: number): Promise<void> {
+    const target = await this.getWindowTarget(page);
+    if (target) {
+      await this.activateWindowTarget(target);
+    } else {
+      await page.bringToFront().catch(() => undefined);
+    }
+    await locator.scrollIntoViewIfNeeded({ timeout: timeoutMs }).catch((error: unknown) => {
+      if (!this.isRetriableLocatorActionError(error)) throw error;
+    });
+  }
+
+  private async runLocatorActionWithRetry(
+    actionName: "click" | "fill" | "hover",
+    target: string,
+    page: Page,
+    sessionId: string,
+    run: (resolved: ResolvedTarget) => Promise<void>,
+  ): Promise<ResolvedTarget | null> {
+    const first = await this.resolveTarget(target, page) ?? await this.refreshSnapshotAndResolve(target, page, sessionId);
+    if (!first) return null;
+
+    try {
+      await run(first);
+      return first;
+    } catch (error: unknown) {
+      if (!this.isRetriableLocatorActionError(error)) throw error;
+      log.warn(`${actionName} retrying after locator actionability failure`, {
+        target,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const retry = await this.refreshSnapshotAndResolve(target, page, sessionId);
+    if (!retry) return null;
+    await run(retry);
+    return retry;
   }
 
   // ── Actions ─────────────────────────────────────────────────────────
@@ -764,56 +890,33 @@ export class BrowserActions {
       const pageOrErr = await this.getConnectedPageForAction<{ clicked: string }>();
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
-      const resolved = await this.resolveTarget(options.target, page);
-
-      if (!resolved) {
-        // Take a snapshot first to populate refs, then retry
-        const snap = await snapshot(page, { sessionId });
-        const pageId = getPageId(page.url(), sessionId);
-        this.refStore.setSnapshot(pageId, snap);
-
-        const retry = await this.resolveTarget(options.target, page);
-        if (!retry) {
-          this.recordTimelineEvent({
-            action: "click",
-            target: options.target,
-            policyDecision: policyEval.policyDecision,
-            risk: policyEval.risk,
-            durationMs: Date.now() - startTime,
-            success: false,
-            error: `Could not resolve click target: ${options.target}`,
-          });
-          return this.failureWithDebug(`Could not resolve click target: ${options.target}`, new Error(`Could not resolve click target: ${options.target}`), {
-            action: "browser_click",
-            path: policyEval.path,
-            sessionId,
-            policyDecision: policyEval.policyDecision,
-            risk: policyEval.risk,
-            auditId: policyEval.auditId,
-          });
-        }
-        await retry.locator.click({
+      const resolved = await this.runLocatorActionWithRetry("click", options.target, page, sessionId, async (target) => {
+        await this.prepareLocatorAction(page, target.locator, options.timeoutMs ?? 5000);
+        await target.locator.click({
           timeout: options.timeoutMs ?? 5000,
           force: options.force,
         });
-        await this.persistObservability(sessionId, page);
+      });
+
+      if (!resolved) {
         this.recordTimelineEvent({
           action: "click",
           target: options.target,
-          url: page.url(),
-          title: await page.title().catch(() => undefined),
           policyDecision: policyEval.policyDecision,
           risk: policyEval.risk,
           durationMs: Date.now() - startTime,
-          success: true,
+          success: false,
+          error: `Could not resolve click target: ${options.target}`,
         });
-        return successResult({ clicked: retry.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+        return this.failureWithDebug(`Could not resolve click target: ${options.target}`, new Error(`Could not resolve click target: ${options.target}`), {
+          action: "browser_click",
+          path: policyEval.path,
+          sessionId,
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
+        });
       }
-
-      await resolved.locator.click({
-        timeout: options.timeoutMs ?? 5000,
-        force: options.force,
-      });
 
       log.info("Clicked element", { target: options.target });
       await this.persistObservability(sessionId, page);
@@ -867,51 +970,32 @@ export class BrowserActions {
       const pageOrErr = await this.getConnectedPageForAction<{ filled: string }>();
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
-      const resolved = await this.resolveTarget(options.target, page);
+      const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 5000;
+      const resolved = await this.runLocatorActionWithRetry("fill", options.target, page, sessionId, async (target) => {
+        await this.prepareLocatorAction(page, target.locator, timeoutMs);
+        await target.locator.fill(options.text, { timeout: timeoutMs });
+        if (options.commit) await target.locator.press("Tab");
+      });
 
       if (!resolved) {
-        const snap = await snapshot(page, { sessionId });
-        const pageId = getPageId(page.url(), sessionId);
-        this.refStore.setSnapshot(pageId, snap);
-
-        const retry = await this.resolveTarget(options.target, page);
-        if (!retry) {
-          this.recordTimelineEvent({
-            action: "fill",
-            target: options.target,
-            policyDecision: policyEval.policyDecision,
-            risk: policyEval.risk,
-            durationMs: Date.now() - startTime,
-            success: false,
-            error: `Could not resolve fill target: ${options.target}`,
-          });
-          return this.failureWithDebug(`Could not resolve fill target: ${options.target}`, new Error(`Could not resolve fill target: ${options.target}`), {
-            action: "browser_fill",
-            path: policyEval.path,
-            sessionId,
-            policyDecision: policyEval.policyDecision,
-            risk: policyEval.risk,
-            auditId: policyEval.auditId,
-          });
-        }
-        await retry.locator.fill(options.text, { timeout: options.timeoutMs ? Number(options.timeoutMs) : 5000 });
-        if (options.commit) await retry.locator.press("Tab");
-        await this.persistObservability(sessionId, page);
         this.recordTimelineEvent({
           action: "fill",
           target: options.target,
-          url: page.url(),
-          title: await page.title().catch(() => undefined),
           policyDecision: policyEval.policyDecision,
           risk: policyEval.risk,
           durationMs: Date.now() - startTime,
-          success: true,
+          success: false,
+          error: `Could not resolve fill target: ${options.target}`,
         });
-        return successResult({ filled: retry.description }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+        return this.failureWithDebug(`Could not resolve fill target: ${options.target}`, new Error(`Could not resolve fill target: ${options.target}`), {
+          action: "browser_fill",
+          path: policyEval.path,
+          sessionId,
+          policyDecision: policyEval.policyDecision,
+          risk: policyEval.risk,
+          auditId: policyEval.auditId,
+        });
       }
-
-      await resolved.locator.fill(options.text, { timeout: options.timeoutMs ? Number(options.timeoutMs) : 5000 });
-      if (options.commit) await resolved.locator.press("Tab");
 
       log.info("Filled element", { target: options.target });
       await this.persistObservability(sessionId, page);
@@ -964,7 +1048,10 @@ export class BrowserActions {
       const pageOrErr = await this.getConnectedPageForAction<{ hovered: string }>();
       if ("success" in pageOrErr) return pageOrErr;
       const page = pageOrErr;
-      const resolved = await this.resolveTarget(options.target, page);
+      const resolved = await this.runLocatorActionWithRetry("hover", options.target, page, sessionId, async (target) => {
+        await this.prepareLocatorAction(page, target.locator, options.timeoutMs ?? 5000);
+        await target.locator.hover({ timeout: options.timeoutMs ?? 5000 });
+      });
 
       if (!resolved) {
         this.recordTimelineEvent({
@@ -986,7 +1073,6 @@ export class BrowserActions {
         });
       }
 
-      await resolved.locator.hover({ timeout: options.timeoutMs ?? 5000 });
       await this.persistObservability(sessionId, page);
 
       this.recordTimelineEvent({
@@ -1940,18 +2026,25 @@ export class BrowserActions {
    * Managed browsers are terminated. Attached browsers are detached rather
    * than killed by BrowserConnectionManager.disconnect().
    */
-  async close(): Promise<ActionResult<{ closed: boolean }>> {
+  async close(): Promise<ActionResult<BrowserCloseResult>> {
     const sessionId = this.getSessionId();
 
     const policyEval = this.context.sessionManager.evaluateAction("browser_close", {});
-    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<{ closed: boolean }>;
+    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<BrowserCloseResult>;
 
     try {
       const bm = this.context.sessionManager.getBrowserManager();
+      const connection = bm.getConnection();
       await bm.disconnect();
       this.unbindBrowserFromSession();
 
-      return successResult({ closed: true }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
+      return successResult({
+        detached: true,
+        closedBrowser: connection?.mode === "attached" ? false : true,
+        mode: connection?.mode ?? "none",
+        ...(connection?.id ? { connectionId: connection.id } : {}),
+        ...(connection?.cdpEndpoint ? { endpoint: connection.cdpEndpoint } : {}),
+      }, { path: policyEval.path, sessionId, policyDecision: policyEval.policyDecision, risk: policyEval.risk, auditId: policyEval.auditId });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return this.failureWithDebug(`Browser close failed: ${message}`, error, {

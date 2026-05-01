@@ -4,6 +4,12 @@ import path from "node:path";
 
 const DEFAULT_HOME_NAME = ".browser-control";
 
+export interface RuntimeSessionInfo {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
 export function getDataHome(): string {
   const override = process.env.BROWSER_CONTROL_HOME;
   if (override && override.trim()) {
@@ -66,6 +72,50 @@ export function getRuntimeDir(dataHome?: string): string {
 
 export function getSessionRuntimeDir(sessionId: string, dataHome?: string): string {
   return path.join(getRuntimeDir(dataHome), sessionId);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function slugifyRuntimeName(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 48);
+  return slug || "session";
+}
+
+export function getStructuredSessionRuntimeDir(session: RuntimeSessionInfo, dataHome?: string): string {
+  const created = new Date(session.createdAt);
+  const safeDate = Number.isNaN(created.getTime()) ? new Date() : created;
+  const date = `${safeDate.getFullYear()}-${pad2(safeDate.getMonth() + 1)}-${pad2(safeDate.getDate())}`;
+  const time = `${pad2(safeDate.getHours())}-${pad2(safeDate.getMinutes())}`;
+  const shortId = session.id.replace(/-/gu, "").slice(0, 8) || "session";
+  const folderName = `${time}_${slugifyRuntimeName(session.name)}_${shortId}`;
+
+  return path.join(getRuntimeDir(dataHome), date, folderName);
+}
+
+export function ensureStructuredSessionRuntimeDir(session: RuntimeSessionInfo, dataHome?: string): string {
+  const runtimeDir = getStructuredSessionRuntimeDir(session, dataHome);
+  fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+
+  const manifestPath = path.join(runtimeDir, "manifest.json");
+  if (!fs.existsSync(manifestPath)) {
+    const manifest = {
+      schemaVersion: 1,
+      sessionId: session.id,
+      name: session.name,
+      createdAt: session.createdAt,
+      folderName: path.basename(runtimeDir),
+      createdAtLocal: new Date(session.createdAt).toLocaleString(),
+    };
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  }
+
+  return runtimeDir;
 }
 
 export function getSessionScreenshotsDir(sessionId: string, dataHome?: string): string {

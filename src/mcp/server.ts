@@ -16,7 +16,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { createBrowserControl, type BrowserControlAPI } from "../browser_control";
 import { buildToolRegistry } from "./tool_registry";
-import { actionResultToMcpResult, normalizeError, mcpErrorResult } from "./types";
+import { actionResultToMcpResult, normalizeError, mcpErrorResult, validateToolParams } from "./types";
 import type { McpTool } from "./types";
 import { logger } from "../shared/logger";
 
@@ -77,6 +77,10 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
 
     try {
       const params = (args ?? {}) as Record<string, unknown>;
+      const validationError = validateToolParams(name, tool.inputSchema, params);
+      if (validationError) {
+        return mcpErrorResult(validationError);
+      }
       const result = await tool.handler(params);
       return actionResultToMcpResult(result);
     } catch (error: unknown) {

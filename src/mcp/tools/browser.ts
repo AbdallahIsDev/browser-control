@@ -181,7 +181,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_screenshot",
       description: "Take a screenshot of the page or a specific element.",
       inputSchema: buildSchema({
-        outputPath: { type: "string", description: "File path to save the screenshot. Default: auto-generated in reports directory." },
+        outputPath: { type: "string", description: "Optional custom screenshot file path. If omitted, Browser Control saves under the active session runtime screenshots directory." },
         fullPage: { type: "boolean", description: "Capture the full page instead of just the viewport.", default: false },
         target: { type: "string", description: "Element ref or selector to screenshot. If omitted, screenshots the viewport." },
         annotate: { type: "boolean", description: "Annotate screenshot with ref labels and boxes for interactive elements." },

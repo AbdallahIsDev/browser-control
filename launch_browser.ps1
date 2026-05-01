@@ -7,7 +7,7 @@ param(
 # Thin wrapper around scripts/launch_browser.ts (via .cjs shim)
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$launcherShim = Join-Path $scriptDir "scripts" "launch_browser.cjs"
+$launcherShim = Join-Path (Join-Path $scriptDir "scripts") "launch_browser.cjs"
 
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {

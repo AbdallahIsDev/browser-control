@@ -19,12 +19,20 @@ npm run cli -- doctor
 npm run cli -- status
 ```
 
-After package installation or `npm link`, use the shorter `bc` command:
+After package installation or `npm link`, use the `bc` command:
 
 ```powershell
 bc setup --non-interactive --profile balanced
 bc doctor
 bc status
+```
+
+In WSL, run `npm link` from this repo first. If `bc` still resolves to the Linux calculator, install the WSL shim:
+
+```sh
+sh scripts/install_wsl_bc.sh
+export PATH="$HOME/.local/bin:$PATH"
+hash -r
 ```
 
 Runtime data lives under `%USERPROFILE%\.browser-control` on Windows and `~/.browser-control` on Unix-like systems. Override it with `BROWSER_CONTROL_HOME`.
@@ -45,8 +53,10 @@ Browser workflow:
 bc browser launch --port 9222 --profile default
 bc open https://example.com
 bc snapshot
-bc screenshot --output .\example.png
+bc screenshot
 ```
+
+Without `--output`, screenshots are saved under the Browser Control runtime screenshots directory.
 
 If Chrome or CDP is unavailable, Browser Control reports degraded browser status. Terminal, filesystem, config, status, and many debug workflows still work.
 
@@ -73,6 +83,7 @@ Main surfaces:
 - [CLI reference](docs/cli.md)
 - [TypeScript API](docs/api.md)
 - [MCP setup and tools](docs/mcp.md)
+- [WSL + visible Windows Chrome](docs/wsl-windows-chrome.md)
 - [Browser behavior](docs/browser.md)
 - [Terminal and filesystem behavior](docs/terminal.md)
 - [Configuration](docs/configuration.md)
