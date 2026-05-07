@@ -35,7 +35,7 @@ bc.browser.tabList();
 bc.browser.tabSwitch("0");
 bc.browser.close();
 
-bc.terminal.open({ shell: "powershell", cwd: "." });
+bc.terminal.open({ shell: "pwsh", cwd: "." });
 bc.terminal.exec({ command: "node --version" });
 bc.terminal.type({ sessionId: "term-id", text: "echo hello\n" });
 bc.terminal.read({ sessionId: "term-id" });

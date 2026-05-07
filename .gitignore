@@ -26,6 +26,8 @@ docs/*
 !docs/business/**
 !docs/architecture/
 !docs/architecture/**
+!docs/web-desktop-wrapper/
+!docs/web-desktop-wrapper/**
 reports/
 *.sqlite
 nul
