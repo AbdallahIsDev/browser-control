@@ -67,8 +67,10 @@
         "close",
         "exec",
         "interrupt",
+        "onOutput",
         "open",
         "read",
+        "resize",
         "resume",
         "snapshot",
         "status",
@@ -185,8 +187,10 @@
         "close": "(options: { sessionId: string; }): Promise<ActionResult<{ closed: boolean; }>>",
         "exec": "(options: { command: string; sessionId?: string | undefined; timeoutMs?: number | undefined; }): Promise<ActionResult<ExecResult>>",
         "interrupt": "(options: { sessionId: string; }): Promise<ActionResult<{ interrupted: boolean; }>>",
+        "onOutput": "(listener: (sessionId: string, data: string) => void): { dispose(): void; }",
         "open": "(options?: { shell?: string | undefined; cwd?: string | undefined; name?: string | undefined; } | undefined): Promise<ActionResult<{ id: string; shell: string; cwd: string; status: string; }>>",
         "read": "(options: { sessionId: string; maxBytes?: number | undefined; }): Promise<ActionResult<{ output: string; }>>",
+        "resize": "(options: { sessionId: string; cols: number; rows: number; }): Promise<ActionResult<{ resized: boolean; }>>",
         "resume": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
         "snapshot": "(options?: { sessionId?: string | undefined; } | undefined): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>",
         "status": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
@@ -740,6 +744,13 @@
       ],
       "kind": "value",
       "name": "createTelegramAlertHandler"
+    },
+    {
+      "declarations": [
+        "src/web/server.ts"
+      ],
+      "kind": "value",
+      "name": "createWebAppServer"
     },
     {
       "declarations": [
@@ -2220,6 +2231,13 @@
     },
     {
       "declarations": [
+        "src/web/server.ts"
+      ],
+      "kind": "value",
+      "name": "openUrlInDefaultBrowser"
+    },
+    {
+      "declarations": [
         "src/packages/eval.ts"
       ],
       "kind": "type+value",
@@ -3242,6 +3260,13 @@
     },
     {
       "declarations": [
+        "src/web/server.ts"
+      ],
+      "kind": "value",
+      "name": "startWebAppServer"
+    },
+    {
+      "declarations": [
         "src/snapshot_diff.ts"
       ],
       "kind": "type",
@@ -3645,6 +3670,48 @@
       ],
       "kind": "value",
       "name": "waitForElement"
+    },
+    {
+      "declarations": [
+        "src/web/types.ts"
+      ],
+      "kind": "type",
+      "name": "WebApiError"
+    },
+    {
+      "declarations": [
+        "src/web/types.ts"
+      ],
+      "kind": "type",
+      "name": "WebAppEvent"
+    },
+    {
+      "declarations": [
+        "src/web/server.ts"
+      ],
+      "kind": "type",
+      "name": "WebAppServer"
+    },
+    {
+      "declarations": [
+        "src/web/types.ts"
+      ],
+      "kind": "type",
+      "name": "WebAppServerInfo"
+    },
+    {
+      "declarations": [
+        "src/web/server.ts"
+      ],
+      "kind": "type",
+      "name": "WebAppServerOptions"
+    },
+    {
+      "declarations": [
+        "src/web/types.ts"
+      ],
+      "kind": "type",
+      "name": "WebCapabilities"
     },
     {
       "declarations": [

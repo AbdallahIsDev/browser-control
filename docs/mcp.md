@@ -70,7 +70,15 @@ Browser:
 - `click`
 - `fill`
 - `screenshot`
+- `browser_list`
+- `drop`
+- `downloads_list`
+- `generate_locator`
+- `highlight`
+- `bc_browser_attach`
+- `bc_browser_detach`
 - `bc_browser_open`
+- `bc_browser_list`
 - `bc_browser_snapshot`
 - `bc_browser_click`
 - `bc_browser_fill`
@@ -83,6 +91,13 @@ Browser:
 - `bc_browser_tab_switch`
 - `bc_browser_tab_close`
 - `bc_browser_close`
+- `bc_browser_downloads_list`
+- `bc_browser_drop`
+- `bc_browser_generate_locator`
+- `bc_browser_highlight`
+- `bc_browser_screencast_start`
+- `bc_browser_screencast_status`
+- `bc_browser_screencast_stop`
 
 Provider:
 
@@ -129,6 +144,29 @@ Service:
 
 - `bc_service_list`
 - `bc_service_resolve`
+
+Workflow:
+
+- `bc_workflow_run`
+- `bc_workflow_status`
+- `bc_workflow_resume`
+- `bc_workflow_approve`
+- `bc_workflow_cancel`
+
+Harness:
+
+- `bc_harness_list`
+- `bc_harness_find_helper`
+- `bc_harness_validate_helper`
+- `bc_harness_rollback`
+
+Packages:
+
+- `bc_package_list`
+- `bc_package_info`
+- `bc_package_run`
+- `bc_package_eval`
+- `bc_package_grant`
 
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
 
