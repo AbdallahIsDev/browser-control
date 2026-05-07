@@ -5,7 +5,7 @@ Browser Control has native terminal sessions and structured filesystem actions.
 ## Terminal Commands
 
 ```powershell
-$open = bc term open --shell powershell --cwd . --json | ConvertFrom-Json
+$open = bc term open --shell pwsh --cwd . --json | ConvertFrom-Json
 $sessionId = $open.data.id
 bc term exec "Get-Location" --json
 bc term list
@@ -24,10 +24,16 @@ bc term exec "node --version" --json
 
 Persistent session commands use a terminal session ID returned by `term open`.
 
+## Dashboard Terminal
+
+The local web and desktop dashboard Terminal page uses the same backend terminal APIs as the CLI. Opening a session auto-fills the selected session ID, the session dropdown lists known sessions, and the primary output pane shows shell, cwd, status, stdout, stderr, exit code, and duration as operator text. Raw JSON remains available in the collapsible raw response section for debugging.
+
+The UI validates resize values through the backend route before resizing. Interrupt, read, status, resize, and close controls all target the selected session ID.
+
 ## Resume and Status
 
 ```powershell
-$open = bc term open --shell powershell --cwd . --json | ConvertFrom-Json
+$open = bc term open --shell pwsh --cwd . --json | ConvertFrom-Json
 $sessionId = $open.data.id
 bc term resume $sessionId
 bc term status $sessionId
@@ -38,7 +44,7 @@ Resume is best-effort. It can preserve metadata and scrollback state, but cannot
 Config:
 
 ```powershell
-bc config set terminalShell powershell
+bc config set terminalShell pwsh
 bc config set terminalCols 120
 bc config set terminalRows 30
 bc config set terminalResumePolicy resume

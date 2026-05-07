@@ -27,6 +27,19 @@ bc open https://example.com
 bc snapshot
 ```
 
+## Window Size and Viewport
+
+Normal browser commands preserve the current user-managed window bounds and viewport. `bc open`, `bc snapshot`, `bc click`, `bc fill`, `bc press`, tab switching, and screenshots activate the target tab without calling CDP window resize APIs. If you manually resize or maximize the visible browser, later Browser Control commands should not restore it to a fixed default size.
+
+Managed automation contexts use the configured initial viewport only when Browser Control creates a new automation-owned context. Set:
+
+```powershell
+bc config set browserViewportWidth 1365
+bc config set browserViewportHeight 768
+```
+
+Attached browsers keep their existing contexts and dimensions. Only an explicit future resize/viewport command should change window or viewport dimensions.
+
 ## Accessibility Refs
 
 `bc snapshot` returns a semantic accessibility snapshot. Interactive elements get refs such as `@e1`.

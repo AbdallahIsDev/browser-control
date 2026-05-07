@@ -14,256 +14,430 @@
  *   const file = await bc.fs.read({ path: "/tmp/data.json" });
  */
 
-import { isPolicyAllowed, SessionManager, type PolicyAllowResult, type SessionState, type SessionListEntry } from "./session_manager";
-import { DefaultPolicyEngine } from "./policy/engine";
-import { BrowserActions, type SnapshotOptions, type ClickOptions, type FillOptions, type HoverOptions, type TypeOptions, type PressOptions, type ScrollOptions, type ScreenshotOptions, type HighlightOptions, type LocatorCandidate, type BrowserActionContext, type DropOptions, type BrowserCloseResult } from "./browser/actions";
-import { TerminalActions, type TerminalActionContext } from "./terminal/actions";
-import { FsActions, type FsActionContext } from "./filesystem/actions";
-import { ServiceActions, type ServiceActionContext } from "./service_actions";
-import { failureResult, successResult, type ActionResult } from "./shared/action_result";
 import type { A11ySnapshot } from "./a11y_snapshot";
-import type { ExecResult, TerminalSnapshot } from "./terminal/types";
-import type {
-  FileReadResult,
-  FileWriteResult,
-  ListResult,
-  MoveResult,
-  DeleteResult,
-  FileStatResult,
-} from "./filesystem/operations";
-import type { ServiceEntry } from "./services/registry";
-import { ServiceRegistry } from "./services/registry";
-import type { ProviderListResult, ProviderSelectionResult } from "./providers/types";
 import {
-  getConfigEntries,
-  getConfigValue,
-  setUserConfigValue,
-  type ConfigEntry,
-  type ConfigSetResult,
-} from "./shared/config";
+	type BrowserActionContext,
+	BrowserActions,
+	type BrowserCloseResult,
+	type DropOptions,
+	type HighlightOptions,
+	type LocatorCandidate,
+} from "./browser/actions";
+import type {
+	AttachableBrowser,
+	BrowserDetachResult,
+	BrowserDropResult,
+	BrowserTargetType,
+} from "./browser/connection";
+import type { ExtendedDownloadResult } from "./browser/file_helpers";
+import { type FsActionContext, FsActions } from "./filesystem/actions";
+import type {
+	DeleteResult,
+	FileReadResult,
+	FileStatResult,
+	FileWriteResult,
+	ListResult,
+	MoveResult,
+} from "./filesystem/operations";
+import type {
+	DebugReceipt,
+	ScreencastOptions,
+	ScreencastSession,
+} from "./observability/types";
 import { collectStatus } from "./operator/status";
 import type { SystemStatus } from "./operator/types";
-import type { ScreencastOptions, ScreencastSession, DebugReceipt } from "./observability/types";
-import type { AttachableBrowser, BrowserDetachResult, BrowserDropResult } from "./browser/connection";
-import type { ExtendedDownloadResult } from "./browser/file_helpers";
+import { DefaultPolicyEngine } from "./policy/engine";
+import type {
+	ProviderListResult,
+	ProviderSelectionResult,
+} from "./providers/types";
+import { type ServiceActionContext, ServiceActions } from "./service_actions";
+import type { ServiceEntry } from "./services/registry";
+import { ServiceRegistry } from "./services/registry";
+import {
+	isPolicyAllowed,
+	type PolicyAllowResult,
+	type SessionListEntry,
+	SessionManager,
+	type SessionState,
+} from "./session_manager";
+import {
+	type ActionResult,
+	failureResult,
+	successResult,
+} from "./shared/action_result";
+import {
+	type ConfigEntry,
+	type ConfigSetResult,
+	getConfigEntries,
+	getConfigValue,
+	setUserConfigValue,
+} from "./shared/config";
+import {
+	type TerminalActionContext,
+	TerminalActions,
+} from "./terminal/actions";
+import type { ExecResult, TerminalSnapshot } from "./terminal/types";
 
 // ── Options ──────────────────────────────────────────────────────────
 
 export interface BrowserControlOptions {
-  /** Policy profile name (default: from config). */
-  policyProfile?: string;
-  /** Working directory for filesystem context. */
-  workingDirectory?: string;
-  /** Custom data home directory (Section 30). */
-  dataHome?: string;
-  /** Memory store instance (for testing / dependency injection). */
-  memoryStore?: import("./runtime/memory_store").MemoryStore;
+	/** Policy profile name (default: from config). */
+	policyProfile?: string;
+	/** Working directory for filesystem context. */
+	workingDirectory?: string;
+	/** Custom data home directory (Section 30). */
+	dataHome?: string;
+	/** Memory store instance (for testing / dependency injection). */
+	memoryStore?: import("./runtime/memory_store").MemoryStore;
 }
 
 // ── Screencast Namespace (Section 26) ─────────────────────────────────────
 
 export interface ScreencastNamespace {
-  start(options?: ScreencastOptions): Promise<ActionResult<{ session: ScreencastSession }>>;
-  stop(): Promise<ActionResult<{ session: ScreencastSession; receiptId?: string; timelinePath?: string }>>;
-  status(): Promise<ActionResult<{ session: ScreencastSession | null }>>;
+	start(
+		options?: ScreencastOptions,
+	): Promise<ActionResult<{ session: ScreencastSession }>>;
+	stop(): Promise<
+		ActionResult<{
+			session: ScreencastSession;
+			receiptId?: string;
+			timelinePath?: string;
+		}>
+	>;
+	status(): Promise<ActionResult<{ session: ScreencastSession | null }>>;
 }
 
 // ── Browser Namespace ────────────────────────────────────────────────
 
 export interface BrowserNamespace {
-  open(options: { url: string; waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit" }): Promise<ActionResult<{ url: string; title: string }>>;
-  snapshot(options?: { rootSelector?: string; boxes?: boolean }): Promise<ActionResult<A11ySnapshot>>;
-  click(options: { target: string; timeoutMs?: number; force?: boolean }): Promise<ActionResult<{ clicked: string }>>;
-  fill(options: { target: string; text: string; timeoutMs?: number; commit?: boolean }): Promise<ActionResult<{ filled: string }>>;
-  hover(options: { target: string; timeoutMs?: number }): Promise<ActionResult<{ hovered: string }>>;
-  type(options: { text: string; delayMs?: number }): Promise<ActionResult<{ typed: string }>>;
-  press(options: { key: string }): Promise<ActionResult<{ pressed: string }>>;
-  scroll(options: { direction: "up" | "down" | "left" | "right"; amount?: number }): Promise<ActionResult<{ scrolled: string }>>;
-  screenshot(options?: { outputPath?: string; fullPage?: boolean; target?: string; annotate?: boolean; refs?: string[] }): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
-  highlight(options: HighlightOptions): Promise<ActionResult<{ highlighted: string }>>;
-  generateLocator(target: string): Promise<ActionResult<{ candidates: LocatorCandidate[] }>>;
-  tabList(): Promise<ActionResult<Array<{ id: string; url: string; title: string }>>>;
-  tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
-  tabClose(): Promise<ActionResult<{ closed: boolean }>>;
-  close(): Promise<ActionResult<BrowserCloseResult>>;
-  provider: ProviderNamespace;
-  /** Screencast recording namespace (Section 26). */
-  screencast: ScreencastNamespace;
-  /** Section 27: Browser discovery and attach UX. */
-  list(options?: { all?: boolean }): Promise<ActionResult<AttachableBrowser[]>>;
-  /** Section 27: Explicit attach to CDP endpoint. */
-  attach(options: { cdp?: string; endpoint?: string; port?: number; targetType?: string }): Promise<ActionResult<{ attached: boolean; endpoint: string }>>;
-  /** Section 27: Clean detach without closing attached browsers. */
-  detach(): Promise<ActionResult<BrowserDetachResult>>;
-  /** Section 27: Drop files or data onto page elements. */
-  drop(options: DropOptions): Promise<ActionResult<BrowserDropResult>>;
-  /** Section 27: List recent downloads. */
-  downloads: {
-    list(): Promise<ActionResult<ExtendedDownloadResult[]>>;
-  };
+	open(options: {
+		url: string;
+		waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+	}): Promise<ActionResult<{ url: string; title: string }>>;
+	snapshot(options?: {
+		rootSelector?: string;
+		boxes?: boolean;
+	}): Promise<ActionResult<A11ySnapshot>>;
+	click(options: {
+		target: string;
+		timeoutMs?: number;
+		force?: boolean;
+	}): Promise<ActionResult<{ clicked: string }>>;
+	fill(options: {
+		target: string;
+		text: string;
+		timeoutMs?: number;
+		commit?: boolean;
+	}): Promise<ActionResult<{ filled: string }>>;
+	hover(options: {
+		target: string;
+		timeoutMs?: number;
+	}): Promise<ActionResult<{ hovered: string }>>;
+	type(options: {
+		text: string;
+		delayMs?: number;
+	}): Promise<ActionResult<{ typed: string }>>;
+	press(options: { key: string }): Promise<ActionResult<{ pressed: string }>>;
+	scroll(options: {
+		direction: "up" | "down" | "left" | "right";
+		amount?: number;
+	}): Promise<ActionResult<{ scrolled: string }>>;
+	screenshot(options?: {
+		outputPath?: string;
+		fullPage?: boolean;
+		target?: string;
+		annotate?: boolean;
+		refs?: string[];
+	}): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
+	highlight(
+		options: HighlightOptions,
+	): Promise<ActionResult<{ highlighted: string }>>;
+	generateLocator(
+		target: string,
+	): Promise<ActionResult<{ candidates: LocatorCandidate[] }>>;
+	tabList(): Promise<
+		ActionResult<Array<{ id: string; url: string; title: string }>>
+	>;
+	tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
+	tabClose(): Promise<ActionResult<{ closed: boolean }>>;
+	close(): Promise<ActionResult<BrowserCloseResult>>;
+	provider: ProviderNamespace;
+	/** Screencast recording namespace (Section 26). */
+	screencast: ScreencastNamespace;
+	/** Section 27: Browser discovery and attach UX. */
+	list(options?: { all?: boolean }): Promise<ActionResult<AttachableBrowser[]>>;
+	/** Section 27: Explicit attach to CDP endpoint. */
+	attach(options: {
+		cdp?: string;
+		endpoint?: string;
+		port?: number;
+		targetType?: string;
+	}): Promise<ActionResult<{ attached: boolean; endpoint: string }>>;
+	/** Section 27: Clean detach without closing attached browsers. */
+	detach(): Promise<ActionResult<BrowserDetachResult>>;
+	/** Section 27: Drop files or data onto page elements. */
+	drop(options: DropOptions): Promise<ActionResult<BrowserDropResult>>;
+	/** Section 27: List recent downloads. */
+	downloads: {
+		list(): Promise<ActionResult<ExtendedDownloadResult[]>>;
+	};
 }
 
 // ── Terminal Namespace ───────────────────────────────────────────────
 
 export interface TerminalNamespace {
-  open(options?: { shell?: string; cwd?: string; name?: string }): Promise<ActionResult<{ id: string; shell: string; cwd: string; status: string }>>;
-  exec(options: { command: string; sessionId?: string; timeoutMs?: number }): Promise<ActionResult<ExecResult>>;
-  type(options: { text: string; sessionId: string }): Promise<ActionResult<{ typed: string }>>;
-  read(options: { sessionId: string; maxBytes?: number }): Promise<ActionResult<{ output: string }>>;
-  snapshot(options?: { sessionId?: string }): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>;
-  interrupt(options: { sessionId: string }): Promise<ActionResult<{ interrupted: boolean }>>;
-  close(options: { sessionId: string }): Promise<ActionResult<{ closed: boolean }>>;
-  /** Resume a terminal session from persisted state (Section 13). */
-  resume(options: { sessionId: string }): Promise<ActionResult<unknown>>;
-  /** Get resume status for a terminal session (Section 13). */
-  status(options: { sessionId: string }): Promise<ActionResult<unknown>>;
+	open(options?: {
+		shell?: string;
+		cwd?: string;
+		name?: string;
+	}): Promise<
+		ActionResult<{ id: string; shell: string; cwd: string; status: string }>
+	>;
+	exec(options: {
+		command: string;
+		sessionId?: string;
+		timeoutMs?: number;
+	}): Promise<ActionResult<ExecResult>>;
+	type(options: {
+		text: string;
+		sessionId: string;
+	}): Promise<ActionResult<{ typed: string }>>;
+	read(options: {
+		sessionId: string;
+		maxBytes?: number;
+	}): Promise<ActionResult<{ output: string }>>;
+	snapshot(options?: {
+		sessionId?: string;
+	}): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>;
+	interrupt(options: {
+		sessionId: string;
+	}): Promise<ActionResult<{ interrupted: boolean }>>;
+	close(options: {
+		sessionId: string;
+	}): Promise<ActionResult<{ closed: boolean }>>;
+	/** Resume a terminal session from persisted state (Section 13). */
+	resume(options: { sessionId: string }): Promise<ActionResult<unknown>>;
+	/** Get resume status for a terminal session (Section 13). */
+	status(options: { sessionId: string }): Promise<ActionResult<unknown>>;
+	/** Resize a terminal session (Section 13). */
+	resize(options: {
+		sessionId: string;
+		cols: number;
+		rows: number;
+	}): Promise<ActionResult<{ resized: boolean }>>;
+	/** Subscribe to terminal output data (Section 13). */
+	onOutput(listener: (sessionId: string, data: string) => void): {
+		dispose(): void;
+	};
 }
 
 // ── FS Namespace ─────────────────────────────────────────────────────
 
 export interface FsNamespace {
-  read(options: { path: string; maxBytes?: number }): Promise<ActionResult<FileReadResult>>;
-  write(options: { path: string; content: string; createDirs?: boolean }): Promise<ActionResult<FileWriteResult>>;
-  ls(options: { path: string; recursive?: boolean; extension?: string }): Promise<ActionResult<ListResult>>;
-  move(options: { src: string; dst: string }): Promise<ActionResult<MoveResult>>;
-  rm(options: { path: string; recursive?: boolean; force?: boolean }): Promise<ActionResult<DeleteResult>>;
-  stat(options: { path: string }): Promise<ActionResult<FileStatResult>>;
+	read(options: {
+		path: string;
+		maxBytes?: number;
+	}): Promise<ActionResult<FileReadResult>>;
+	write(options: {
+		path: string;
+		content: string;
+		createDirs?: boolean;
+	}): Promise<ActionResult<FileWriteResult>>;
+	ls(options: {
+		path: string;
+		recursive?: boolean;
+		extension?: string;
+	}): Promise<ActionResult<ListResult>>;
+	move(options: {
+		src: string;
+		dst: string;
+	}): Promise<ActionResult<MoveResult>>;
+	rm(options: {
+		path: string;
+		recursive?: boolean;
+		force?: boolean;
+	}): Promise<ActionResult<DeleteResult>>;
+	stat(options: { path: string }): Promise<ActionResult<FileStatResult>>;
 }
 
 // ── Service Namespace ─────────────────────────────────────────────────
 
 export interface ServiceNamespace {
-  register(options: { name: string; port: number; protocol?: "http" | "https"; path?: string }): Promise<ActionResult<ServiceEntry>>;
-  list(): ActionResult<ServiceEntry[]>;
-  resolve(options: { name: string }): Promise<ActionResult<{ url: string; service?: ServiceEntry }>>;
-  remove(options: { name: string }): ActionResult<{ removed: boolean }>;
+	register(options: {
+		name: string;
+		port: number;
+		protocol?: "http" | "https";
+		path?: string;
+	}): Promise<ActionResult<ServiceEntry>>;
+	list(): ActionResult<ServiceEntry[]>;
+	resolve(options: {
+		name: string;
+	}): Promise<ActionResult<{ url: string; service?: ServiceEntry }>>;
+	remove(options: { name: string }): ActionResult<{ removed: boolean }>;
 }
 
 // ── Session Namespace ─────────────────────────────────────────────────
 
 export interface SessionNamespace {
-  create(name: string, options?: { policyProfile?: string; workingDirectory?: string }): Promise<ActionResult<SessionState>>;
-  list(): ActionResult<SessionListEntry[]>;
-  use(nameOrId: string): ActionResult<SessionState>;
-  status(nameOrId?: string): ActionResult<SessionState>;
+	create(
+		name: string,
+		options?: { policyProfile?: string; workingDirectory?: string },
+	): Promise<ActionResult<SessionState>>;
+	list(): ActionResult<SessionListEntry[]>;
+	use(nameOrId: string): ActionResult<SessionState>;
+	status(nameOrId?: string): ActionResult<SessionState>;
 }
 
 // ── Provider Namespace ────────────────────────────────────────────────
 
 export interface ProviderNamespace {
-  list(): ProviderListResult;
-  use(name: string): ActionResult<ProviderSelectionResult>;
-  getActive(): string;
+	list(): ProviderListResult;
+	use(name: string): ActionResult<ProviderSelectionResult>;
+	getActive(): string;
 }
 
 // ── Debug Namespace (Section 10) ──────────────────────────────────────
 
 export interface DebugNamespace {
-  /** Run health checks across all components. */
-  health(options?: { port?: number }): Promise<import("./runtime/health_check").HealthReport>;
-  /** Get a debug bundle by ID. */
-  bundle(bundleId: string): import("./observability/debug_bundle").DebugBundle | null;
-  /** Get captured console entries for a session. */
-  console(options?: { sessionId?: string }): import("./observability/types").ConsoleEntry[];
-  /** Get captured network entries for a session. */
-  network(options?: { sessionId?: string }): import("./observability/types").NetworkEntry[];
-  /** List available debug bundles. */
-  listBundles(): Array<{ bundleId: string; taskId: string; assembledAt: string; partial: boolean }>;
-  /** Get a debug receipt by ID (Section 26). */
-  receipt(receiptId: string): DebugReceipt | null;
+	/** Run health checks across all components. */
+	health(options?: {
+		port?: number;
+	}): Promise<import("./runtime/health_check").HealthReport>;
+	/** Get a debug bundle by ID. */
+	bundle(
+		bundleId: string,
+	): import("./observability/debug_bundle").DebugBundle | null;
+	/** Get captured console entries for a session. */
+	console(options?: {
+		sessionId?: string;
+	}): import("./observability/types").ConsoleEntry[];
+	/** Get captured network entries for a session. */
+	network(options?: {
+		sessionId?: string;
+	}): import("./observability/types").NetworkEntry[];
+	/** List available debug bundles. */
+	listBundles(): Array<{
+		bundleId: string;
+		taskId: string;
+		assembledAt: string;
+		partial: boolean;
+	}>;
+	/** Get a debug receipt by ID (Section 26). */
+	receipt(receiptId: string): DebugReceipt | null;
 }
 
 // ── Config Namespace ──────────────────────────────────────────────────
 
 export interface ConfigNamespace {
-  list(): ConfigEntry[];
-  get(key: string): ConfigEntry;
-  set(key: string, value: unknown): ActionResult<ConfigSetResult>;
+	list(): ConfigEntry[];
+	get(key: string): ConfigEntry;
+	set(key: string, value: unknown): ActionResult<ConfigSetResult>;
 }
 
 // ── Dashboard Namespace (Section 28) ──────────────────────────────────
 
 export interface DashboardNamespace {
-  status(): Promise<import("./operator/dashboard").DashboardState>;
+	status(): Promise<import("./operator/dashboard").DashboardState>;
 }
 
 // ── Workflow Namespace (Section 29) ───────────────────────────────────
 
 export interface WorkflowNamespace {
-  run(graphJson: string): Promise<ActionResult>;
-  status(runId: string): ActionResult;
-  resume(runId: string): Promise<ActionResult>;
-  approve(runId: string, nodeId: string): ActionResult;
-  cancel(runId: string): ActionResult;
+	run(graphJson: string): Promise<ActionResult>;
+	status(runId: string): ActionResult;
+	resume(runId: string): Promise<ActionResult>;
+	approve(runId: string, nodeId: string): ActionResult;
+	cancel(runId: string): ActionResult;
 }
 
 // ── Harness Namespace (Section 29) ────────────────────────────────────
 
 export interface HarnessNamespace {
-  list(): ActionResult;
-  find(query: { domain?: string; taskTag?: string; failureType?: string }): ActionResult;
-  validate(helperId: string): ActionResult;
-  rollback(helperId: string, version: string): ActionResult;
+	list(): ActionResult;
+	find(query: {
+		domain?: string;
+		taskTag?: string;
+		failureType?: string;
+	}): ActionResult;
+	validate(helperId: string): ActionResult;
+	rollback(helperId: string, version: string): ActionResult;
 }
 
 // ── Package Namespace (Section 30) ────────────────────────────────────
 
 export interface PackageNamespace {
-  install(source: string): Promise<ActionResult<import("./packages/types").InstalledAutomationPackage>>;
-  list(): ActionResult<import("./packages/types").InstalledAutomationPackage[]>;
-  info(name: string): ActionResult<import("./packages/types").InstalledAutomationPackage>;
-  remove(name: string): ActionResult<{ removed: boolean }>;
-  update(name: string, source?: string): Promise<ActionResult<import("./packages/types").InstalledAutomationPackage>>;
-  grantPermission(name: string, permissionRef: string | number): ActionResult<{ granted: boolean }>;
-  run(name: string, workflowNameOrId: string): Promise<ActionResult>;
-  eval(name: string): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
+	install(
+		source: string,
+	): Promise<
+		ActionResult<import("./packages/types").InstalledAutomationPackage>
+	>;
+	list(): ActionResult<import("./packages/types").InstalledAutomationPackage[]>;
+	info(
+		name: string,
+	): ActionResult<import("./packages/types").InstalledAutomationPackage>;
+	remove(name: string): ActionResult<{ removed: boolean }>;
+	update(
+		name: string,
+		source?: string,
+	): Promise<
+		ActionResult<import("./packages/types").InstalledAutomationPackage>
+	>;
+	grantPermission(
+		name: string,
+		permissionRef: string | number,
+	): ActionResult<{ granted: boolean }>;
+	run(name: string, workflowNameOrId: string): Promise<ActionResult>;
+	eval(
+		name: string,
+	): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
 }
 
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
-  browser: BrowserNamespace;
-  terminal: TerminalNamespace;
-  fs: FsNamespace;
-  session: SessionNamespace;
-  service: ServiceNamespace;
-  provider: ProviderNamespace;
-  /** Debug and observability namespace (Section 10). */
-  debug: DebugNamespace;
-  /** Runtime configuration namespace (Section 11). */
-  config: ConfigNamespace;
-  /** Dashboard and UI rendering namespace (Section 28). */
-  dashboard: DashboardNamespace;
-  /** Workflow graph runtime namespace (Section 29). */
-  workflow: WorkflowNamespace;
-  /** Self-healing harness namespace (Section 29). */
-  harness: HarnessNamespace;
-  /** Automation packages namespace (Section 30). */
-  package: PackageNamespace;
-  /** Collect operator-facing system status (Section 11). */
-  status(): Promise<SystemStatus>;
-  /** Access the underlying session manager for advanced use. */
-  readonly sessionManager: SessionManager;
-  /** Access the underlying browser actions instance. */
-  readonly browserActions: BrowserActions;
-  /** Access the underlying terminal actions instance. */
-  readonly terminalActions: TerminalActions;
-  /** Access the underlying fs actions instance. */
-  readonly fsActions: FsActions;
-  /** Access the underlying service actions instance. */
-  readonly serviceActions: ServiceActions;
-  /**
-   * Close the BrowserControl instance and release all held resources.
-   *
-   * This is critical for process lifecycle management: after calling
-   * terminal.open() (which is daemon-backed), the SessionManager's
-   * MemoryStore keeps a SQLite handle alive that prevents the Node.js
-   * event loop from exiting. Calling close() releases that handle so
-   * the process can exit cleanly.
-   *
-   * Call this at the end of any short-lived script that uses the API.
-   */
-  close(): void;
+	browser: BrowserNamespace;
+	terminal: TerminalNamespace;
+	fs: FsNamespace;
+	session: SessionNamespace;
+	service: ServiceNamespace;
+	provider: ProviderNamespace;
+	/** Debug and observability namespace (Section 10). */
+	debug: DebugNamespace;
+	/** Runtime configuration namespace (Section 11). */
+	config: ConfigNamespace;
+	/** Dashboard and UI rendering namespace (Section 28). */
+	dashboard: DashboardNamespace;
+	/** Workflow graph runtime namespace (Section 29). */
+	workflow: WorkflowNamespace;
+	/** Self-healing harness namespace (Section 29). */
+	harness: HarnessNamespace;
+	/** Automation packages namespace (Section 30). */
+	package: PackageNamespace;
+	/** Collect operator-facing system status (Section 11). */
+	status(): Promise<SystemStatus>;
+	/** Access the underlying session manager for advanced use. */
+	readonly sessionManager: SessionManager;
+	/** Access the underlying browser actions instance. */
+	readonly browserActions: BrowserActions;
+	/** Access the underlying terminal actions instance. */
+	readonly terminalActions: TerminalActions;
+	/** Access the underlying fs actions instance. */
+	readonly fsActions: FsActions;
+	/** Access the underlying service actions instance. */
+	readonly serviceActions: ServiceActions;
+	/**
+	 * Close the BrowserControl instance and release all held resources.
+	 *
+	 * This is critical for process lifecycle management: after calling
+	 * terminal.open() (which is daemon-backed), the SessionManager's
+	 * MemoryStore keeps a SQLite handle alive that prevents the Node.js
+	 * event loop from exiting. Calling close() releases that handle so
+	 * the process can exit cleanly.
+	 *
+	 * Call this at the end of any short-lived script that uses the API.
+	 */
+	close(): void;
 }
 
 // ── Factory ──────────────────────────────────────────────────────────
@@ -277,479 +451,711 @@ export interface BrowserControlAPI {
  *
  * Section 7 (MCP) will wrap this exact object 1:1.
  */
-export function createBrowserControl(options: BrowserControlOptions = {}): BrowserControlAPI {
-  // If a policy profile was specified, create a policy engine with that profile
-  const policyEngine = options.policyProfile
-    ? new DefaultPolicyEngine({ profileName: options.policyProfile })
-    : undefined;
+export function createBrowserControl(
+	options: BrowserControlOptions = {},
+): BrowserControlAPI {
+	// If a policy profile was specified, create a policy engine with that profile
+	const policyEngine = options.policyProfile
+		? new DefaultPolicyEngine({ profileName: options.policyProfile })
+		: undefined;
 
-  const sessionManager = new SessionManager({
-    memoryStore: options.memoryStore,
-    policyEngine,
-  });
+	const sessionManager = new SessionManager({
+		memoryStore: options.memoryStore,
+		policyEngine,
+	});
 
-  // ── Pre-warm daemon runtime (optional optimization) ─────────────
-  // TerminalActions.ensureDaemonRuntimeReady() probes the daemon before
-  // every session-dependent action, so this fire-and-forget call is NOT
-  // a correctness requirement — it's a pre-warm that may settle the
-  // broker runtime cache before the first terminal action, saving an
-  // HTTP round-trip on that first call.  If it hasn't settled yet,
-  // ensureDaemonRuntimeReady() will handle it.
-  sessionManager.ensureDaemonRuntime({ autoStart: false }).catch(() => {
-    // Ignore — pre-warm failed, ensureDaemonRuntimeReady() will retry
-  });
+	// ── Pre-warm daemon runtime (optional optimization) ─────────────
+	// TerminalActions.ensureDaemonRuntimeReady() probes the daemon before
+	// every session-dependent action, so this fire-and-forget call is NOT
+	// a correctness requirement — it's a pre-warm that may settle the
+	// broker runtime cache before the first terminal action, saving an
+	// HTTP round-trip on that first call.  If it hasn't settled yet,
+	// ensureDaemonRuntimeReady() will handle it.
+	sessionManager.ensureDaemonRuntime({ autoStart: false }).catch(() => {
+		// Ignore — pre-warm failed, ensureDaemonRuntimeReady() will retry
+	});
 
-  const sharedRegistry = new ServiceRegistry();
+	const sharedRegistry = new ServiceRegistry();
 
-  const browserCtx: BrowserActionContext = { sessionManager, serviceRegistry: sharedRegistry };
-  // Terminal actions use autoStartDaemon: true so that persistent terminal
-  // sessions (open, read, type, etc.) are daemon-backed, aligning the API
-  // with the CLI ownership model. This prevents the API process from
-  // hanging after terminal.open() due to an in-process PTY.
-  const terminalCtx: TerminalActionContext = { sessionManager, autoStartDaemon: true };
-  const fsCtx: FsActionContext = { sessionManager };
-  const serviceCtx: ServiceActionContext = { sessionManager, registry: sharedRegistry };
+	const browserCtx: BrowserActionContext = {
+		sessionManager,
+		serviceRegistry: sharedRegistry,
+	};
+	// Terminal actions use autoStartDaemon: true so that persistent terminal
+	// sessions (open, read, type, etc.) are daemon-backed, aligning the API
+	// with the CLI ownership model. This prevents the API process from
+	// hanging after terminal.open() due to an in-process PTY.
+	const terminalCtx: TerminalActionContext = {
+		sessionManager,
+		autoStartDaemon: true,
+	};
+	const fsCtx: FsActionContext = { sessionManager };
+	const serviceCtx: ServiceActionContext = {
+		sessionManager,
+		registry: sharedRegistry,
+	};
 
-  const browserActions = new BrowserActions(browserCtx);
-  const terminalActions = new TerminalActions(terminalCtx);
-  const fsActions = new FsActions(fsCtx);
-  const serviceActions = new ServiceActions(serviceCtx);
+	const browserActions = new BrowserActions(browserCtx);
+	const terminalActions = new TerminalActions(terminalCtx);
+	const fsActions = new FsActions(fsCtx);
+	const serviceActions = new ServiceActions(serviceCtx);
 
-  const requireDebugPolicy = (action: string, params: Record<string, unknown> = {}) => {
-    const policyEval = sessionManager.evaluateAction(action, params);
-    if (!isPolicyAllowed(policyEval)) {
-      throw new Error(policyEval.error ?? `Policy blocked ${action}`);
-    }
-    return policyEval;
-  };
+	const requireDebugPolicy = (
+		action: string,
+		params: Record<string, unknown> = {},
+	) => {
+		const policyEval = sessionManager.evaluateAction(action, params);
+		if (!isPolicyAllowed(policyEval)) {
+			throw new Error(policyEval.error ?? `Policy blocked ${action}`);
+		}
+		return policyEval;
+	};
 
-  const providerNamespace: ProviderNamespace = {
-    list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
-    use: (name) => {
-      const policyEval = sessionManager.evaluateAction("browser_provider_use", { name });
-      if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<ProviderSelectionResult>;
-      const result = sessionManager.getBrowserManager().getProviderRegistry().select(name);
-      return {
-        success: result.success,
-        path: policyEval.path,
-        sessionId: sessionManager.getActiveSession()?.id ?? "default",
-        data: result,
-        ...(result.error ? { error: result.error } : {}),
-        policyDecision: policyEval.policyDecision,
-        risk: policyEval.risk,
-        ...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
-        completedAt: new Date().toISOString(),
-      };
-    },
-    getActive: () => sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
-  };
-  const configNamespace: ConfigNamespace = {
-    list: () => getConfigEntries({ validate: false }),
-    get: (key) => getConfigValue(key, { validate: false }),
-    set: (key, value) => {
-      const policyEval = sessionManager.evaluateAction("config_set", { key, value });
-      if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<ConfigSetResult>;
-      const result = setUserConfigValue(key, value);
-      return {
-        success: true,
-        path: policyEval.path,
-        sessionId: sessionManager.getActiveSession()?.id ?? "default",
-        data: result,
-        policyDecision: policyEval.policyDecision,
-        risk: policyEval.risk,
-        ...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
-        completedAt: new Date().toISOString(),
-      };
-    },
-  };
+	const providerNamespace: ProviderNamespace = {
+		list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
+		use: (name) => {
+			const policyEval = sessionManager.evaluateAction("browser_provider_use", {
+				name,
+			});
+			if (!isPolicyAllowed(policyEval))
+				return policyEval as ActionResult<ProviderSelectionResult>;
+			const result = sessionManager
+				.getBrowserManager()
+				.getProviderRegistry()
+				.select(name);
+			return {
+				success: result.success,
+				path: policyEval.path,
+				sessionId: sessionManager.getActiveSession()?.id ?? "default",
+				data: result,
+				...(result.error ? { error: result.error } : {}),
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+				completedAt: new Date().toISOString(),
+			};
+		},
+		getActive: () =>
+			sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
+	};
+	const configNamespace: ConfigNamespace = {
+		list: () => getConfigEntries({ validate: false }),
+		get: (key) => getConfigValue(key, { validate: false }),
+		set: (key, value) => {
+			const policyEval = sessionManager.evaluateAction("config_set", {
+				key,
+				value,
+			});
+			if (!isPolicyAllowed(policyEval))
+				return policyEval as ActionResult<ConfigSetResult>;
+			const result = setUserConfigValue(key, value);
+			return {
+				success: true,
+				path: policyEval.path,
+				sessionId: sessionManager.getActiveSession()?.id ?? "default",
+				data: result,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+				completedAt: new Date().toISOString(),
+			};
+		},
+	};
 
-  const debugNamespace: DebugNamespace = {
-    health: async (options = {}) => {
-      requireDebugPolicy("debug_health", options);
-      const { HealthCheck } = await import("./runtime/health_check");
-      const healthCheck = new HealthCheck({
-        port: options.port,
-        memoryStore: sessionManager.getMemoryStore(),
-      });
-      return healthCheck.runExtended();
-    },
-    bundle: (bundleId) => {
-      requireDebugPolicy("debug_bundle_export", { bundleId });
-      const { loadDebugBundle } = require("./observability/debug_bundle");
-      return loadDebugBundle(bundleId, sessionManager.getMemoryStore());
-    },
-    console: (options = {}) => {
-      requireDebugPolicy("debug_console_read", options);
-      const { getGlobalConsoleCapture } = require("./observability/console_capture");
-      const capture = getGlobalConsoleCapture();
-      return capture.getEntries(options.sessionId ?? "default");
-    },
-    network: (options = {}) => {
-      requireDebugPolicy("debug_network_read", options);
-      const { getGlobalNetworkCapture } = require("./observability/network_capture");
-      const capture = getGlobalNetworkCapture();
-      return capture.getEntries(options.sessionId ?? "default");
-    },
-    listBundles: () => {
-      requireDebugPolicy("debug_bundle_export", { list: true });
-      const { listDebugBundles } = require("./observability/debug_bundle");
-      return listDebugBundles(sessionManager.getMemoryStore());
-    },
-    receipt: (receiptId) => {
-      requireDebugPolicy("debug_receipt_export", { receiptId });
-      const { getGlobalScreencastRecorder } = require("./observability/screencast");
-      const recorder = getGlobalScreencastRecorder(sessionManager.getMemoryStore());
-      return recorder.loadReceipt(receiptId);
-    },
-  };
+	const debugNamespace: DebugNamespace = {
+		health: async (options = {}) => {
+			requireDebugPolicy("debug_health", options);
+			const { HealthCheck } = await import("./runtime/health_check");
+			const healthCheck = new HealthCheck({
+				port: options.port,
+				memoryStore: sessionManager.getMemoryStore(),
+			});
+			return healthCheck.runExtended();
+		},
+		bundle: (bundleId) => {
+			requireDebugPolicy("debug_bundle_export", { bundleId });
+			const { loadDebugBundle } = require("./observability/debug_bundle");
+			return loadDebugBundle(bundleId, sessionManager.getMemoryStore());
+		},
+		console: (options = {}) => {
+			requireDebugPolicy("debug_console_read", options);
+			const {
+				getGlobalConsoleCapture,
+			} = require("./observability/console_capture");
+			const capture = getGlobalConsoleCapture();
+			return capture.getEntries(options.sessionId ?? "default");
+		},
+		network: (options = {}) => {
+			requireDebugPolicy("debug_network_read", options);
+			const {
+				getGlobalNetworkCapture,
+			} = require("./observability/network_capture");
+			const capture = getGlobalNetworkCapture();
+			return capture.getEntries(options.sessionId ?? "default");
+		},
+		listBundles: () => {
+			requireDebugPolicy("debug_bundle_export", { list: true });
+			const { listDebugBundles } = require("./observability/debug_bundle");
+			return listDebugBundles(sessionManager.getMemoryStore());
+		},
+		receipt: (receiptId) => {
+			requireDebugPolicy("debug_receipt_export", { receiptId });
+			const {
+				getGlobalScreencastRecorder,
+			} = require("./observability/screencast");
+			const recorder = getGlobalScreencastRecorder(
+				sessionManager.getMemoryStore(),
+			);
+			return recorder.loadReceipt(receiptId);
+		},
+	};
 
-  const screencastNamespace: ScreencastNamespace = {
-    start: (options) => browserActions.screencastStart(options),
-    stop: () => browserActions.screencastStop(),
-    status: () => browserActions.screencastStatus(),
-  };
+	const screencastNamespace: ScreencastNamespace = {
+		start: (options) => browserActions.screencastStart(options),
+		stop: () => browserActions.screencastStop(),
+		status: () => browserActions.screencastStatus(),
+	};
 
-  const getActionSessionId = () => sessionManager.getActiveSession()?.id ?? "system";
+	const getActionSessionId = () =>
+		sessionManager.getActiveSession()?.id ?? "system";
 
-  const buildWorkflowRuntime = () => {
-    const { WorkflowStore } = require("./workflows/store");
-    const { WorkflowRuntime } = require("./workflows/runtime");
-    const { HarnessRegistry } = require("./harness/registry");
-    const store = new WorkflowStore(sessionManager.getMemoryStore());
-    return new WorkflowRuntime(store, {
-      sessionId: getActionSessionId(),
-      terminalExec: (command: string, timeoutMs?: number) => terminalActions.exec({ command, timeoutMs }),
-      fsRead: (path: string) => fsActions.read({ path }),
-      fsWrite: (path: string, content: string) => fsActions.write({ path, content }),
-      browserOpen: (url: string) => browserActions.open({ url }),
-      verificationExecute: async (input: Record<string, unknown>) => {
-        const actual = input.actual ?? input.expression;
-        const expected = input.expected;
-        const passed = input.passed === true || String(actual) === String(expected);
-        return passed
-          ? successResult({ actual, expected, passed }, { path: "command", sessionId: getActionSessionId() })
-          : failureResult(`Verification failed: expected "${String(expected)}" but got "${String(actual)}"`, {
-              path: "command",
-              sessionId: getActionSessionId(),
-            });
-      },
-      helperExecute: async (helperId: string) => {
-        const registry = new HarnessRegistry();
-        const helper = registry.get(helperId);
-        if (!helper) {
-          return failureResult(`Helper not found: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
-        }
-        if (!helper.activated) {
-          return failureResult(`Helper is not activated: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
-        }
-        const validation = registry.validate(helperId);
-        if (validation.status !== "passed") {
-          return failureResult(`Helper validation failed: ${helperId}`, { path: "command", sessionId: getActionSessionId() });
-        }
-        return successResult({ helperId, helper, validation }, { path: "command", sessionId: getActionSessionId() });
-      },
-    });
-  };
+	const buildWorkflowRuntime = () => {
+		const { WorkflowStore } = require("./workflows/store");
+		const { WorkflowRuntime } = require("./workflows/runtime");
+		const { HarnessRegistry } = require("./harness/registry");
+		const store = new WorkflowStore(sessionManager.getMemoryStore());
+		return new WorkflowRuntime(store, {
+			sessionId: getActionSessionId(),
+			terminalExec: (command: string, timeoutMs?: number) =>
+				terminalActions.exec({ command, timeoutMs }),
+			fsRead: (path: string) => fsActions.read({ path }),
+			fsWrite: (path: string, content: string) =>
+				fsActions.write({ path, content }),
+			browserOpen: (url: string) => browserActions.open({ url }),
+			verificationExecute: async (input: Record<string, unknown>) => {
+				const actual = input.actual ?? input.expression;
+				const expected = input.expected;
+				const passed =
+					input.passed === true || String(actual) === String(expected);
+				return passed
+					? successResult(
+							{ actual, expected, passed },
+							{ path: "command", sessionId: getActionSessionId() },
+						)
+					: failureResult(
+							`Verification failed: expected "${String(expected)}" but got "${String(actual)}"`,
+							{
+								path: "command",
+								sessionId: getActionSessionId(),
+							},
+						);
+			},
+			helperExecute: async (helperId: string) => {
+				const registry = new HarnessRegistry();
+				const helper = registry.get(helperId);
+				if (!helper) {
+					return failureResult(`Helper not found: ${helperId}`, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					});
+				}
+				if (!helper.activated) {
+					return failureResult(`Helper is not activated: ${helperId}`, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					});
+				}
+				const validation = registry.validate(helperId);
+				if (validation.status !== "passed") {
+					return failureResult(`Helper validation failed: ${helperId}`, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					});
+				}
+				return successResult(
+					{ helperId, helper, validation },
+					{ path: "command", sessionId: getActionSessionId() },
+				);
+			},
+		});
+	};
 
-  const evaluateActionPolicy = <T>(action: string, params: Record<string, unknown>): { blocked: ActionResult<T>; policy?: never } | { blocked: null; policy: PolicyAllowResult } => {
-    const policyEval = sessionManager.evaluateAction(action, params);
-    if (!isPolicyAllowed(policyEval)) return { blocked: policyEval as ActionResult<T> };
-    return { blocked: null, policy: policyEval };
-  };
+	const evaluateActionPolicy = <T>(
+		action: string,
+		params: Record<string, unknown>,
+	):
+		| { blocked: ActionResult<T>; policy?: never }
+		| { blocked: null; policy: PolicyAllowResult } => {
+		const policyEval = sessionManager.evaluateAction(action, params);
+		if (!isPolicyAllowed(policyEval))
+			return { blocked: policyEval as ActionResult<T> };
+		return { blocked: null, policy: policyEval };
+	};
 
-  const attachPolicy = <T>(result: ActionResult<T>, policy: PolicyAllowResult): ActionResult<T> => {
-    return {
-      ...result,
-      path: policy.path,
-      sessionId: getActionSessionId(),
-      ...(policy.auditId ? { auditId: policy.auditId } : {}),
-      policyDecision: policy.policyDecision,
-      risk: policy.risk,
-    };
-  };
+	const attachPolicy = <T>(
+		result: ActionResult<T>,
+		policy: PolicyAllowResult,
+	): ActionResult<T> => {
+		return {
+			...result,
+			path: policy.path,
+			sessionId: getActionSessionId(),
+			...(policy.auditId ? { auditId: policy.auditId } : {}),
+			policyDecision: policy.policyDecision,
+			risk: policy.risk,
+		};
+	};
 
-  return {
-    browser: {
-      open: (o) => browserActions.open(o),
-      snapshot: (o) => browserActions.takeSnapshot(o),
-      click: (o) => browserActions.click(o),
-      fill: (o) => browserActions.fill(o),
-      hover: (o) => browserActions.hover(o),
-      type: (o) => browserActions.type(o),
-      press: (o) => browserActions.press(o),
-      scroll: (o) => browserActions.scroll(o),
-      screenshot: (o) => browserActions.screenshot(o),
-      highlight: (o) => browserActions.highlight(o),
-      generateLocator: (target) => browserActions.generateLocator(target),
-      tabList: () => browserActions.tabList(),
-      tabSwitch: (id) => browserActions.tabSwitch(id),
-      tabClose: () => browserActions.tabClose(),
-      close: () => browserActions.close(),
-      provider: providerNamespace,
-      screencast: screencastNamespace,
-      // Section 27: Browser discovery and attach UX
-      list: async (options) => {
-        const policyEval = sessionManager.evaluateAction("browser_list", options ?? {});
-        if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<AttachableBrowser[]>;
-        const localProvider = new (await import("./providers/local")).LocalBrowserProvider();
-        const browsers = await localProvider.discoverBrowsers(options);
-        return {
-          success: true,
-          path: policyEval.path,
-          sessionId: sessionManager.getActiveSession()?.id ?? "default",
-          policyDecision: policyEval.policyDecision,
-          risk: policyEval.risk,
-          auditId: policyEval.auditId,
-          data: browsers,
-          completedAt: new Date().toISOString(),
-        };
-      },
-      attach: async (options) => {
-        const bm = sessionManager.getBrowserManager();
-        const cdpUrl = options.cdp ?? options.endpoint;
-        const result = await bm.attach({
-          cdpUrl,
-          port: options.port,
-          targetType: options.targetType as any,
-        });
-        return {
-          success: true,
-          path: "a11y",
-          sessionId: sessionManager.getActiveSession()?.id ?? "default",
-          data: { attached: true, endpoint: result.cdpEndpoint },
-          completedAt: new Date().toISOString(),
-        };
-      },
-      detach: async () => {
-        const policyEval = sessionManager.evaluateAction("browser_detach", {});
-        if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<BrowserDetachResult>;
-        const bm = sessionManager.getBrowserManager();
-        const result = await bm.detach();
-        return {
-          success: result.detached,
-          path: policyEval.path,
-          sessionId: sessionManager.getActiveSession()?.id ?? "default",
-          policyDecision: policyEval.policyDecision,
-          risk: policyEval.risk,
-          auditId: policyEval.auditId,
-          data: result,
-          completedAt: new Date().toISOString(),
-        };
-      },
-      drop: (options) => browserActions.drop(options),
-      downloads: {
-        list: () => browserActions.downloadsList(),
-      },
-    },
-    terminal: {
-      open: (o) => terminalActions.open(o),
-      exec: (o) => terminalActions.exec(o),
-      type: (o) => terminalActions.type(o),
-      read: (o) => terminalActions.read(o),
-      snapshot: (o) => terminalActions.snapshot(o),
-      interrupt: (o) => terminalActions.interrupt(o),
-      close: (o) => terminalActions.close(o),
-      resume: (o) => terminalActions.resume(o),
-      status: (o) => terminalActions.status(o),
-    },
-    fs: {
-      read: (o) => fsActions.read(o),
-      write: (o) => fsActions.write(o),
-      ls: (o) => fsActions.ls(o),
-      move: (o) => fsActions.move(o),
-      rm: (o) => fsActions.rm(o),
-      stat: (o) => fsActions.stat(o),
-    },
-    session: {
-      create: (name, o) => sessionManager.create(name, o),
-      list: () => sessionManager.list(),
-      use: (nameOrId) => sessionManager.use(nameOrId),
-      status: (nameOrId) => sessionManager.status(nameOrId),
-    },
-    service: {
-      register: (o) => serviceActions.register(o),
-      list: () => serviceActions.list(),
-      resolve: (o) => serviceActions.resolve(o),
-      remove: (o) => serviceActions.remove(o),
-    },
-    provider: providerNamespace,
-    debug: debugNamespace,
-    config: configNamespace,
-    dashboard: {
-      status: async () => {
-        const { getDashboardState } = await import("./operator/dashboard");
-        return getDashboardState();
-      }
-    },
-    workflow: {
-      run: async (graphJson: string) => {
-        const policy = evaluateActionPolicy("workflow_run", { graphJson });
-        if (policy.blocked) return policy.blocked;
-        const runtime = buildWorkflowRuntime();
-        let graph: unknown;
-        try {
-          graph = JSON.parse(graphJson);
-        } catch {
-          return attachPolicy(failureResult("Invalid workflow graph JSON", {
-            path: "command",
-            sessionId: getActionSessionId(),
-          }), policy.policy);
-        }
-        return attachPolicy(await runtime.run(graph as import("./workflows/types").WorkflowGraph), policy.policy);
-      },
-      status: (runId: string) => {
-        const policy = evaluateActionPolicy("workflow_status", { runId });
-        if (policy.blocked) return policy.blocked;
-        const runtime = buildWorkflowRuntime();
-        return attachPolicy(runtime.status(runId), policy.policy);
-      },
-      resume: async (runId: string) => {
-        const policy = evaluateActionPolicy("workflow_resume", { runId });
-        if (policy.blocked) return policy.blocked;
-        const runtime = buildWorkflowRuntime();
-        return attachPolicy(await runtime.resume(runId), policy.policy);
-      },
-      approve: (runId: string, nodeId: string) => {
-        const policy = evaluateActionPolicy("workflow_approve", { runId, nodeId });
-        if (policy.blocked) return policy.blocked;
-        const runtime = buildWorkflowRuntime();
-        return attachPolicy(runtime.approve(runId, nodeId), policy.policy);
-      },
-      cancel: (runId: string) => {
-        const policy = evaluateActionPolicy("workflow_cancel", { runId });
-        if (policy.blocked) return policy.blocked;
-        const runtime = buildWorkflowRuntime();
-        return attachPolicy(runtime.cancel(runId), policy.policy);
-      },
-    },
-    harness: {
-      list: () => {
-        const policy = evaluateActionPolicy("harness_list", {});
-        if (policy.blocked) return policy.blocked;
-        const { HarnessRegistry } = require("./harness/registry");
-        const registry = new HarnessRegistry();
-        return attachPolicy(successResult(registry.list(), { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      find: (query) => {
-        const policy = evaluateActionPolicy("harness_find", query);
-        if (policy.blocked) return policy.blocked;
-        const { HarnessRegistry } = require("./harness/registry");
-        const registry = new HarnessRegistry();
-        return attachPolicy(successResult(registry.find(query), { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      validate: (helperId: string) => {
-        const policy = evaluateActionPolicy("harness_validate", { helperId });
-        if (policy.blocked) return policy.blocked;
-        const { HarnessRegistry } = require("./harness/registry");
-        const registry = new HarnessRegistry();
-        const result = registry.validate(helperId);
-        if (result.status === "passed") {
-          return attachPolicy(successResult(result, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(`Validation failed for ${helperId}`, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      rollback: (helperId: string, version: string) => {
-        const policy = evaluateActionPolicy("harness_rollback", { helperId, version });
-        if (policy.blocked) return policy.blocked;
-        const { HarnessRegistry } = require("./harness/registry");
-        const registry = new HarnessRegistry();
-        const result = registry.rollback(helperId, version);
-        if (result.success) {
-          return attachPolicy(successResult(result, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(result.error ?? "Rollback failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-    },
-    package: {
-      install: async (source: string) => {
-        const policy = evaluateActionPolicy("package_install", { source });
-        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
-        const { PackageRegistry } = await import("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        const result = registry.install(source);
-        if (result.success && result.package) {
-          return attachPolicy(successResult(result.package, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(result.error ?? "Install failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      list: () => {
-        const policy = evaluateActionPolicy("package_list", {});
-        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage[]>;
-        const { PackageRegistry } = require("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        return attachPolicy(successResult(registry.list(), { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      info: (name: string) => {
-        const policy = evaluateActionPolicy("package_info", { name });
-        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
-        const { PackageRegistry } = require("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        const pkg = registry.get(name);
-        if (pkg) {
-          return attachPolicy(successResult(pkg, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(`Package not found: ${name}`, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      remove: (name: string) => {
-        const policy = evaluateActionPolicy("package_remove", { name });
-        if (policy.blocked) return policy.blocked as ActionResult<{ removed: boolean }>;
-        const { PackageRegistry } = require("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        const result = registry.remove(name);
-        if (result.success) {
-          return attachPolicy(successResult({ removed: true }, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(result.error ?? "Remove failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      update: async (name: string, source?: string) => {
-        const policy = evaluateActionPolicy("package_update", { name, source });
-        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").InstalledAutomationPackage>;
-        const { PackageRegistry } = await import("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        const result = registry.update(name, source);
-        if (result.success && result.package) {
-          return attachPolicy(successResult(result.package, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(result.error ?? "Update failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      grantPermission: (name: string, permissionRef: string | number) => {
-        const policy = evaluateActionPolicy("package_grant", { name, permissionRef });
-        if (policy.blocked) return policy.blocked as ActionResult<{ granted: boolean }>;
-        const { PackageRegistry } = require("./packages/registry");
-        const registry = new PackageRegistry(options.dataHome);
-        const result = registry.grantPermission(name, permissionRef);
-        if (result.success) {
-          return attachPolicy(successResult({ granted: true }, { path: "command", sessionId: getActionSessionId() }), policy.policy);
-        }
-        return attachPolicy(failureResult(result.error ?? "Grant failed", { path: "command", sessionId: getActionSessionId() }), policy.policy);
-      },
-      run: async (name: string, workflowNameOrId: string) => {
-        const policy = evaluateActionPolicy("package_run", { name, workflowNameOrId });
-        if (policy.blocked) return policy.blocked as ActionResult;
-        const { PackageRegistry } = await import("./packages/registry");
-        const { PackageRunner } = await import("./packages/runner");
-        const registry = new PackageRegistry(options.dataHome);
-        const runner = new PackageRunner(registry, sessionManager.getMemoryStore(), getActionSessionId(), buildWorkflowRuntime());
-        const result = await runner.runWorkflow(name, workflowNameOrId);
-        return attachPolicy(result, policy.policy);
-      },
-      eval: async (name: string) => {
-        const policy = evaluateActionPolicy("package_eval", { name });
-        if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").PackageEvalResult[]>;
-        const { PackageRegistry } = await import("./packages/registry");
-        const { PackageEval } = await import("./packages/eval");
-        const registry = new PackageRegistry(options.dataHome);
-        const evaluator = new PackageEval(registry, sessionManager.getMemoryStore(), getActionSessionId(), buildWorkflowRuntime());
-        const result = await evaluator.evaluate(name);
-        return attachPolicy(result, policy.policy);
-      },
-    },
-    status: () => collectStatus(),
-    get sessionManager() { return sessionManager; },
-    get browserActions() { return browserActions; },
-    get terminalActions() { return terminalActions; },
-    get fsActions() { return fsActions; },
-    get serviceActions() { return serviceActions; },
-    close() { sessionManager.close(); },
-  };
+	return {
+		browser: {
+			open: (o) => browserActions.open(o),
+			snapshot: (o) => browserActions.takeSnapshot(o),
+			click: (o) => browserActions.click(o),
+			fill: (o) => browserActions.fill(o),
+			hover: (o) => browserActions.hover(o),
+			type: (o) => browserActions.type(o),
+			press: (o) => browserActions.press(o),
+			scroll: (o) => browserActions.scroll(o),
+			screenshot: (o) => browserActions.screenshot(o),
+			highlight: (o) => browserActions.highlight(o),
+			generateLocator: (target) => browserActions.generateLocator(target),
+			tabList: () => browserActions.tabList(),
+			tabSwitch: (id) => browserActions.tabSwitch(id),
+			tabClose: () => browserActions.tabClose(),
+			close: () => browserActions.close(),
+			provider: providerNamespace,
+			screencast: screencastNamespace,
+			// Section 27: Browser discovery and attach UX
+			list: async (options) => {
+				const policyEval = sessionManager.evaluateAction(
+					"browser_list",
+					options ?? {},
+				);
+				if (!isPolicyAllowed(policyEval))
+					return policyEval as ActionResult<AttachableBrowser[]>;
+				const localProvider = new (
+					await import("./providers/local")
+				).LocalBrowserProvider();
+				const browsers = await localProvider.discoverBrowsers(options);
+				return {
+					success: true,
+					path: policyEval.path,
+					sessionId: sessionManager.getActiveSession()?.id ?? "default",
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+					data: browsers,
+					completedAt: new Date().toISOString(),
+				};
+			},
+			attach: async (options) => {
+				const bm = sessionManager.getBrowserManager();
+				const cdpUrl = options.cdp ?? options.endpoint;
+				const result = await bm.attach({
+					cdpUrl,
+					port: options.port,
+					targetType: options.targetType as BrowserTargetType | undefined,
+				});
+				return {
+					success: true,
+					path: "a11y",
+					sessionId: sessionManager.getActiveSession()?.id ?? "default",
+					data: { attached: true, endpoint: result.cdpEndpoint },
+					completedAt: new Date().toISOString(),
+				};
+			},
+			detach: async () => {
+				const policyEval = sessionManager.evaluateAction("browser_detach", {});
+				if (!isPolicyAllowed(policyEval))
+					return policyEval as ActionResult<BrowserDetachResult>;
+				const bm = sessionManager.getBrowserManager();
+				const result = await bm.detach();
+				return {
+					success: result.detached,
+					path: policyEval.path,
+					sessionId: sessionManager.getActiveSession()?.id ?? "default",
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+					data: result,
+					completedAt: new Date().toISOString(),
+				};
+			},
+			drop: (options) => browserActions.drop(options),
+			downloads: {
+				list: () => browserActions.downloadsList(),
+			},
+		},
+		terminal: {
+			open: (o) => terminalActions.open(o),
+			exec: (o) => terminalActions.exec(o),
+			type: (o) => terminalActions.type(o),
+			read: (o) => terminalActions.read(o),
+			snapshot: (o) => terminalActions.snapshot(o),
+			interrupt: (o) => terminalActions.interrupt(o),
+			close: (o) => terminalActions.close(o),
+			resume: (o) => terminalActions.resume(o),
+			status: (o) => terminalActions.status(o),
+			resize: (o) => terminalActions.resize(o),
+			onOutput: (l) => terminalActions.onData(l),
+		},
+		fs: {
+			read: (o) => fsActions.read(o),
+			write: (o) => fsActions.write(o),
+			ls: (o) => fsActions.ls(o),
+			move: (o) => fsActions.move(o),
+			rm: (o) => fsActions.rm(o),
+			stat: (o) => fsActions.stat(o),
+		},
+		session: {
+			create: (name, o) => sessionManager.create(name, o),
+			list: () => sessionManager.list(),
+			use: (nameOrId) => sessionManager.use(nameOrId),
+			status: (nameOrId) => sessionManager.status(nameOrId),
+		},
+		service: {
+			register: (o) => serviceActions.register(o),
+			list: () => serviceActions.list(),
+			resolve: (o) => serviceActions.resolve(o),
+			remove: (o) => serviceActions.remove(o),
+		},
+		provider: providerNamespace,
+		debug: debugNamespace,
+		config: configNamespace,
+		dashboard: {
+			status: async () => {
+				const { getDashboardState } = await import("./operator/dashboard");
+				return getDashboardState();
+			},
+		},
+		workflow: {
+			run: async (graphJson: string) => {
+				const policy = evaluateActionPolicy("workflow_run", { graphJson });
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				let graph: unknown;
+				try {
+					graph = JSON.parse(graphJson);
+				} catch {
+					return attachPolicy(
+						failureResult("Invalid workflow graph JSON", {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					await runtime.run(graph as import("./workflows/types").WorkflowGraph),
+					policy.policy,
+				);
+			},
+			status: (runId: string) => {
+				const policy = evaluateActionPolicy("workflow_status", { runId });
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				return attachPolicy(runtime.status(runId), policy.policy);
+			},
+			resume: async (runId: string) => {
+				const policy = evaluateActionPolicy("workflow_resume", { runId });
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				return attachPolicy(await runtime.resume(runId), policy.policy);
+			},
+			approve: (runId: string, nodeId: string) => {
+				const policy = evaluateActionPolicy("workflow_approve", {
+					runId,
+					nodeId,
+				});
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				return attachPolicy(runtime.approve(runId, nodeId), policy.policy);
+			},
+			cancel: (runId: string) => {
+				const policy = evaluateActionPolicy("workflow_cancel", { runId });
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				return attachPolicy(runtime.cancel(runId), policy.policy);
+			},
+		},
+		harness: {
+			list: () => {
+				const policy = evaluateActionPolicy("harness_list", {});
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				return attachPolicy(
+					successResult(registry.list(), {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			find: (query) => {
+				const policy = evaluateActionPolicy("harness_find", query);
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				return attachPolicy(
+					successResult(registry.find(query), {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			validate: (helperId: string) => {
+				const policy = evaluateActionPolicy("harness_validate", { helperId });
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				const result = registry.validate(helperId);
+				if (result.status === "passed") {
+					return attachPolicy(
+						successResult(result, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(`Validation failed for ${helperId}`, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			rollback: (helperId: string, version: string) => {
+				const policy = evaluateActionPolicy("harness_rollback", {
+					helperId,
+					version,
+				});
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				const result = registry.rollback(helperId, version);
+				if (result.success) {
+					return attachPolicy(
+						successResult(result, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(result.error ?? "Rollback failed", {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+		},
+		package: {
+			install: async (source: string) => {
+				const policy = evaluateActionPolicy("package_install", { source });
+				if (policy.blocked)
+					return policy.blocked as ActionResult<
+						import("./packages/types").InstalledAutomationPackage
+					>;
+				const { PackageRegistry } = await import("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const result = registry.install(source);
+				if (result.success && result.package) {
+					return attachPolicy(
+						successResult(result.package, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(result.error ?? "Install failed", {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			list: () => {
+				const policy = evaluateActionPolicy("package_list", {});
+				if (policy.blocked)
+					return policy.blocked as ActionResult<
+						import("./packages/types").InstalledAutomationPackage[]
+					>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				return attachPolicy(
+					successResult(registry.list(), {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			info: (name: string) => {
+				const policy = evaluateActionPolicy("package_info", { name });
+				if (policy.blocked)
+					return policy.blocked as ActionResult<
+						import("./packages/types").InstalledAutomationPackage
+					>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const pkg = registry.get(name);
+				if (pkg) {
+					return attachPolicy(
+						successResult(pkg, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(`Package not found: ${name}`, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			remove: (name: string) => {
+				const policy = evaluateActionPolicy("package_remove", { name });
+				if (policy.blocked)
+					return policy.blocked as ActionResult<{ removed: boolean }>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const result = registry.remove(name);
+				if (result.success) {
+					return attachPolicy(
+						successResult(
+							{ removed: true },
+							{ path: "command", sessionId: getActionSessionId() },
+						),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(result.error ?? "Remove failed", {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			update: async (name: string, source?: string) => {
+				const policy = evaluateActionPolicy("package_update", { name, source });
+				if (policy.blocked)
+					return policy.blocked as ActionResult<
+						import("./packages/types").InstalledAutomationPackage
+					>;
+				const { PackageRegistry } = await import("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const result = registry.update(name, source);
+				if (result.success && result.package) {
+					return attachPolicy(
+						successResult(result.package, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(result.error ?? "Update failed", {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			grantPermission: (name: string, permissionRef: string | number) => {
+				const policy = evaluateActionPolicy("package_grant", {
+					name,
+					permissionRef,
+				});
+				if (policy.blocked)
+					return policy.blocked as ActionResult<{ granted: boolean }>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const result = registry.grantPermission(name, permissionRef);
+				if (result.success) {
+					return attachPolicy(
+						successResult(
+							{ granted: true },
+							{ path: "command", sessionId: getActionSessionId() },
+						),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					failureResult(result.error ?? "Grant failed", {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			run: async (name: string, workflowNameOrId: string) => {
+				const policy = evaluateActionPolicy("package_run", {
+					name,
+					workflowNameOrId,
+				});
+				if (policy.blocked) return policy.blocked as ActionResult;
+				const { PackageRegistry } = await import("./packages/registry");
+				const { PackageRunner } = await import("./packages/runner");
+				const registry = new PackageRegistry(options.dataHome);
+				const runner = new PackageRunner(
+					registry,
+					sessionManager.getMemoryStore(),
+					getActionSessionId(),
+					buildWorkflowRuntime(),
+				);
+				const result = await runner.runWorkflow(name, workflowNameOrId);
+				return attachPolicy(result, policy.policy);
+			},
+			eval: async (name: string) => {
+				const policy = evaluateActionPolicy("package_eval", { name });
+				if (policy.blocked)
+					return policy.blocked as ActionResult<
+						import("./packages/types").PackageEvalResult[]
+					>;
+				const { PackageRegistry } = await import("./packages/registry");
+				const { PackageEval } = await import("./packages/eval");
+				const registry = new PackageRegistry(options.dataHome);
+				const evaluator = new PackageEval(
+					registry,
+					sessionManager.getMemoryStore(),
+					getActionSessionId(),
+					buildWorkflowRuntime(),
+				);
+				const result = await evaluator.evaluate(name);
+				return attachPolicy(result, policy.policy);
+			},
+		},
+		status: () => collectStatus(),
+		get sessionManager() {
+			return sessionManager;
+		},
+		get browserActions() {
+			return browserActions;
+		},
+		get terminalActions() {
+			return terminalActions;
+		},
+		get fsActions() {
+			return fsActions;
+		},
+		get serviceActions() {
+			return serviceActions;
+		},
+		close() {
+			sessionManager.close();
+		},
+	};
 }

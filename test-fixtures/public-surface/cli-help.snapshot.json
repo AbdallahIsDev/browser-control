@@ -49,7 +49,7 @@
             "terminal-shell"
           ],
           "jsonSupport": false,
-          "syntax": "[--terminal-shell=powershell] [--browserless-endpoint=<url>]"
+          "syntax": "[--terminal-shell=pwsh] [--browserless-endpoint=<url>]"
         },
         {
           "commandPath": [],
@@ -111,12 +111,64 @@
             "dashboard",
             "open"
           ],
-          "description": "Open local dashboard",
+          "description": "Start/open local dashboard",
+          "flags": [
+            "json",
+            "port"
+          ],
+          "jsonSupport": true,
+          "syntax": "dashboard open [--json] [--port=7790]"
+        },
+        {
+          "commandPath": [
+            "web",
+            "serve"
+          ],
+          "description": "",
+          "flags": [
+            "host",
+            "json",
+            "port",
+            "token"
+          ],
+          "jsonSupport": true,
+          "syntax": "web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>]"
+        },
+        {
+          "commandPath": [
+            "Start",
+            "local",
+            "web"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Start local web app server"
+        },
+        {
+          "commandPath": [
+            "web",
+            "open"
+          ],
+          "description": "Start and open local web app server",
+          "flags": [
+            "json",
+            "port"
+          ],
+          "jsonSupport": true,
+          "syntax": "web open [--json] [--port=7790]"
+        },
+        {
+          "commandPath": [
+            "desktop",
+            "start"
+          ],
+          "description": "Start the Electron desktop wrapper",
           "flags": [
             "json"
           ],
           "jsonSupport": true,
-          "syntax": "dashboard open [--json]"
+          "syntax": "desktop start [--json]"
         }
       ],
       "section": "Operator"

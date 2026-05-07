@@ -83,12 +83,22 @@ bc snapshot
 
 If Chrome/CDP is missing, browser commands fail or report degraded status. Terminal and filesystem commands do not require Chrome.
 
+## First Dashboard Workflow
+
+Run the local dashboard from a source checkout:
+
+```powershell
+npm run cli -- web open --json --port 0
+```
+
+The command starts a loopback-only app server, prints machine-readable connection data, and opens a token-authenticated local URL. The dashboard stores the URL fragment token in session storage, then removes the fragment from the address bar. API responses keep ISO UTC timestamps for scripts, while the dashboard formats primary timestamp fields as local human-readable time with timezone.
+
 ## First Terminal and Filesystem Workflow
 
 PowerShell:
 
 ```powershell
-bc term open --shell powershell --cwd .
+bc term open --shell pwsh --cwd .
 bc term exec "Get-Location" --json
 bc fs write .\tmp\browser-control-demo.txt --content "hello"
 bc fs read .\tmp\browser-control-demo.txt

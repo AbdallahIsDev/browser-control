@@ -690,6 +690,9 @@ export { buildStatusTools } from "./mcp/tools/status";
 // ── Section 11: Operator UX ───────────────────────────────────────────
 
 export { runDoctor, buildDoctorChecks } from "./operator/doctor";
+export { createWebAppServer, startWebAppServer, openUrlInDefaultBrowser } from "./web/server";
+export type { WebAppServer, WebAppServerOptions } from "./web/server";
+export type { WebAppEvent, WebCapabilities, WebAppServerInfo, WebApiError } from "./web/types";
 export { runSetup } from "./operator/setup";
 export { collectStatus, defaultBrokerProbe } from "./operator/status";
 export type {
