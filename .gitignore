@@ -3,6 +3,8 @@ node_modules/
 .interop/
 .worktrees/
 .vscode/
+desktop/BrowserControlLauncher/
+desktop/bin/
 
 .env
 .env.*
@@ -20,6 +22,7 @@ docs/*
 !docs/cli.md
 !docs/compatibility.md
 !docs/troubleshooting.md
+!docs/wsl-windows-chrome.md
 !docs/specs/
 !docs/specs/**
 !docs/business/
@@ -28,6 +31,8 @@ docs/*
 !docs/architecture/**
 !docs/web-desktop-wrapper/
 !docs/web-desktop-wrapper/**
+!docs/production-upgrade/
+!docs/production-upgrade/**
 reports/
 *.sqlite
 nul

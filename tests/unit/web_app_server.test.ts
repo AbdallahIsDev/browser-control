@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import fs from "node:fs";
 import type { AddressInfo } from "node:net";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
 import type { BrowserControlAPI } from "../../src/browser_control";
@@ -272,6 +275,77 @@ test("web app server bridges task and automation endpoints through broker", asyn
 	});
 	assert.equal(automation.status, 200);
 	assert.equal(((await automation.json()) as { id: string }).id, "auto-1");
+});
+
+test("web app server persists saved automations and queues run when broker is available", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-autos-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const broker = createBrokerServer({
+		callbacks: {
+			submitTask: async () => ({ taskId: "queued-automation" }),
+		},
+	});
+	t.after(() => broker.close());
+	const brokerAddress = await broker.listen(0, "127.0.0.1");
+	const previousPort = process.env.BROKER_PORT;
+	process.env.BROKER_PORT = String(brokerAddress.port);
+	t.after(() => {
+		if (previousPort === undefined) delete process.env.BROKER_PORT;
+		else process.env.BROKER_PORT = previousPort;
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const defaults = await fetch(`${info.url}/api/saved-automations`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(defaults.status, 200);
+	assert.equal(
+		((await defaults.json()) as Array<{ id: string }>)[0].id,
+		"tradingview-ict-analysis",
+	);
+
+	const created = await fetch(`${info.url}/api/saved-automations`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({
+			name: "Daily review",
+			prompt: "Summarize active market conditions.",
+		}),
+	});
+	assert.equal(created.status, 200);
+	const createdBody = (await created.json()) as { id: string };
+
+	const run = await fetch(
+		`${info.url}/api/saved-automations/${createdBody.id}/run`,
+		{
+			method: "POST",
+			headers: { authorization: "Bearer test-token" },
+		},
+	);
+	assert.equal(run.status, 202);
+	const runBody = (await run.json()) as {
+		success: boolean;
+		queued: boolean;
+		result: { taskId: string };
+		automation: { runCount: number };
+	};
+	assert.equal(runBody.success, true);
+	assert.equal(runBody.queued, true);
+	assert.equal(runBody.result.taskId, "queued-automation");
+	assert.equal(runBody.automation.runCount, 1);
 });
 
 test("web app server no longer serves /app-config.js (token leak fix)", async (t) => {

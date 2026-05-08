@@ -1,8 +1,8 @@
 {
-  "name": "browser-control-web",
-  "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "build": "node build.cjs"
-  }
+	"name": "browser-control-web",
+	"private": true,
+	"version": "1.0.0",
+	"scripts": {
+		"build": "node build.cjs"
+	}
 }

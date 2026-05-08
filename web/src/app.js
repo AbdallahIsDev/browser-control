@@ -12,28 +12,27 @@
 })();
 
 const token = sessionStorage.getItem("bc-token") || "";
+const { formatDateTime, formatCellValue } = window.BrowserControlFormat;
 
 const state = {
-	page: "overview",
+	page: localStorage.getItem("bc-page") || "agent",
+	theme: localStorage.getItem("bc-theme") || "dark",
 	status: null,
-	capabilities: null,
+	health: null,
 	events: [],
+	tasks: [],
+	automations: [],
+	config: [],
+	notice: "",
+	busy: false,
 };
 
-const { formatDateTime, formatCellValue, formatTerminalActionResult } =
-	window.BrowserControlFormat;
-
 const pages = [
-	["overview", "Overview"],
-	["browser", "Browser"],
-	["tasks", "Tasks"],
+	["agent", "Agent"],
 	["automations", "Automations"],
-	["terminal", "Terminal"],
-	["filesystem", "Filesystem"],
-	["logs", "Logs / Audit"],
-	["debug", "Debug Evidence"],
+	["sessions", "Sessions"],
+	["health", "Health"],
 	["settings", "Settings"],
-	["health", "Health / Doctor"],
 ];
 
 function esc(value) {
@@ -62,736 +61,404 @@ async function api(path, options = {}) {
 	const text = await response.text();
 	const body = text ? JSON.parse(text) : {};
 	if (!response.ok) {
-		const message = body.error || response.statusText;
-		throw new Error(message);
+		throw new Error(body.error || response.statusText);
 	}
 	return body;
 }
 
-function jsonBlock(value) {
-	return `<pre>${esc(JSON.stringify(value, null, 2))}</pre>`;
+function setNotice(message) {
+	state.notice = message || "";
+	const node = document.getElementById("notice");
+	if (node) node.textContent = state.notice;
 }
 
-function setOutput(id, value) {
-	const node = document.getElementById(id);
-	if (node) {
-		const renderValue =
-			typeof value === "string"
-				? value
-				: JSON.stringify(
-						value,
-						(key, entry) =>
-							typeof entry === "string" && formatCellValue(entry, key) !== entry
-								? formatCellValue(entry, key)
-								: entry,
-						2,
-					);
-		node.textContent = renderValue;
-	}
+function runtimeSummary() {
+	const status = state.status || {};
+	const daemonState = status.daemon?.state || "stopped";
+	const brokerReady = status.broker?.reachable === true;
+	const browserReady = Number(status.browser?.activeSessions || 0) > 0;
+	const health = status.health?.overall || "unknown";
+	return {
+		agent: brokerReady && daemonState === "running" ? "Ready" : "Offline",
+		agentTone: brokerReady && daemonState === "running" ? "ok" : "warn",
+		browser: browserReady ? "Connected" : status.browser?.provider || "Local",
+		health,
+		dataHome: status.dataHome || "",
+	};
 }
 
-function actionSummary(value, fallback = "OK") {
-	return formatTerminalActionResult(value, fallback);
-}
-
-function setRaw(id, value) {
-	const node = document.getElementById(id);
-	if (!node) return;
-	node.textContent =
-		typeof value === "string" ? value : JSON.stringify(value, null, 2);
-}
-
-function setTerminalResult(value, fallback = "OK") {
-	setOutput("term-output", actionSummary(value, fallback));
-	setRaw("term-raw", value);
-	const meta = document.getElementById("term-meta");
-	if (meta && value?.data) {
-		const data = value.data;
-		meta.innerHTML = [
-			data.id ? `<span>Session: ${esc(data.id)}</span>` : "",
-			data.shell ? `<span>Shell: ${esc(data.shell)}</span>` : "",
-			data.cwd ? `<span>CWD: ${esc(data.cwd)}</span>` : "",
-			data.status ? `<span>Status: ${esc(data.status)}</span>` : "",
-			data.exitCode !== undefined
-				? `<span>Exit: ${esc(data.exitCode)}</span>`
-				: "",
-		]
-			.filter(Boolean)
-			.join("");
-	}
-}
-
-function metric(label, value, detail = "") {
-	return `<div class="panel"><h3>${esc(label)}</h3><div class="metric-value">${esc(value)}</div><div class="muted">${esc(detail)}</div></div>`;
-}
-
-function table(rows, columns) {
-	if (!rows || rows.length === 0) return `<div class="empty">No entries.</div>`;
-	return `<table><thead><tr>${columns.map((c) => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>${rows
-		.map(
-			(row) =>
-				`<tr>${columns
-					.map((c) => {
-						const raw =
-							typeof c.value === "function" ? c.value(row) : row[c.value];
-						const key = typeof c.value === "string" ? c.value : c.label;
-						return `<td>${esc(formatCellValue(raw, key))}</td>`;
-					})
-					.join("")}</tr>`,
-		)
-		.join("")}</tbody></table>`;
+function configValue(key) {
+	const item = state.config.find((entry) => entry.key === key);
+	return item?.value ?? "";
 }
 
 function renderShell() {
+	document.documentElement.dataset.theme = state.theme;
 	document.getElementById("app").innerHTML = `
-    <div class="shell">
-      <aside class="sidebar">
-        <div class="brand"><span class="brand-mark">BC</span><span>Browser Control</span></div>
-        ${pages.map(([key, label]) => `<button class="nav-button ${state.page === key ? "active" : ""}" data-page="${key}">${label}</button>`).join("")}
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">BC</div>
+          <div>
+            <div class="brand-name">Browser Control</div>
+            <div class="brand-sub">Local agent workspace</div>
+          </div>
+        </div>
+        <nav class="nav-list">
+          ${pages
+						.map(
+							([key, label]) =>
+								`<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${label}</button>`,
+						)
+						.join("")}
+        </nav>
+        <div class="rail-footer">
+          <button class="ghost-button" id="theme-toggle">${state.theme === "dark" ? "Light" : "Dark"} mode</button>
+        </div>
       </aside>
-      <main class="main">
-        <div class="topbar">
-          <div class="status-strip" id="status-strip"></div>
-          <button id="refresh" title="Refresh">Refresh</button>
-        </div>
-        <div class="content">
-          ${pages.map(([key]) => `<section id="page-${key}" class="page ${state.page === key ? "active" : ""}"></section>`).join("")}
-        </div>
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Local automation</div>
+            <h1>${esc(pages.find(([key]) => key === state.page)?.[1] || "Agent")}</h1>
+          </div>
+          <div class="top-actions">
+            ${statusPills()}
+            <button id="refresh" class="icon-button" title="Refresh">Refresh</button>
+          </div>
+        </header>
+        <div id="notice" class="notice">${esc(state.notice)}</div>
+        <section id="view" class="view"></section>
       </main>
     </div>`;
 
 	document.querySelectorAll("[data-page]").forEach((button) => {
 		button.addEventListener("click", () => {
 			state.page = button.dataset.page;
+			localStorage.setItem("bc-page", state.page);
 			render();
 		});
 	});
 	document.getElementById("refresh").addEventListener("click", refreshAll);
+	document.getElementById("theme-toggle").addEventListener("click", () => {
+		state.theme = state.theme === "dark" ? "light" : "dark";
+		localStorage.setItem("bc-theme", state.theme);
+		render();
+	});
 }
 
-function renderStatus() {
-	const status = state.status || {};
-	const broker = status.broker?.reachable ? "ok" : "err";
-	const daemon =
-		status.daemon?.state === "running"
-			? "ok"
-			: status.daemon?.state === "degraded"
-				? "warn"
-				: "err";
-	document.getElementById("status-strip").innerHTML = `
-    <span class="badge ${daemon}">Daemon: ${esc(status.daemon?.state || "unknown")}</span>
-    <span class="badge ${broker}">Broker: ${status.broker?.reachable ? "reachable" : "offline"}</span>
-    <span class="badge">Policy: ${esc(status.policyProfile || "unknown")}</span>
-    <span class="badge">Data: ${esc(status.dataHome || "")}</span>`;
+function statusPills() {
+	const summary = runtimeSummary();
+	return `
+    <span class="status-pill ${summary.agentTone}">Agent ${esc(summary.agent)}</span>
+    <span class="status-pill">Browser ${esc(summary.browser)}</span>
+    <span class="status-pill">Health ${esc(summary.health)}</span>`;
 }
 
-function renderOverview() {
-	const s = state.status || {};
-	document.getElementById("page-overview").innerHTML = `
-    <div class="grid metrics">
-      ${metric("Daemon", s.daemon?.state || "unknown", s.daemon?.reason || "")}
-      ${metric("Browser Sessions", s.browser?.activeSessions || 0, s.browser?.provider || "")}
-      ${metric("Terminal Sessions", s.terminal?.activeSessions || 0)}
-      ${metric("Queued / Running", `${s.tasks?.queued || 0} / ${s.tasks?.running || 0}`)}
-    </div>
-    <div class="grid two" style="margin-top:12px">
-      <div class="panel"><h2>Recent Events</h2>${table(
-				state.events.slice(-8).reverse(),
-				[
-					{ label: "Time", value: (row) => formatDateTime(row.timestamp) },
-					{ label: "Type", value: "type" },
-					{ label: "Session", value: "sessionId" },
-				],
-			)}</div>
-      <div class="panel"><h2>Capabilities</h2>${jsonBlock(state.capabilities || {})}</div>
+function metric(label, value, detail = "", tone = "") {
+	return `
+    <div class="metric ${tone}">
+      <div class="metric-label">${esc(label)}</div>
+      <div class="metric-value">${esc(value)}</div>
+      <div class="metric-detail">${esc(detail)}</div>
     </div>`;
 }
 
-function renderBrowser() {
-	document.getElementById("page-browser").innerHTML = `
-    <div class="panel">
-      <h2>Browser Sessions</h2>
-      <div class="form-grid">
-        <input id="browser-url" placeholder="https://example.com">
-        <button class="primary" id="browser-open">Open URL</button>
-        <button id="browser-tabs">List Tabs</button>
+function renderAgent() {
+	const summary = runtimeSummary();
+	const recent = state.events.slice(-5).reverse();
+	document.getElementById("view").innerHTML = `
+    <div class="agent-layout">
+      <section class="command-panel">
+        <div class="command-head">
+          <div>
+            <div class="eyebrow">Ask the agent</div>
+            <h2>What should Browser Control do?</h2>
+          </div>
+          <span class="model-chip">${esc(configValue("openrouterModel") || "Model not set")}</span>
+        </div>
+        <textarea id="agent-prompt" placeholder="Analyze a site, run a local workflow, or prepare a TradingView ICT plan..."></textarea>
+        <div class="command-actions">
+          <button class="primary" id="agent-run">Run task</button>
+          <button id="agent-save">Save automation</button>
+        </div>
+      </section>
+      <section class="overview-grid">
+        ${metric("Agent runtime", summary.agent, summary.agent === "Ready" ? "Tasks can queue now" : "Start daemon to queue tasks", summary.agentTone)}
+        ${metric("Saved automations", state.automations.length, "Reusable one-click workflows")}
+        ${metric("Recent tasks", state.tasks.length, "Broker task history")}
+        ${metric("Data", summary.dataHome ? "Local" : "Unknown", summary.dataHome)}
+      </section>
+      <section class="split">
+        <div class="panel">
+          <div class="panel-title">Pinned Automations</div>
+          ${automationCards(state.automations.slice(0, 3))}
+        </div>
+        <div class="panel">
+          <div class="panel-title">Recent Activity</div>
+          ${recent.length ? recent.map(activityRow).join("") : emptyState("No recent activity yet.")}
+        </div>
+      </section>
+    </div>`;
+	document
+		.getElementById("agent-run")
+		.addEventListener("click", submitAgentTask);
+	document
+		.getElementById("agent-save")
+		.addEventListener("click", savePromptAutomation);
+}
+
+function activityRow(event) {
+	return `
+    <div class="activity-row">
+      <div>
+        <strong>${esc(event.type || "event")}</strong>
+        <span>${esc(formatDateTime(event.timestamp))}</span>
       </div>
-      <div class="row">
-        <input id="browser-target" placeholder="@e1 or selector">
-        <input id="browser-text" placeholder="Text/key">
-        <button id="browser-snapshot">Snapshot</button>
-        <button id="browser-click">Click</button>
-        <button id="browser-fill">Fill</button>
-        <button id="browser-press">Press</button>
-        <button id="browser-shot">Screenshot</button>
-      </div>
-      <pre id="browser-output">No browser action yet.</pre>
+      <span>${esc(event.sessionId || "system")}</span>
     </div>`;
 }
 
-function renderTasks() {
-	const cap = state.capabilities?.tasks;
-	if (cap && cap.available === false) {
-		document.getElementById("page-tasks").innerHTML =
-			`<div class="panel"><h2>Tasks</h2><div class="empty error">${esc(cap.reason || "Unavailable")}</div></div>`;
-		return;
-	}
-	document.getElementById("page-tasks").innerHTML = `
-    <div class="panel">
-      <h2>Tasks</h2>
-      <div class="form-grid">
-        <input id="task-skill" placeholder="skill (optional)">
-        <input id="task-action" placeholder="action">
-        <input id="task-params" placeholder='{"url":"https://example.com"}'>
+function emptyState(message) {
+	return `<div class="empty-state">${esc(message)}</div>`;
+}
+
+function automationCards(items) {
+	if (!items.length) return emptyState("No automations saved yet.");
+	return `<div class="automation-list">${items.map(automationCard).join("")}</div>`;
+}
+
+function automationCard(item) {
+	const lastRun = item.lastRunAt ? formatDateTime(item.lastRunAt) : "Never run";
+	return `
+    <article class="automation-card">
+      <div>
+        <div class="automation-meta">${esc(item.category || "General")} ${item.approvalRequired ? "- approval required" : ""}</div>
+        <h3>${esc(item.name)}</h3>
+        <p>${esc(item.description || item.prompt)}</p>
       </div>
-      <div class="row"><button class="primary" id="task-run">Run Task</button><button id="task-refresh">Refresh</button></div>
-      <div id="task-table" style="margin-top:10px"></div>
-    </div>`;
+      <div class="automation-actions">
+        <span>${esc(lastRun)}</span>
+        <button class="primary" data-run-automation="${esc(item.id)}">Run</button>
+      </div>
+    </article>`;
 }
 
 function renderAutomations() {
-	const cap = state.capabilities?.automations;
-	if (cap && cap.available === false) {
-		document.getElementById("page-automations").innerHTML =
-			`<div class="panel"><h2>Automations</h2><div class="empty error">${esc(cap.reason || "Unavailable")}</div></div>`;
-		return;
-	}
-	document.getElementById("page-automations").innerHTML = `
-    <div class="panel">
-      <h2>Automations</h2>
-      <div class="form-grid">
-        <input id="auto-id" placeholder="automation id">
-        <input id="auto-name" placeholder="name">
-        <input id="auto-cron" placeholder="0 8 * * *">
-      </div>
-      <div class="row"><button class="primary" id="auto-create">Create</button><button id="auto-refresh">Refresh</button></div>
-      <div id="auto-table" style="margin-top:10px"></div>
+	document.getElementById("view").innerHTML = `
+    <div class="page-stack">
+      <section class="panel">
+        <div class="panel-title">Automation Library</div>
+        ${automationCards(state.automations)}
+      </section>
+      <section class="panel compact-form">
+        <div class="panel-title">Create Automation</div>
+        <input id="automation-name" placeholder="Automation name">
+        <textarea id="automation-prompt" placeholder="What should this automation do?"></textarea>
+        <button class="primary" id="automation-create">Save automation</button>
+      </section>
     </div>`;
+	document
+		.getElementById("automation-create")
+		.addEventListener("click", createAutomation);
 }
 
-function renderTerminal() {
-	document.getElementById("page-terminal").innerHTML = `
-    <div class="panel">
-      <h2>Terminal</h2>
-      <div class="form-grid">
-        <input id="term-shell" placeholder="pwsh">
-        <input id="term-cwd" placeholder="cwd">
-        <button id="term-open">Open Session</button>
-      </div>
-      <div class="row">
-        <select id="term-session-list" aria-label="Terminal sessions"><option value="">No sessions loaded</option></select>
-        <input id="term-session" placeholder="session id">
-        <input id="term-command" value="node --version">
-        <button class="primary" id="term-exec">Exec</button>
-        <button id="term-interrupt" class="danger">Interrupt</button>
-        <button id="term-status">Status</button>
-        <button id="term-read">Read</button>
-        <button id="term-list">List</button>
-        <button id="term-close" class="danger">Close</button>
-      </div>
-      <div class="row" style="margin-top: 10px">
-        <label for="term-cols">Cols:</label>
-        <input id="term-cols" type="number" value="80" style="min-width: 60px; width: 60px">
-        <label for="term-rows">Rows:</label>
-        <input id="term-rows" type="number" value="24" style="min-width: 60px; width: 60px">
-        <button id="term-resize">Resize</button>
-      </div>
-      <div class="term-meta" id="term-meta"><span>No session selected.</span></div>
-      <div class="terminal" id="term-output" style="margin-top: 12px">Idle</div>
-      <details class="raw-details"><summary>Raw response</summary><pre id="term-raw">No raw response.</pre></details>
+function renderSessions() {
+	document.getElementById("view").innerHTML = `
+    <div class="split">
+      <section class="panel">
+        <div class="panel-title">Task History</div>
+        ${
+					state.tasks.length
+						? table(state.tasks, [
+								["Task", (row) => row.id || row.taskId || row.name],
+								["Status", (row) => row.status],
+								[
+									"Updated",
+									(row) => row.updatedAt || row.completedAt || row.startedAt,
+								],
+							])
+						: emptyState("No broker tasks reported.")
+				}
+      </section>
+      <section class="panel">
+        <div class="panel-title">Event Stream</div>
+        ${state.events.length ? state.events.slice(-12).reverse().map(activityRow).join("") : emptyState("No event stream yet.")}
+      </section>
     </div>`;
-}
-
-function renderFilesystem() {
-	document.getElementById("page-filesystem").innerHTML = `
-    <div class="panel">
-      <h2>Filesystem</h2>
-      <div class="row">
-        <input id="fs-path" value="." placeholder="path">
-        <button id="fs-list">List</button>
-        <button id="fs-read">Read</button>
-        <button id="fs-stat">Stat</button>
-      </div>
-      <textarea id="fs-content" placeholder="content for write"></textarea>
-      <div class="row"><button class="primary" id="fs-write">Write</button><button class="danger" id="fs-delete">Delete</button></div>
-      <pre id="fs-output">Idle</pre>
-    </div>`;
-}
-
-function renderLogs() {
-	const cap = state.capabilities?.logs;
-	if (cap && cap.available === false) {
-		document.getElementById("page-logs").innerHTML =
-			`<div class="panel"><h2>Logs / Audit</h2><div class="empty error">${esc(cap.reason || "Unavailable")}</div></div>`;
-		return;
-	}
-	document.getElementById("page-logs").innerHTML = `
-    <div class="panel">
-      <h2>Logs / Audit</h2>
-      <div class="row"><button id="logs-refresh">Refresh Logs</button><button id="events-refresh">Refresh Events</button></div>
-      <div class="grid two" style="margin-top:10px">
-        <pre id="logs-output">No logs loaded.</pre>
-        <pre id="events-output">No events loaded.</pre>
-      </div>
-    </div>`;
-}
-
-function renderDebug() {
-	const cap = state.capabilities?.debugEvidence;
-	if (cap && cap.available === false) {
-		document.getElementById("page-debug").innerHTML =
-			`<div class="panel"><h2>Debug Evidence</h2><div class="empty error">${esc(cap.reason || "Unavailable")}</div></div>`;
-		return;
-	}
-	document.getElementById("page-debug").innerHTML = `
-    <div class="panel">
-      <h2>Debug Evidence</h2>
-      <div class="row"><button id="debug-bundles">Bundles</button><button id="debug-console">Console</button><button id="debug-network">Network</button><button id="debug-receipts">Receipts</button></div>
-      <pre id="debug-output">No evidence loaded.</pre>
-    </div>`;
-}
-
-function renderSettings() {
-	document.getElementById("page-settings").innerHTML = `
-    <div class="panel"><h2>Settings / Policy</h2><div id="config-table"></div><h3>Policy</h3><pre id="policy-output">Loading...</pre></div>`;
 }
 
 function renderHealth() {
-	document.getElementById("page-health").innerHTML = `
-    <div class="panel"><h2>Health / Doctor</h2><button class="primary" id="doctor-run">Run Doctor</button><pre id="doctor-output">Idle</pre></div>`;
+	const health = state.health || {};
+	document.getElementById("view").innerHTML = `
+    <div class="overview-grid">
+      ${metric("Overall", health.overall || runtimeSummary().health, "Doctor summary")}
+      ${metric("Pass", health.pass ?? state.status?.health?.pass ?? 0)}
+      ${metric("Warn", health.warn ?? state.status?.health?.warn ?? 0, "", "warn")}
+      ${metric("Fail", health.fail ?? state.status?.health?.fail ?? 0, "", "danger")}
+    </div>
+    <section class="panel spaced">
+      <div class="panel-title">Health Doctor</div>
+      <button class="primary" id="doctor-run">Run health check</button>
+      <div id="doctor-output" class="doctor-output">${health.checks ? health.checks.map((check) => `<div>${esc(check.name || check.id)} - ${esc(check.status || "")}</div>`).join("") : "No doctor run yet."}</div>
+    </section>`;
+	document.getElementById("doctor-run").addEventListener("click", runDoctor);
+}
+
+function renderSettings() {
+	document.getElementById("view").innerHTML = `
+    <section class="panel settings-panel">
+      <div class="panel-title">Model Connection</div>
+      <label>Base URL<input id="openrouterBaseUrl" value="${esc(configValue("openrouterBaseUrl"))}" placeholder="https://openrouter.ai/api/v1"></label>
+      <label>Model<input id="openrouterModel" value="${esc(configValue("openrouterModel"))}" placeholder="provider/model"></label>
+      <label>API key<input id="openrouterApiKey" value="" type="password" placeholder="Stored locally"></label>
+      <button class="primary" id="settings-save">Save model settings</button>
+    </section>`;
+	document
+		.getElementById("settings-save")
+		.addEventListener("click", saveSettings);
+}
+
+function table(rows, columns) {
+	return `<div class="table">${rows
+		.map(
+			(row) =>
+				`<div class="table-row">${columns
+					.map(([label, get]) => {
+						const raw = typeof get === "function" ? get(row) : row[get];
+						return `<div><span>${esc(label)}</span><strong>${esc(formatCellValue(raw, label))}</strong></div>`;
+					})
+					.join("")}</div>`,
+		)
+		.join("")}</div>`;
+}
+
+async function submitAgentTask() {
+	const prompt = document.getElementById("agent-prompt").value.trim();
+	if (!prompt) return setNotice("Enter a task first.");
+	state.busy = true;
+	setNotice("Submitting task...");
+	try {
+		await api("/api/tasks", {
+			method: "POST",
+			body: JSON.stringify({
+				action: prompt.slice(0, 48),
+				prompt,
+				params: { prompt },
+			}),
+		});
+		setNotice("Task queued.");
+		document.getElementById("agent-prompt").value = "";
+		await refreshAll();
+	} catch (error) {
+		await saveAutomationFromPrompt(prompt, "Saved from agent input");
+		setNotice(`Runtime offline. Saved as automation. ${error.message}`);
+	}
+	state.busy = false;
+}
+
+async function savePromptAutomation() {
+	const prompt = document.getElementById("agent-prompt").value.trim();
+	if (!prompt) return setNotice("Enter automation instructions first.");
+	await saveAutomationFromPrompt(prompt, "Saved from agent input");
+	document.getElementById("agent-prompt").value = "";
+	setNotice("Automation saved.");
+	await refreshAll();
+}
+
+async function saveAutomationFromPrompt(prompt, description) {
+	return api("/api/saved-automations", {
+		method: "POST",
+		body: JSON.stringify({
+			name: prompt.slice(0, 48),
+			description,
+			prompt,
+		}),
+	});
+}
+
+async function createAutomation() {
+	const name = document.getElementById("automation-name").value.trim();
+	const prompt = document.getElementById("automation-prompt").value.trim();
+	if (!name || !prompt) return setNotice("Name and instructions are required.");
+	await api("/api/saved-automations", {
+		method: "POST",
+		body: JSON.stringify({ name, prompt }),
+	});
+	setNotice("Automation saved.");
+	await refreshAll();
+}
+
+async function runAutomation(id) {
+	setNotice("Running automation...");
+	const result = await api(
+		`/api/saved-automations/${encodeURIComponent(id)}/run`,
+		{
+			method: "POST",
+		},
+	);
+	setNotice(result.queued ? "Automation queued." : result.message);
+	await refreshAll();
+}
+
+async function runDoctor() {
+	setNotice("Running health doctor...");
+	state.health = await api("/api/doctor/run", { method: "POST" });
+	setNotice("Health check complete.");
+	render();
+}
+
+async function saveSettings() {
+	const keys = ["openrouterBaseUrl", "openrouterModel", "openrouterApiKey"];
+	for (const key of keys) {
+		const value = document.getElementById(key).value.trim();
+		if (value) {
+			await api(`/api/config/${encodeURIComponent(key)}`, {
+				method: "POST",
+				body: JSON.stringify({ value }),
+			});
+		}
+	}
+	setNotice("Model settings saved.");
+	await refreshAll();
 }
 
 function render() {
 	renderShell();
-	renderStatus();
-	renderOverview();
-	renderBrowser();
-	renderTasks();
-	renderAutomations();
-	renderTerminal();
-	renderFilesystem();
-	renderLogs();
-	renderDebug();
-	renderSettings();
-	renderHealth();
-	bindActions();
-}
-
-function bindActions() {
-	const bind = (id, fn) =>
-		document.getElementById(id)?.addEventListener("click", fn);
-	const sessionSelect = document.getElementById("term-session-list");
-	sessionSelect?.addEventListener("change", () => {
-		document.getElementById("term-session").value = sessionSelect.value;
-	});
-
-	bind("browser-open", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/open", {
-				method: "POST",
-				body: JSON.stringify({
-					url: document.getElementById("browser-url").value,
-				}),
-			}).catch(String),
-		),
-	);
-	bind("browser-tabs", async () =>
-		setOutput("browser-output", await api("/api/browser/tabs").catch(String)),
-	);
-	bind("browser-snapshot", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/snapshot", { method: "POST", body: "{}" }).catch(
-				String,
-			),
-		),
-	);
-	bind("browser-click", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/click", {
-				method: "POST",
-				body: JSON.stringify({
-					target: document.getElementById("browser-target").value,
-				}),
-			}).catch(String),
-		),
-	);
-	bind("browser-fill", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/fill", {
-				method: "POST",
-				body: JSON.stringify({
-					target: document.getElementById("browser-target").value,
-					text: document.getElementById("browser-text").value,
-				}),
-			}).catch(String),
-		),
-	);
-	bind("browser-press", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/press", {
-				method: "POST",
-				body: JSON.stringify({
-					key: document.getElementById("browser-text").value || "Enter",
-				}),
-			}).catch(String),
-		),
-	);
-	bind("browser-shot", async () =>
-		setOutput(
-			"browser-output",
-			await api("/api/browser/screenshot", {
-				method: "POST",
-				body: "{}",
-			}).catch(String),
-		),
-	);
-
-	bind("term-open", async () => {
-		try {
-			const data = await api("/api/terminal/sessions", {
-				method: "POST",
-				body: JSON.stringify({
-					shell: document.getElementById("term-shell").value || undefined,
-					cwd: document.getElementById("term-cwd").value || undefined,
-				}),
-			});
-			const sessionId = data?.data?.id || data?.id;
-			if (sessionId) document.getElementById("term-session").value = sessionId;
-			setTerminalResult(
-				data,
-				sessionId ? `Opened session ${sessionId}` : "Session opened",
-			);
-			await loadTerminalSessions(sessionId);
-		} catch (error) {
-			setOutput("term-output", actionSummary(String(error)));
-		}
-	});
-	bind("term-exec", async () => {
-		api("/api/terminal/exec", {
-			method: "POST",
-			body: JSON.stringify({
-				sessionId: document.getElementById("term-session").value || undefined,
-				command: document.getElementById("term-command").value,
-			}),
-		})
-			.then((data) => setTerminalResult(data, "Command finished"))
-			.catch((error) => setOutput("term-output", actionSummary(String(error))));
-	});
-	bind("term-interrupt", async () =>
-		setTerminalResult(
-			await api(
-				`/api/terminal/sessions/${encodeURIComponent(document.getElementById("term-session").value)}/interrupt`,
-				{ method: "POST" },
-			).catch(String),
-		),
-	);
-	bind("term-status", async () =>
-		setTerminalResult(
-			await api(
-				`/api/terminal/sessions/${encodeURIComponent(document.getElementById("term-session").value)}/status`,
-			).catch(String),
-			"Status loaded",
-		),
-	);
-	bind("term-read", async () =>
-		setTerminalResult(
-			await api(
-				`/api/terminal/sessions/${encodeURIComponent(document.getElementById("term-session").value)}/read`,
-			).catch(String),
-			"Read complete",
-		),
-	);
-	bind("term-list", () => loadTerminalSessions());
-	bind("term-close", async () => {
-		const sessionId = document.getElementById("term-session").value;
-		if (!sessionId) return setTerminalResult("No session selected.");
-		if (!confirm(`Close terminal session ${sessionId}?`)) return;
-		setTerminalResult(
-			await api(`/api/terminal/sessions/${encodeURIComponent(sessionId)}`, {
-				method: "DELETE",
-			}).catch(String),
-			"Session closed",
+	if (state.page === "agent") renderAgent();
+	else if (state.page === "automations") renderAutomations();
+	else if (state.page === "sessions") renderSessions();
+	else if (state.page === "health") renderHealth();
+	else renderSettings();
+	document.querySelectorAll("[data-run-automation]").forEach((button) => {
+		button.addEventListener("click", () =>
+			runAutomation(button.dataset.runAutomation),
 		);
-		await loadTerminalSessions();
 	});
-	bind("term-resize", async () =>
-		setTerminalResult(
-			await api(
-				`/api/terminal/sessions/${encodeURIComponent(document.getElementById("term-session").value)}/resize`,
-				{
-					method: "POST",
-					body: JSON.stringify({
-						cols: Number(document.getElementById("term-cols").value),
-						rows: Number(document.getElementById("term-rows").value),
-					}),
-				},
-			).catch(String),
-			"Resize complete",
-		),
-	);
-
-	bind("fs-list", async () =>
-		setOutput(
-			"fs-output",
-			await api(
-				`/api/fs/list?path=${encodeURIComponent(document.getElementById("fs-path").value)}`,
-			).catch(String),
-		),
-	);
-	bind("fs-read", async () =>
-		setOutput(
-			"fs-output",
-			await api(
-				`/api/fs/read?path=${encodeURIComponent(document.getElementById("fs-path").value)}`,
-			).catch(String),
-		),
-	);
-	bind("fs-stat", async () =>
-		setOutput(
-			"fs-output",
-			await api(
-				`/api/fs/stat?path=${encodeURIComponent(document.getElementById("fs-path").value)}`,
-			).catch(String),
-		),
-	);
-	bind("fs-write", async () =>
-		setOutput(
-			"fs-output",
-			await api("/api/fs/write", {
-				method: "POST",
-				body: JSON.stringify({
-					path: document.getElementById("fs-path").value,
-					content: document.getElementById("fs-content").value,
-				}),
-			}).catch(String),
-		),
-	);
-	bind("fs-delete", async () => {
-		if (confirm(`Delete ${document.getElementById("fs-path").value}?`)) {
-			setOutput(
-				"fs-output",
-				await api("/api/fs/delete", {
-					method: "DELETE",
-					body: JSON.stringify({
-						path: document.getElementById("fs-path").value,
-						force: true,
-					}),
-				}).catch(String),
-			);
-		}
-	});
-
-	bind("task-refresh", loadTasks);
-	bind("task-run", runTask);
-	bind("auto-refresh", loadAutomations);
-	bind("auto-create", createAutomation);
-	bind("logs-refresh", async () =>
-		setOutput("logs-output", await api("/api/logs").catch(String)),
-	);
-	bind("events-refresh", async () =>
-		setOutput("events-output", await api("/api/events/recent").catch(String)),
-	);
-	bind("debug-bundles", async () =>
-		setOutput("debug-output", await api("/api/debug/bundles").catch(String)),
-	);
-	bind("debug-receipts", async () =>
-		setOutput("debug-output", await api("/api/debug/receipts").catch(String)),
-	);
-	bind("debug-console", async () =>
-		setOutput("debug-output", await api("/api/debug/console").catch(String)),
-	);
-	bind("debug-network", async () =>
-		setOutput("debug-output", await api("/api/debug/network").catch(String)),
-	);
-	bind("doctor-run", async () =>
-		setOutput(
-			"doctor-output",
-			await api("/api/doctor/run", { method: "POST", body: "{}" }).catch(
-				String,
-			),
-		),
-	);
-}
-
-async function loadTasks() {
-	const target = document.getElementById("task-table");
-	try {
-		const rows = await api("/api/tasks");
-		target.innerHTML = table(rows, [
-			{ label: "ID", value: "id" },
-			{ label: "Status", value: "status" },
-			{ label: "Error", value: "error" },
-		]);
-	} catch (e) {
-		target.innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
-	}
-}
-
-async function loadTerminalSessions(selectedId) {
-	const select = document.getElementById("term-session-list");
-	try {
-		const result = await api("/api/terminal/sessions");
-		setTerminalResult(result, "Sessions loaded");
-		const data = result?.data ?? result;
-		const sessions = Array.isArray(data)
-			? data
-			: Array.isArray(data?.sessions)
-				? data.sessions
-				: [];
-		if (!select) return;
-		if (sessions.length === 0) {
-			select.innerHTML = `<option value="">No sessions</option>`;
-			return;
-		}
-		select.innerHTML = sessions
-			.map((session) => {
-				const label = [
-					session.id,
-					session.shell,
-					session.status,
-					session.cwd,
-					session.updatedAt ? formatDateTime(session.updatedAt) : "",
-				]
-					.filter(Boolean)
-					.join(" | ");
-				return `<option value="${esc(session.id)}">${esc(label)}</option>`;
-			})
-			.join("");
-		const activeId =
-			selectedId || document.getElementById("term-session").value;
-		const chosen =
-			sessions.find((session) => session.id === activeId) || sessions[0];
-		select.value = chosen.id;
-		document.getElementById("term-session").value = chosen.id;
-		document.getElementById("term-meta").innerHTML = [
-			`<span>Session: ${esc(chosen.id)}</span>`,
-			chosen.shell ? `<span>Shell: ${esc(chosen.shell)}</span>` : "",
-			chosen.cwd ? `<span>CWD: ${esc(chosen.cwd)}</span>` : "",
-			chosen.status ? `<span>Status: ${esc(chosen.status)}</span>` : "",
-			chosen.createdAt
-				? `<span>Created: ${esc(formatDateTime(chosen.createdAt))}</span>`
-				: "",
-		]
-			.filter(Boolean)
-			.join("");
-	} catch (error) {
-		setTerminalResult(String(error));
-	}
-}
-
-async function runTask() {
-	const paramsRaw = document.getElementById("task-params").value.trim();
-	const body = {
-		skill: document.getElementById("task-skill").value || undefined,
-		action: document.getElementById("task-action").value || undefined,
-		params: paramsRaw ? JSON.parse(paramsRaw) : {},
-	};
-	await api("/api/tasks", { method: "POST", body: JSON.stringify(body) });
-	await loadTasks();
-}
-
-async function loadAutomations() {
-	const target = document.getElementById("auto-table");
-	try {
-		const rows = await api("/api/automations");
-		target.innerHTML = table(rows, [
-			{ label: "ID", value: "id" },
-			{ label: "Name", value: "name" },
-			{ label: "Enabled", value: (row) => (row.enabled ? "yes" : "no") },
-			{ label: "Next Run", value: "nextRun" },
-		]);
-	} catch (e) {
-		target.innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
-	}
-}
-
-async function createAutomation() {
-	await api("/api/automations", {
-		method: "POST",
-		body: JSON.stringify({
-			id: document.getElementById("auto-id").value,
-			name: document.getElementById("auto-name").value,
-			cronExpression: document.getElementById("auto-cron").value,
-		}),
-	});
-	await loadAutomations();
 }
 
 async function refreshAll() {
 	try {
-		const [status, capabilities, config, policy] = await Promise.all([
+		const [status, events, automations, config] = await Promise.all([
 			api("/api/status"),
-			api("/api/capabilities"),
-			api("/api/config"),
-			api("/api/policy/profile"),
+			api("/api/events/recent").catch(() => []),
+			api("/api/saved-automations").catch(() => []),
+			api("/api/config").catch(() => []),
 		]);
 		state.status = status;
-		state.capabilities = capabilities;
+		state.events = Array.isArray(events) ? events : [];
+		state.automations = Array.isArray(automations) ? automations : [];
+		state.config = Array.isArray(config) ? config : [];
+		state.tasks = await api("/api/tasks").catch(() => []);
 		render();
-		document.getElementById("config-table").innerHTML = table(config, [
-			{ label: "Key", value: "key" },
-			{ label: "Value", value: "value" },
-			{ label: "Source", value: "source" },
-			{ label: "Sensitive", value: (row) => (row.sensitive ? "yes" : "no") },
-		]);
-		setOutput("policy-output", policy);
-	} catch (e) {
-		document.getElementById("app").innerHTML =
-			`<main class="content"><div class="panel"><h2>Disconnected</h2><p class="error">${esc(e.message)}</p><button id="reconnect">Retry</button></div></main>`;
-		document
-			.getElementById("reconnect")
-			?.addEventListener("click", () => location.reload());
+	} catch (error) {
+		document.getElementById("app").innerHTML = `
+      <div class="locked-screen">
+        <div class="brand-mark large">BC</div>
+        <h1>Browser Control is locked</h1>
+        <p>${esc(error.message || "Open this app from Browser Control Desktop or CLI.")}</p>
+      </div>`;
 	}
 }
 
-function connectEvents() {
-	const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/events?token=${encodeURIComponent(token)}`;
-	const socket = new WebSocket(url);
-	socket.onmessage = (event) => {
-		try {
-			const payload = JSON.parse(event.data);
-			if (payload.type === "terminal.output") {
-				const termOutput = document.getElementById("term-output");
-				if (termOutput) {
-					// Clear "Idle" if present
-					if (termOutput.textContent === "Idle") termOutput.textContent = "";
-
-					// Only append if it's for the current session or no session is selected
-					const currentSession = document.getElementById("term-session")?.value;
-					const { sessionId, data } = payload.payload || {};
-					if (!currentSession || sessionId === currentSession) {
-						termOutput.textContent += data || "";
-						termOutput.scrollTop = termOutput.scrollHeight;
-					}
-				}
-				return;
-			}
-
-			if (Array.isArray(payload.events)) {
-				state.events = payload.events;
-			} else {
-				state.events.push(payload);
-				state.events = state.events.slice(-100);
-			}
-			if (state.page === "overview" || state.page === "logs") render();
-		} catch {
-			// Ignore malformed event frames.
-		}
-	};
-	socket.onclose = () => {
-		state.events.push({
-			timestamp: new Date().toISOString(),
-			type: "log.entry",
-			payload: { message: "Event stream disconnected" },
-		});
-	};
-}
-
-renderShell();
 refreshAll();
-connectEvents();
