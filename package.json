@@ -1,111 +1,113 @@
 {
-  "name": "browser-control",
-  "version": "1.0.0",
-  "description": "Unified browser, terminal, filesystem, and MCP automation engine for AI agents.",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "require": "./dist/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "bin": {
-    "bc": "./cli.js"
-  },
-  "files": [
-    "dist/",
-    "web/dist/",
-    "desktop/",
-    "cli.js",
-    "launch_browser.bat",
-    "launch_browser.ps1",
-    "scripts/launch_browser.cjs",
-    "scripts/launch_browser.sh",
-    "scripts/install_wsl_bc.sh",
-    "wsl_cdp_bridge.cjs",
-    "LICENSE",
-    "README.md",
-    ".env.example",
-    "docs/getting-started.md",
-    "docs/cli.md",
-    "docs/mcp.md",
-    "docs/wsl-windows-chrome.md",
-    "docs/troubleshooting.md",
-    "docs/policy.md",
-    "docs/api.md",
-    "docs/compatibility.md"
-  ],
-  "scripts": {
-    "build": "node scripts/clean_dist.cjs && tsc -p tsconfig.build.json",
-    "package:smoke": "node scripts/package_smoke_test.cjs",
-    "prepublishOnly": "npm run build",
-    "test": "node scripts/run_active_tests.cjs",
-    "test:ci": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/action_result.test.ts tests/unit/config.test.ts tests/unit/policy_engine.test.ts tests/unit/execution_router.test.ts tests/unit/browser_actions.test.ts tests/unit/terminal_actions.test.ts tests/unit/fs_actions.test.ts tests/unit/broker_server.test.ts tests/unit/operator_doctor_status_setup.test.ts tests/unit/operator_cli.test.ts tests/unit/operator_config.test.ts tests/unit/stagehand_optional.test.ts tests/unit/project_structure.test.ts tests/unit/terminal_render.test.ts tests/unit/operator_dashboard.test.ts tests/unit/workflows.test.ts tests/unit/harness.test.ts tests/unit/packages.test.ts tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts tests/unit/desktop_security.test.ts",
-    "test:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/mcp/server_stdio.test.ts tests/unit/mcp/tool_registry.test.ts",
-    "test:browser-features": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/browser_features_regression.test.ts tests/unit/a11y_snapshot.test.ts tests/unit/cli.test.ts tests/unit/cli_debug_observability.test.ts tests/unit/observability/screencast.test.ts tests/unit/browser_connection.test.ts tests/unit/providers/local.test.ts tests/unit/mcp/tool_registry.test.ts",
-    "test:browser-features:live": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/e2e/browser_features_live_workflow.test.ts",
-    "test:lifecycle": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/unit/daemon_launch.test.ts tests/unit/node_pty_windows_patch.test.ts tests/unit/process_leak_detection.test.ts tests/unit/api_term_exit.test.ts tests/unit/cli_term_exit.test.ts tests/unit/cold_start_exit.test.ts",
-    "test:browser-smoke": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/unit/browser_smoke.test.ts",
-    "test:package": "node scripts/ci_package_smoke.cjs",
-    "docs:check": "node scripts/check_production_status.cjs && node scripts/check_docs.cjs",
-    "audit:high": "npm audit --audit-level=high",
-    "test:e2e": "node scripts/run_golden_workflows.cjs",
-    "test:e2e:golden": "npm run test:e2e",
-    "test:e2e:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/e2e/golden/mcp_workflow.test.ts",
-    "broker:start": "ts-node src/broker_server.ts",
-    "daemon": "ts-node src/daemon.ts",
-    "daemon:dev": "ts-node src/daemon.ts --dev",
-    "web:serve": "ts-node src/web/server.ts",
-    "web:build": "node web/build.cjs",
-    "desktop:dev": "electron desktop/main.cjs",
-    "desktop:build": "npm run web:build && node desktop/verify.cjs",
-    "typecheck": "tsc --noEmit",
-    "start": "ts-node src/main.ts",
-    "cli": "ts-node src/cli.ts",
-    "compat:test": "node --require ts-node/register --require tsconfig-paths/register --test tests/compatibility/package_import_smoke.test.ts tests/compatibility/public_surface.test.ts",
-    "compat:update": "node scripts/update_public_surface_snapshots.cjs"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "dotenv": "^16.6.1",
-    "node-gyp": "^12.2.0",
-    "node-pty": "^1.1.0",
-    "playwright": "^1.54.2",
-    "ws": "^8.20.0",
-    "zod": "^3.25.76"
-  },
-  "peerDependencies": {
-    "@browserbasehq/stagehand": ">=3.2.1"
-  },
-  "peerDependenciesMeta": {
-    "@browserbasehq/stagehand": {
-      "optional": true
-    }
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AbdallahIsDev/browser-control.git"
-  },
-  "homepage": "https://github.com/AbdallahIsDev/browser-control#readme",
-  "bugs": {
-    "url": "https://github.com/AbdallahIsDev/browser-control/issues"
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.4.14",
-    "@types/node": "^22.19.17",
-    "@types/ws": "^8.18.1",
-    "electron": "^41.5.0",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.3"
-  },
-  "overrides": {
-    "uuid": "^14.0.0",
-    "langsmith": "^0.5.25"
-  }
+	"name": "browser-control",
+	"version": "1.0.0",
+	"description": "Unified browser, terminal, filesystem, and MCP automation engine for AI agents.",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"require": "./dist/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"bin": {
+		"bc": "./cli.js"
+	},
+	"files": [
+		"dist/",
+		"web/dist/",
+		"desktop/",
+		"cli.js",
+		"launch_browser.bat",
+		"launch_browser.ps1",
+		"scripts/launch_browser.cjs",
+		"scripts/launch_browser.sh",
+		"scripts/install_wsl_bc.sh",
+		"wsl_cdp_bridge.cjs",
+		"automation-packages/tradingview-ict-analysis/",
+		"LICENSE",
+		"README.md",
+		".env.example",
+		"docs/getting-started.md",
+		"docs/cli.md",
+		"docs/mcp.md",
+		"docs/wsl-windows-chrome.md",
+		"docs/troubleshooting.md",
+		"docs/policy.md",
+		"docs/api.md",
+		"docs/compatibility.md"
+	],
+	"scripts": {
+		"build": "node scripts/clean_dist.cjs && tsc -p tsconfig.build.json",
+		"package:smoke": "node scripts/package_smoke_test.cjs",
+		"prepack": "npm run build && npm run web:build",
+		"prepublishOnly": "npm run build && npm run web:build",
+		"test": "node scripts/run_active_tests.cjs",
+		"test:ci": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/action_result.test.ts tests/unit/config.test.ts tests/unit/policy_engine.test.ts tests/unit/execution_router.test.ts tests/unit/browser_actions.test.ts tests/unit/terminal_actions.test.ts tests/unit/fs_actions.test.ts tests/unit/broker_server.test.ts tests/unit/operator_doctor_status_setup.test.ts tests/unit/operator_cli.test.ts tests/unit/operator_config.test.ts tests/unit/stagehand_optional.test.ts tests/unit/project_structure.test.ts tests/unit/terminal_render.test.ts tests/unit/operator_dashboard.test.ts tests/unit/workflows.test.ts tests/unit/harness.test.ts tests/unit/packages.test.ts tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts tests/unit/desktop_security.test.ts",
+		"test:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/mcp/server_stdio.test.ts tests/unit/mcp/tool_registry.test.ts",
+		"test:browser-features": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/browser_features_regression.test.ts tests/unit/a11y_snapshot.test.ts tests/unit/cli.test.ts tests/unit/cli_debug_observability.test.ts tests/unit/observability/screencast.test.ts tests/unit/browser_connection.test.ts tests/unit/providers/local.test.ts tests/unit/mcp/tool_registry.test.ts",
+		"test:browser-features:live": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/e2e/browser_features_live_workflow.test.ts",
+		"test:lifecycle": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/unit/daemon_launch.test.ts tests/unit/node_pty_windows_patch.test.ts tests/unit/process_leak_detection.test.ts tests/unit/api_term_exit.test.ts tests/unit/cli_term_exit.test.ts tests/unit/cold_start_exit.test.ts",
+		"test:browser-smoke": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/unit/browser_smoke.test.ts",
+		"test:package": "node scripts/ci_package_smoke.cjs",
+		"docs:check": "node scripts/check_production_status.cjs && node scripts/check_docs.cjs",
+		"audit:high": "npm audit --audit-level=high",
+		"test:e2e": "node scripts/run_golden_workflows.cjs",
+		"test:e2e:golden": "npm run test:e2e",
+		"test:e2e:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/e2e/golden/mcp_workflow.test.ts",
+		"broker:start": "ts-node src/broker_server.ts",
+		"daemon": "ts-node src/daemon.ts",
+		"daemon:dev": "ts-node src/daemon.ts --dev",
+		"web:serve": "ts-node src/web/server.ts",
+		"web:build": "node web/build.cjs",
+		"desktop:dev": "electron desktop/main.cjs",
+		"desktop:build": "npm run web:build && node desktop/verify.cjs",
+		"typecheck": "tsc --noEmit",
+		"start": "ts-node src/main.ts",
+		"cli": "ts-node src/cli.ts",
+		"compat:test": "node --require ts-node/register --require tsconfig-paths/register --test tests/compatibility/package_import_smoke.test.ts tests/compatibility/public_surface.test.ts",
+		"compat:update": "node scripts/update_public_surface_snapshots.cjs"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"dotenv": "^16.6.1",
+		"node-gyp": "^12.2.0",
+		"node-pty": "^1.1.0",
+		"playwright": "^1.54.2",
+		"ws": "^8.20.0",
+		"zod": "^3.25.76"
+	},
+	"peerDependencies": {
+		"@browserbasehq/stagehand": ">=3.2.1"
+	},
+	"peerDependenciesMeta": {
+		"@browserbasehq/stagehand": {
+			"optional": true
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/AbdallahIsDev/browser-control.git"
+	},
+	"homepage": "https://github.com/AbdallahIsDev/browser-control#readme",
+	"bugs": {
+		"url": "https://github.com/AbdallahIsDev/browser-control/issues"
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.14",
+		"@types/node": "^22.19.17",
+		"@types/ws": "^8.18.1",
+		"electron": "^41.5.0",
+		"ts-node": "^10.9.2",
+		"tsconfig-paths": "^4.2.0",
+		"typescript": "^5.9.3"
+	},
+	"overrides": {
+		"uuid": "^14.0.0",
+		"langsmith": "^0.5.25"
+	}
 }

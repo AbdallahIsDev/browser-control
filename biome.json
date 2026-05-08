@@ -1,12 +1,24 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
 		"useIgnoreFile": true
 	},
 	"files": {
-		"includes": ["**", "!!**/dist"]
+		"includes": [
+			"automation-packages/tradingview-ict-analysis/**/*.json",
+			"biome.json",
+			"package.json",
+			"scripts/ci_package_smoke.cjs",
+			"web/**",
+			"desktop/**",
+			"src/web/**",
+			"tests/unit/web_app_server.test.ts",
+			"tests/unit/web_frontend_format.test.ts",
+			"tests/unit/desktop_security.test.ts",
+			"!!**/dist"
+		]
 	},
 	"formatter": {
 		"enabled": true,

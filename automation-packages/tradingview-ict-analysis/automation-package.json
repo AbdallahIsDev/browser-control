@@ -1,0 +1,30 @@
+{
+	"schemaVersion": "1",
+	"name": "tradingview-ict-analysis",
+	"version": "1.0.0",
+	"description": "TradingView MCP analysis automation using a condensed ICT methodology, journal template, and approval-gated execution policy.",
+	"browserControlVersion": "^1.0.0",
+	"permissions": [
+		{
+			"kind": "network",
+			"domains": ["tradingview.com"]
+		},
+		{
+			"kind": "helper",
+			"helperIds": ["tradingview-mcp-analysis"]
+		},
+		{
+			"kind": "filesystem",
+			"paths": ["trades_journal"],
+			"access": "read-write"
+		}
+	],
+	"workflows": ["workflows/tradingview-ict-analysis.json"],
+	"entrypoints": {
+		"default": "workflows/tradingview-ict-analysis.json"
+	},
+	"provenance": {
+		"source": "Condensed from user-provided ICT trading notes for Browser Control.",
+		"license": "Project-local"
+	}
+}

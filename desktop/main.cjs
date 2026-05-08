@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, Menu, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const readline = require("node:readline");
@@ -13,6 +13,7 @@ const {
 let serverProcess = null;
 let mainWindow = null;
 let appOrigin = "";
+let shuttingDown = false;
 
 function rootDir() {
 	return path.resolve(__dirname, "..");
@@ -123,6 +124,8 @@ function lockWindowNavigation(window, origin) {
 }
 
 async function createWindow() {
+	app.setName("Browser Control");
+	Menu.setApplicationMenu(null);
 	const server = await startAppServer();
 	mainWindow = new BrowserWindow(
 		createBrowserWindowOptions(path.join(__dirname, "preload.cjs")),
@@ -130,6 +133,10 @@ async function createWindow() {
 	lockWindowNavigation(mainWindow, appOrigin);
 	mainWindow.once("ready-to-show", () => mainWindow?.show());
 	await mainWindow.loadURL(`${server.url}/#token=${server.token}`);
+	if (!mainWindow.isVisible()) {
+		mainWindow.show();
+	}
+	mainWindow.focus();
 }
 
 app
@@ -144,8 +151,26 @@ app.on("window-all-closed", () => {
 	app.quit();
 });
 
+function killServerProcessTree() {
+	if (!serverProcess || serverProcess.killed) return;
+	const pid = serverProcess.pid;
+	if (process.platform === "win32" && pid) {
+		spawn("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
+			stdio: "ignore",
+			windowsHide: true,
+		}).unref();
+		return;
+	}
+	serverProcess.kill("SIGTERM");
+}
+
 app.on("before-quit", () => {
-	if (serverProcess && !serverProcess.killed) {
-		serverProcess.kill();
+	shuttingDown = true;
+	killServerProcessTree();
+});
+
+app.on("will-quit", () => {
+	if (!shuttingDown) {
+		killServerProcessTree();
 	}
 });
