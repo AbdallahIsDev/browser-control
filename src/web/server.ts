@@ -12,6 +12,7 @@ import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
 import { logger } from "../shared/logger";
+import { getDataHome } from "../shared/paths";
 import { validateResize } from "../terminal/actions";
 import { fetchBrokerJson, listLogFiles, readRecentLogs } from "./bridge";
 import { WebEventHub } from "./events";
@@ -51,6 +52,129 @@ export interface WebAppServer {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7790;
+
+interface SavedAutomation {
+	id: string;
+	name: string;
+	description: string;
+	category: string;
+	prompt: string;
+	source: "built-in" | "user" | "task";
+	status: "ready" | "last-run";
+	approvalRequired: boolean;
+	createdAt: string;
+	updatedAt: string;
+	lastRunAt?: string;
+	runCount: number;
+}
+
+function automationStorePath(): string {
+	return path.join(getDataHome(), "automations", "saved-automations.json");
+}
+
+function slugifyAutomationId(value: string): string {
+	const slug = value
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/gu, "-")
+		.replace(/^-+|-+$/gu, "")
+		.slice(0, 64);
+	return slug || `automation-${Date.now()}`;
+}
+
+function builtInAutomations(now = new Date().toISOString()): SavedAutomation[] {
+	return [
+		{
+			id: "tradingview-ict-analysis",
+			name: "TradingView ICT Analysis",
+			description:
+				"Analyze the active TradingView chart with ICT confluence and prepare a trade plan for review.",
+			category: "Trading",
+			prompt:
+				"Use the TradingView MCP chart state, OHLCV, visible indicators, and drawings to analyze market structure with the packaged guide at automation-packages/tradingview-ict-analysis/docs/ict-methodology.md. Prioritize fair value gaps, order blocks, liquidity sweeps, displacement, market structure shift, premium/discount, and OTE. Produce bias, invalidation, entry zone, stop, targets, risk notes, and a journal-ready summary. Do not place live trades unless the user explicitly approves the exact order.",
+			source: "built-in",
+			status: "ready",
+			approvalRequired: true,
+			createdAt: now,
+			updatedAt: now,
+			runCount: 0,
+		},
+	];
+}
+
+function readSavedAutomations(): SavedAutomation[] {
+	const filePath = automationStorePath();
+	if (!fs.existsSync(filePath)) {
+		const defaults = builtInAutomations();
+		writeSavedAutomations(defaults);
+		return defaults;
+	}
+	try {
+		const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+		if (!Array.isArray(parsed)) return builtInAutomations();
+		return parsed as SavedAutomation[];
+	} catch {
+		return builtInAutomations();
+	}
+}
+
+function writeSavedAutomations(automations: SavedAutomation[]): void {
+	const filePath = automationStorePath();
+	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+	fs.writeFileSync(filePath, JSON.stringify(automations, null, 2), "utf8");
+}
+
+function upsertSavedAutomation(
+	input: Partial<SavedAutomation> & { name: string; prompt: string },
+): SavedAutomation {
+	const now = new Date().toISOString();
+	const automations = readSavedAutomations();
+	const id = input.id || slugifyAutomationId(input.name);
+	const existingIndex = automations.findIndex((item) => item.id === id);
+	const existing = existingIndex >= 0 ? automations[existingIndex] : undefined;
+	const next: SavedAutomation = {
+		id,
+		name: input.name,
+		description: input.description || existing?.description || "",
+		category: input.category || existing?.category || "General",
+		prompt: input.prompt,
+		source: input.source || existing?.source || "user",
+		status: input.status || existing?.status || "ready",
+		approvalRequired:
+			input.approvalRequired ?? existing?.approvalRequired ?? true,
+		createdAt: existing?.createdAt || input.createdAt || now,
+		updatedAt: now,
+		lastRunAt: input.lastRunAt || existing?.lastRunAt,
+		runCount: input.runCount ?? existing?.runCount ?? 0,
+	};
+	if (existingIndex >= 0) automations[existingIndex] = next;
+	else automations.unshift(next);
+	writeSavedAutomations(automations);
+	return next;
+}
+
+function rememberRequestAutomation(
+	body: Record<string, unknown>,
+	source: "task" | "user",
+): void {
+	const action = asOptionalString(body.action) || asOptionalString(body.name);
+	const prompt =
+		asOptionalString(body.prompt) ||
+		asOptionalString(
+			(body.params as Record<string, unknown> | undefined)?.prompt,
+		) ||
+		(action
+			? `Run ${action} with parameters ${JSON.stringify(body.params ?? {})}`
+			: "");
+	if (!action || !prompt) return;
+	upsertSavedAutomation({
+		id: slugifyAutomationId(action),
+		name: action,
+		description: "Saved automatically from a submitted task.",
+		category: "Recent",
+		prompt,
+		source,
+	});
+}
 
 function json(
 	response: ServerResponse,
@@ -635,6 +759,79 @@ export function createWebAppServer(
 			return;
 		}
 
+		if (request.method === "GET" && pathname === "/api/saved-automations") {
+			json(response, 200, readSavedAutomations());
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/saved-automations") {
+			const body = await readJsonBody(request);
+			const automation = upsertSavedAutomation({
+				name: asString(body.name, "name"),
+				description: asOptionalString(body.description) || "",
+				category: asOptionalString(body.category) || "General",
+				prompt: asString(body.prompt, "prompt"),
+				source: "user",
+				approvalRequired: body.approvalRequired !== false,
+			});
+			json(response, 200, automation);
+			return;
+		}
+
+		const savedAutomationRunMatch =
+			/^\/api\/saved-automations\/([^/]+)\/run$/u.exec(pathname);
+		if (request.method === "POST" && savedAutomationRunMatch) {
+			const id = decodeURIComponent(savedAutomationRunMatch[1] ?? "");
+			const automations = readSavedAutomations();
+			const automation = automations.find((item) => item.id === id);
+			if (!automation) {
+				json(response, 404, {
+					success: false,
+					code: "not_found",
+					error: `Automation not found: ${id}`,
+				});
+				return;
+			}
+
+			const now = new Date().toISOString();
+			const updated = upsertSavedAutomation({
+				...automation,
+				status: "last-run",
+				lastRunAt: now,
+				runCount: automation.runCount + 1,
+			});
+
+			try {
+				const result = await fetchBrokerJson("/api/v1/tasks/run", {
+					method: "POST",
+					body: {
+						action: updated.name,
+						params: {
+							automationId: updated.id,
+							prompt: updated.prompt,
+							approvalRequired: updated.approvalRequired,
+						},
+					},
+				});
+				json(response, 202, {
+					success: true,
+					queued: true,
+					automation: updated,
+					result,
+				});
+			} catch (e: unknown) {
+				json(response, 200, {
+					success: true,
+					queued: false,
+					automation: updated,
+					message:
+						"Automation saved. Agent runtime is not reachable, so it was not queued.",
+					error: errorMessage(e),
+				});
+			}
+			return;
+		}
+
 		if (request.method === "GET" && pathname === "/api/terminal/sessions") {
 			const result = await api.terminalActions.list();
 			events.emit("terminal.action", formatActionResult(result));
@@ -962,6 +1159,7 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/tasks") {
 			try {
 				const body = await readJsonBody(request);
+				rememberRequestAutomation(body, "task");
 				const result = await fetchBrokerJson("/api/v1/tasks/run", {
 					method: "POST",
 					body,
@@ -1019,6 +1217,7 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/automations") {
 			try {
 				const body = await readJsonBody(request);
+				rememberRequestAutomation(body, "user");
 				const result = await fetchBrokerJson("/api/v1/tasks/schedule", {
 					method: "POST",
 					body,

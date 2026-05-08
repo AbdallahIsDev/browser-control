@@ -3594,6 +3594,7 @@ async function handleDesktop(args: ParsedArgs): Promise<void> {
 			const { spawn } = await import("node:child_process");
 			const pathMod = await import("node:path");
 			const fsMod = await import("node:fs");
+			const { createRequire } = await import("node:module");
 
 			const desktopMain = pathMod.resolve(
 				__dirname,
@@ -3625,11 +3626,29 @@ async function handleDesktop(args: ParsedArgs): Promise<void> {
 				".bin",
 				process.platform === "win32" ? "electron.cmd" : "electron",
 			);
+			const requireFromRoot = createRequire(
+				pathMod.resolve(__dirname, "..", "package.json"),
+			);
+			let resolvedElectronExe = "";
+			try {
+				const electronPackagePath = requireFromRoot.resolve(
+					"electron/package.json",
+				);
+				resolvedElectronExe = pathMod.join(
+					pathMod.dirname(electronPackagePath),
+					"dist",
+					process.platform === "win32" ? "electron.exe" : "electron",
+				);
+			} catch {
+				resolvedElectronExe = "";
+			}
 			if (
 				process.platform === "win32" &&
 				fsMod.existsSync(windowsElectronExe)
 			) {
 				electronBin = windowsElectronExe;
+			} else if (resolvedElectronExe && fsMod.existsSync(resolvedElectronExe)) {
+				electronBin = resolvedElectronExe;
 			} else if (fsMod.existsSync(localElectron)) {
 				electronBin = localElectron;
 			} else {
@@ -3640,7 +3659,7 @@ async function handleDesktop(args: ParsedArgs): Promise<void> {
 				stdio: "ignore",
 				detached: true,
 				env: { ...process.env, BROWSER_CONTROL_NODE: process.execPath },
-				windowsHide: false,
+				windowsHide: true,
 			});
 			child.unref();
 

@@ -1,0 +1,22 @@
+{
+	"id": "tradingview-ict-analysis",
+	"name": "TradingView ICT Analysis",
+	"version": "1.0.0",
+	"nodes": [
+		{
+			"id": "analyze-active-tradingview-chart",
+			"kind": "helper",
+			"name": "Analyze active TradingView chart",
+			"input": {
+				"helperId": "tradingview-mcp-analysis",
+				"mode": "analysis-only",
+				"mcp": "tradingview",
+				"methodology": "docs/ict-methodology.md",
+				"permissions": "docs/permissions.md",
+				"journal": "docs/trade-journal.md",
+				"prompt": "Read the active TradingView symbol, timeframe, visible indicators, OHLCV summary, and visible drawings. Produce an ICT analysis using liquidity, displacement, MSS, FVG, OB, premium/discount, OTE, invalidation, and target logic. Return a journal-ready plan. Do not execute live orders without explicit user approval of symbol, side, size, entry, stop, and targets."
+			}
+		}
+	],
+	"edges": []
+}
