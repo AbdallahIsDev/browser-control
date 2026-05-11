@@ -11,6 +11,8 @@ import type {
   FilesystemPolicy,
   BrowserPolicy,
   LowLevelPolicy,
+  CredentialPolicy,
+  PrivacyPolicy,
   RiskLevel,
   PolicyDecision,
 } from "./types";
@@ -74,12 +76,25 @@ const SAFE_LOW_LEVEL_POLICY: LowLevelPolicy = {
   performanceTracesAllowed: false,
 };
 
+const SAFE_CREDENTIAL_POLICY: CredentialPolicy = {
+  secretUseConfirmThreshold: "all",
+  secretRevealAllowed: true,
+  secretAutoTypeAllowed: false,
+  secretAutoPasteAllowed: false,
+};
+
+const SAFE_PRIVACY_POLICY: PrivacyPolicy = {
+  profile: "strict",
+};
+
 export const SAFE_PROFILE: PolicyProfile = {
   name: "safe",
   commandPolicy: SAFE_COMMAND_POLICY,
   filesystemPolicy: SAFE_FILESYSTEM_POLICY,
   browserPolicy: SAFE_BROWSER_POLICY,
   lowLevelPolicy: SAFE_LOW_LEVEL_POLICY,
+  credentialPolicy: SAFE_CREDENTIAL_POLICY,
+  privacyPolicy: SAFE_PRIVACY_POLICY,
 };
 
 // ── Balanced Profile ────────────────────────────────────────────────────
@@ -129,12 +144,25 @@ const BALANCED_LOW_LEVEL_POLICY: LowLevelPolicy = {
   performanceTracesAllowed: true,
 };
 
+const BALANCED_CREDENTIAL_POLICY: CredentialPolicy = {
+  secretUseConfirmThreshold: "cross-site",
+  secretRevealAllowed: true,
+  secretAutoTypeAllowed: true,
+  secretAutoPasteAllowed: true,
+};
+
+const BALANCED_PRIVACY_POLICY: PrivacyPolicy = {
+  profile: "balanced",
+};
+
 export const BALANCED_PROFILE: PolicyProfile = {
   name: "balanced",
   commandPolicy: BALANCED_COMMAND_POLICY,
   filesystemPolicy: BALANCED_FILESYSTEM_POLICY,
   browserPolicy: BALANCED_BROWSER_POLICY,
   lowLevelPolicy: BALANCED_LOW_LEVEL_POLICY,
+  credentialPolicy: BALANCED_CREDENTIAL_POLICY,
+  privacyPolicy: BALANCED_PRIVACY_POLICY,
 };
 
 // ── Trusted Profile ─────────────────────────────────────────────────────
@@ -184,12 +212,25 @@ const TRUSTED_LOW_LEVEL_POLICY: LowLevelPolicy = {
   performanceTracesAllowed: true,
 };
 
+const TRUSTED_CREDENTIAL_POLICY: CredentialPolicy = {
+  secretUseConfirmThreshold: "none",
+  secretRevealAllowed: true,
+  secretAutoTypeAllowed: true,
+  secretAutoPasteAllowed: true,
+};
+
+const TRUSTED_PRIVACY_POLICY: PrivacyPolicy = {
+  profile: "audit",
+};
+
 export const TRUSTED_PROFILE: PolicyProfile = {
   name: "trusted",
   commandPolicy: TRUSTED_COMMAND_POLICY,
   filesystemPolicy: TRUSTED_FILESYSTEM_POLICY,
   browserPolicy: TRUSTED_BROWSER_POLICY,
   lowLevelPolicy: TRUSTED_LOW_LEVEL_POLICY,
+  credentialPolicy: TRUSTED_CREDENTIAL_POLICY,
+  privacyPolicy: TRUSTED_PRIVACY_POLICY,
 };
 
 // ── Profile Registry ────────────────────────────────────────────────────
@@ -270,6 +311,14 @@ export function validateProfile(profile: PolicyProfile): { valid: boolean; error
 
   if (!profile.lowLevelPolicy || typeof profile.lowLevelPolicy !== "object") {
     errors.push("Profile must include lowLevelPolicy.");
+  }
+
+  if (!profile.credentialPolicy || typeof profile.credentialPolicy !== "object") {
+    errors.push("Profile must include credentialPolicy.");
+  }
+
+  if (!profile.privacyPolicy || typeof profile.privacyPolicy !== "object") {
+    errors.push("Profile must include privacyPolicy.");
   }
 
   return { valid: errors.length === 0, errors };

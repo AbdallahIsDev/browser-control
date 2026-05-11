@@ -18,6 +18,10 @@ import type {
   StoredSupervisorJob,
   StoredSupervisorDecision,
   StoredPackageEval,
+  StoredSecret,
+  StoredSecretGrant,
+  StoredNetworkRule,
+  StoredSecretAuditEvent,
 } from "./index";
 
 const log = logger.withComponent("sqlite-state");
@@ -171,6 +175,46 @@ export class SqliteStateStorage implements StateStorage {
       CREATE INDEX IF NOT EXISTS idx_order_tickets_plan_id ON order_tickets(plan_id);
       CREATE INDEX IF NOT EXISTS idx_supervisor_jobs_trade_id ON supervisor_jobs(trade_id);
       CREATE INDEX IF NOT EXISTS idx_supervisor_decisions_trade_id ON supervisor_decisions(trade_id);
+      
+      CREATE TABLE IF NOT EXISTS secrets (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        scope_name TEXT NOT NULL,
+        secret_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        encrypted_value BLOB NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS secret_grants (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        secret_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS network_rules (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        pattern TEXT NOT NULL,
+        rule_type TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        created_at TEXT NOT NULL
+      );
+      
+      CREATE TABLE IF NOT EXISTS secret_audit_events (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        secret_id TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_secret_grants_secret_id ON secret_grants(secret_id);
+      CREATE INDEX IF NOT EXISTS idx_secret_audit_secret_id ON secret_audit_events(secret_id);
     `);
   }
 
@@ -495,6 +539,112 @@ export class SqliteStateStorage implements StateStorage {
   async listPackageEvals(): Promise<StoredPackageEval[]> {
     return this.safeExecute(() => {
       const rows = this.db.prepare("SELECT data_json FROM package_evals ORDER BY evaluated_at DESC").all() as Array<{ data_json: string }>;
+      return rows.map(r => JSON.parse(r.data_json));
+    });
+  }
+
+  // ── Secrets ──
+  async saveSecret(secret: StoredSecret): Promise<void> {
+    return this.safeExecute(() => {
+      const stmt = this.db.prepare(`
+        INSERT INTO secrets (id, data_json, scope, scope_name, secret_name, created_at, updated_at, encrypted_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          data_json = excluded.data_json,
+          encrypted_value = excluded.encrypted_value,
+          updated_at = excluded.updated_at
+      `);
+      stmt.run(secret.id, JSON.stringify({ id: secret.id, scope: secret.scope, scopeName: secret.scopeName, secretName: secret.secretName }), secret.scope, secret.scopeName, secret.secretName, secret.createdAt, secret.updatedAt, secret.encryptedValue);
+    });
+  }
+
+  async getSecret(id: string): Promise<StoredSecret | null> {
+    return this.safeExecute(() => {
+      const stmt = this.db.prepare("SELECT data_json, scope, scope_name, secret_name, created_at, updated_at, encrypted_value FROM secrets WHERE id = ?");
+      const row = stmt.get(id) as { data_json: string; scope: string; scope_name: string; secret_name: string; created_at: string; updated_at: string; encrypted_value: Buffer } | undefined;
+      if (!row) return null;
+      return { id, scope: row.scope as StoredSecret["scope"], scopeName: row.scope_name, secretName: row.secret_name, encryptedValue: row.encrypted_value, createdAt: row.created_at, updatedAt: row.updated_at };
+    });
+  }
+
+  async listSecrets(): Promise<StoredSecret[]> {
+    return this.safeExecute(() => {
+      const rows = this.db.prepare("SELECT id, scope, scope_name, secret_name, created_at, updated_at, encrypted_value FROM secrets ORDER BY created_at DESC").all() as Array<{ id: string; scope: string; scope_name: string; secret_name: string; created_at: string; updated_at: string; encrypted_value: Buffer }>;
+      return rows.map(r => ({ id: r.id, scope: r.scope as StoredSecret["scope"], scopeName: r.scope_name, secretName: r.secret_name, encryptedValue: r.encrypted_value, createdAt: r.created_at, updatedAt: r.updated_at }));
+    });
+  }
+
+  async deleteSecret(id: string): Promise<void> {
+    return this.safeExecute(() => { this.db.prepare("DELETE FROM secrets WHERE id = ?").run(id); });
+  }
+
+  // ── Grants ──
+  async saveGrant(grant: StoredSecretGrant): Promise<void> {
+    return this.safeExecute(() => {
+      const stmt = this.db.prepare(`
+        INSERT INTO secret_grants (id, data_json, secret_id, action, revoked, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, revoked = excluded.revoked
+      `);
+      stmt.run(grant.id, JSON.stringify(grant), grant.secretId, grant.action, grant.revoked ? 1 : 0, grant.createdAt);
+    });
+  }
+
+  async listGrants(secretId?: string): Promise<StoredSecretGrant[]> {
+    return this.safeExecute(() => {
+      if (secretId) {
+        const rows = this.db.prepare("SELECT data_json FROM secret_grants WHERE secret_id = ? ORDER BY created_at DESC").all(secretId) as Array<{ data_json: string }>;
+        return rows.map(r => JSON.parse(r.data_json));
+      }
+      const rows = this.db.prepare("SELECT data_json FROM secret_grants ORDER BY created_at DESC").all() as Array<{ data_json: string }>;
+      return rows.map(r => JSON.parse(r.data_json));
+    });
+  }
+
+  async revokeGrant(grantId: string): Promise<void> {
+    return this.safeExecute(() => {
+      this.db.prepare("UPDATE secret_grants SET revoked = 1 WHERE id = ?").run(grantId);
+    });
+  }
+
+  // ── Network Rules ──
+  async saveNetworkRule(rule: StoredNetworkRule): Promise<void> {
+    return this.safeExecute(() => {
+      const stmt = this.db.prepare(`
+        INSERT INTO network_rules (id, data_json, pattern, rule_type, enabled, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, enabled = excluded.enabled
+      `);
+      stmt.run(rule.id, JSON.stringify(rule), rule.pattern, rule.ruleType, rule.enabled ? 1 : 0, rule.source, rule.createdAt);
+    });
+  }
+
+  async listNetworkRules(): Promise<StoredNetworkRule[]> {
+    return this.safeExecute(() => {
+      const rows = this.db.prepare("SELECT data_json FROM network_rules ORDER BY created_at DESC").all() as Array<{ data_json: string }>;
+      return rows.map(r => JSON.parse(r.data_json));
+    });
+  }
+
+  async deleteNetworkRule(id: string): Promise<void> {
+    return this.safeExecute(() => { this.db.prepare("DELETE FROM network_rules WHERE id = ?").run(id); });
+  }
+
+  // ── Secret Audit ──
+  async saveSecretAuditEvent(event: StoredSecretAuditEvent): Promise<void> {
+    return this.safeExecute(() => {
+      const stmt = this.db.prepare(`
+        INSERT INTO secret_audit_events (id, data_json, secret_id, timestamp)
+        VALUES (?, ?, ?, ?)
+      `);
+      stmt.run(event.id, JSON.stringify(event), event.secretId, event.timestamp);
+      this.db.exec("DELETE FROM secret_audit_events WHERE id NOT IN (SELECT id FROM secret_audit_events ORDER BY timestamp DESC LIMIT 1000)");
+    });
+  }
+
+  async listSecretAuditEvents(limit = 100): Promise<StoredSecretAuditEvent[]> {
+    return this.safeExecute(() => {
+      const rows = this.db.prepare("SELECT data_json FROM secret_audit_events ORDER BY timestamp DESC LIMIT ?").all(limit) as Array<{ data_json: string }>;
       return rows.map(r => JSON.parse(r.data_json));
     });
   }

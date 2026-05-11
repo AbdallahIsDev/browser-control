@@ -294,6 +294,15 @@ test("bc policy import --json writes clean parseable JSON", async () => {
 				coordinateActionsAllowed: false,
 				performanceTracesAllowed: true,
 			},
+			credentialPolicy: {
+				secretUseConfirmThreshold: "all",
+				secretRevealAllowed: true,
+				secretAutoTypeAllowed: false,
+				secretAutoPasteAllowed: false,
+			},
+			privacyPolicy: {
+				profile: "balanced",
+			},
 		}),
 		"utf8",
 	);

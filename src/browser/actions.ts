@@ -491,7 +491,9 @@ export class BrowserActions {
 		settleMs = 250,
 	): Promise<void> {
 		try {
-			await page?.waitForTimeout(settleMs).catch(() => undefined);
+			if (page && settleMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, settleMs));
+			}
 			const store = this.context.sessionManager.getMemoryStore();
 			getGlobalConsoleCapture().persistToStore(store, sessionId);
 			getGlobalNetworkCapture({ captureSuccess: true }).persistToStore(

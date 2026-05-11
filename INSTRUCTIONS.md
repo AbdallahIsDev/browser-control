@@ -1,63 +1,305 @@
-# Browser Control Premium: Third-Pass Remaining Blockers Only
+# Browser Control Premium: New Session Implementation Instructions
 
-This file is the source of truth for the next implementation session.
+This file is the source of truth for the next AI coding session.
 
-Do not restart the Browser Control Premium migration. Do not rebuild the React app, SQLite state layer, trading layer, desktop packaging, or MCP registry from scratch. Prior agents made real progress, but also overclaimed completion. Your job is to fix only the remaining verified blockers below, prove them with real evidence, and update the tracker truthfully.
+The previous session fixed the third-pass blocker cleanup. Do not confuse that blocker cleanup with the premium feature backlog. The blockers are verified fixed; the large premium backlog is still mostly partial or not started.
+
+Your job in the next session is to implement the remaining premium feature backlog in the priority order below, without restarting from scratch and without breaking the verified blocker fixes.
 
 ==================================================
-CURRENT VERIFIED STATE
+HIGH-LEVEL TRUTH
 ==================================================
 
-These items are already implemented enough. Do not redo them unless a remaining blocker forces a small targeted change.
+Browser Control is an existing TypeScript/Node/Electron/React automation engine. It already has:
 
-1. React/Vite/TypeScript frontend exists.
-   - `web/src/App.tsx`
-   - `web/src/pages/`
-   - old `web/src/app.js` is removed.
+- Browser automation actions and a11y snapshots.
+- Terminal engine and PTY lifecycle.
+- Filesystem actions.
+- MCP tool registry.
+- Policy profiles and action evaluation.
+- Web dashboard and Electron desktop shell.
+- SQLite state storage and recovery.
+- Local service registry using `bc://name`.
+- Local automation package v1.
+- Workflow runtime v1.
+- Harness registry v1.
+- Observability/debug artifacts.
+- CAPTCHA solver.
+- Opt-in stealth controls.
 
-2. MCP tool count is under the 100-tool limit.
-   - `npx ts-node scratch/count_tools.ts` currently prints:
+Do not create a parallel product. Extend the current architecture.
+
+Do not claim completion from tests alone. Product verification is required.
+
+==================================================
+CURRENT VERIFIED BLOCKER CLEANUP STATUS
+==================================================
+
+These items were fixed/verified in the previous session. Do not redo them unless your new implementation breaks them.
+
+1. Biome errors in `web/src/App.tsx`
+   - Fixed.
+   - `npx biome check . --max-diagnostics=30` passed.
+   - Backdrop is a real `<button type="button">`.
+   - Hamburger/nav SVGs are decorative with `aria-hidden="true"` and `focusable="false"`.
+
+2. Mobile horizontal overflow
+   - Fixed.
+   - Fresh screenshot helper run reported:
 
 ```text
-Total tools: 66
+Mobile overflow check: scrollWidth=375, innerWidth=375
 ```
 
-3. `scratch/count_tools.ts` no longer prints the malformed DB warning.
-   - `ExperimentalWarning: SQLite is an experimental feature` may still appear. That is not the malformed DB warning.
+   - `reports/ui-verification/sidebar-mobile.png` is usable at 375x812.
 
-4. SQLite recovery test is now wired into package scripts.
-   - `tests/unit/sqlite_recovery.test.ts` is included in `test:state`.
-   - `tests/unit/sqlite_recovery.test.ts` is included in `test:ci`.
-   - Do not remove this wiring.
+3. Screenshot helper
+   - Fixed.
+   - `scripts/capture_ui_screenshots.cjs` exists.
+   - It captures desktop, mobile, and after-refresh screenshots.
+   - It verifies nonempty files.
+   - It closes Playwright browser in `finally`.
+   - It exits nonzero on failure.
+   - It writes `reports/ui-verification/screenshot-manifest.json`.
 
-5. `npm run test:state` passed with 25 tests in review.
+4. Desktop screenshot helper
+   - Fixed.
+   - `scripts/capture_desktop_offscreen.cjs` exists.
+   - It captures `reports/ui-verification/desktop-sidebar.png`.
+   - Latest screenshot was nonblank and showed real Browser Control UI.
 
-6. Settings cleanup destructive action has a confirmation guard in source.
-   - `web/src/pages/SettingsView.tsx` disables destructive cleanup unless the exact confirmation string is entered.
+5. `npm run web:serve` malformed DB warning
+   - Latest clean default run did not print malformed DB warning.
+   - It printed only expected Node SQLite experimental warning:
 
-7. The mobile sidebar changed to a hamburger/drawer pattern.
-   - This is progress, but the mobile screenshot still shows horizontal overflow and clipped content.
+```text
+ExperimentalWarning: SQLite is an experimental feature
+```
+
+   - That warning is acceptable and is not the malformed DB warning.
+
+6. Stale web server process
+   - A stale `ts-node src/web/server.ts` process on port 7790 caused one `EADDRINUSE` during verification.
+   - It was PID 3976 and was stopped after command-line verification.
+   - Future sessions must check port 7790 before blaming `web:serve`.
+
+7. Desktop process cleanup
+   - Latest final check found no `Browser Control.exe` processes.
+   - Port 7790 was also clear after verification.
+
+8. Tracker accuracy
+   - `premium-completion-tracker.md` was rewritten.
+   - Treat it as the current blocker-cleanup evidence file, not as proof that backlog features are implemented.
+
+9. Newly found observability warning
+   - Real bug found and fixed in `src/browser/actions.ts`.
+   - Old issue:
+
+```text
+Observability persistence failed: page?.waitForTimeout is not a function
+```
+
+   - Cause: `page?.waitForTimeout(...)` only protects against null page, not missing method. Some tests/mocks or current Playwright API shape do not provide `waitForTimeout`.
+   - Fix: use a runtime-neutral `setTimeout` promise before persisting observability.
+   - `npm run test:ci` passed after this fix.
+
+10. Screenshot MD5 concern
+    - `sidebar-desktop.png` and `sidebar-after-hard-refresh.png` can be bit-for-bit identical.
+    - This does not prove fake evidence by itself. The UI is deterministic after reload.
+    - `screenshot-manifest.json` now records separate capture timestamps, title, URL, file path, and byte size for the post-refresh capture.
+    - If you need stronger proof, add a harmless manifest/event log, not visual noise in screenshots.
 
 ==================================================
-AFTER CURRENT BLOCKERS: MISSING FEATURE BACKLOG
+KNOWN NON-BLOCKING CURRENT ISSUE
 ==================================================
 
-Do not start this backlog until the verified blockers in this file are fixed or the user explicitly asks for one backlog item.
+`npm run test:browser-features` is not part of the final blocker gates, but it currently has live managed-Chrome failures on Windows with profile lock errors like:
 
-This backlog exists so future AI coding agents do not reimplement features that already exist. Before implementing any item below:
+```text
+The process cannot access the file because it is being used by another process.
+'...\\Default\\Network'
+```
 
-1. Read the upstream source catalog first:
-   - `C:\Users\11\browser-control\docs\production-upgrade\UPSTREAM-SOURCES.md`
-   - This file explains which upstream repositories are useful, which features already exist in Browser Control, which parts are missing, and which repos must be study-only/avoid.
-2. Read `docs/production-upgrade/STATUS.md`.
-3. Search the codebase with `rg` for the feature name and related files.
-4. Reuse existing code first.
-5. Extend current architecture.
-6. Do not create a parallel system.
-7. Do not replace Browser Control core policy/session/runtime models.
-8. Add tests and real product verification for every user-facing feature.
+This indicates live managed-browser tests may reuse or collide with a profile path. Do not ignore it if you touch browser provider/session/profile code. If your feature touches browser launch, profiles, providers, or live browser lifecycle, investigate and fix this. If your feature does not touch that area, document it as pre-existing/non-blocking.
 
-Current truth from code audit:
+==================================================
+ABSOLUTE RULES
+==================================================
+
+1. Work only inside this repo:
+
+```text
+C:\Users\11\browser-control
+```
+
+2. Read this file completely before editing anything.
+
+3. Read the required files in the reading order below before editing anything.
+
+4. Do not restart from scratch.
+
+5. Do not rewrite the React app, runtime, policy engine, terminal engine, MCP registry, SQLite state layer, or desktop shell from scratch.
+
+6. Reuse existing architecture first.
+
+7. Do not silently delete user data.
+
+8. Do not delete SQLite DBs as recovery.
+
+9. If a DB is corrupt and must be moved, quarantine it by moving files and writing a recovery report.
+
+10. Do not fake screenshots, test output, process cleanup, or tracker status.
+
+11. Do not claim complete if any required gate fails.
+
+12. If any command fails, fix the cause and rerun it, or document the exact blocker with evidence.
+
+13. If a feature cannot be safely completed in one session, leave the tracker truthful and mark status Partial, not Complete.
+
+14. Do not use isolated fake data homes to hide default data-home failures unless a test specifically requires isolation.
+
+15. Do not leave servers, browsers, Electron apps, PTYs, or test runners running after verification.
+
+==================================================
+NEW SESSION OBJECTIVE
+==================================================
+
+Implement the missing premium feature backlog in this priority order:
+
+1. Credential Vault and Privacy Network Control.
+2. Browser Terminal and Dashboard Polish.
+3. Workflow Graph v2 and Self-Healing Harness Generation.
+4. Automation Package Marketplace, Signing, Trust Review, and Eval Proof.
+5. Local Model Provider Router and OpenAI-Compatible Local API.
+6. Record/Replay Automation Builder and Site Memory Upgrade.
+7. Visual Diff, Replay Debugger, and Audit Viewer.
+8. Optional Portless-Style `.localhost` Proxy.
+9. Browserbase Provider and Provider Health Scoring.
+10. Later-only experiments: CubeSandbox, Qdrant/PageIndex, Cap anti-abuse, zero-native, Rolldown, deepsec, react-doctor, Camofox/Cloak/Obscura.
+
+Do not implement later-only experiments unless the user explicitly asks.
+
+If the session cannot complete all priority items, complete them in order and leave a precise, truthful tracker showing what remains.
+
+==================================================
+REQUIRED READING ORDER
+==================================================
+
+Read every file below before editing anything.
+
+Core status and project context:
+
+1. `INSTRUCTIONS.md`
+2. `premium-completion-tracker.md`
+3. `README.md`
+4. `package.json`
+5. `web/package.json`
+6. `docs/production-upgrade/UPSTREAM-SOURCES.md`
+7. `docs/production-upgrade/STATUS.md`
+
+Current UI/dashboard/desktop:
+
+8. `web/src/App.tsx`
+9. `web/src/App.css`
+10. `web/src/index.css`
+11. `web/src/api.ts`
+12. `web/src/types.ts`
+13. `web/src/pages/CommandView.tsx`
+14. `web/src/pages/SettingsView.tsx`
+15. `web/src/pages/AdvancedView.tsx`
+16. `web/src/pages/BrowserView.tsx`
+17. `web/src/pages/PackagesView.tsx`
+18. `web/src/pages/WorkflowsView.tsx`
+19. `web/src/pages/EvidenceView.tsx`
+20. `desktop/main.cjs`
+21. `desktop/preload.cjs`
+22. `desktop/security.cjs`
+
+Runtime/state/session/policy:
+
+23. `src/browser_control.ts`
+24. `src/session_manager.ts`
+25. `src/shared/config.ts`
+26. `src/shared/paths.ts`
+27. `src/shared/sqlite_util.ts`
+28. `src/runtime/memory_store.ts`
+29. `src/state/index.ts`
+30. `src/state/sqlite.ts`
+31. `src/policy/profiles.ts`
+32. `src/policy/engine.ts`
+33. `src/policy/audit.ts`
+34. `src/observability/redaction.ts`
+
+Browser/network/observability:
+
+35. `src/browser/actions.ts`
+36. `src/browser/connection.ts`
+37. `src/browser/profiles.ts`
+38. `src/browser/network_interceptor.ts`
+39. `src/observability/network_capture.ts`
+40. `src/observability/console_capture.ts`
+41. `src/observability/debug_bundle.ts`
+42. `src/observability/screencast.ts`
+43. `src/snapshot_diff.ts`
+44. `src/captcha_solver.ts`
+45. `src/stealth.ts`
+
+Terminal/workflow/harness/packages/services/providers/models:
+
+46. `src/terminal/actions.ts`
+47. `src/terminal/session.ts`
+48. `src/terminal/render.ts`
+49. `src/runtime/daemon.ts`
+50. `src/web/server.ts`
+51. `src/web/events.ts`
+52. `src/workflows/types.ts`
+53. `src/workflows/runtime.ts`
+54. `src/workflows/store.ts`
+55. `src/harness/types.ts`
+56. `src/harness/registry.ts`
+57. `src/harness/sandbox.ts`
+58. `src/packages/types.ts`
+59. `src/packages/manifest.ts`
+60. `src/packages/registry.ts`
+61. `src/packages/runner.ts`
+62. `src/packages/eval.ts`
+63. `src/operator/generated_ui.ts`
+64. `src/services/registry.ts`
+65. `src/services/resolver.ts`
+66. `src/services/detector.ts`
+67. `src/proxy_manager.ts`
+68. `src/providers/interface.ts`
+69. `src/providers/registry.ts`
+70. `src/providers/local.ts`
+71. `src/providers/custom.ts`
+72. `src/providers/browserless.ts`
+73. `src/ai_agent.ts`
+74. `src/operator/doctor.ts`
+
+Existing tests:
+
+75. `tests/unit/sqlite_recovery.test.ts`
+76. `tests/unit/sqlite_storage.test.ts`
+77. `tests/unit/state_storage.test.ts`
+78. `tests/unit/desktop_security.test.ts`
+79. `tests/unit/web_frontend_format.test.ts`
+80. `tests/unit/web_app_server.test.ts`
+81. `tests/unit/browser_actions.test.ts`
+82. `tests/unit/browser_connection.test.ts`
+83. `tests/unit/terminal_actions.test.ts`
+84. `tests/unit/workflows.test.ts`
+85. `tests/unit/harness.test.ts`
+86. `tests/unit/packages.test.ts`
+87. `tests/unit/mcp/tool_registry.test.ts`
+88. `tests/unit/captcha_solver.test.ts`
+
+After reading, inspect directly related files as needed.
+
+==================================================
+CURRENT FEATURE TRUTH
+==================================================
+
+Use this as the starting truth. Do not downgrade implemented pieces. Do not claim missing pieces are done without evidence.
 
 1. A11y browser action model exists.
    - Evidence: `src/a11y_snapshot.ts`, `src/browser/actions.ts`, MCP browser tools.
@@ -132,128 +374,171 @@ Current truth from code audit:
     - Missing: Camofox/Cloak/Obscura providers. These are risky. Do not make them default.
 
 ==================================================
-FEATURE PRIORITY ORDER
+IMPLEMENTATION ORDER AND DETAILED REQUIREMENTS
 ==================================================
 
-Implement missing features in this order unless the user explicitly changes priority:
+Implement in order. Do not skip a priority item to work on a later one.
 
-1. Credential Vault and Privacy Network Control.
-2. Browser Terminal and Dashboard polish.
-3. Workflow Graph v2 and Self-Healing Harness generation.
-4. Automation Package Marketplace, signing, trust review, and eval proof.
-5. Local Model Provider Router and OpenAI-compatible local API.
-6. Record/Replay Automation Builder and Site Memory upgrade.
-7. Visual Diff, Replay Debugger, and Audit Viewer.
-8. Optional Portless-style `.localhost` proxy.
-9. Browserbase provider and provider health scoring.
-10. Later-only experiments: CubeSandbox, Qdrant/PageIndex, Cap anti-abuse, zero-native, Rolldown, deepsec, react-doctor.
+If one priority item becomes blocked, document exact blocker with evidence, then ask the user before jumping far ahead.
 
 ==================================================
-FEATURE IMPLEMENTATION INSTRUCTIONS
+FEATURE 1: CREDENTIAL VAULT AND PRIVACY NETWORK CONTROL
 ==================================================
-
-## Feature 1: Credential Vault and Privacy Network Control
 
 Goal:
 
-Make Browser Control safe for logged-in automation by adding real secret storage and policy-managed network privacy.
+Make Browser Control safe for logged-in automation by adding real secret storage, policy-managed secret use, and network privacy controls.
 
 Already exists:
 
 - redaction helpers
 - policy credential gate
 - config sensitive-key redaction
+- data-home `secrets/` directory
 - network capture
 - request intercept/block/mock/capture primitives
 - blocked-domain policy concept
 
 Do not rebuild these. Extend them.
 
-Read first:
+Read first for this feature:
 
 1. `src/policy/profiles.ts`
-2. `src/session_manager.ts`
-3. `src/observability/redaction.ts`
-4. `src/browser/network_interceptor.ts`
-5. `src/observability/network_capture.ts`
-6. `src/shared/config.ts`
-7. `src/shared/paths.ts`
-8. `src/web/server.ts`
-9. `web/src/pages/SettingsView.tsx`
-10. `docs/production-upgrade/UPSTREAM-SOURCES.md`
+2. `src/policy/engine.ts`
+3. `src/session_manager.ts`
+4. `src/observability/redaction.ts`
+5. `src/browser/network_interceptor.ts`
+6. `src/observability/network_capture.ts`
+7. `src/shared/config.ts`
+8. `src/shared/paths.ts`
+9. `src/web/server.ts`
+10. `web/src/pages/SettingsView.tsx`
 
 Implement:
 
-1. Add a credential vault abstraction.
-   - File target: `src/security/credential_vault.ts` or equivalent.
-   - Support at least local encrypted storage or OS-backed storage where available.
-   - On Windows, prefer DPAPI/keytar-style OS protection if dependency choice is acceptable.
-   - If OS vault is not available, provide a clearly named local fallback with warnings.
-   - Store secrets outside repo.
-   - Never store plain secrets in debug logs, audit logs, screenshots, package manifests, or workflow graph files.
+1. Add credential vault core.
+   - Target file: `src/security/credential_vault.ts` or equivalent.
+   - Store secrets outside repo, under data home.
+   - Prefer Windows DPAPI or OS-backed storage if a dependency is acceptable and stable.
+   - If OS vault is not available, provide a clearly named encrypted local fallback.
+   - Never store raw secrets in plain JSON.
+   - Never log raw secrets.
+   - Never include raw secrets in screenshots, debug bundles, package manifests, workflow graph files, CLI output, MCP output, or audit details.
 
-2. Add secret references.
-   - Use stable IDs like `secret://site/name`.
-   - Workflows/packages should request a secret reference, not raw value.
-   - Browser/terminal actions must require policy approval before typing/revealing secret values.
+2. Add secret reference model.
+   - Use stable IDs like:
 
-3. Add per-site and per-package secret grants.
-   - Grant shape must include package/workflow/site/action scope.
-   - Grant must be auditable.
+```text
+secret://site/name
+secret://package/name
+secret://workflow/name
+```
+
+   - Workflows/packages/browser/terminal actions should request secret references, not raw values.
+   - Secret values are resolved only at execution time after policy approval.
+
+3. Add secret grants.
+   - Grant shape must include:
+     - secret ID
+     - site/domain scope
+     - package/workflow scope
+     - action scope: reveal, type, paste, use-as-header, use-as-form-value
+     - created timestamp
+     - optional expiry
+     - revoked flag
    - Revocation must be possible.
+   - Grants must be auditable.
 
-4. Add secret-use audit events.
-   - Log secret ID, action type, target site/package/workflow, timestamp, policy decision.
-   - Never log raw value.
+4. Add secret-use policy decisions.
+   - Safe profile: require confirmation for reveal/type/paste.
+   - Balanced profile: require confirmation for reveal and cross-site use; allow audited same-site use if granted.
+   - Trusted profile: allow with audit when grant exists; require confirmation for reveal.
+   - No profile should allow raw secret logging.
 
-5. Add network filter engine v1.
+5. Add audit events.
+   - Record:
+     - secret ID
+     - action type
+     - target site/package/workflow
+     - policy decision
+     - timestamp
+     - session ID
+   - Do not record raw value.
+
+6. Add network filter engine v1.
+   - Target file: `src/security/network_rules.ts` or equivalent.
    - Use existing request interception primitives.
    - Support allowlist/denylist domains.
    - Support resource type rules when available.
-   - Support tracker/ad/analytics profile lists.
-   - Start with a small native format. Do not copy uBlock GPL code.
+   - Support built-in tracker/analytics/ad profile lists.
+   - Use a small native format. Do not copy GPL uBlock code.
+   - Rule result must be auditable.
 
-6. Add policy profiles.
-   - Safe profile: strict third-party/tracker blocking.
-   - Balanced profile: block common trackers/analytics.
-   - Trusted profile: audit only unless configured.
+7. Add privacy policy profiles.
+   - Safe: strict third-party/tracker blocking.
+   - Balanced: block common trackers/analytics.
+   - Trusted: audit only unless configured.
 
-7. Add dashboard UI.
+8. Add API/CLI/MCP surface.
+   - CLI:
+     - `bc vault list`
+     - `bc vault set`
+     - `bc vault delete`
+     - `bc vault grants list`
+     - `bc vault grants revoke`
+     - `bc network rules list`
+     - `bc network rules add`
+     - `bc network rules remove`
+   - API:
+     - list entries without values
+     - create/update/delete entries with confirmation
+     - list/revoke grants
+     - list/add/remove network rules
+     - list recent blocked requests
+   - MCP:
+     - keep minimal and policy-gated
+     - never expose raw secret values directly
+
+9. Add dashboard UI.
    - Show vault entries without values.
+   - Show grants.
    - Show network rules.
    - Show recent blocked requests.
-   - Show secret-use audit.
-   - Require explicit confirmation for reveal/delete/revoke actions.
+   - Show secret-use audit events.
+   - Require explicit confirmation for reveal/delete/revoke.
+   - Mobile layout must fit at 375x812.
 
-8. Add CLI/API/MCP surface only where useful.
-   - `bc vault list`
-   - `bc vault set`
-   - `bc vault delete`
-   - `bc network rules list`
-   - `bc network rules add`
-   - Keep MCP tools minimal and policy-gated.
+Tests:
 
-Verify:
-
-```text
-npm run typecheck
-npm test
-npm run test:security
-npm run test:web
-```
+- Add unit tests for vault storage, redaction, grants, revocation, audit events, network rules, and policy decisions.
+- Add web/API tests for vault/network endpoints.
+- Add CLI tests for vault/network commands.
+- Add MCP tests only if MCP tools are added.
 
 Product verification:
 
 1. Add a test secret.
-2. Confirm config/list/debug output redacts it.
-3. Use it in a controlled browser form only after approval.
+2. Confirm `config/list/debug/log` output redacts it.
+3. Use it in a controlled local browser form only after approval.
 4. Confirm audit event appears.
 5. Add a tracker/domain block rule.
-6. Open a page that requests the blocked domain.
-7. Confirm request is blocked and visible in audit/UI.
-8. Confirm no raw secret appears in logs, screenshots, debug bundles, receipts, terminal serialization, or package eval output.
+6. Open a local test page that requests the blocked domain.
+7. Confirm request is blocked and visible in UI/audit.
+8. Confirm no raw secret appears in logs, screenshots, debug bundles, receipts, terminal serialization, workflow files, or package eval output.
 
-## Feature 2: Browser Terminal and Dashboard Polish
+Required commands for this feature:
+
+```text
+npm run typecheck
+npm test
+npm run test:state
+npm run test:web
+npm run test:mcp
+```
+
+==================================================
+FEATURE 2: BROWSER TERMINAL AND DASHBOARD POLISH
+==================================================
 
 Goal:
 
@@ -266,41 +551,88 @@ Already exists:
 - terminal render adapter
 - dashboard and web server
 
-Do not replace the terminal engine. The browser terminal is UI/render/control layer only.
+Do not replace the terminal engine. The browser terminal is a UI/render/control layer only.
 
 Read first:
 
-1. `src/terminal/*`
-2. `src/terminal/render.ts`
-3. `src/runtime/daemon.ts`
-4. `src/web/server.ts`
-5. `src/web/events.ts`
-6. `web/src/App.tsx`
-7. `web/src/pages/CommandView.tsx`
-8. `web/src/pages/AdvancedView.tsx`
-9. `desktop/main.cjs`
-10. `docs/web-desktop-wrapper/*`
+1. `src/terminal/actions.ts`
+2. `src/terminal/session.ts`
+3. `src/terminal/render.ts`
+4. `src/runtime/daemon.ts`
+5. `src/web/server.ts`
+6. `src/web/events.ts`
+7. `web/src/App.tsx`
+8. `web/src/pages/CommandView.tsx`
+9. `web/src/pages/AdvancedView.tsx`
+10. `desktop/main.cjs`
 
 Implement:
 
-1. Add terminal session list and attach UI.
-2. Add full terminal pane.
-   - Render ANSI/VT properly.
-   - Preserve selectable text.
-   - Support keyboard input.
-   - Support paste with confirmation for multiline/destructive commands.
-   - Support resize.
-   - Support copy.
-   - Support clear.
-   - Support reconnect/resume.
-3. Prefer wterm/localterm-style rendering if a dependency is stable and license-compatible.
-4. Keep PTY ownership in Browser Control backend.
-5. Expose semantic DOM rows for a11y snapshots.
-6. Add terminal event streaming through existing web event system.
-7. Add loading/empty/error states.
-8. Add mobile layout.
+1. Add terminal session list API.
+   - List sessions.
+   - Create session.
+   - Attach to session.
+   - Read session snapshot.
+   - Write input.
+   - Resize.
+   - Close.
 
-Verify:
+2. Add terminal event streaming.
+   - Use existing web event system.
+   - Stream terminal output to browser clients.
+   - Dispose subscriptions on server close.
+   - Avoid duplicate subscriptions.
+
+3. Add browser terminal UI.
+   - Session list.
+   - Attach/detach UI.
+   - Terminal pane.
+   - ANSI/VT rendering.
+   - Selectable text.
+   - Keyboard input.
+   - Paste support.
+   - Confirmation for multiline/destructive paste.
+   - Resize support.
+   - Copy support.
+   - Clear output.
+   - Reconnect/resume after refresh.
+   - Close session.
+   - Loading/empty/error states.
+   - Mobile layout.
+
+4. Accessibility:
+   - Expose semantic rows or meaningful text representation for a11y snapshots.
+   - Buttons must have labels.
+   - Keyboard focus must be usable.
+
+5. Dashboard polish:
+   - Add error boundaries or contained error states for complex pages.
+   - Add visible loading/empty states.
+   - Avoid UI cards inside UI cards.
+   - Avoid mobile overflow.
+   - Keep existing dark/light theme.
+
+Tests:
+
+- Unit/API tests for terminal endpoints.
+- Web tests for event stream payloads.
+- Terminal tests for resize/input/read/close.
+- Frontend formatting/state tests where practical.
+
+Product verification:
+
+1. Start dashboard.
+2. Open browser terminal.
+3. Create terminal session.
+4. Run `pwd` or `dir`.
+5. Run a long command and confirm streaming output.
+6. Resize viewport and confirm terminal resizes.
+7. Refresh dashboard and confirm terminal resumes.
+8. Test copy/paste.
+9. Close session and confirm child process cleanup.
+10. Capture desktop and mobile screenshots.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -310,23 +642,15 @@ npm run test:web
 npm run test:terminal
 ```
 
-Product verification:
+If `test:terminal` does not exist, add the right script or run the exact terminal test files and update `package.json` truthfully.
 
-1. Start dashboard.
-2. Open browser terminal.
-3. Create terminal session.
-4. Run `pwd`/`dir`.
-5. Run a long command and confirm streaming output.
-6. Resize viewport.
-7. Refresh dashboard and confirm terminal resumes.
-8. Close session and confirm child process cleanup.
-9. Capture desktop and mobile screenshots.
-
-## Feature 3: Workflow Graph v2 and Self-Healing Harness Generation
+==================================================
+FEATURE 3: WORKFLOW GRAPH V2 AND SELF-HEALING HARNESS GENERATION
+==================================================
 
 Goal:
 
-Turn the current linear workflow runtime and helper registry into a durable graph + self-healing helper system.
+Turn the current linear workflow runtime and helper registry into a durable graph plus self-healing helper system.
 
 Already exists:
 
@@ -356,45 +680,71 @@ Read first:
 
 Implement:
 
-1. Add graph branching.
+1. Graph branching.
    - Conditional edge expressions must be typed and safe.
-   - No arbitrary JS eval.
-   - Keep validation strict.
+   - No arbitrary JS `eval`.
+   - Validation must reject unknown state paths, unsafe expressions, and ambiguous edges.
 
-2. Add loops with guardrails.
+2. Loops with guardrails.
    - Max loop count.
    - Timeout.
-   - state-change requirement or retry policy.
+   - State-change requirement or explicit retry policy.
+   - Clear failure if guardrail trips.
 
-3. Add typed workflow state.
+3. Typed workflow state.
+   - State schema.
    - Persist state after each node.
-   - Allow safe human edit for approved fields only.
-   - Add state schema validation.
+   - Allow human edits only for approved fields.
+   - Validate state before resume.
 
-4. Add event streaming.
-   - Emit node started/completed/failed/retried/paused/resumed.
+4. Event streaming.
+   - Emit node started/completed/failed/retried/paused/resumed/state-updated.
    - Expose to dashboard.
 
-5. Add self-healing helper generation loop.
+5. Self-healing helper generation loop.
    - Detect repeat failure.
-   - Generate helper into isolated harness area, not core source.
+   - Generate helper into isolated harness area under data home, not core source.
    - Validate static safety.
    - Run in sandbox.
    - Replay against controlled browser state when possible.
    - Activate only after tests pass.
    - Keep rollback.
 
-6. Add hot-load helper execution adapter.
+6. Hot-load helper execution adapter.
    - Workflow helper nodes can call activated helper by ID/version.
    - Package permissions must allow helper use.
    - Policy must audit helper execution.
 
-7. Add sandbox provider interface.
+7. Sandbox provider interface.
    - Keep local-temp default.
    - Add extension points for Docker/CubeSandbox/E2B later.
-   - Do not implement heavy CubeSandbox unless user asks.
+   - Do not implement heavy providers unless user asks.
 
-Verify:
+Tests:
+
+- Branch workflow.
+- Loop workflow with max-loop guard.
+- State schema validation.
+- Human-edit state allow/deny.
+- Event stream sequence.
+- Helper generation failure/success.
+- Helper rollback.
+
+Product verification:
+
+1. Create workflow with branch.
+2. Create workflow with loop and max-loop guard.
+3. Pause for approval.
+4. Edit allowed state.
+5. Resume.
+6. Force helper failure.
+7. Generate helper in sandbox.
+8. Validate helper.
+9. Activate helper.
+10. Re-run workflow and confirm success.
+11. Confirm rollback works.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -402,19 +752,9 @@ npm test
 node --require ts-node/register --require tsconfig-paths/register --test tests/unit/workflows.test.ts tests/unit/harness.test.ts tests/unit/packages.test.ts
 ```
 
-Product verification:
-
-1. Create workflow with branch.
-2. Create workflow with loop and max-loop guard.
-3. Pause for approval, edit allowed state, resume.
-4. Force helper failure.
-5. Generate helper in sandbox.
-6. Validate helper.
-7. Activate helper.
-8. Re-run workflow and confirm success.
-9. Confirm rollback works.
-
-## Feature 4: Automation Package Marketplace, Signing, Trust Review, and Eval Proof
+==================================================
+FEATURE 4: AUTOMATION PACKAGE MARKETPLACE, SIGNING, TRUST REVIEW, AND EVAL PROOF
+==================================================
 
 Goal:
 
@@ -440,48 +780,63 @@ Read first:
 6. `src/operator/generated_ui.ts`
 7. `src/policy/profiles.ts`
 8. `src/web/server.ts`
-9. `web/src/pages/*`
-10. `automation-packages/tradingview-ict-analysis/`
+9. `web/src/pages/PackagesView.tsx`
+10. `automation-packages/tradingview-ict-analysis/automation-package.json`
 
 Implement:
 
-1. Add remote package source abstraction.
-   - Local directory stays supported.
+1. Remote package source abstraction.
+   - Local directory remains supported.
    - Remote registry source is optional/configured.
    - No arbitrary remote execution without trust review.
+   - Test registry can be local fixture.
 
-2. Add package signing/trust metadata.
+2. Package signing/trust metadata.
    - signer
    - digest
    - signature
    - trusted/untrusted state
    - install time
    - source URL
+   - review status
 
-3. Add trust review workflow.
+3. Trust review workflow.
    - Show permissions.
    - Show files.
    - Show generated UI spec.
    - Show risk summary.
-   - Require user confirmation for high-risk install/grant.
+   - Require explicit confirmation for high-risk install/grant.
+   - Audit install/grant decisions.
 
-4. Add generated package config UI.
+4. Generated package config UI.
    - Use existing `uiSpec` validation.
-   - Optionally integrate json-render runtime later.
    - Do not allow arbitrary component/action execution.
+   - Render only safe supported fields.
 
-5. Add eval proof dashboard.
+5. Eval proof dashboard.
    - Show package eval pass/fail history.
    - Show last run duration.
    - Show failed step.
    - Show debug receipt link.
 
-6. Add package search/list/update UX.
+6. Package search/list/update UX.
    - CLI first.
    - Dashboard second.
    - MCP only if policy-safe.
 
-Verify:
+Tests:
+
+- Install local package.
+- Install fixture remote package.
+- Reject untrusted/unsigned package when policy requires trust.
+- Review permissions.
+- Grant minimum permission.
+- Render config UI.
+- Run package.
+- Run package eval.
+- Verify eval history persists.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -490,19 +845,9 @@ npm run test:package
 npm run test:web
 ```
 
-Product verification:
-
-1. Install local package.
-2. Install from test remote registry.
-3. Reject untrusted/unsigned package.
-4. Review permissions.
-5. Grant minimum permission.
-6. Render config UI.
-7. Run package.
-8. Run package eval.
-9. Confirm dashboard shows evidence.
-
-## Feature 5: Local Model Provider Router and OpenAI-Compatible Local API
+==================================================
+FEATURE 5: LOCAL MODEL PROVIDER ROUTER AND OPENAI-COMPATIBLE LOCAL API
+==================================================
 
 Goal:
 
@@ -530,37 +875,46 @@ Read first:
 
 Implement:
 
-1. Add model provider abstraction.
+1. Model provider abstraction.
    - OpenRouter provider.
    - Ollama provider.
    - OpenAI-compatible custom endpoint provider.
    - Optional LM Studio/LocalAI via OpenAI-compatible endpoint.
 
-2. Add router.
-   - priority order
-   - fallback on provider failure
-   - cost cap
-   - local-only mode
-   - model capability metadata
+2. Router.
+   - Priority order.
+   - Fallback on provider failure.
+   - Cost cap.
+   - Local-only mode.
+   - Model capability metadata.
 
-3. Add config.
+3. Config.
    - CLI set/list.
-   - dashboard settings.
-   - sensitive values redacted.
+   - Dashboard settings.
+   - Sensitive values redacted.
 
-4. Add local OpenAI-compatible API.
+4. Local OpenAI-compatible API.
    - Loopback-only by default.
    - Token required.
    - Route model requests through provider router.
    - Tool calls can invoke Browser Control only through policy-gated runtime.
 
-5. Add doctor checks.
+5. Doctor checks.
    - Ollama reachable.
-   - custom endpoint reachable.
+   - Custom endpoint reachable.
    - API key present if needed.
-   - local API bound to loopback.
+   - Local API bound to loopback.
 
-Verify:
+Tests:
+
+- Provider selection.
+- Fallback.
+- Local-only mode.
+- Auth required for local API.
+- Non-loopback denied unless explicitly enabled.
+- Secret redaction.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -571,15 +925,17 @@ npm run test:web
 Product verification:
 
 1. Configure OpenRouter.
-2. Configure Ollama if installed.
-3. Configure custom OpenAI-compatible endpoint.
+2. Configure Ollama if installed; if not installed, doctor must report readable unavailable status.
+3. Configure custom OpenAI-compatible endpoint using local fixture server.
 4. Force primary provider failure and confirm fallback.
 5. Start local API.
 6. Send chat request.
 7. Confirm auth required.
 8. Confirm non-loopback exposure is denied unless explicitly enabled.
 
-## Feature 6: Record/Replay Automation Builder and Site Memory Upgrade
+==================================================
+FEATURE 6: RECORD/REPLAY AUTOMATION BUILDER AND SITE MEMORY UPGRADE
+==================================================
 
 Goal:
 
@@ -601,40 +957,51 @@ Read first:
 4. `src/workflows/*`
 5. `src/packages/*`
 6. `src/browser/actions.ts`
-7. `src/a11y_snapshot.ts`
+7. `src/terminal/actions.ts`
+8. `src/filesystem/actions.ts`
 
 Implement:
 
-1. Add recorder mode.
+1. Recorder mode.
    - Capture browser actions.
    - Capture terminal actions.
    - Capture filesystem actions.
    - Capture approvals.
    - Redact secrets.
 
-2. Add replay model.
+2. Replay model.
    - Convert recorded actions to workflow draft.
    - Prefer semantic refs/roles/names over raw coordinates/selectors.
    - Store assertions after important actions.
    - Record wait conditions.
 
-3. Add package draft generator.
+3. Package draft generator.
    - Manifest.
    - Permissions.
-   - uiSpec stub.
-   - eval definition.
+   - UI spec stub.
+   - Eval definition.
 
-4. Add site memory upgrade.
+4. Site memory upgrade.
    - Use existing knowledge store.
    - Add stale locator scoring.
    - Add optional semantic ranking.
-   - Keep Qdrant/PageIndex as optional later adapters, not required default.
+   - Keep Qdrant/PageIndex as optional later adapters, not default.
 
-5. Add replay debugger.
+5. Replay debugger integration.
    - Show step-by-step replay result.
-   - Link to screenshot/debug receipt.
+   - Link screenshot/debug receipt.
 
-Verify:
+Tests:
+
+- Record browser workflow.
+- Record terminal/fs action.
+- Redact secret.
+- Convert to workflow draft.
+- Replay draft.
+- Convert to package draft.
+- Eval package.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -642,16 +1009,11 @@ npm test
 npm run test:browser-features
 ```
 
-Product verification:
+If `npm run test:browser-features` still fails because of pre-existing Windows profile lock, either fix it if related or document exact blocker and evidence.
 
-1. Record a simple browser workflow.
-2. Convert to workflow draft.
-3. Replay it.
-4. Convert to package draft.
-5. Run package eval.
-6. Confirm no secrets were captured.
-
-## Feature 7: Visual Diff, Replay Debugger, and Audit Viewer
+==================================================
+FEATURE 7: VISUAL DIFF, REPLAY DEBUGGER, AND AUDIT VIEWER
+==================================================
 
 Goal:
 
@@ -672,26 +1034,26 @@ Read first:
 3. `src/observability/screencast.ts`
 4. `src/policy/audit.ts`
 5. `src/web/server.ts`
-6. `web/src/pages/*`
+6. `web/src/pages/EvidenceView.tsx`
 
 Implement:
 
-1. Add screenshot pixel diff.
+1. Screenshot pixel diff.
    - Use stable image diff dependency if license-compatible.
-   - Store diff artifact under data home/reports, not repo.
+   - Store diff artifact under data home/reports or evidence, not repo.
 
-2. Add DOM structural diff.
+2. DOM structural diff.
    - Keep separate from a11y snapshot diff.
    - Redact sensitive text where possible.
 
-3. Add before/after comparison UI.
+3. Before/after comparison UI.
    - screenshot before
    - screenshot after
    - pixel diff
    - a11y diff
    - DOM diff summary
 
-4. Add replay debugger.
+4. Replay debugger.
    - Step timeline.
    - Inputs.
    - Outputs.
@@ -699,11 +1061,18 @@ Implement:
    - Retries.
    - Helper used.
 
-5. Add audit viewer.
+5. Audit viewer.
    - Filter by session/workflow/package/action/risk.
    - Show redacted details only.
 
-Verify:
+Tests:
+
+- Pixel diff creates artifact.
+- DOM diff redacts sensitive values.
+- Audit viewer endpoint filters correctly.
+- Replay debugger data shape stable.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -721,7 +1090,9 @@ Product verification:
 6. Confirm audit viewer shows policy decision.
 7. Confirm secrets are redacted.
 
-## Feature 8: Optional Portless-Style `.localhost` Proxy
+==================================================
+FEATURE 8: OPTIONAL PORTLESS-STYLE `.localhost` PROXY
+==================================================
 
 Goal:
 
@@ -749,7 +1120,8 @@ Implement:
 1. Keep `bc://name` default for agents.
 2. Add optional `.localhost` proxy mode.
 3. Support:
-   - `https://myapp.localhost`
+   - `http://myapp.localhost`
+   - optional `https://myapp.localhost`
    - hidden/random backend ports
    - stable service names
    - worktree subdomains
@@ -757,26 +1129,28 @@ Implement:
 4. HTTPS/local CA is optional and must be explicit.
 5. Tailscale/public sharing is later-only unless user asks.
 6. Add doctor checks for port 80/443 conflicts and cert status.
-7. Add clear failure messages on Windows permission issues.
+7. Add clear Windows permission failure messages.
 
-Verify:
+Tests:
+
+- Register service on random port.
+- Resolve `bc://name`.
+- Enable `.localhost` proxy.
+- Open stable URL.
+- Restart backend on a different port.
+- Stable URL still works.
+- Disable proxy and confirm cleanup.
+
+Required commands:
 
 ```text
 npm run typecheck
 npm test
 ```
 
-Product verification:
-
-1. Register service on random port.
-2. Resolve `bc://name`.
-3. Enable `.localhost` proxy.
-4. Open `http://name.localhost` or `https://name.localhost`.
-5. Restart service on a different backend port.
-6. Confirm stable URL still works.
-7. Disable proxy and confirm cleanup.
-
-## Feature 9: Browserbase Provider and Provider Health Scoring
+==================================================
+FEATURE 9: BROWSERBASE PROVIDER AND PROVIDER HEALTH SCORING
+==================================================
 
 Goal:
 
@@ -801,22 +1175,31 @@ Read first:
 
 Implement:
 
-1. Add Browserbase provider adapter if current Browserbase API/license fits.
-2. Add provider health checks.
+1. Browserbase provider adapter if current Browserbase API/license fits.
+2. Provider health checks.
    - auth valid
    - endpoint reachable
    - launch supported
    - attach supported
    - latency
    - recent failures
-3. Add provider scoring.
-   - Used for diagnostics first.
+3. Provider scoring.
+   - Diagnostics first.
    - Do not auto-switch providers unless configured.
-4. Add dashboard provider status.
-5. Add policy profile for remote providers.
-6. Keep tokens redacted.
+4. Dashboard provider status.
+5. Policy profile for remote providers.
+6. Token redaction.
 
-Verify:
+Tests:
+
+- List providers.
+- Add fake/custom provider.
+- Health failure readable.
+- Valid provider launch/attach when credentials exist.
+- Redaction.
+- Cleanup.
+
+Required commands:
 
 ```text
 npm run typecheck
@@ -824,26 +1207,19 @@ npm test
 npm run test:browser-features
 ```
 
-Product verification:
-
-1. List providers.
-2. Add fake/custom provider.
-3. Confirm health failure is readable.
-4. Add valid provider if credentials exist.
-5. Launch/attach.
-6. Confirm cleanup.
-
-## Later-Only Feature Notes
+==================================================
+LATER-ONLY FEATURES
+==================================================
 
 Do not implement these unless the user explicitly asks:
 
 1. CubeSandbox/E2B provider.
-   - Design interface now.
+   - Design interfaces only if needed by self-healing harness.
    - Heavy runtime later.
 
 2. Qdrant/PageIndex memory backend.
    - Current markdown knowledge system exists.
-   - Add optional adapter only after record/replay and site memory need ranking.
+   - Add optional adapter only after record/replay/site memory needs ranking.
 
 3. Cap proof-of-work anti-abuse.
    - Only useful for public marketplace/API.
@@ -870,269 +1246,26 @@ Do not implement these unless the user explicitly asks:
    - Require explicit opt-in, policy warnings, and abuse-risk docs.
 
 ==================================================
-CURRENT VERIFIED FAILURES
+GENERAL IMPLEMENTATION GUIDANCE
 ==================================================
 
-The last review found these real failures. Fix them. Do not mark them complete until verified.
-
-1. Biome fails.
-   - Command:
-
-```text
-npx biome check . --max-diagnostics=30
-```
-
-   - Current failures:
-     - `web/src/App.tsx:129` uses `role="button"` on a div/backdrop where Biome asks for semantic elements.
-     - `web/src/App.tsx:201` hamburger SVG is missing a title or proper accessibility hiding.
-
-2. Mobile UI is still broken.
-   - File:
-
-```text
-reports/ui-verification/sidebar-mobile.png
-```
-
-   - It shows the command page improved, but right-side cards/content still overflow horizontally and are clipped offscreen.
-   - A screenshot existing is not proof. The screenshot must show a usable layout.
-
-3. Desktop UI screenshot claim is false.
-   - `premium-completion-tracker.md` claims:
-
-```text
-reports/ui-verification/desktop-app-offscreen.png
-```
-
-   - Actual `reports/ui-verification/` contains only:
-
-```text
-sidebar-desktop.png
-sidebar-mobile.png
-sidebar-after-hard-refresh.png
-```
-
-   - A separate file was found at:
-
-```text
-scripts/reports/ui-verification/desktop-app-offscreen.png
-```
-
-   - That image is blank white and does not verify desktop UI.
-
-4. Desktop processes were left running.
-   - Review found `Browser Control.exe` processes still alive after the agent claimed cleanup.
-   - Example PIDs found: `25252`, `25572`, `34804`, `2324`.
-   - Final verification must not leave orphan `Browser Control.exe` processes started by this task.
-
-5. `npm run web:serve` still hit the real malformed MemoryStore DB.
-   - Latest transcript still showed:
-
-```text
-Runtime malformed database error in MemoryStore: database disk image is malformed. Attempting recovery...
-Failed to quarantine corrupt database: EBUSY...
-Failed to load persisted sessions: database disk image is malformed
-```
-
-   - The previous agent then marked this complete. That is false.
-   - Either fix this safely or document it as a blocker with exact evidence and a safe manual recovery path.
-
-6. Screenshot helper was removed instead of fixed.
-   - `scripts/capture_ui_screenshots.cjs` is currently missing.
-   - `scripts/capture_desktop_offscreen.cjs` is currently missing.
-   - Requirement was to make screenshot capture fail clearly on error, not delete the helper while still relying on screenshots.
-
-7. Tracker is still inaccurate.
-   - `premium-completion-tracker.md` says everything is complete.
-   - It claims Biome clean even though Biome fails.
-   - It claims desktop evidence that is missing/blank.
-   - It marks runtime malformed DB fixed even though `web:serve` still showed it.
-
-==================================================
-REQUIRED READING ORDER
-==================================================
-
-Before editing anything, read every file below in order. Do not skip any file.
-
-1. `INSTRUCTIONS.md`
-2. `premium-completion-tracker.md`
-3. `package.json`
-4. `web/package.json`
-5. `web/src/App.tsx`
-6. `web/src/App.css`
-7. `web/src/index.css`
-8. `web/src/pages/CommandView.tsx`
-9. `web/src/pages/SettingsView.tsx`
-10. `web/src/pages/AdvancedView.tsx`
-11. `src/shared/sqlite_util.ts`
-12. `src/runtime/memory_store.ts`
-13. `src/session_manager.ts`
-14. `src/browser_control.ts`
-15. `src/shared/paths.ts`
-16. `src/state/sqlite.ts`
-17. `tests/unit/sqlite_recovery.test.ts`
-18. `tests/unit/sqlite_storage.test.ts`
-19. `tests/unit/state_storage.test.ts`
-20. `tests/unit/desktop_security.test.ts`
-21. `tests/unit/web_frontend_format.test.ts`
-22. `tests/unit/web_app_server.test.ts`
-23. `desktop/main.cjs`
-24. `desktop/preload.cjs`
-25. `desktop/security.cjs`
-
-After these, inspect directly related files as needed.
-
-==================================================
-IMPLEMENTATION REQUIREMENTS
-==================================================
-
-## 1. Fix Biome Failures
-
-Current failing command:
-
-```text
-npx biome check . --max-diagnostics=30
-```
-
-Required fixes:
-
-1. Fix the sidebar backdrop accessibility issue in `web/src/App.tsx`.
-   - Do not use a div with `role="button"` when Biome requires a semantic element.
-   - Prefer a real `<button type="button">` backdrop or another accessible semantic structure.
-   - Keep click-to-close and Escape-to-close behavior if present.
-   - Ensure the backdrop has an accessible label if it is interactive.
-
-2. Fix hamburger SVG accessibility.
-   - If the button already has `aria-label="Toggle navigation"`, the SVG can be decorative.
-   - Add `aria-hidden="true"` and `focusable="false"` to the SVG, or otherwise satisfy Biome with a valid title/label.
-
-Verification:
-
-```text
-npx biome check . --max-diagnostics=30
-```
-
-Must exit 0.
-
-## 2. Fix Mobile Horizontal Overflow
-
-Current evidence:
-
-`reports/ui-verification/sidebar-mobile.png` still shows right-side content clipped offscreen.
-
-Required behavior at 375x812 viewport:
-
-1. No horizontal page overflow.
-2. No clipped right-side panels.
-3. Command page main content must fit within viewport.
-4. Cards/panels that are side-by-side on desktop must stack on mobile.
-5. Buttons must fit their containers.
-6. Text must remain readable and not overlap.
-7. Header must fit: hamburger, title, and health/status must not crowd or clip.
-
-Likely fixes:
-
-- Add mobile media queries for dashboard/page grids.
-- Ensure `.workspace-content`, page containers, panels, and cards use `min-width: 0`.
-- Convert desktop multi-column layouts to one column under `768px`.
-- Avoid fixed widths wider than the viewport.
-- Add `max-width: 100%` to panels/textareas/cards as needed.
-- Consider hiding or compacting nonessential right-side metric cards on small screens only if the page remains useful.
-
-Files likely involved:
-
-- `web/src/App.css`
-- `web/src/index.css`
-- `web/src/pages/CommandView.tsx`
-- possibly other `web/src/pages/*.tsx` if shared page layouts overflow
-
-Verification:
-
-Capture a fresh mobile screenshot:
-
-```text
-reports/ui-verification/sidebar-mobile.png
-```
-
-The screenshot must visibly show no horizontal clipping. If you can programmatically verify `document.documentElement.scrollWidth <= window.innerWidth`, do so and record the evidence.
-
-## 3. Restore/Fix Screenshot Capture Helper
-
-Problem:
-
-Screenshot helper scripts were deleted or not left in the repo even though screenshots are required.
-
-Required behavior:
-
-1. Create or restore a durable helper script:
-
-```text
-scripts/capture_ui_screenshots.cjs
-```
-
-2. The script must:
-   - accept a URL argument
-   - create `reports/ui-verification/`
-   - capture desktop screenshot
-   - capture mobile screenshot at 375x812
-   - capture after-refresh screenshot
-   - verify each output file exists and is nonempty
-   - exit nonzero on any failure
-   - close the browser in `finally`
-
-3. Do not leave helper output under `scripts/reports/`.
-4. Do not swallow errors with `console.error` and exit 0.
-5. If using Playwright, keep it isolated to screenshot capture only. For Browser Control product verification, prefer Browser Control MCP when practical, but a small deterministic screenshot helper is acceptable.
-
-Required output files:
-
-```text
-reports/ui-verification/sidebar-desktop.png
-reports/ui-verification/sidebar-mobile.png
-reports/ui-verification/sidebar-after-hard-refresh.png
-```
-
-Verification:
-
-Run the helper against the live local web URL and confirm all output files exist and are nonempty.
-
-## 4. Fix Or Honestly Document Runtime Malformed DB Recovery
-
-Problem:
-
-`npm run web:serve` still printed the malformed DB warning for the real user data home.
-
-Required steps:
-
-1. Check for existing Browser Control, Node, Electron, or MCP processes that may hold:
-
-```text
-C:\Users\11\.browser-control\memory\memory.sqlite
-```
-
-2. Do not kill unrelated user processes blindly. If you started a process in this task, you may stop it during cleanup. If another long-running MCP/server process is holding the DB, document it.
-
-3. Run:
-
-```text
-npm run web:serve
-```
-
-4. Read startup output.
-
-5. If the malformed DB warning no longer appears:
-   - document exact clean output in `premium-completion-tracker.md`
-   - stop the server you started
-
-6. If the malformed DB warning still appears:
-   - do not call it complete
-   - investigate what holds the DB lock
-   - if safe automated recovery is possible, implement it
-   - if not safe, document exact blocker and safe manual recovery path in `premium-completion-tracker.md`
-
-Safe manual recovery path must include:
-
-1. Stop Browser Control processes that hold the DB.
-2. Move, not delete:
+Architecture:
+
+- Extend `SessionManager`, `BrowserControlAPI`, web server, policy profiles, and state storage where appropriate.
+- Keep Browser Control as one unified engine.
+- Do not create a second policy engine.
+- Do not create a second terminal engine.
+- Do not create a second workflow runtime.
+- Do not create a second package registry unless it wraps the current registry.
+- Do not bypass policy checks for convenience.
+- Do not use raw filesystem paths for user-facing artifact references when data-home helpers exist.
+
+State:
+
+- Use SQLite state storage for durable product state unless data naturally belongs in existing JSON/package files.
+- Use data home, not repo, for runtime data, secrets, reports, helper generation, and artifacts.
+- Never delete user DBs as recovery.
+- Quarantine corrupt DB files by moving:
 
 ```text
 C:\Users\11\.browser-control\memory\memory.sqlite
@@ -1140,96 +1273,134 @@ C:\Users\11\.browser-control\memory\memory.sqlite-wal
 C:\Users\11\.browser-control\memory\memory.sqlite-shm
 ```
 
-3. Move them into:
+into:
 
 ```text
 C:\Users\11\.browser-control\reports\sqlite-recovery\<timestamp-or-id>\
 ```
 
-4. Write/preserve `recovery-report.json`.
-5. Restart only after move succeeds.
+and write/preserve `recovery-report.json`.
 
-Do not:
+Security:
 
-- delete the DB
-- hide the issue by using an isolated data home for `web:serve`
-- mark complete if default `web:serve` still prints the malformed DB warning
+- Loopback-only by default for local APIs.
+- Token required for privileged local APIs.
+- Wrong/missing token must fail.
+- Wrong Origin WebSocket must fail.
+- Sensitive values must be redacted everywhere.
+- Terminal/fs/browser actions must go through policy.
+- Destructive actions must require exact confirmation.
+- Remote providers must be opt-in and audited.
+- Anti-detect/stealth must never become default.
 
-Files likely involved:
+UI:
 
-- `src/runtime/memory_store.ts`
-- `src/shared/sqlite_util.ts`
-- `src/session_manager.ts`
-- `src/web/server.ts`
-- `premium-completion-tracker.md`
+- Keep mobile 375x812 usable.
+- No horizontal overflow.
+- No clipped panels.
+- No buttons with unreadable text.
+- Use semantic controls.
+- Use real loading/empty/error states.
+- Capture fresh screenshots after UI changes.
 
-## 5. Fix Desktop UI Verification
+Desktop:
 
-Problem:
-
-Desktop verification is currently invalid:
-
-- expected report screenshot is missing
-- offscreen screenshot was saved under `scripts/reports/...`
-- offscreen screenshot is blank white
-- Browser Control desktop processes were left alive
-
-Required behavior:
-
-1. Build desktop:
-
-```text
-npm run desktop:build
-```
-
-2. Verify the desktop UI, not only process existence.
-
-Preferred artifact:
-
-```text
-reports/ui-verification/desktop-sidebar.png
-```
-
-The screenshot must show actual Browser Control UI, not blank white.
-
-Acceptable alternatives if a real desktop screenshot is impossible:
-
-1. Document exact blocker in `premium-completion-tracker.md`.
-2. Include:
-   - command run
-   - executable path
-   - process evidence
-   - app logs if available
-   - why screenshot capture is blocked
-   - whether the window was visible
-   - cleanup evidence
-
-Process cleanup required:
-
-After desktop verification, run a check equivalent to:
+- Verify real UI, not only process existence.
+- Screenshot must not be blank.
+- Output under `reports/ui-verification/`, not `scripts/reports/`.
+- Close desktop app and server child process after verification.
+- Final check:
 
 ```powershell
 Get-Process "Browser Control" -ErrorAction SilentlyContinue
 ```
 
-If processes you started remain, stop them. Final state must not leave orphan `Browser Control.exe` processes from this verification.
+==================================================
+BASELINE CHECKS BEFORE MAJOR IMPLEMENTATION
+==================================================
 
-Do not:
-
-- claim desktop UI verified from `Get-Process` alone
-- use a blank white screenshot as evidence
-- save the final artifact under `scripts/reports`
-- leave `Browser Control.exe` running
-
-## 6. Update Tracker Truthfully
-
-File:
+Before changing feature code, run or inspect:
 
 ```text
-premium-completion-tracker.md
+git status --short
+npx biome check . --max-diagnostics=30
+npm run typecheck
+npm run web:typecheck
+npm run test:state
 ```
 
-Rewrite it to reflect current truth. It must include:
+Also check for stale processes:
+
+```powershell
+Get-Process "Browser Control" -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 7790 -ErrorAction SilentlyContinue
+```
+
+If port 7790 is in use, inspect owning process command line before stopping it:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "ProcessId=<PID>" | Select-Object ProcessId,ParentProcessId,Name,CreationDate,CommandLine
+```
+
+Do not kill unrelated user processes blindly.
+
+==================================================
+FINAL VERIFICATION GATES
+==================================================
+
+Run all applicable commands before claiming completion:
+
+```text
+npx biome check . --max-diagnostics=30
+npm run typecheck
+npm run web:typecheck
+npm run web:build
+npx ts-node scratch/count_tools.ts
+npm run test:state
+npm run test:mcp
+npm run test:web
+npm run test:desktop
+npm run test:ci
+npm run build
+npm run test:package
+npm pack --dry-run --json
+npm run desktop:build
+```
+
+If your feature touches browser launch/profile/provider/live browser lifecycle, also run:
+
+```text
+npm run test:browser-features
+```
+
+If it fails with the known Windows profile lock issue, fix it if your changes touch that code. If unrelated, document exact failure as pre-existing.
+
+Required artifacts after UI/dashboard/desktop changes:
+
+```text
+reports/ui-verification/sidebar-desktop.png
+reports/ui-verification/sidebar-mobile.png
+reports/ui-verification/sidebar-after-hard-refresh.png
+reports/ui-verification/desktop-sidebar.png
+reports/ui-verification/screenshot-manifest.json
+```
+
+Required runtime checks:
+
+1. `npx ts-node scratch/count_tools.ts` prints tool count under 100 and no malformed DB warning.
+2. `npm run web:serve` startup is checked for the real malformed DB warning.
+3. Every server/process started by the task is stopped.
+4. No orphan `Browser Control.exe` processes started by this task remain.
+5. Port 7790 is clear unless a pre-existing user server is intentionally running and documented.
+6. Screenshot files exist, are nonempty, and visually show expected UI.
+
+==================================================
+TRACKER UPDATE REQUIREMENT
+==================================================
+
+Update `premium-completion-tracker.md` truthfully at the end.
+
+It must include:
 
 1. Biome status and command output summary.
 2. Typecheck status.
@@ -1249,53 +1420,11 @@ Rewrite it to reflect current truth. It must include:
 16. Desktop screenshot status or exact blocker.
 17. `web:serve` malformed DB status.
 18. Process cleanup status.
-19. Remaining blockers.
+19. Feature backlog status.
+20. Remaining blockers.
+21. Known non-blocking issues.
 
-Do not mark an item complete unless evidence exists.
-
-If any blocker remains, tracker must say so plainly.
-
-==================================================
-FINAL VERIFICATION GATES
-==================================================
-
-Run all applicable commands below before claiming completion:
-
-```text
-npx biome check . --max-diagnostics=30
-npm run typecheck
-npm run web:typecheck
-npm run web:build
-npx ts-node scratch/count_tools.ts
-npm run test:state
-npm run test:mcp
-npm run test:web
-npm run test:desktop
-npm run test:ci
-npm run build
-npm run test:package
-npm pack --dry-run --json
-npm run desktop:build
-```
-
-Required artifacts:
-
-```text
-reports/ui-verification/sidebar-desktop.png
-reports/ui-verification/sidebar-mobile.png
-reports/ui-verification/sidebar-after-hard-refresh.png
-reports/ui-verification/desktop-sidebar.png
-```
-
-If `desktop-sidebar.png` cannot be produced, the tracker must document an exact blocker with evidence. A blank screenshot is not acceptable.
-
-Required runtime checks:
-
-1. `npx ts-node scratch/count_tools.ts` prints tool count under 100 and no malformed DB warning.
-2. `npm run web:serve` startup is checked for the real malformed DB warning.
-3. Every server/process started by this task is stopped.
-4. No orphan `Browser Control.exe` processes from this task remain.
-5. Screenshot files exist, are nonempty, and visually show the expected UI.
+Do not mark an item complete unless evidence exists from the current session or explicitly cited previous verified artifact still applies.
 
 ==================================================
 STRICT COMPLETION RULE
@@ -1304,17 +1433,22 @@ STRICT COMPLETION RULE
 Do not claim complete unless all are true:
 
 1. Biome exits 0.
-2. Mobile screenshot at 375x812 is visibly usable and not horizontally clipped.
-3. Screenshot helper exists and exits nonzero on failure.
-4. Web screenshots exist in `reports/ui-verification`.
-5. Desktop UI screenshot exists in `reports/ui-verification/desktop-sidebar.png`, or exact blocker is documented.
-6. Desktop screenshot is not blank.
-7. Runtime `web:serve` malformed DB status is fixed or honestly documented as a blocker.
-8. `premium-completion-tracker.md` is truthful.
-9. No started Browser Control desktop processes are left running.
-10. Final verification gates pass or have exact documented blockers.
+2. Typecheck exits 0.
+3. Web typecheck exits 0.
+4. Required tests pass.
+5. Build commands pass.
+6. Package dry-run passes.
+7. Web screenshots exist and are nonempty if UI changed.
+8. Mobile screenshot at 375x812 is usable and not horizontally clipped if UI changed.
+9. Desktop UI screenshot exists and is nonblank if desktop/web shell changed.
+10. Runtime `web:serve` malformed DB status is fixed or honestly documented.
+11. `premium-completion-tracker.md` is truthful.
+12. No started Browser Control desktop processes are left running.
+13. No started web servers, daemons, browsers, or PTYs are left running unless intentionally left and documented.
+14. Final verification gates pass or have exact documented blockers.
+15. Feature backlog item(s) requested for this session are actually implemented and product-verified, not only scaffolded.
 
-If any item is not verified, result is partial or blocked, not complete.
+If any item is not verified, result is Partial or Blocked, not Complete.
 
 ==================================================
 FINAL RESPONSE FORMAT
@@ -1323,11 +1457,15 @@ FINAL RESPONSE FORMAT
 When finished, respond with:
 
 1. Status: Complete / Partial / Blocked.
-2. Files changed.
-3. Commands run and results.
-4. Screenshot/artifact paths.
-5. Process cleanup result.
-6. Remaining blockers, if any.
-7. Strict completion audit matching this file.
+2. Feature scope completed.
+3. Files changed.
+4. Commands run and results.
+5. Screenshot/artifact paths.
+6. Product verification evidence.
+7. Security/policy verification evidence.
+8. Process cleanup result.
+9. Remaining blockers, if any.
+10. Strict completion audit matching this file.
 
 Do not say "production-ready", "fully complete", or "no blockers remain" unless the strict completion rule is fully satisfied.
+
