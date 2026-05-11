@@ -1,0 +1,10 @@
+export { AdvancedView } from "./AdvancedView";
+export { AutomationsView } from "./AutomationsView";
+export { BrowserView } from "./BrowserView";
+export { CommandView } from "./CommandView";
+export { EvidenceView } from "./EvidenceView";
+export { PackagesView } from "./PackagesView";
+export { SettingsView } from "./SettingsView";
+export { TasksView } from "./TasksView";
+export { TradingView } from "./TradingView";
+export { WorkflowsView } from "./WorkflowsView";

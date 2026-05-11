@@ -1,25 +1,66 @@
-# Browser Control
+<div align="center">
+  <h1>🖥️ Browser Control</h1>
+  <p><strong>Unified browser, terminal, filesystem, and MCP automation engine for AI agents.</strong></p>
 
-Browser Control is a local automation engine for AI agents and operators. It gives one policy-governed surface for browser pages, terminal sessions, filesystem operations, stable local service URLs, provider-backed browser connections, and debugging evidence.
+  <a href="https://www.npmjs.com/package/browser-control"><img src="https://img.shields.io/npm/v/browser-control?color=blue" alt="npm version"></a>
+  <img width="8" alt="">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
+  <img width="8" alt="">
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js >= 22"></a>
+  <img width="8" alt="">
+  <a href="https://github.com/AbdallahIsDev/browser-control"><img src="https://img.shields.io/github/stars/AbdallahIsDev/browser-control?style=social" alt="GitHub stars"></a>
+  <img width="8" alt="">
+  <a href="./docs/support-matrix.md"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platforms"></a>
+  <br/><br/>
+  <img src="https://img.shields.io/badge/status-pre--release%20%7C%20active%20development-yellow" alt="Status: pre-release">
+</div>
 
-It is not a native desktop GUI automation product. The browser path targets Chromium/CDP and semantic accessibility snapshots. Native terminal and filesystem operations run on the local machine under the configured policy profile.
+<br/>
 
-## Quick Start
+## What It Does
 
-Prerequisite: Node.js `>=22`.
+Browser Control is a **local automation engine** that gives AI agents and operators one policy-governed surface across three domains:
 
-PowerShell:
+| Domain | Capabilities |
+|--------|-------------|
+| **🌐 Browser** | Navigate, snapshot (accessibility tree with stable `@e3` refs), click, fill, hover, type, press keys, scroll, screenshot, tab management, screencast recording. Powered by Chromium/CDP via Playwright. |
+| **💻 Terminal** | Persistent PTY sessions (open/exec/read/write/interrupt/close/resume), command execution, output capture. Cross-platform via `node-pty`. |
+| **📁 Filesystem** | Structured read/write/list/move/delete/stat — policy-governed, not shell emulation. |
+
+Every action is gated by a **policy engine** (`safe` / `balanced` / `trusted` profiles) and returns a structured `ActionResult` with success/failure, risk level, and optional debug evidence.
+
+It exposes this surface through **five execution surfaces**: CLI (`bc`), TypeScript API, MCP server, web dashboard, and Electron desktop app.
+
+> **Not a native desktop GUI automation product.** The browser path targets Chromium/CDP and semantic accessibility snapshots. It does not automate native OS windows or non-browser desktop apps.
+
+<br/>
+
+## 🎬 Demos
+
+### MCP Server Demo — AI Agent controlling browser + terminal + filesystem
+
+<video src="demos/browser-control-mcp-demo.mp4" controls width="100%"></video>
+
+### MIMO Research Demo — AI-powered web research with MCP tools
+
+<video src="demos/browser-control-mcp-mimo-research-demo.mp4" controls width="100%"></video>
+
+<br/>
+
+## ⚡ Quick Start
+
+**Prerequisite:** Node.js `>= 22`
 
 ```powershell
+git clone https://github.com/AbdallahIsDev/browser-control.git
+cd browser-control
 npm install
 npm run typecheck
-npm run cli -- --help
-npm run cli -- setup --non-interactive --profile balanced
-npm run cli -- doctor
-npm run cli -- status
+npm run build
+npm link              # Makes `bc` command globally available
 ```
 
-After package installation or `npm link`, use the `bc` command:
+First setup:
 
 ```powershell
 bc setup --non-interactive --profile balanced
@@ -27,75 +68,215 @@ bc doctor
 bc status
 ```
 
-In WSL, run `npm link` from this repo first. If `bc` still resolves to the Linux calculator, install the WSL shim:
+**WSL users:** Run `sh scripts/install_wsl_bc.sh` if `bc` resolves to the Linux calculator instead.
 
-```sh
-sh scripts/install_wsl_bc.sh
-export PATH="$HOME/.local/bin:$PATH"
-hash -r
-```
+Runtime data lives under `%USERPROFILE%\.browser-control` (Windows) or `~/.browser-control` (Unix). Override with `BROWSER_CONTROL_HOME`.
 
-Runtime data lives under `%USERPROFILE%\.browser-control` on Windows and `~/.browser-control` on Unix-like systems. Override it with `BROWSER_CONTROL_HOME`.
-
-## First Workflow
-
-PowerShell:
+### First Workflow
 
 ```powershell
+# Terminal + Filesystem
 bc session create demo --policy balanced
 bc term exec "node --version" --json
 bc fs ls . --json
-```
 
-Browser workflow:
-
-```powershell
+# Browser
 bc browser launch --port 9222 --profile default
 bc open https://example.com
 bc snapshot
 bc screenshot
+bc click "@e3"
 ```
 
-Without `--output`, screenshots are saved under the Browser Control runtime screenshots directory.
+<br/>
 
-If Chrome or CDP is unavailable, Browser Control reports degraded browser status. Terminal, filesystem, config, status, and many debug workflows still work.
+## 🔌 MCP Server — AI Agent Integration
 
-## Architecture
+Browser Control exposes its full action surface as an MCP stdio server. AI agents (Claude Desktop, Codex, Cursor, etc.) can control your local browser, terminal, and filesystem through it.
 
-Browser Control routes actions across three paths:
+```json
+{
+  "mcpServers": {
+    "bc": {
+      "command": "bc",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
 
-- `command`: terminal, filesystem, process, service, and local system work.
-- `a11y`: browser accessibility snapshots and stable refs such as `@e3`.
-- `low_level`: CDP, DOM, network, and browser fallback work.
+### Tool Categories (66 tools)
 
-Every public action returns an `ActionResult` with success/failure state, path, session ID, policy metadata, timestamp, and optional debug bundle information.
+| Category | Key Tools |
+|----------|----------|
+| **Status** | `status` — daemon, broker, sessions, services, policy, health |
+| **Session** | `bc_session_create`, `list`, `select`, `status` |
+| **Browser** | `open`, `snapshot`, `click`, `fill`, `hover`, `type`, `press`, `scroll`, `screenshot`, `tab_list/switch/close`, `screencast_start/stop`, `highlight`, `generate_locator` |
+| **Terminal** | `terminal_exec`, `terminal_open`, `read`, `write`, `interrupt`, `snapshot`, `list`, `close`, `resume` |
+| **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `move`, `delete`, `stat` |
+| **Debug** | `debug_health`, `debug_failure_bundle`, `get_console`, `get_network` |
+| **Provider** | `bc_browser_provider_list`, `use` (local, custom CDP, browserless) |
+| **Service** | `bc_service_list`, `resolve` |
+| **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel` |
+| **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback` |
+| **Packages** | `bc_package_list`, `info`, `run`, `eval`, `grant` |
 
-Main surfaces:
+Full tool reference: [docs/mcp.md](docs/mcp.md)
 
-- CLI: `bc ...`
-- TypeScript API: `createBrowserControl()`
-- MCP server: `bc mcp serve`
-- Broker/daemon runtime for long-lived sessions and scheduled work.
+### Security with MCP
 
-## Docs
+MCP clients are powerful — they can run commands, read/write files, and control browser pages with your logged-in sessions. Use `safe` or `balanced` policy for untrusted agents, scope working directories, and review destructive actions.
 
-- [Getting started](docs/getting-started.md)
-- [CLI reference](docs/cli.md)
-- [TypeScript API](docs/api.md)
-- [MCP setup and tools](docs/mcp.md)
-- [WSL + visible Windows Chrome](docs/wsl-windows-chrome.md)
-- [Browser behavior](docs/browser.md)
-- [Terminal and filesystem behavior](docs/terminal.md)
-- [Configuration](docs/configuration.md)
-- [Security model](docs/security.md)
-- [Source layout](docs/architecture/source-layout.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Support matrix](docs/support-matrix.md)
-- [Examples](docs/examples/)
+<br/>
 
-## Limits
+## 🏗️ Architecture
 
-- Chromium/CDP browser automation is supported. Other native desktop apps are not supported.
-- Browser workflows require local Chrome/Chromium, an attachable CDP endpoint, or a configured remote provider.
-- MCP tools can read/write files and run commands depending on policy. Use them only with trusted agents.
-- Provider tokens, CAPTCHA keys, and OpenRouter keys are read from config/env and redacted from config output, but local administrators can still access local files and process state.
+```
+browser-control/
+├── src/                        # Production TypeScript
+│   ├── browser/                # CDP/Playwright browser automation
+│   ├── terminal/               # PTY-based native terminal
+│   ├── filesystem/             # Policy-governed FS operations
+│   ├── policy/                 # Risk-based policy engine
+│   ├── mcp/                    # MCP server + tool registry
+│   ├── runtime/                # Daemon, broker, health, scheduler
+│   ├── observability/          # Debug bundles, console/network capture
+│   ├── operator/               # Doctor, setup, dashboard
+│   ├── providers/              # local / custom CDP / browserless
+│   ├── services/               # bc:// service registry
+│   ├── workflows/              # Workflow graph runtime
+│   ├── harness/                # Self-healing helper registry
+│   ├── packages/               # Automation package system
+│   └── knowledge/              # Markdown artifact storage
+├── web/                        # React 19 + Vite dashboard
+├── desktop/                    # Electron wrapper
+├── tests/                      # Unit, E2E, compatibility
+├── docs/                       # Full documentation
+├── examples/                   # Golden workflow examples
+└── automation-packages/        # Example packages
+```
+
+**Three execution paths:**
+
+- **`command`** — terminal, filesystem, process, service, and local system work
+- **`a11y`** — browser accessibility snapshots with stable refs (`@e3`)
+- **`low_level`** — CDP, DOM, network, and browser fallback
+
+**Technology stack:** TypeScript, Node.js ≥22, Playwright, node-pty, SQLite (built-in), React 19, Vite 8, Electron 41, Zod, ws v8, @modelcontextprotocol/sdk.
+
+See the full architecture: [docs/architecture/source-layout.md](docs/architecture/source-layout.md) | [docs/architecture/overview.md](docs/architecture/overview.md)
+
+<br/>
+
+## 📚 TypeScript API
+
+```typescript
+import { createBrowserControl } from "browser-control";
+
+const bc = createBrowserControl({ policyProfile: "balanced" });
+
+const result = await bc.browser.open("https://example.com");
+const snapshot = await bc.browser.snapshot();
+await bc.browser.click("@e3");
+await bc.browser.screenshot({ output: "./page.png" });
+
+const { stdout } = await bc.terminal.exec("node --version");
+await bc.fs.write({ path: "./output.txt", content: "hello" });
+```
+
+Full API reference: [docs/api.md](docs/api.md)
+
+<br/>
+
+## 🖥️ Dashboard & Desktop App
+
+Browser Control includes a **web dashboard** (React + Vite) served on loopback and an **Electron desktop app**.
+
+```powershell
+npm run web:dev           # Dev dashboard
+npm run web:build         # Build for production
+bc web open               # Launch in browser
+npm run desktop:dev       # Electron dev mode
+npm run desktop:build     # Package Electron app
+```
+
+<br/>
+
+## 🗺️ Roadmap
+
+| Area | Status |
+|------|--------|
+| ✅ Browser CDP automation | Stable |
+| ✅ Accessibility snapshots | Stable |
+| ✅ Native terminal (PTY) | Stable |
+| ✅ Filesystem operations | Stable |
+| ✅ Policy engine (safe/balanced/trusted) | Stable |
+| ✅ MCP server (66 tools) | Stable |
+| ✅ CLI (`bc` command) | Stable |
+| ✅ TypeScript API | Stable |
+| ✅ Service registry (`bc://`) | Stable |
+| ✅ Debug bundles + observability | Stable |
+| ✅ Web dashboard (React/Vite) | Stable |
+| ✅ Electron desktop app | Stable |
+| 🔄 Self-healing harness | Active |
+| 🔄 Workflow graphs | Active |
+| 🔄 Automation packages | Active |
+| 🔄 Remote providers (browserless) | Active |
+| 🎯 Production hardening | Planned |
+| 🎯 Cross-platform package publishing | Planned |
+
+See detailed roadmap: [docs/specs/v1-roadmap.md](docs/specs/v1-roadmap.md) | Production upgrade tracker: [docs/production-upgrade/STATUS.md](docs/production-upgrade/STATUS.md)
+
+<br/>
+
+## 🔒 Security
+
+Browser Control runs with the same authority as your user account. Treat it accordingly.
+
+- **Three policy profiles:** `safe` (denies high/critical), `balanced` (confirms high/critical, default), `trusted` (audits high, confirms critical)
+- **Secrets redaction:** Provider tokens, CAPTCHA keys, and OpenRouter keys are redacted from config output
+- **MCP security:** Only connect trusted agents. Use `safe`/`balanced` policy, scope working directories, avoid storing tokens in prompts
+- **Dedicated browser profiles:** Recommended — use `BROWSER_LAUNCH_PROFILE=isolated` for automation
+
+Full security documentation: [SECURITY.md](SECURITY.md) | [docs/security.md](docs/security.md)
+
+<br/>
+
+## 📖 Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Getting Started](docs/getting-started.md) | Prerequisites, setup, first workflows |
+| [CLI Reference](docs/cli.md) | Full `bc` command reference (100+ subcommands) |
+| [TypeScript API](docs/api.md) | `createBrowserControl()` API surface |
+| [MCP Setup & Tools](docs/mcp.md) | MCP server config + all 66 tools |
+| [Architecture Overview](docs/architecture/overview.md) | System architecture, data flow, component map |
+| [Source Layout](docs/architecture/source-layout.md) | Directory structure and conventions |
+| [Browser Behavior](docs/browser.md) | Modes, profiles, CDP, remote providers |
+| [Terminal & Filesystem](docs/terminal.md) | PTY sessions, FS operations |
+| [Configuration](docs/configuration.md) | All config keys, env vars, runtime paths |
+| [Security Model](docs/security.md) | Trust boundaries, policy, secrets, MCP security |
+| [Policy Guide](docs/policy.md) | Policy profiles and risk evaluation |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
+| [Support Matrix](docs/support-matrix.md) | Platform and feature support |
+| [Compatibility](docs/compatibility.md) | Semver, breaking changes, deprecation |
+| [WSL + Windows Chrome](docs/wsl-windows-chrome.md) | WSL-specific browser setup |
+| [Examples](docs/examples/) | Copy-pasteable CLI, API, MCP examples |
+
+<br/>
+
+## 🤝 Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards, and [docs/release-checklist.md](docs/release-checklist.md) for the release process.
+
+<br/>
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+<br/>
+
+<div align="center">
+  <strong>Tell your agent what to do, and Browser Control gets it done.</strong>
+</div>

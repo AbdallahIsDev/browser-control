@@ -52,8 +52,11 @@ const VALUE_FLAGS = new Set([
 	"health-check-interval",
 	"help",
 	"host",
+	"iterations",
 	"key",
 	"kind",
+	"label",
+	"last",
 	"list",
 	"max-bytes",
 	"message",
@@ -79,6 +82,7 @@ const VALUE_FLAGS = new Set([
 	"show-actions",
 	"skill",
 	"style",
+	"suite",
 	"target",
 	"target-type",
 	"terminal-shell",
@@ -406,6 +410,8 @@ Operator:
                                                                       Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
+  data doctor|cleanup|export [--json]                                Inspect, clean, or export local data home
+  benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json] [--port=7790]                              Start/open local dashboard
   web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>]
@@ -2565,6 +2571,14 @@ export async function runCli(argv = process.argv): Promise<void> {
 			await handleStatus(args);
 			break;
 
+		case "data":
+			await handleData(args);
+			break;
+
+		case "benchmark":
+			await handleBenchmark(args);
+			break;
+
 		case "dashboard":
 			await handleDashboard(args);
 			break;
@@ -3578,6 +3592,134 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown web command: ${action}`);
 			console.error("Available: serve, open");
+			process.exit(1);
+	}
+}
+
+async function handleData(args: ParsedArgs): Promise<void> {
+	const { subcommand, flags } = args;
+	const jsonOutput = flags.json === "true";
+	const action = subcommand || "doctor";
+	const { cleanupDataHome, exportDataHome, formatDataHomeReport, inspectDataHome } =
+		await import("./data_home");
+
+	switch (action) {
+		case "doctor": {
+			const report = inspectDataHome();
+			if (jsonOutput) outputJson(report, false);
+			else console.log(formatDataHomeReport(report));
+			return;
+		}
+		case "cleanup": {
+			const dryRunRequested = flags["dry-run"] === "false";
+			const confirm = flags.confirm;
+			const dryRun = !dryRunRequested || confirm !== "DELETE_RUNTIME_TEMP";
+
+			if (dryRunRequested && confirm !== "DELETE_RUNTIME_TEMP") {
+				console.error(
+					"Error: Destructive cleanup requires explicit confirmation.",
+				);
+				console.error(
+					"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
+				);
+				process.exit(1);
+			}
+
+			const result = cleanupDataHome(undefined, { dryRun, confirm });
+			if (jsonOutput) outputJson(result, false);
+			else {
+				console.log(
+					`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.reclaimedBytes} bytes reclaimed.`,
+				);
+				if (result.dryRun && dryRunRequested) {
+					console.log(
+						"Note: This was a dry run because confirmation was invalid or missing.",
+					);
+				}
+			}
+			return;
+		}
+		case "export": {
+			const result = exportDataHome(undefined, {
+				label: typeof flags.label === "string" ? flags.label : "cli",
+			});
+			if (jsonOutput) outputJson(result, false);
+			else console.log(`Export written: ${result.exportDir}`);
+			return;
+		}
+		default:
+			console.error(`Unknown data command: ${action}`);
+			console.error("Available: doctor, cleanup, export");
+			process.exit(1);
+	}
+}
+
+async function handleBenchmark(args: ParsedArgs): Promise<void> {
+	const { subcommand, flags, positional } = args;
+	const jsonOutput = flags.json === "true";
+	const action = subcommand || "run";
+	const {
+		compareBenchmarkRuns,
+		listBenchmarkRuns,
+		runBenchmarks,
+	} = await import("./benchmarks/runner");
+
+	switch (action) {
+		case "run": {
+			const result = await runBenchmarks({
+				suite: (flags.suite || "all") as never,
+				iterations: flags.iterations ? Number(flags.iterations) : 1,
+			});
+			if (jsonOutput) outputJson(result, false);
+			else {
+				console.log(
+					`Benchmark ${result.runId}: ${result.summary.passed}/${result.summary.totalBenchmarks} passed, ${Math.round(
+						result.summary.avgDurationMs,
+					)} ms avg.`,
+				);
+				console.log(`Saved: ${result.savedPath}`);
+			}
+			return;
+		}
+		case "results": {
+			const result = listBenchmarkRuns(undefined, {
+				last: flags.last ? Number(flags.last) : 10,
+			});
+			if (jsonOutput) outputJson(result, false);
+			else {
+				for (const run of result) {
+					console.log(
+						`${run.runId} ${run.suite} ${run.summary.passed}/${run.summary.totalBenchmarks} ${Math.round(
+							run.summary.avgDurationMs,
+						)} ms avg`,
+					);
+				}
+			}
+			return;
+		}
+		case "compare": {
+			const [baseRunId, compareRunId] = positional;
+			if (!baseRunId || !compareRunId) {
+				throw new Error("benchmark compare requires <baseRunId> <compareRunId>.");
+			}
+			const result = compareBenchmarkRuns(
+				(await import("./shared/paths")).getDataHome(),
+				baseRunId,
+				compareRunId,
+			);
+			if (jsonOutput) outputJson(result, false);
+			else {
+				console.log(
+					`Success delta: ${result.successRateDelta}; avg duration delta: ${Math.round(
+						result.avgDurationDeltaMs,
+					)} ms`,
+				);
+			}
+			return;
+		}
+		default:
+			console.error(`Unknown benchmark command: ${action}`);
+			console.error("Available: run, results, compare");
 			process.exit(1);
 	}
 }

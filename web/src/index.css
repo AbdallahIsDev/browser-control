@@ -1,0 +1,168 @@
+:root {
+	/* Typography - Premium Inter stack */
+	--font-sans:
+		"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+	/* HSL Base Colors - Blue/Violet Palette */
+	--accent-h: 220;
+	--accent-s: 85%;
+	--accent-l: 60%;
+
+	--secondary-h: 260;
+	--secondary-s: 75%;
+	--secondary-l: 65%;
+
+	/* Dark Theme (Default) */
+	--bg-app: hsl(230, 15%, 4%);
+	--bg-rail: hsl(230, 15%, 8%);
+	--bg-card: hsl(230, 15%, 10%);
+	--bg-surface: hsl(230, 15%, 12%);
+
+	--accent-primary: hsl(var(--accent-h), var(--accent-s), var(--accent-l));
+	--accent-secondary: hsl(
+		var(--secondary-h),
+		var(--secondary-s),
+		var(--secondary-l)
+	);
+	--accent-gradient: linear-gradient(
+		135deg,
+		var(--accent-primary) 0%,
+		var(--accent-secondary) 100%
+	);
+	--accent-glow: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.3);
+
+	--text-primary: hsl(210, 20%, 98%);
+	--text-secondary: hsl(215, 15%, 75%);
+	--text-tertiary: hsl(215, 12%, 55%);
+
+	--border-subtle: hsla(210, 20%, 100%, 0.05);
+	--border-strong: hsla(210, 20%, 100%, 0.1);
+
+	--glass-bg: hsla(230, 15%, 10%, 0.6);
+	--glass-border: hsla(210, 20%, 100%, 0.08);
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+	--shadow-md:
+		0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+	--shadow-lg:
+		0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 20px;
+	--radius-full: 9999px;
+
+	--transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+	--transition-base: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+	--status-ok: #10b981;
+	--status-warn: #f43f5e;
+}
+
+[data-theme="light"] {
+	--bg-app: hsl(210, 40%, 98%);
+	--bg-rail: hsl(210, 30%, 94%);
+	--bg-card: hsl(0, 0%, 100%);
+	--bg-surface: hsl(210, 30%, 94%);
+
+	--text-primary: hsl(220, 45%, 15%);
+	--text-secondary: hsl(215, 25%, 40%);
+	--text-tertiary: hsl(215, 20%, 60%);
+
+	--border-subtle: hsla(220, 45%, 0%, 0.05);
+	--border-strong: hsla(220, 45%, 0%, 0.1);
+
+	--glass-bg: hsla(210, 40%, 98%, 0.8);
+	--glass-border: hsla(220, 45%, 0%, 0.05);
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	font-family: var(--font-sans);
+	background-color: var(--bg-app);
+	color: var(--text-primary);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	overflow: hidden;
+}
+
+button {
+	font-family: inherit;
+	cursor: pointer;
+	border: none;
+	background: none;
+	color: inherit;
+}
+
+a {
+	text-decoration: none;
+	color: inherit;
+}
+
+ul {
+	list-style: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--border-strong);
+	border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-tertiary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes slideInRight {
+	from {
+		transform: translateX(20px);
+		opacity: 0;
+	}
+	to {
+		transform: translateX(0);
+		opacity: 1;
+	}
+}
+
+.animate-fade-in {
+	animation: fadeIn var(--transition-base) forwards;
+}
+
+/* Layout Utilities */
+.glass {
+	background: var(--glass-bg);
+	backdrop-filter: blur(12px) saturate(180%);
+	border: 1px solid var(--glass-border);
+}
+
+.gradient-text {
+	background: var(--accent-gradient);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}

@@ -15,8 +15,6 @@ const required = [
 	"desktop/preload.cjs",
 	"desktop/security.cjs",
 	"web/dist/index.html",
-	"web/dist/app.js",
-	"web/dist/styles.css",
 ];
 
 for (const file of required) {
@@ -26,6 +24,19 @@ for (const file of required) {
 		`${file} is required`,
 	);
 }
+
+const assetsDir = path.join(root, "web", "dist", "assets");
+assert.equal(fs.existsSync(assetsDir), true, "web/dist/assets is required");
+assert.equal(
+	fs.readdirSync(assetsDir).some((file) => /^index-.*\.js$/u.test(file)),
+	true,
+	"Vite JavaScript asset is required",
+);
+assert.equal(
+	fs.readdirSync(assetsDir).some((file) => /^index-.*\.css$/u.test(file)),
+	true,
+	"Vite CSS asset is required",
+);
 
 const options = createBrowserWindowOptions(path.join(__dirname, "preload.cjs"));
 assert.equal(options.webPreferences.contextIsolation, true);
@@ -46,4 +57,4 @@ assert.equal(
 	true,
 );
 
-console.log(JSON.stringify({ success: true, checked: required.length + 6 }));
+console.log(JSON.stringify({ success: true, checked: required.length + 9 }));

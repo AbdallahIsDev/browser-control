@@ -61,6 +61,7 @@ import {
 	SessionManager,
 	type SessionState,
 } from "./session_manager";
+import { getStateStorage } from "./state/index";
 import {
 	type ActionResult,
 	failureResult,
@@ -393,6 +394,22 @@ export interface PackageNamespace {
 	): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
 }
 
+// ── Benchmark Namespace (Section 16) ─────────────────────────────────
+
+export interface BenchmarkNamespace {
+	run(options?: {
+		suite?: import("./benchmarks/types").BenchmarkSuiteName;
+		iterations?: number;
+	}): Promise<import("./benchmarks/types").BenchmarkRunOutput>;
+	results(options?: {
+		last?: number;
+	}): import("./benchmarks/types").BenchmarkRunRecord[];
+	compare(
+		baseRunId: string,
+		compareRunId: string,
+	): import("./benchmarks/types").BenchmarkComparison;
+}
+
 // ── Unified API Object ────────────────────────────────────────────────
 
 export interface BrowserControlAPI {
@@ -414,6 +431,10 @@ export interface BrowserControlAPI {
 	harness: HarnessNamespace;
 	/** Automation packages namespace (Section 30). */
 	package: PackageNamespace;
+	/** Product benchmark namespace (Section 16). */
+	benchmark: BenchmarkNamespace;
+	/** Durable product state storage (Section 4). */
+	state: import("./state/index").StateStorage;
 	/** Collect operator-facing system status (Section 11). */
 	status(): Promise<SystemStatus>;
 	/** Access the underlying session manager for advanced use. */
@@ -1138,6 +1159,30 @@ export function createBrowserControl(
 				return attachPolicy(result, policy.policy);
 			},
 		},
+		benchmark: {
+			run: async (runOptions = {}) => {
+				const { runBenchmarks } = await import("./benchmarks/runner");
+				return runBenchmarks({
+					dataHome: options.dataHome,
+					api: undefined,
+					suite: runOptions.suite,
+					iterations: runOptions.iterations,
+				});
+			},
+			results: (resultOptions = {}) => {
+				const { listBenchmarkRuns } = require("./benchmarks/runner");
+				return listBenchmarkRuns(options.dataHome, resultOptions);
+			},
+			compare: (baseRunId, compareRunId) => {
+				const { compareBenchmarkRuns } = require("./benchmarks/runner");
+				return compareBenchmarkRuns(
+					options.dataHome ?? require("./shared/paths").getDataHome(),
+					baseRunId,
+					compareRunId,
+				);
+			},
+		},
+		state: getStateStorage(options.dataHome),
 		status: () => collectStatus(),
 		get sessionManager() {
 			return sessionManager;
@@ -1156,6 +1201,7 @@ export function createBrowserControl(
 		},
 		close() {
 			sessionManager.close();
+			require("./state/index").resetStateStorage();
 		},
 	};
 }

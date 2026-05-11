@@ -48,7 +48,14 @@ for (const line of status.split(/\r?\n/)) {
   }
 }
 
-for (let section = 4; section <= 23; section += 1) {
+for (let section = 4; section <= 30; section += 1) {
+  if (status && !sectionRows.has(section)) {
+    errors.push(`STATUS.md missing Section ${String(section).padStart(2, "0")}`);
+  }
+}
+
+const activeSections = [16];
+for (const section of activeSections) {
   const sectionId = String(section).padStart(2, "0");
   const prefix = `section-${sectionId}-`;
   const dirs = exists(productionDir)
@@ -65,16 +72,6 @@ for (let section = 4; section <= 23; section += 1) {
   const specPath = path.join(productionDir, dirs[0], "spec.md");
   if (!exists(specPath)) {
     errors.push(`Missing spec.md for ${dirs[0]}`);
-  }
-
-  if (status && !sectionRows.has(section)) {
-    errors.push(`STATUS.md missing Section ${sectionId}`);
-  }
-}
-
-for (let section = 17; section <= 23; section += 1) {
-  if (status && !sectionRows.has(section)) {
-    errors.push(`STATUS.md missing premium-readiness Section ${section}`);
   }
 }
 

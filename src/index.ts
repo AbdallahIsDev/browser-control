@@ -832,3 +832,8 @@ export {
 export type {
   DebugNamespace,
 } from "./browser_control";
+
+// Product data home, benchmarks, and trading supervisor foundations.
+export * from "./data_home";
+export * from "./benchmarks/runner";
+export * from "./trading";

@@ -122,6 +122,16 @@ function mockApi(): BrowserControlAPI {
 				} as never),
 			screenshot: async () => actionResult({ path: "shot.png", sizeBytes: 1 }),
 		},
+		package: {
+			list: () =>
+				actionResult([
+					{
+						name: "basic-test-package",
+						version: "1.0.0",
+						installedAt: "2026-05-08T00:00:00.000Z",
+					},
+				] as never),
+		},
 		close: () => undefined,
 	} as unknown as BrowserControlAPI;
 }
@@ -414,6 +424,44 @@ test("web app server returns 503 for broker endpoints when broker is unreachable
 	);
 	const body = (await tasks.json()) as { code: string };
 	assert.equal(body.code, "capability_unavailable");
+});
+
+test("web app server exposes data, package, and trading product endpoints", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-product-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = { authorization: "Bearer test-token" };
+
+	const dataHome = await fetch(`${info.url}/api/data/doctor`, { headers });
+	assert.equal(dataHome.status, 200);
+	assert.equal(
+		((await dataHome.json()) as { schemaVersion: number }).schemaVersion,
+		2,
+	);
+
+	const packages = await fetch(`${info.url}/api/packages`, { headers });
+	assert.equal(packages.status, 200);
+	assert.equal(
+		((await packages.json()) as Array<{ name: string }>)[0].name,
+		"basic-test-package",
+	);
+
+	const trading = await fetch(`${info.url}/api/trading/status`, { headers });
+	assert.equal(trading.status, 200);
+	assert.equal(
+		((await trading.json()) as { liveRequiresExactApproval: boolean })
+			.liveRequiresExactApproval,
+		true,
+	);
 });
 
 // ── Regression 1: Terminal stream event contract ─────────────────────

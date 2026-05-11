@@ -1464,6 +1464,15 @@ export class BrowserConnectionManager {
 			);
 		}
 	}
+	
+	/**
+	 * Close the connection manager and release held resources.
+	 */
+	close(): void {
+		if (this.ownsMemoryStore) {
+			this.memoryStore.close();
+		}
+	}
 }
 
 // ── Convenience Exports ─────────────────────────────────────────────

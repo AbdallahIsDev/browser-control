@@ -13,6 +13,7 @@ import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
 import { logger } from "../shared/logger";
 import { getDataHome } from "../shared/paths";
+import type { StateStorage, StoredAutomation } from "../state/index";
 import { validateResize } from "../terminal/actions";
 import { fetchBrokerJson, listLogFiles, readRecentLogs } from "./bridge";
 import { WebEventHub } from "./events";
@@ -216,6 +217,22 @@ function asString(value: unknown, name: string): string {
 
 function asOptionalString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function asAutomationSource(
+	value: unknown,
+): StoredAutomation["source"] | undefined {
+	const source = asOptionalString(value);
+	if (source === "built-in" || source === "user" || source === "task") {
+		return source;
+	}
+	return undefined;
+}
+
+function optionalStateStorage(
+	api: BrowserControlAPI,
+): StateStorage | undefined {
+	return (api as BrowserControlAPI & { state?: StateStorage }).state;
 }
 
 function asOptionalNumber(value: unknown): number | undefined {
@@ -495,6 +512,17 @@ export function createWebAppServer(
 			return;
 		}
 
+		if (request.method === "GET" && pathname === "/api/settings") {
+			const status = await api.status();
+			json(response, 200, {
+				dataHome: status.dataHome,
+				policyProfile: status.policyProfile,
+				provider: status.provider?.active ?? "local",
+				browserProvider: status.browser?.provider ?? "local",
+			});
+			return;
+		}
+
 		if (request.method === "GET" && pathname === "/api/capabilities") {
 			json(response, 200, await capabilities(api));
 			return;
@@ -753,6 +781,359 @@ export function createWebAppServer(
 			return;
 		}
 
+		if (request.method === "GET" && pathname === "/api/data/doctor") {
+			const { inspectDataHome } = await import("../data_home");
+			json(response, 200, inspectDataHome());
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/data/cleanup") {
+			const body = (await readJsonBody(request)) as {
+				dryRun?: boolean;
+				confirm?: string;
+			};
+
+			if (body.dryRun === false && body.confirm !== "DELETE_RUNTIME_TEMP") {
+				json(response, 400, {
+					success: false,
+					error: "Destructive cleanup requires explicit confirmation.",
+					code: "CONFIRMATION_REQUIRED",
+					requiredConfirm: "DELETE_RUNTIME_TEMP",
+				});
+				return;
+			}
+
+			const { cleanupDataHome } = await import("../data_home");
+			json(
+				response,
+				200,
+				cleanupDataHome(undefined, {
+					dryRun: body.dryRun !== false,
+					confirm: body.confirm,
+				}),
+			);
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/data/export") {
+			const body = await readJsonBody(request);
+			const { exportDataHome } = await import("../data_home");
+			json(
+				response,
+				200,
+				exportDataHome(undefined, { label: asOptionalString(body.label) }),
+			);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/packages") {
+			const result = api.package.list();
+			json(response, result.success ? 200 : 403, result.data ?? []);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/benchmark/results") {
+			const { listBenchmarkRuns } = await import("../benchmarks/runner");
+			json(
+				response,
+				200,
+				listBenchmarkRuns(undefined, {
+					last: Number(requestUrl.searchParams.get("last")) || 10,
+				}),
+			);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/trading/status") {
+			const status = await api.status();
+			json(response, 200, {
+				mode: "analysis_only",
+				supervisor: "active",
+				broker: status.provider.active || "local",
+				health: status.health?.overall || "unknown",
+				defaultMode: "analysis_only",
+				paperTrading: true,
+				liveRequiresExactApproval: true,
+			});
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/trading/plans") {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			json(response, 200, await storage.listTradePlans());
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/trading/plans") {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const body = (await readJsonBody(request)) as {
+				planId?: string;
+				symbol?: string;
+				side?: string;
+				mode?: string;
+				status?: string;
+				riskPercent?: number;
+				thesis?: string;
+			};
+			const plan = {
+				id: `plan-${Date.now()}`,
+				planId: body.planId || `plan-${Date.now()}`,
+				symbol: body.symbol || "EURUSD",
+				side: (body.side === "sell" ? "sell" : "buy") as "buy" | "sell",
+				mode: (body.mode || "analysis_only") as
+					| "analysis_only"
+					| "paper"
+					| "live_assisted"
+					| "live_supervised",
+				status: (body.status || "draft") as
+					| "draft"
+					| "active"
+					| "completed"
+					| "cancelled",
+				riskPercent: body.riskPercent ?? 0.5,
+				thesis: body.thesis ?? "",
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+			};
+			await storage.saveTradePlan(plan);
+			json(response, 200, plan);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/trading/tickets") {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			json(response, 200, await storage.listOrderTickets());
+			return;
+		}
+
+		const jobControlMatch =
+			/^\/api\/trading\/(?:supervisor\/)?jobs\/([^/]+)\/(start|pause|resume|stop)$/u.exec(
+				pathname,
+			);
+		if (request.method === "POST" && jobControlMatch) {
+			const jobId = decodeURIComponent(jobControlMatch[1] ?? "");
+			const action = jobControlMatch[2];
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const jobs = await storage.listSupervisorJobs();
+			const job = jobs.find((j) => j.id === jobId);
+			if (job) {
+				job.status =
+					action === "pause"
+						? "paused"
+						: action === "stop"
+							? "stopped"
+							: "active";
+				await storage.saveSupervisorJob(job);
+				json(response, 200, { success: true, job });
+			} else {
+				json(response, 404, { success: false, error: "Job not found" });
+			}
+			return;
+		}
+
+		// Alias: GET /api/trading/supervisor/jobs → same as /api/trading/jobs
+		if (
+			request.method === "GET" &&
+			(pathname === "/api/trading/supervisor/jobs" ||
+				pathname === "/api/trading/jobs")
+		) {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			json(response, 200, await storage.listSupervisorJobs());
+			return;
+		}
+
+		// Alias: GET /api/trading/supervisor/decisions → same as /api/trading/decisions
+		if (
+			request.method === "GET" &&
+			(pathname === "/api/trading/supervisor/decisions" ||
+				pathname === "/api/trading/decisions")
+		) {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const tradeId = requestUrl.searchParams.get("tradeId") || undefined;
+			json(response, 200, await storage.listSupervisorDecisions(tradeId));
+			return;
+		}
+
+		// POST /api/trading/tickets — create an order ticket
+		if (request.method === "POST" && pathname === "/api/trading/tickets") {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const body = (await readJsonBody(request)) as {
+				planId: string;
+				mode: string;
+				account: string;
+				platform: string;
+				symbol: string;
+				side: string;
+				size: number;
+				entry: number;
+				stopLoss?: number;
+				targets: number[];
+			};
+			const ticket = {
+				id: `ticket-${Date.now()}`,
+				planId: body.planId,
+				mode: body.mode || "paper",
+				account: body.account || "paper",
+				platform: body.platform || "paper",
+				symbol: body.symbol,
+				side: body.side,
+				size: body.size,
+				entry: body.entry,
+				stopLoss: body.stopLoss,
+				targets: body.targets || [],
+				status: "pending" as const,
+				createdAt: new Date().toISOString(),
+			};
+			await storage.saveOrderTicket(ticket);
+			json(response, 200, ticket);
+			return;
+		}
+
+		// POST /api/trading/tickets/:id/approve
+		const ticketApproveMatch =
+			/^\/api\/trading\/tickets\/([^/]+)\/approve$/u.exec(pathname);
+		if (request.method === "POST" && ticketApproveMatch) {
+			const ticketId = decodeURIComponent(ticketApproveMatch[1] ?? "");
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const tickets = await storage.listOrderTickets();
+			const ticket = tickets.find((t) => t.id === ticketId);
+			if (!ticket) {
+				json(response, 404, { success: false, error: "Ticket not found" });
+				return;
+			}
+			if (ticket.status !== "pending") {
+				json(response, 400, {
+					success: false,
+					error: `Ticket is ${ticket.status}, not pending`,
+				});
+				return;
+			}
+			// Live tickets require exact approval fields
+			const body = (await readJsonBody(request)) as {
+				approvedBy?: string;
+				text?: string;
+			};
+			const isLive =
+				ticket.mode === "live_assisted" || ticket.mode === "live_supervised";
+			if (isLive && !body.approvedBy) {
+				json(response, 400, {
+					success: false,
+					error:
+						"Live ticket approval requires approvedBy field with exact approval text",
+				});
+				return;
+			}
+			ticket.status = "approved";
+			ticket.approval = {
+				approvedAt: new Date().toISOString(),
+				approvedBy: body.approvedBy || "local-user",
+			};
+			await storage.saveOrderTicket(ticket);
+			json(response, 200, { success: true, ticket });
+			return;
+		}
+
+		// POST /api/trading/tickets/:id/reject
+		const ticketRejectMatch =
+			/^\/api\/trading\/tickets\/([^/]+)\/reject$/u.exec(pathname);
+		if (request.method === "POST" && ticketRejectMatch) {
+			const ticketId = decodeURIComponent(ticketRejectMatch[1] ?? "");
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const tickets = await storage.listOrderTickets();
+			const ticket = tickets.find((t) => t.id === ticketId);
+			if (!ticket) {
+				json(response, 404, { success: false, error: "Ticket not found" });
+				return;
+			}
+			ticket.status = "rejected";
+			await storage.saveOrderTicket(ticket);
+			json(response, 200, { success: true, ticket });
+			return;
+		}
+
+		// GET /api/trading/journal — aggregated journal/evidence for trading
+		if (request.method === "GET" && pathname === "/api/trading/journal") {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const [decisions, evidence, plans, tickets] = await Promise.all([
+				storage.listSupervisorDecisions(),
+				storage.listEvidence(),
+				storage.listTradePlans(),
+				storage.listOrderTickets(),
+			]);
+			json(response, 200, {
+				plans: plans.length,
+				tickets: tickets.length,
+				decisions: decisions.slice(0, 50),
+				evidence: evidence
+					.filter((e) => e.type === "receipt" || e.type === "log")
+					.slice(0, 50),
+			});
+			return;
+		}
+
+		// ── State Storage API endpoints ────────────────────────────────
+		if (pathname.startsWith("/api/state/")) {
+			const { getStateStorage } = await import("../state/index");
+			const storage = getStateStorage();
+			const subPath = pathname.slice("/api/state/".length);
+
+			if (request.method === "GET") {
+				switch (subPath) {
+					case "tasks":
+						json(response, 200, await storage.listTasks());
+						return;
+					case "automations":
+						json(response, 200, await storage.listAutomations());
+						return;
+					case "workflow-definitions":
+						json(response, 200, await storage.listWorkflowDefinitions());
+						return;
+					case "workflow-runs":
+						json(response, 200, await storage.listWorkflowRuns());
+						return;
+					case "approvals":
+						json(response, 200, await storage.listApprovals());
+						return;
+					case "evidence":
+						json(response, 200, await storage.listEvidence());
+						return;
+					case "audit-events":
+						json(response, 200, await storage.listAuditEvents());
+						return;
+					case "trade-plans":
+						json(response, 200, await storage.listTradePlans());
+						return;
+					case "order-tickets":
+						json(response, 200, await storage.listOrderTickets());
+						return;
+					case "supervisor-jobs":
+						json(response, 200, await storage.listSupervisorJobs());
+						return;
+					case "supervisor-decisions":
+						json(response, 200, await storage.listSupervisorDecisions());
+						return;
+					case "package-evals":
+						json(response, 200, await storage.listPackageEvals());
+						return;
+					default:
+						json(response, 404, {
+							error: `Unknown state endpoint: ${subPath}`,
+						});
+						return;
+				}
+			}
+		}
+
 		if (request.method === "POST" && pathname === "/api/doctor/run") {
 			const { runDoctor } = await import("../operator/doctor");
 			json(response, 200, await runDoctor());
@@ -760,20 +1141,60 @@ export function createWebAppServer(
 		}
 
 		if (request.method === "GET" && pathname === "/api/saved-automations") {
-			json(response, 200, readSavedAutomations());
+			const state = optionalStateStorage(api);
+			if (state) {
+				let automations = await state.listAutomations();
+				if (automations.length === 0) {
+					const builtIns = builtInAutomations();
+					for (const b of builtIns) {
+						await state.saveAutomation({
+							...b,
+							status: "ready",
+							runCount: 0,
+							createdAt: new Date().toISOString(),
+							updatedAt: new Date().toISOString(),
+							source: b.source as "built-in" | "user" | "task",
+						});
+					}
+					automations = await state.listAutomations();
+				}
+				json(response, 200, automations);
+			} else {
+				json(response, 200, readSavedAutomations());
+			}
 			return;
 		}
 
 		if (request.method === "POST" && pathname === "/api/saved-automations") {
 			const body = await readJsonBody(request);
-			const automation = upsertSavedAutomation({
+			const id =
+				asOptionalString(body.id) ||
+				slugifyAutomationId(asString(body.name, "name"));
+			const now = new Date().toISOString();
+			const state = optionalStateStorage(api);
+			const existing = state ? await state.getAutomation(id) : undefined;
+
+			const automation: StoredAutomation = {
+				id,
 				name: asString(body.name, "name"),
-				description: asOptionalString(body.description) || "",
-				category: asOptionalString(body.category) || "General",
+				description:
+					asOptionalString(body.description) || existing?.description || "",
+				category:
+					asOptionalString(body.category) || existing?.category || "General",
 				prompt: asString(body.prompt, "prompt"),
-				source: "user",
+				source: asAutomationSource(body.source) || existing?.source || "user",
 				approvalRequired: body.approvalRequired !== false,
-			});
+				status: "ready",
+				runCount: existing?.runCount || 0,
+				createdAt: existing?.createdAt || now,
+				updatedAt: now,
+			};
+
+			if (state) {
+				await state.saveAutomation(automation);
+			} else {
+				upsertSavedAutomation(automation);
+			}
 			json(response, 200, automation);
 			return;
 		}
@@ -782,8 +1203,10 @@ export function createWebAppServer(
 			/^\/api\/saved-automations\/([^/]+)\/run$/u.exec(pathname);
 		if (request.method === "POST" && savedAutomationRunMatch) {
 			const id = decodeURIComponent(savedAutomationRunMatch[1] ?? "");
-			const automations = readSavedAutomations();
-			const automation = automations.find((item) => item.id === id);
+			const state = optionalStateStorage(api);
+			const automation = state
+				? await state.getAutomation(id)
+				: readSavedAutomations().find((item) => item.id === id);
 			if (!automation) {
 				json(response, 404, {
 					success: false,
@@ -794,12 +1217,17 @@ export function createWebAppServer(
 			}
 
 			const now = new Date().toISOString();
-			const updated = upsertSavedAutomation({
+			const updated = {
 				...automation,
-				status: "last-run",
+				status: "last-run" as const,
 				lastRunAt: now,
 				runCount: automation.runCount + 1,
-			});
+			};
+			if (state) {
+				await state.saveAutomation(updated);
+			} else {
+				upsertSavedAutomation(updated);
+			}
 
 			try {
 				const result = await fetchBrokerJson("/api/v1/tasks/run", {

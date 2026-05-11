@@ -8,6 +8,7 @@ import { PackageRegistry } from "../../src/packages/registry";
 import { validatePackageManifest, safeResolveRelativePath } from "../../src/packages/manifest";
 import { MemoryStore } from "../../src/runtime/memory_store";
 import { createBrowserControl } from "../../src/browser_control";
+import { resetStateStorage } from "../../src/state/index";
 
 describe("Automation Packages - Hardened", () => {
   let tmpDataHome: string;
@@ -23,10 +24,11 @@ describe("Automation Packages - Hardened", () => {
   });
 
   afterEach(() => {
+    memoryStore.close();
+    resetStateStorage();
     if (fs.existsSync(tmpDataHome)) {
       fs.rmSync(tmpDataHome, { recursive: true, force: true });
     }
-    memoryStore.close();
   });
 
   describe("Manifest Validation & Path Safety", () => {
