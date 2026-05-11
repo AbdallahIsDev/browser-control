@@ -10,6 +10,7 @@ import {
 	PackagesView,
 	SettingsView,
 	TasksView,
+	TerminalView,
 	TradingView,
 	WorkflowsView,
 } from "./pages";
@@ -17,6 +18,7 @@ import type { AppStatus } from "./types";
 
 type Page =
 	| "command"
+	| "terminal"
 	| "tasks"
 	| "automations"
 	| "browser"
@@ -71,6 +73,11 @@ export default function App() {
 			id: "command",
 			label: "Command",
 			icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+		},
+		{
+			id: "terminal",
+			label: "Terminal",
+			icon: "M4 6h16M4 12h16M4 18h12",
 		},
 		{
 			id: "tasks",
@@ -235,6 +242,7 @@ export default function App() {
 
 				<main className="workspace-content animate-fade-in">
 					{page === "command" && <CommandView />}
+					{page === "terminal" && <TerminalView />}
 					{page === "tasks" && <TasksView />}
 					{page === "automations" && <AutomationsView />}
 					{page === "browser" && <BrowserView />}
