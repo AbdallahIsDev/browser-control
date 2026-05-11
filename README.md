@@ -39,10 +39,10 @@ It exposes this surface through **five execution surfaces**: CLI (`bc`), TypeScr
 
 | Demo | Watch |
 |------|-------|
-| **MCP Server Demo** — AI Agent controlling browser + terminal + filesystem via MCP | [▶️ Watch on GitHub](https://github.com/AbdallahIsDev/browser-control/blob/main/demos/browser-control-mcp-demo.mp4) |
-| **MIMO Research Demo** — AI-powered web research with MCP tools | [▶️ Watch on GitHub](https://github.com/AbdallahIsDev/browser-control/blob/main/demos/browser-control-mcp-mimo-research-demo.mp4) |
+| **MCP Server Demo** — AI Agent controlling browser + terminal + filesystem via MCP | [▶️ Watch / Download](https://github.com/AbdallahIsDev/browser-control/releases/download/v0.1.0-demo/browser-control-mcp-demo.mp4) |
+| **MIMO Research Demo** — AI-powered web research with MCP tools | [▶️ Watch / Download](https://github.com/AbdallahIsDev/browser-control/releases/download/v0.1.0-demo/browser-control-mcp-mimo-research-demo.mp4) |
 
-> Click a link to open GitHub's built-in video player. Videos are also available for download in [`demos/`](demos/).
+> Click a link to download and watch. Hosted via GitHub Releases CDN. Videos are also available in [`demos/`](demos/).
 
 <br/>
 
