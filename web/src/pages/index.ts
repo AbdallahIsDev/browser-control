@@ -6,5 +6,6 @@ export { EvidenceView } from "./EvidenceView";
 export { PackagesView } from "./PackagesView";
 export { SettingsView } from "./SettingsView";
 export { TasksView } from "./TasksView";
+export { TerminalView } from "./TerminalView";
 export { TradingView } from "./TradingView";
 export { WorkflowsView } from "./WorkflowsView";
