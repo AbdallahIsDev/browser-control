@@ -37,12 +37,12 @@ It exposes this surface through **five execution surfaces**: CLI (`bc`), TypeScr
 
 ## 🎬 Demos
 
-| Demo | Description | Duration |
-|------|-------------|----------|
-| ▶️ **[MCP Server Demo](demos/browser-control-mcp-demo.mp4)** | AI Agent controlling browser + terminal + filesystem via MCP tools — navigate, snapshot, click, fill forms, run terminal commands, read/write files | ~20 MB MP4 |
-| ▶️ **[MIMO Research Demo](demos/browser-control-mcp-mimo-research-demo.mp4)** | AI-powered web research with MCP tools — multi-step research workflow, data extraction, and evidence collection | ~18 MB MP4 |
+| Demo | Watch |
+|------|-------|
+| **MCP Server Demo** — AI Agent controlling browser + terminal + filesystem via MCP | [▶️ Watch on GitHub](https://github.com/AbdallahIsDev/browser-control/blob/main/demos/browser-control-mcp-demo.mp4) |
+| **MIMO Research Demo** — AI-powered web research with MCP tools | [▶️ Watch on GitHub](https://github.com/AbdallahIsDev/browser-control/blob/main/demos/browser-control-mcp-mimo-research-demo.mp4) |
 
-> **Tip:** Click the demo name to download and watch. Right-click → "Save link as..." to download. Videos show real Browser Control MCP workflows.
+> Click a link to open GitHub's built-in video player. Videos are also available for download in [`demos/`](demos/).
 
 <br/>
 
