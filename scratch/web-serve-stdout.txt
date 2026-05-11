@@ -1,0 +1,7 @@
+
+> browser-control@1.0.0 web:serve
+> ts-node src/web/server.ts
+
+2026-05-11T21:35:21.605Z [INFO] [policy-engine] Policy engine initialized with profile: balanced
+2026-05-11T21:35:21.659Z [INFO] [web] Listening {"host":"127.0.0.1","port":7790,"url":"http://127.0.0.1:7790/"}
+{"url":"http://127.0.0.1:7790","token":"GoiQxHo9zVtx4cz2d0WOtiV7-u4nDh_P5M94vcnlIfI"}

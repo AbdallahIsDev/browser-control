@@ -177,6 +177,46 @@ export interface StoredSupervisorDecision {
   createdAt: string;
 }
 
+export interface StoredSecret {
+  id: string;
+  scope: "site" | "package" | "workflow";
+  scopeName: string;
+  secretName: string;
+  encryptedValue: Buffer;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoredSecretGrant {
+  id: string;
+  secretId: string;
+  action: string;
+  domain: string | null;
+  expiresAt: string | null;
+  revoked: boolean;
+  createdAt: string;
+}
+
+export interface StoredNetworkRule {
+  id: string;
+  pattern: string;
+  ruleType: string;
+  resourceTypes: string[] | null;
+  enabled: boolean;
+  source: string;
+  createdAt: string;
+}
+
+export interface StoredSecretAuditEvent {
+  id: string;
+  secretId: string;
+  action: string;
+  targetDomain: string | null;
+  policyDecision: string;
+  sessionId: string | null;
+  timestamp: string;
+}
+
 // ── Storage Interface ────────────────────────────────────────────────────
 
 export interface StateStorage {
@@ -229,6 +269,26 @@ export interface StateStorage {
   // Package Evals
   savePackageEval(evalResult: StoredPackageEval): Promise<void>;
   listPackageEvals(): Promise<StoredPackageEval[]>;
+
+  // Secrets
+  saveSecret(secret: StoredSecret): Promise<void>;
+  getSecret(id: string): Promise<StoredSecret | null>;
+  listSecrets(): Promise<StoredSecret[]>;
+  deleteSecret(id: string): Promise<void>;
+
+  // Secret Grants
+  saveGrant(grant: StoredSecretGrant): Promise<void>;
+  listGrants(secretId?: string): Promise<StoredSecretGrant[]>;
+  revokeGrant(grantId: string): Promise<void>;
+
+  // Network Rules
+  saveNetworkRule(rule: StoredNetworkRule): Promise<void>;
+  listNetworkRules(): Promise<StoredNetworkRule[]>;
+  deleteNetworkRule(id: string): Promise<void>;
+
+  // Secret Audit
+  saveSecretAuditEvent(event: StoredSecretAuditEvent): Promise<void>;
+  listSecretAuditEvents(limit?: number): Promise<StoredSecretAuditEvent[]>;
 
   // Lifecycle
   close(): void;
@@ -492,6 +552,68 @@ export class JsonFileStateStorage implements StateStorage {
 
   async listPackageEvals(): Promise<StoredPackageEval[]> {
     return this.loadCollection<StoredPackageEval>("package_evals");
+  }
+
+  // ── Secrets ──
+  async saveSecret(secret: StoredSecret): Promise<void> {
+    const items = this.loadCollection<StoredSecret>("secrets");
+    this.upsertById(items, secret);
+    this.saveCollection("secrets", items);
+  }
+  async getSecret(id: string): Promise<StoredSecret | null> {
+    return this.findById(this.loadCollection<StoredSecret>("secrets"), id) ?? null;
+  }
+  async listSecrets(): Promise<StoredSecret[]> {
+    return this.loadCollection<StoredSecret>("secrets");
+  }
+  async deleteSecret(id: string): Promise<void> {
+    const items = this.loadCollection<StoredSecret>("secrets");
+    this.deleteById(items, id);
+    this.saveCollection("secrets", items);
+  }
+
+  // ── Grants ──
+  async saveGrant(grant: StoredSecretGrant): Promise<void> {
+    const items = this.loadCollection<StoredSecretGrant>("secret_grants");
+    this.upsertById(items, grant);
+    this.saveCollection("secret_grants", items);
+  }
+  async listGrants(secretId?: string): Promise<StoredSecretGrant[]> {
+    const items = this.loadCollection<StoredSecretGrant>("secret_grants");
+    if (secretId) return items.filter((g) => g.secretId === secretId);
+    return items;
+  }
+  async revokeGrant(grantId: string): Promise<void> {
+    const items = this.loadCollection<StoredSecretGrant>("secret_grants");
+    const idx = items.findIndex((g) => g.id === grantId);
+    if (idx >= 0) { items[idx].revoked = true; this.saveCollection("secret_grants", items); }
+  }
+
+  // ── Network Rules ──
+  async saveNetworkRule(rule: StoredNetworkRule): Promise<void> {
+    const items = this.loadCollection<StoredNetworkRule>("network_rules");
+    this.upsertById(items, rule);
+    this.saveCollection("network_rules", items);
+  }
+  async listNetworkRules(): Promise<StoredNetworkRule[]> {
+    return this.loadCollection<StoredNetworkRule>("network_rules");
+  }
+  async deleteNetworkRule(id: string): Promise<void> {
+    const items = this.loadCollection<StoredNetworkRule>("network_rules");
+    this.deleteById(items, id);
+    this.saveCollection("network_rules", items);
+  }
+
+  // ── Secret Audit ──
+  async saveSecretAuditEvent(event: StoredSecretAuditEvent): Promise<void> {
+    const items = this.loadCollection<StoredSecretAuditEvent>("secret_audit_events");
+    items.push(event);
+    if (items.length > 1000) items.splice(0, items.length - 1000);
+    this.saveCollection("secret_audit_events", items);
+  }
+  async listSecretAuditEvents(limit = 100): Promise<StoredSecretAuditEvent[]> {
+    const items = this.loadCollection<StoredSecretAuditEvent>("secret_audit_events");
+    return items.slice(-limit).reverse();
   }
 
   // ── Lifecycle ──

@@ -103,6 +103,25 @@ export interface LowLevelPolicy {
   performanceTracesAllowed: boolean;
 }
 
+// ── Policy Category: Credential ─────────────────────────────────────────
+
+export interface CredentialPolicy {
+  secretUseConfirmThreshold: "none" | "cross-site" | "all";
+  secretRevealAllowed: boolean;
+  secretAutoTypeAllowed: boolean;
+  secretAutoPasteAllowed: boolean;
+}
+
+// ── Policy Category: Privacy ────────────────────────────────────────────
+
+export type PrivacyProfileName = "strict" | "balanced" | "audit";
+
+export interface PrivacyPolicy {
+  profile: PrivacyProfileName;
+  customBlockedDomains?: string[];
+  customAllowedDomains?: string[];
+}
+
 // ── Policy Profile ───────────────────────────────────────────────────────
 
 export interface PolicyProfile {
@@ -111,6 +130,8 @@ export interface PolicyProfile {
   filesystemPolicy: FilesystemPolicy;
   browserPolicy: BrowserPolicy;
   lowLevelPolicy: LowLevelPolicy;
+  credentialPolicy: CredentialPolicy;
+  privacyPolicy: PrivacyPolicy;
 }
 
 // ── Confirmation Handler Interface ───────────────────────────────────────

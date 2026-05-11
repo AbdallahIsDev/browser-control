@@ -18,6 +18,13 @@ const outputs = {
 	desktop: path.join(reportDir, "sidebar-desktop.png"),
 	mobile: path.join(reportDir, "sidebar-mobile.png"),
 	refresh: path.join(reportDir, "sidebar-after-hard-refresh.png"),
+	manifest: path.join(reportDir, "screenshot-manifest.json"),
+};
+
+const manifest = {
+	url,
+	startedAt: new Date().toISOString(),
+	captures: [],
 };
 
 async function waitForApp(page) {
@@ -31,6 +38,13 @@ async function capture(page, filePath) {
 	if (!stat.isFile() || stat.size === 0) {
 		throw new Error(`Screenshot missing or empty: ${filePath}`);
 	}
+	manifest.captures.push({
+		file: path.relative(rootDir, filePath),
+		bytes: stat.size,
+		capturedAt: new Date().toISOString(),
+		url: page.url(),
+		title: await page.title(),
+	});
 }
 
 async function assertNoHorizontalOverflow(page) {
@@ -83,6 +97,9 @@ async function assertNoHorizontalOverflow(page) {
 		await refresh.waitForSelector(".premium-app-container", { timeout: 15000 });
 		await capture(refresh, outputs.refresh);
 		await refresh.close();
+
+		manifest.finishedAt = new Date().toISOString();
+		fs.writeFileSync(outputs.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
 
 		for (const filePath of Object.values(outputs)) {
 			const stat = fs.statSync(filePath);

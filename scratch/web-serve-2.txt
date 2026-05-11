@@ -1,0 +1,8 @@
+
+> browser-control@1.0.0 web:serve
+> ts-node src/web/server.ts
+
+2026-05-11T21:36:45.129Z [INFO] [policy-engine] Policy engine initialized with profile: balanced
+(node:3016) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+2026-05-11T21:36:45.176Z [CRITICAL] [web] Fatal startup error {"error":"listen EADDRINUSE: address already in use 127.0.0.1:7790"}
