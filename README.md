@@ -37,13 +37,13 @@ It exposes this surface through **five execution surfaces**: CLI (`bc`), TypeScr
 
 ## 🎬 Demos
 
-### MCP Server Demo — AI Agent controlling browser + terminal + filesystem via MCP
-
-https://github.com/user-attachments/assets/47fc88ce-4b86-4112-a99a-c4bbdcfb19f2
-
 ### MIMO Research Demo — AI-powered web research with MCP tools
 
-https://github.com/user-attachments/assets/bb9cd071-9f50-44de-8012-6d3bfdc7a1a1
+<video src="https://github.com/user-attachments/assets/47fc88ce-4b86-4112-a99a-c4bbdcfb19f2" controls autoplay muted loop width="100%"></video>
+
+### MCP Server Demo — AI Agent controlling browser + terminal + filesystem via MCP
+
+<video src="https://github.com/user-attachments/assets/bb9cd071-9f50-44de-8012-6d3bfdc7a1a1" controls autoplay muted loop width="100%"></video>
 
 <br/>
 
