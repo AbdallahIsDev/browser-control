@@ -85,9 +85,16 @@ if (-not (Test-Path $iexpress)) {
   throw "iexpress.exe not found at $iexpress"
 }
 
-& $iexpress /N $sedPath
-if (($LASTEXITCODE -ne 0) -and (-not (Test-Path $Output))) {
-  throw "IExpress failed with exit code $LASTEXITCODE"
+$process = Start-Process -FilePath $iexpress -ArgumentList @("/N", $sedPath) -Wait -PassThru -WindowStyle Hidden
+
+$deadline = (Get-Date).AddSeconds(10)
+while ((-not (Test-Path -LiteralPath $Output)) -and ((Get-Date) -lt $deadline)) {
+  Start-Sleep -Milliseconds 250
+}
+
+if (-not (Test-Path -LiteralPath $Output)) {
+  $exitCode = if ($null -ne $process.ExitCode) { $process.ExitCode } else { "unknown" }
+  throw "IExpress failed with exit code $exitCode"
 }
 
 Write-Output $Output

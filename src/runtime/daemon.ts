@@ -30,6 +30,7 @@ import {
 import type { SkillContext } from "../skill";
 import { SkillMemoryStore } from "../skill_memory";
 import { SkillRegistry } from "../skill_registry";
+import type { StoredTask } from "../state/index";
 import { validateResize } from "../terminal/actions";
 import { TerminalBufferStore } from "../terminal/buffer_store";
 import {
@@ -83,6 +84,11 @@ export interface TaskIntent {
 	completedAt?: string;
 	failedAt?: string;
 	error?: string;
+}
+
+function toStoredTaskStatus(status: TaskIntent["status"]): StoredTask["status"] {
+	if (status === "interrupted") return "failed";
+	return status;
 }
 
 // ── Resume Policy ───────────────────────────────────────────────────
@@ -147,6 +153,7 @@ export class Daemon {
 	private readonly config: DaemonConfig;
 
 	private memoryStore!: MemoryStore;
+	private state!: import("../state/index").StateStorage;
 
 	private telemetry!: Telemetry;
 
@@ -231,6 +238,9 @@ export class Daemon {
 
 		this.appConfig = loadConfig({ validate: false });
 		this.memoryStore = this.config.memoryStore ?? new MemoryStore();
+		this.state =
+			(this.config as any).state ??
+			require("../state/index").getStateStorage(this.appConfig.dataHome);
 		this.telemetry = this.config.telemetry ?? new Telemetry();
 		this.telemetry.onAlert(
 			createTelegramAlertHandler(
@@ -1255,6 +1265,20 @@ export class Daemon {
 		}
 		try {
 			this.memoryStore.set(`task:${taskId}:intent`, intent);
+
+			// Also persist to durable product state
+			void this.state.saveTask({
+				id: taskId,
+				prompt: JSON.stringify(intent.params ?? {}),
+				skill: intent.skill,
+				action: intent.action,
+				params: intent.params,
+				status: toStoredTaskStatus(intent.status),
+				error: intent.error,
+				createdAt: intent.startedAt,
+				updatedAt: new Date().toISOString(),
+				completedAt: intent.completedAt ?? intent.failedAt,
+			});
 		} catch (error: unknown) {
 			this.log.error("Failed to persist task intent", {
 				taskId,

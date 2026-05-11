@@ -16,7 +16,7 @@
 	},
 	"files": [
 		"dist/",
-		"web/dist/",
+		"web/dist/**/*",
 		"desktop/",
 		"cli.js",
 		"launch_browser.bat",
@@ -25,6 +25,7 @@
 		"scripts/launch_browser.sh",
 		"scripts/install_wsl_bc.sh",
 		"wsl_cdp_bridge.cjs",
+		"examples/",
 		"automation-packages/tradingview-ict-analysis/",
 		"LICENSE",
 		"README.md",
@@ -44,7 +45,7 @@
 		"prepack": "npm run build && npm run web:build",
 		"prepublishOnly": "npm run build && npm run web:build",
 		"test": "node scripts/run_active_tests.cjs",
-		"test:ci": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/action_result.test.ts tests/unit/config.test.ts tests/unit/policy_engine.test.ts tests/unit/execution_router.test.ts tests/unit/browser_actions.test.ts tests/unit/terminal_actions.test.ts tests/unit/fs_actions.test.ts tests/unit/broker_server.test.ts tests/unit/operator_doctor_status_setup.test.ts tests/unit/operator_cli.test.ts tests/unit/operator_config.test.ts tests/unit/stagehand_optional.test.ts tests/unit/project_structure.test.ts tests/unit/terminal_render.test.ts tests/unit/operator_dashboard.test.ts tests/unit/workflows.test.ts tests/unit/harness.test.ts tests/unit/packages.test.ts tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts tests/unit/desktop_security.test.ts",
+		"test:ci": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/action_result.test.ts tests/unit/config.test.ts tests/unit/policy_engine.test.ts tests/unit/execution_router.test.ts tests/unit/browser_actions.test.ts tests/unit/terminal_actions.test.ts tests/unit/fs_actions.test.ts tests/unit/broker_server.test.ts tests/unit/operator_doctor_status_setup.test.ts tests/unit/operator_cli.test.ts tests/unit/operator_config.test.ts tests/unit/stagehand_optional.test.ts tests/unit/project_structure.test.ts tests/unit/terminal_render.test.ts tests/unit/operator_dashboard.test.ts tests/unit/workflows.test.ts tests/unit/harness.test.ts tests/unit/packages.test.ts tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts tests/unit/desktop_security.test.ts tests/unit/data_home.test.ts tests/unit/trading_supervisor.test.ts tests/unit/benchmarks.test.ts tests/unit/state_storage.test.ts tests/unit/cleanup_safety.test.ts tests/unit/profile_migration.test.ts tests/unit/sqlite_storage.test.ts tests/unit/sqlite_recovery.test.ts",
 		"test:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/mcp/server_stdio.test.ts tests/unit/mcp/tool_registry.test.ts",
 		"test:browser-features": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/browser_features_regression.test.ts tests/unit/a11y_snapshot.test.ts tests/unit/cli.test.ts tests/unit/cli_debug_observability.test.ts tests/unit/observability/screencast.test.ts tests/unit/browser_connection.test.ts tests/unit/providers/local.test.ts tests/unit/mcp/tool_registry.test.ts",
 		"test:browser-features:live": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=120000 tests/e2e/browser_features_live_workflow.test.ts",
@@ -60,14 +61,52 @@
 		"daemon": "ts-node src/daemon.ts",
 		"daemon:dev": "ts-node src/daemon.ts --dev",
 		"web:serve": "ts-node src/web/server.ts",
-		"web:build": "node web/build.cjs",
+		"web:build": "cd web && npm run build",
+		"web:typecheck": "cd web && npx tsc --noEmit",
+		"test:web": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts",
+		"test:state": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/state_storage.test.ts tests/unit/sqlite_storage.test.ts tests/unit/sqlite_recovery.test.ts tests/unit/data_home.test.ts tests/unit/cleanup_safety.test.ts tests/unit/profile_migration.test.ts",
+		"test:trading": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/trading_supervisor.test.ts",
+		"test:desktop": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/desktop_security.test.ts",
 		"desktop:dev": "electron desktop/main.cjs",
-		"desktop:build": "npm run web:build && node desktop/verify.cjs",
+		"desktop:build": "npm run build && npm run web:build && electron-builder build --win --dir",
+		"package:desktop": "npm run build && npm run web:build && electron-builder build --win",
 		"typecheck": "tsc --noEmit",
 		"start": "ts-node src/main.ts",
 		"cli": "ts-node src/cli.ts",
 		"compat:test": "node --require ts-node/register --require tsconfig-paths/register --test tests/compatibility/package_import_smoke.test.ts tests/compatibility/public_surface.test.ts",
 		"compat:update": "node scripts/update_public_surface_snapshots.cjs"
+	},
+	"build": {
+		"appId": "dev.abdallah.browser-control",
+		"productName": "Browser Control",
+		"npmRebuild": false,
+		"directories": {
+			"output": "dist-desktop-2"
+		},
+		"files": [
+			"dist/**/*",
+			"web/dist/**/*",
+			"desktop/**/*",
+			"cli.js",
+			"package.json",
+			"node_modules/**/*"
+		],
+		"win": {
+			"target": "zip",
+			"icon": "desktop/icon.ico",
+			"signAndEditExecutable": false,
+			"signExts": [
+				"!.exe"
+			]
+		},
+		"mac": {
+			"target": "dmg",
+			"category": "public.app-category.developer-tools"
+		},
+		"asar": false,
+		"extraMetadata": {
+			"main": "desktop/main.cjs"
+		}
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.29.0",
@@ -102,6 +141,8 @@
 		"@types/node": "^22.19.17",
 		"@types/ws": "^8.18.1",
 		"electron": "^41.5.0",
+		"electron-builder": "^26.8.1",
+		"electron-packager": "^17.1.2",
 		"ts-node": "^10.9.2",
 		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.9.3"

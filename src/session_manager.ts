@@ -899,29 +899,7 @@ export class SessionManager {
 		return this.memoryStore;
 	}
 
-	/**
-	 * Close the session manager and release all held resources.
-	 *
-	 * This is critical for the CLI: after a command like `bc term open --json`
-	 * completes, the process must exit cleanly. Without close(), the
-	 * MemoryStore's SQLite database handle keeps the Node.js event loop
-	 * alive, preventing the process from exiting.
-	 *
-	 * Call this at the end of runCli() (or any short-lived entry point)
-	 * after all work is done.
-	 */
-	close(): void {
-		try {
-			this.terminalManager.closeAll();
-		} catch {
-			// Best-effort
-		}
-		try {
-			this.memoryStore.close();
-		} catch {
-			// Best-effort — may already be closed
-		}
-	}
+
 
 	/**
 	 * Create a TerminalRuntime for this session manager.
@@ -1456,6 +1434,28 @@ export class SessionManager {
 				`Failed to load persisted sessions: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
+	}
+	
+	/**
+	 * Close the session manager and release all held resources.
+	 * This closes the memory store and all browser connections.
+	 */
+	/**
+	 * Close the session manager and release all held resources.
+	 * This closes the memory store, terminal manager, and browser connections.
+	 */
+	close(): void {
+		try {
+			this.terminalManager.closeAll().catch(() => { /* ignore */ });
+		} catch { /* ignore */ }
+		
+		try {
+			this.browserManager.close();
+		} catch { /* ignore */ }
+
+		try {
+			this.memoryStore.close();
+		} catch { /* ignore */ }
 	}
 }
 

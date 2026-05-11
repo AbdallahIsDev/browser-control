@@ -44,5 +44,7 @@ output/
 *.log
 *.tsbuildinfo
 dist/
+dist-desktop/
+dist-desktop-2/
 
 .tmp-*

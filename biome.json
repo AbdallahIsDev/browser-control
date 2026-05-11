@@ -7,8 +7,12 @@
 	},
 	"files": {
 		"includes": [
-			"automation-packages/tradingview-ict-analysis/**/*.json",
 			"biome.json",
+			"!dist",
+			"!web/dist",
+			"!dist-desktop",
+			"!dist-desktop-2",
+			"automation-packages/tradingview-ict-analysis/**/*.json",
 			"package.json",
 			"scripts/ci_package_smoke.cjs",
 			"web/**",
@@ -16,8 +20,7 @@
 			"src/web/**",
 			"tests/unit/web_app_server.test.ts",
 			"tests/unit/web_frontend_format.test.ts",
-			"tests/unit/desktop_security.test.ts",
-			"!!**/dist"
+			"tests/unit/desktop_security.test.ts"
 		]
 	},
 	"formatter": {

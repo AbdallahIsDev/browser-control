@@ -32,6 +32,25 @@ function fail(message) {
 	errors.push(message);
 }
 
+function parseNpmPackJson(output) {
+	const lines = output.split(/\r?\n/u);
+	const startLine = lines.findIndex((line) => line.trim() === "[");
+	const endLine =
+		lines.length -
+		1 -
+		[...lines].reverse().findIndex((line) => line.trim() === "]");
+	if (startLine === -1 || endLine === -1 || endLine < startLine) {
+		throw new Error(`npm pack --json did not emit a JSON array:\n${output}`);
+	}
+	return JSON.parse(lines.slice(startLine, endLine + 1).join("\n"));
+}
+
+function hasViteAsset(files, extension) {
+	return [...files].some((file) =>
+		new RegExp(`^web/dist/assets/index-.*\\.${extension}$`, "u").test(file),
+	);
+}
+
 function walkFiles(dir, result = []) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		const fullPath = path.join(dir, entry.name);
@@ -68,7 +87,7 @@ let tempProject = "";
 
 try {
 	const output = runNpm(["pack", "--json"]);
-	const parsed = JSON.parse(output);
+	const parsed = parseNpmPackJson(output);
 	if (!Array.isArray(parsed) || parsed.length !== 1) {
 		throw new Error("npm pack --json did not return one package record");
 	}
@@ -94,9 +113,6 @@ try {
 		"dist/wsl_cdp_bridge.cjs",
 		"dist/telegram_notifier.ps1",
 		"web/dist/index.html",
-		"web/dist/app.js",
-		"web/dist/format.js",
-		"web/dist/styles.css",
 		"desktop/main.cjs",
 		"desktop/preload.cjs",
 		"desktop/security.cjs",
@@ -105,6 +121,11 @@ try {
 		"automation-packages/tradingview-ict-analysis/docs/ict-methodology.md",
 		"automation-packages/tradingview-ict-analysis/docs/permissions.md",
 		"automation-packages/tradingview-ict-analysis/docs/trade-journal.md",
+		"examples/browser/basic-navigation.md",
+		"examples/terminal/basic-exec.md",
+		"examples/combined/dev-server-workflow.md",
+		"examples/mcp/codex-setup.md",
+		"examples/skills/packaging-a-skill.md",
 		"LICENSE",
 		".env.example",
 	];
@@ -113,6 +134,12 @@ try {
 		if (!files.has(file)) {
 			fail(`Package missing required file: ${file}`);
 		}
+	}
+	if (!hasViteAsset(files, "js")) {
+		fail("Package missing Vite web JavaScript asset");
+	}
+	if (!hasViteAsset(files, "css")) {
+		fail("Package missing Vite web CSS asset");
 	}
 
 	const forbiddenPatterns = [

@@ -24,8 +24,11 @@
   "exclude": [
     "node_modules",
     "dist",
+    "dist-desktop",
+    "dist-desktop-2",
     "docs",
     "screenshots",
-    ".omx"
+    ".omx",
+    "web"
   ]
 }
