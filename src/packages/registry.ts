@@ -309,7 +309,7 @@ export class PackageRegistry {
     }
   }
 
-  private saveRegistry(packages: InstalledAutomationPackage[]): void {
+  public saveRegistry(packages: InstalledAutomationPackage[]): void {
     ensurePackagesDir(this.dataHome);
     fs.writeFileSync(getPackageRegistryPath(this.dataHome), JSON.stringify(packages, null, 2), "utf8");
   }

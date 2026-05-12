@@ -832,6 +832,34 @@ export function createWebAppServer(
 			return;
 		}
 
+		const packageReviewMatch = /^\/api\/packages\/([^/]+)\/review$/u.exec(pathname);
+		if (request.method === "POST" && packageReviewMatch) {
+			const name = decodeURIComponent(packageReviewMatch[1] ?? "");
+			const body = await readJsonBody(request);
+			const status = asOptionalString(body.status) || "unreviewed";
+			try {
+				const { PackageRegistry } = await import("../packages/registry");
+				const registry = new PackageRegistry();
+				const pkg = registry.get(name);
+				if (!pkg) { json(response, 404, { error: "Package not found" }); return; }
+				pkg.trustStatus = status as "unreviewed" | "pending" | "approved" | "rejected";
+				if (status === "approved" || status === "rejected") {
+					pkg.signer = pkg.signer || "manual-review";
+				}
+				registry.saveRegistry(registry.list());
+				json(response, 200, { success: true, name, trustStatus: status });
+			} catch (e) { json(response, 500, { error: String(e) }); }
+			return;
+		}
+
+		const packageEvalMatch = /^\/api\/packages\/([^/]+)\/eval$/u.exec(pathname);
+		if (request.method === "POST" && packageEvalMatch) {
+			const name = decodeURIComponent(packageEvalMatch[1] ?? "");
+			const result = await api.package.eval(name);
+			json(response, result.success ? 200 : 403, result);
+			return;
+		}
+
 		if (request.method === "GET" && pathname === "/api/benchmark/results") {
 			const { listBenchmarkRuns } = await import("../benchmarks/runner");
 			json(
