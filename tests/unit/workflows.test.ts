@@ -78,8 +78,8 @@ describe("Workflow Graph Validation", () => {
       ],
       edges: [{ from: "a", to: "b" }, { from: "a", to: "c" }],
     }));
-    assert.strictEqual(branch.valid, false);
-    assert.ok(branch.errors.some(e => e.includes("multiple outgoing")));
+    assert.strictEqual(branch.valid, true);
+    // v2 allows branching
   });
 });
 
