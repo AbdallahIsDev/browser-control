@@ -15,6 +15,10 @@ export function SettingsView() {
 	const [providerName, setProviderName] = useState("local");
 	const [cleanupConfirm, setCleanupConfirm] = useState("");
 	const [message, setMessage] = useState("");
+	const [modelProvider, setModelProvider] = useState("openrouter");
+	const [modelEndpoint, setModelEndpoint] = useState("");
+	const [modelKey, setModelKey] = useState("");
+	const [modelName, setModelName] = useState("");
 
 	useEffect(() => {
 		apiFetch<Settings>("/api/settings")
@@ -106,6 +110,38 @@ export function SettingsView() {
 						Save Provider
 					</button>
 				</div>
+			</div>
+			<div style={{ marginBottom: "16px" }}>
+				<div style={{ color: "var(--fg-muted)", marginBottom: "4px" }}>
+					Model Provider
+				</div>
+				<div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+					<select value={modelProvider} onChange={(e) => setModelProvider(e.target.value)} style={{ padding: "6px 8px", borderRadius: "4px", background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+						<option value="openrouter">OpenRouter</option>
+						<option value="ollama">Ollama</option>
+						<option value="openai-compatible">Custom (OpenAI Compatible)</option>
+					</select>
+				</div>
+				{modelProvider === "openai-compatible" && (
+					<div style={{ marginBottom: "6px" }}>
+						<input value={modelEndpoint} onChange={(e) => setModelEndpoint(e.target.value)} placeholder="http://localhost:8080/v1" style={{ width: "100%", marginBottom: "4px" }} />
+					</div>
+				)}
+				<div style={{ marginBottom: "6px" }}>
+					<input value={modelKey} onChange={(e) => setModelKey(e.target.value)} type="password" placeholder="API Key" style={{ width: "100%", marginBottom: "4px" }} />
+				</div>
+				<div style={{ marginBottom: "6px" }}>
+					<input value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="Model name (e.g. gpt-4o)" style={{ width: "100%", marginBottom: "4px" }} />
+				</div>
+				<button type="button" className="button" onClick={async () => {
+					setMessage("Saving model config...");
+					try {
+						await apiFetch("/api/config/modelProvider", { method: "POST", body: JSON.stringify({ modelProvider, modelEndpoint, modelKey, modelName }) });
+						setMessage("Model config saved");
+					} catch (e) { setMessage(`Failed: ${String(e)}`); }
+				}}>
+					Save Model Config
+				</button>
 			</div>
 			<div style={{ marginBottom: "16px" }}>
 				<div style={{ color: "var(--fg-muted)", marginBottom: "4px" }}>

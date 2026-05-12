@@ -581,6 +581,26 @@ export function createWebAppServer(
 			return;
 		}
 
+		if (request.method === "POST" && pathname === "/api/config/modelProvider") {
+			const body = await readJsonBody(request);
+			const { setUserConfigValue } = await import("../shared/config");
+			setUserConfigValue("modelProvider", body.modelProvider);
+			setUserConfigValue("modelEndpoint", body.modelEndpoint);
+			setUserConfigValue("modelApiKey", body.modelKey);
+			setUserConfigValue("modelName", body.modelName);
+			json(response, 200, { success: true });
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/config/localApi") {
+			const body = await readJsonBody(request);
+			const { startLocalApi } = await import("../model_router");
+			const { server, url, token } = startLocalApi({ port: Number(body.port) || 11435, allowRemote: body.allowRemote === true });
+			// Store the server for cleanup
+			json(response, 200, { success: true, url, token });
+			return;
+		}
+
 		const configKeyMatch = /^\/api\/config\/([^/]+)$/u.exec(pathname);
 		if (request.method === "GET" && configKeyMatch) {
 			const key = decodeURIComponent(configKeyMatch[1] ?? "");
