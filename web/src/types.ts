@@ -26,6 +26,18 @@ export interface Task {
 	result?: string;
 }
 
+export interface TaskListResponse {
+	tasks: Task[];
+
+	available: boolean;
+
+	code?: string;
+
+	error?: string;
+
+	recovery?: string;
+}
+
 export interface Automation {
 	id: string;
 

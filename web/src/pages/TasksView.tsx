@@ -15,7 +15,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { apiFetch } from "../api";
-import type { Task } from "../types";
+import type { Task, TaskListResponse } from "../types";
 
 const STATUS_MAP: Record<string, "ok" | "warn" | "neutral" | "info"> = {
 	running: "info",
@@ -26,14 +26,21 @@ const STATUS_MAP: Record<string, "ok" | "warn" | "neutral" | "info"> = {
 
 export function TasksView() {
 	const [tasks, setTasks] = useState<Task[]>([]);
+	const [availability, setAvailability] = useState<TaskListResponse | null>(
+		null,
+	);
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
 		setLoading(true);
-		apiFetch<Task[]>("/api/tasks")
+		apiFetch<Task[] | TaskListResponse>("/api/tasks")
 			.then((data) => {
-				setTasks(data);
+				const response = Array.isArray(data)
+					? { tasks: data, available: true }
+					: data;
+				setTasks(response.tasks ?? []);
+				setAvailability(response);
 				setError("");
 			})
 			.catch((err: unknown) =>
@@ -53,7 +60,38 @@ export function TasksView() {
 	if (error) {
 		return (
 			<PageShell>
-				<ErrorState message="Error loading tasks" details={error} />
+				<ErrorState
+					message="Tasks could not load"
+					details={`Browser Control could not read task history. ${error}`}
+				/>
+			</PageShell>
+		);
+	}
+
+	if (availability?.available === false) {
+		const recovery =
+			availability.recovery ||
+			"Start Browser Control daemon, then return here. Task history will load automatically when the runtime reconnects.";
+		return (
+			<PageShell>
+				<div className="space-y-4 md:space-y-6">
+					<Card>
+						<CardContent className="p-6">
+							<EmptyState
+								title="Task runtime offline"
+								description={
+									availability.error ||
+									"Start Browser Control daemon to queue and monitor tasks."
+								}
+								action={
+									<div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-left text-xs text-muted-foreground">
+										{recovery}
+									</div>
+								}
+							/>
+						</CardContent>
+					</Card>
+				</div>
 			</PageShell>
 		);
 	}

@@ -1121,7 +1121,18 @@ export function createWebAppServer(
 
 		// ── Debug Evidence ───────────────────────────────────────────────
 		if (request.method === "GET" && pathname === "/api/debug/bundles") {
-			json(response, 200, api.debug.listBundles());
+			try {
+				json(response, 200, api.debug.listBundles());
+			} catch (e: unknown) {
+				const message = errorMessage(e);
+				if (
+					!message.includes("requires user confirmation") &&
+					!message.includes("Policy blocked debug_bundle_export")
+				) {
+					throw e;
+				}
+				json(response, 200, []);
+			}
 			return;
 		}
 
@@ -2539,11 +2550,16 @@ export function createWebAppServer(
 		if (request.method === "GET" && pathname === "/api/tasks") {
 			try {
 				json(response, 200, await fetchBrokerJson("/api/v1/tasks"));
-			} catch (e: unknown) {
-				json(response, 503, {
+			} catch {
+				json(response, 200, {
 					success: false,
+					available: false,
+					tasks: [],
 					code: "capability_unavailable",
-					error: errorMessage(e),
+					error:
+						"Task runtime is offline. Start Browser Control daemon to queue and monitor tasks.",
+					recovery:
+						"Run `bc daemon` or start the desktop app. Task history will load automatically when the runtime reconnects.",
 				});
 			}
 			return;
@@ -2567,7 +2583,9 @@ export function createWebAppServer(
 				json(response, 503, {
 					success: false,
 					code: "capability_unavailable",
-					error: errorMessage(e),
+					error:
+						"Task runtime is offline. Start Browser Control daemon before submitting tasks.",
+					details: errorMessage(e),
 				});
 			}
 			return;

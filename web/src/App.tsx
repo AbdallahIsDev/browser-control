@@ -64,23 +64,30 @@ function getReadiness(
 	text: string;
 	variant: "ok" | "warn" | "neutral";
 } {
-	if (error) return { text: "Runtime offline", variant: "neutral" };
-	if (loading) return { text: "Checking", variant: "neutral" };
+	if (error) return { text: "API unavailable", variant: "warn" };
+	if (loading) return { text: "Runtime starting", variant: "neutral" };
 
 	if (!status) return { text: "Runtime starting", variant: "neutral" };
 
-	// Explicitly check connectivity first
-	const isConnected =
-		status.daemon?.state === "running" || status.broker?.reachable === true;
+	const daemonState = status.daemon?.state;
+	const brokerReachable = status.broker?.reachable === true;
+	const browserSessions = Number(status.browser?.activeSessions ?? 0);
 
 	if (status.health?.overall === "healthy")
-		return { text: "Ready", variant: "ok" };
+		return { text: "Runtime ready", variant: "ok" };
 	if (status.health?.overall === "degraded")
-		return { text: "Limited", variant: "warn" };
+		return { text: "Runtime degraded", variant: "warn" };
 	if (status.health?.overall === "unhealthy")
-		return { text: "Needs setup", variant: "warn" };
+		return { text: "Runtime degraded", variant: "warn" };
 
-	if (isConnected) return { text: "Ready", variant: "ok" };
+	if (daemonState === "stopped" && !brokerReachable)
+		return { text: "Runtime offline", variant: "neutral" };
+
+	if (daemonState === "running" || brokerReachable) {
+		if (browserSessions === 0)
+			return { text: "Browser disconnected", variant: "warn" };
+		return { text: "Runtime ready", variant: "ok" };
+	}
 
 	return { text: "Runtime starting", variant: "neutral" };
 }
@@ -188,6 +195,8 @@ export default function App() {
 					<div className="flex items-center gap-2">
 						{/* Readiness pill */}
 						<div
+							role="status"
+							aria-label={`Browser Control status: ${health.text}`}
 							className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium ${
 								health.variant === "ok"
 									? "bg-primary/10 text-primary"

@@ -986,6 +986,46 @@ test("web app server exposes real failure debug bundles without leaking secrets"
 	assert.equal(traversal.status, 404);
 });
 
+test("web app server keeps evidence page load quiet when debug bundle listing needs confirmation", async (t) => {
+	const api = mockApi();
+	api.debug = {
+		...api.debug,
+		listBundles: () => {
+			throw new Error('Risk level "high" requires user confirmation');
+		},
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const listed = await fetch(`${info.url}/api/debug/bundles`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(listed.status, 200);
+	assert.deepEqual(await listed.json(), []);
+});
+
+test("web app server reports real debug bundle listing failures", async (t) => {
+	const api = mockApi();
+	api.debug = {
+		...api.debug,
+		listBundles: () => {
+			throw new Error("debug bundle store unreadable");
+		},
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const listed = await fetch(`${info.url}/api/debug/bundles`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(listed.status, 400);
+	assert.match(await listed.text(), /debug bundle store unreadable/u);
+});
+
 test("web app server exposes service proxy status and controls", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());
@@ -1536,7 +1576,7 @@ test("web app server sets security headers (CSP, X-Frame-Options)", async (t) =>
 	assert.equal(nosniff, "nosniff");
 });
 
-test("web app server returns 503 for broker endpoints when broker is unreachable", async (t) => {
+test("web app server returns readable tasks availability when broker is unreachable", async (t) => {
 	// Use a port that nothing is listening on
 	const previousPort = process.env.BROKER_PORT;
 	process.env.BROKER_PORT = "19999";
@@ -1554,11 +1594,19 @@ test("web app server returns 503 for broker endpoints when broker is unreachable
 	});
 	assert.equal(
 		tasks.status,
-		503,
-		"Tasks endpoint should return 503 when broker is unreachable",
+		200,
+		"Tasks list should stay readable when broker is unreachable",
 	);
-	const body = (await tasks.json()) as { code: string };
+	const body = (await tasks.json()) as {
+		code: string;
+		available: boolean;
+		tasks: unknown[];
+		error: string;
+	};
 	assert.equal(body.code, "capability_unavailable");
+	assert.equal(body.available, false);
+	assert.deepEqual(body.tasks, []);
+	assert.match(body.error, /task runtime is offline/i);
 });
 
 test("web app server exposes data, package, and trading product endpoints", async (t) => {

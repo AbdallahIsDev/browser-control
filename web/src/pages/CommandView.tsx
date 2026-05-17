@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "../api";
-import type { AppStatus, Task } from "../types";
+import type { AppStatus, Task, TaskListResponse } from "../types";
 
 const STATUS_MAP: Record<string, "ok" | "warn" | "neutral" | "info"> = {
 	running: "info",
@@ -51,8 +51,8 @@ export function CommandView() {
 
 	const loadTasks = useCallback(async () => {
 		try {
-			const tasks = await apiFetch<Task[]>("/api/tasks");
-			setAllTasks(tasks);
+			const response = await apiFetch<Task[] | TaskListResponse>("/api/tasks");
+			setAllTasks(Array.isArray(response) ? response : (response.tasks ?? []));
 		} catch {
 			// ignore
 		}
