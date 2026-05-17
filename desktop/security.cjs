@@ -1,6 +1,6 @@
 "use strict";
 
-function createBrowserWindowOptions(preloadPath) {
+function createBrowserWindowOptions(preloadPath, iconPath) {
 	return {
 		width: 1320,
 
@@ -13,6 +13,8 @@ function createBrowserWindowOptions(preloadPath) {
 		show: false,
 
 		backgroundColor: "#080A0F",
+
+		...(iconPath ? { icon: iconPath } : {}),
 
 		webPreferences: {
 			preload: preloadPath,

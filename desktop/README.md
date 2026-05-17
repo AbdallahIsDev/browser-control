@@ -25,3 +25,6 @@ Build verification:
 ```powershell
 npm run desktop:build
 ```
+
+The Windows directory build is created under `dist-desktop\win-unpacked\`.
+The Electron window uses `desktop\icon.png`; the Windows package uses `desktop\icon.ico`.

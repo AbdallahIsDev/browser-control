@@ -46,6 +46,8 @@ output/
 *.tsbuildinfo
 dist/
 dist-desktop/
-dist-desktop-2/
+dist-desktop-*/
+release-desktop/
+win-unpacked/
 
 .tmp-*

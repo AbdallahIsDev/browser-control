@@ -3,7 +3,11 @@ import path from "node:path";
 import test from "node:test";
 
 const security = require("../../desktop/security.cjs") as {
-	createBrowserWindowOptions(preloadPath: string): {
+	createBrowserWindowOptions(
+		preloadPath: string,
+		iconPath?: string,
+	): {
+		icon?: string;
 		webPreferences: {
 			contextIsolation: boolean;
 			nodeIntegration: boolean;
@@ -26,6 +30,16 @@ test("desktop browser window disables dangerous renderer capabilities", () => {
 	assert.equal(options.webPreferences.sandbox, true);
 	assert.equal(options.webPreferences.webSecurity, true);
 	assert.equal(options.webPreferences.allowRunningInsecureContent, false);
+});
+
+test("desktop browser window uses Browser Control icon when provided", () => {
+	const iconPath = path.join(process.cwd(), "desktop", "icon.png");
+	const options = security.createBrowserWindowOptions(
+		path.join(process.cwd(), "desktop", "preload.cjs"),
+		iconPath,
+	);
+
+	assert.equal(options.icon, iconPath);
 });
 
 test("desktop navigation stays pinned to local app origin", () => {

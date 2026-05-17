@@ -11,7 +11,7 @@ Current-session status: **Partial but improved**. Git baseline was recovered, re
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Git baseline | Pass | Initial dirty state was recovered Browser Control source plus two remote contamination commits. Baseline fix committed as `c319d0a`; non-destructive reconciliation commit `f06a73a`; pushed to `origin/main`. |
-| Git status | Pending commit | `git status --short` currently shows only intentional current-session UI/API/test/tracker edits before the next atomic commit. |
+| Git status | Pending commit | `git status --short` currently shows only intentional current-session desktop/package/tracker edits before the next atomic commit. |
 | Biome | Pass | `npx biome check . --max-diagnostics=30` — exit 0, checked 78 files, no fixes applied. |
 | Typecheck | Pass | `npm run typecheck` — exit 0. |
 | Web typecheck | Pass | `npm run web:typecheck` — exit 0. |
@@ -20,17 +20,20 @@ Current-session status: **Partial but improved**. Git baseline was recovered, re
 | State tests | Pass | `npm run test:state` — 25/25. |
 | MCP tests | Pass | `npm run test:mcp` — 26/26. |
 | Web tests | Pass | `npm run test:web` — 60/60. |
-| Desktop tests | Pass | `npm run test:desktop` — 2/2. |
+| Desktop tests | Pass | `npm run test:desktop` — 3/3. |
 | Browser feature tests | Pass | `npm run test:browser-features` — 173/173. |
 | CI tests | Pass | `npm run test:ci` — 511/511. |
 | Build | Pass | `npm run build` — exit 0. |
 | Package smoke | Pass | `npm run test:package` — 460 files checked. |
-| Pack dry run | Pass | `npm pack --dry-run --json` — entryCount 460. |
+| Pack dry run | Pass | `npm pack --dry-run --json` — entryCount 460 and includes `scripts/desktop_after_pack.cjs`. |
 | UI screenshot capture | Pass | `node scripts/capture_ui_screenshots.cjs "http://127.0.0.1:7790/#token=..."` captured 25+ artifacts in `reports/ui-verification/`; mobile checks report `scrollWidth=375`, `innerWidth=375`. |
 | Tasks tab | Pass | Browser Control a11y verified `/api/tasks` returns 200 while broker is offline; Tasks shows `Task runtime offline` recovery state instead of `fetch failed`. |
 | Runtime badge | Pass | Browser Control a11y verified accessible status label `Browser Control status: Runtime offline`; badge no longer stays on `Runtime starting` for stopped daemon/broker. |
 | Evidence UX | Pass | Evidence page now has plain-language purpose, Visual comparison, Page changes, Policy and safety decisions, Technical details, and raw details hidden behind disclosures. Desktop/mobile screenshots captured. |
-| Process cleanup | Pass | Verification web server stopped; `Get-Process "Browser Control"` and `Get-NetTCPConnection -LocalPort 7790` returned no active process/listener output. |
+| Desktop icon | Pass | Runtime window uses `desktop/icon.png`; Windows package uses `desktop/icon.ico`; extracted `dist-desktop\win-unpacked\Browser Control.exe` icon captured at `reports/ui-verification/desktop-exe-icon.png`. |
+| Desktop build folders | Pass | Removed stale ignored `dist-desktop-2`, old `dist-desktop`, `desktop\bin`, and `desktop\BrowserControlLauncher`; rebuilt one current output under `dist-desktop\win-unpacked\`; package excludes stale desktop launcher folders. |
+| Desktop build | Pass | `npm run desktop:build` — exit 0; output standardized to `dist-desktop\win-unpacked\`. |
+| Process cleanup | Pass | Verification web server/desktop app stopped; `Get-Process "Browser Control"` and `Get-NetTCPConnection -LocalPort 7790` returned no active process/listener output. |
 
 ## Screenshot Artifacts
 
