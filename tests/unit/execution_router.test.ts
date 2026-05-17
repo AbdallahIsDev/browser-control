@@ -73,7 +73,15 @@ test("classifies provider and service mutations as policy-governed command actio
 
   const providerUse = router.buildRoutedStep(intent, "browser_provider_use", { name: "browserless" });
   assert.strictEqual(providerUse.path, "command");
-  assert.strictEqual(providerUse.risk, "moderate");
+  assert.strictEqual(providerUse.risk, "high");
+
+  const sandboxProviderAdd = router.buildRoutedStep(intent, "browser_provider_add", { name: "sandbox", type: "e2b" });
+  assert.strictEqual(sandboxProviderAdd.path, "command");
+  assert.strictEqual(sandboxProviderAdd.risk, "high");
+
+  const localProviderUse = router.buildRoutedStep(intent, "browser_provider_use", { name: "local" });
+  assert.strictEqual(localProviderUse.path, "command");
+  assert.strictEqual(localProviderUse.risk, "moderate");
 
   const serviceRegister = router.buildRoutedStep(intent, "service_register", { name: "app" });
   assert.strictEqual(serviceRegister.path, "command");

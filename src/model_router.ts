@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import http from "node:http";
+import { redactString } from "./observability/redaction";
 import { logger } from "./shared/logger";
-import { getConfigValue, setUserConfigValue } from "./shared/config";
+import { getConfigValue, setUserConfigValue, loadUserConfig } from "./shared/config";
 
 const log = logger.withComponent("model-router");
 
@@ -43,13 +44,98 @@ function defaultProviders(): ModelProvider[] {
 }
 
 export function getDefaultProviders(): ModelProvider[] {
-	const stored = getConfigValue("modelProviders")?.value;
-	if (Array.isArray(stored)) return stored as unknown as ModelProvider[];
-	return defaultProviders();
+	const providers = defaultProviders();
+	// Use loadUserConfig for sensitive values (API keys) to avoid redaction.
+	// Use getConfigValue for non-sensitive values.
+	const getRawString = (key: string): string | undefined => {
+		try {
+			const userConfig = loadUserConfig();
+			const value = (userConfig as Record<string, unknown>)[key];
+			return typeof value === "string" && value.trim() ? value : undefined;
+		} catch {
+			return undefined;
+		}
+	};
+	const getString = (key: string): string | undefined => {
+		try {
+			const value = getConfigValue(key, { validate: false }).value;
+			return typeof value === "string" && value.trim() && value !== "[redacted]" ? value : undefined;
+		} catch {
+			return undefined;
+		}
+	};
+	const selected = getString("modelProvider") ?? "openrouter";
+	const endpoint = getString("modelEndpoint");
+	const apiKey = getRawString("modelApiKey");
+	const modelName = getString("modelName");
+
+	return providers.map(provider => {
+		const enabled = provider.kind === selected;
+		if (provider.kind === "openrouter") {
+			return {
+				...provider,
+				enabled,
+				apiKey: apiKey ?? getRawString("openrouterApiKey"),
+				model: modelName ?? getString("openrouterModel") ?? provider.model,
+				baseUrl: endpoint ?? getString("openrouterBaseUrl") ?? provider.baseUrl,
+			};
+		}
+		if (provider.kind === "openai-compatible") {
+			return {
+				...provider,
+				enabled,
+				apiKey,
+				model: modelName ?? provider.model,
+				baseUrl: endpoint ?? provider.baseUrl,
+			};
+		}
+		if (provider.kind === "ollama") {
+			return {
+				...provider,
+				enabled,
+				model: modelName ?? provider.model,
+				baseUrl: endpoint ?? provider.baseUrl,
+			};
+		}
+		return { ...provider, enabled };
+	});
 }
 
 export function saveProviders(providers: ModelProvider[]): void {
-	setUserConfigValue("modelProviders", providers);
+	const firstEnabled = [...providers]
+		.filter(provider => provider.enabled)
+		.sort((a, b) => a.priority - b.priority)[0];
+	if (!firstEnabled) return;
+	setUserConfigValue("modelProvider", firstEnabled.kind);
+	setUserConfigValue("modelEndpoint", firstEnabled.baseUrl);
+	setUserConfigValue("modelName", firstEnabled.model);
+	if (firstEnabled.apiKey) setUserConfigValue("modelApiKey", firstEnabled.apiKey);
+}
+
+function isLoopbackBaseUrl(baseUrl: string): boolean {
+	try {
+		const hostname = new URL(baseUrl).hostname.toLowerCase();
+		return (
+			hostname === "localhost" ||
+			hostname === "::1" ||
+			hostname === "[::1]" ||
+			hostname === "127.0.0.1" ||
+			hostname.startsWith("127.")
+		);
+	} catch {
+		return false;
+	}
+}
+
+function isLoopbackRemoteAddress(address: string | undefined): boolean {
+	if (!address) return false;
+	const normalized = address.toLowerCase();
+	return (
+		normalized === "127.0.0.1" ||
+		normalized === "::1" ||
+		normalized === "::ffff:127.0.0.1" ||
+		normalized.startsWith("127.")
+	);
 }
 
 // ── Router ──────────────────────────────────────────────────────────
@@ -69,7 +155,12 @@ export class ModelRouter {
 	getActiveProviders(): ModelProvider[] {
 		return this.providers
 			.filter(p => p.enabled)
-			.filter(p => !this.localOnly || p.kind === "ollama" || p.kind === "openai-compatible")
+			.filter(
+				p =>
+					!this.localOnly ||
+					((p.kind === "ollama" || p.kind === "openai-compatible") &&
+						isLoopbackBaseUrl(p.baseUrl)),
+			)
 			.sort((a, b) => a.priority - b.priority);
 	}
 
@@ -104,14 +195,20 @@ export class ModelRouter {
 
 		const model = request.model || provider.model;
 		const body = JSON.stringify({ ...request, model, stream: false });
+		const baseUrl = provider.baseUrl.replace(/\/+$/u, "");
 
-		const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+		const response = await fetch(`${baseUrl}/chat/completions`, {
 			method: "POST", headers, body,
+			signal: AbortSignal.timeout(30_000),
 		});
 
 		if (!response.ok) {
 			const text = await response.text();
-			throw new Error(`Provider ${provider.name} returned ${response.status}: ${text.substring(0, 200)}`);
+			throw new Error(
+				redactString(
+					`Provider ${provider.name} returned ${response.status}: ${text.substring(0, 200)}`,
+				),
+			);
 		}
 
 		return response.json() as Promise<ChatResponse>;
@@ -135,7 +232,9 @@ export interface LocalApiConfig {
 	router?: ModelRouter;
 }
 
-export function startLocalApi(config: LocalApiConfig = {}): { server: http.Server; url: string; token: string } {
+export async function startLocalApi(
+	config: LocalApiConfig = {},
+): Promise<{ server: http.Server; url: string; token: string }> {
 	const port = config.port ?? 11435;
 	const token = config.token ?? crypto.randomBytes(16).toString("hex");
 	const router = config.router ?? new ModelRouter();
@@ -143,8 +242,9 @@ export function startLocalApi(config: LocalApiConfig = {}): { server: http.Serve
 
 	const server = http.createServer(async (req, res) => {
 		res.setHeader("Content-Type", "application/json");
+		const pathname = (req.url ?? "/").replace(/^\/+/, "/").split("?")[0] ?? "/";
 
-		if (!config.allowRemote && req.socket.remoteAddress !== "127.0.0.1" && req.socket.remoteAddress !== "::1") {
+		if (!config.allowRemote && !isLoopbackRemoteAddress(req.socket.remoteAddress)) {
 			res.writeHead(403);
 			res.end(JSON.stringify({ error: "Loopback only" }));
 			return;
@@ -157,14 +257,14 @@ export function startLocalApi(config: LocalApiConfig = {}): { server: http.Serve
 			return;
 		}
 
-		if (req.method === "GET" && req.url === "/v1/models") {
+		if (req.method === "GET" && pathname === "/v1/models") {
 			const active = router.getActiveProviders();
 			res.writeHead(200);
 			res.end(JSON.stringify({ object: "list", data: active.map(p => ({ id: p.model, object: "model", owned_by: p.name })) }));
 			return;
 		}
 
-		if (req.method === "POST" && req.url === "/v1/chat/completions") {
+		if (req.method === "POST" && pathname === "/v1/chat/completions") {
 			try {
 				const body = await readBody(req);
 				const request: ChatRequest = JSON.parse(body);
@@ -173,7 +273,7 @@ export function startLocalApi(config: LocalApiConfig = {}): { server: http.Serve
 				res.end(JSON.stringify(response));
 			} catch (e) {
 				res.writeHead(500);
-				res.end(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }));
+				res.end(JSON.stringify({ error: e instanceof Error ? redactString(e.message) : "Unknown error" }));
 			}
 			return;
 		}
@@ -182,8 +282,23 @@ export function startLocalApi(config: LocalApiConfig = {}): { server: http.Serve
 		res.end(JSON.stringify({ error: "Not found" }));
 	});
 
-	server.listen(port, host);
-	const url = `http://${host}:${port}`;
+	await new Promise<void>((resolve, reject) => {
+		const onError = (error: Error) => {
+			server.off("listening", onListening);
+			reject(error);
+		};
+		const onListening = () => {
+			server.off("error", onError);
+			resolve();
+		};
+		server.once("error", onError);
+		server.once("listening", onListening);
+		server.listen(port, host);
+	});
+	const address = server.address();
+	const actualPort =
+		address && typeof address === "object" ? address.port : port;
+	const url = `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${actualPort}`;
 	log.info(`Local API listening at ${url}`);
 	return { server, url, token };
 }
@@ -209,8 +324,9 @@ export async function checkOllamaReachable(): Promise<{ ok: boolean; message: st
 }
 
 export async function checkOpenRouterKey(): Promise<{ ok: boolean; message: string }> {
-	const key = getConfigValue("openrouterApiKey")?.value as string | undefined;
-	if (!key) return { ok: false, message: "OpenRouter API key not configured" };
+	const userConfig = loadUserConfig();
+	const key = (userConfig as Record<string, unknown>).openrouterApiKey ?? (userConfig as Record<string, unknown>).modelApiKey;
+	if (typeof key !== "string" || !key.trim()) return { ok: false, message: "OpenRouter API key not configured" };
 	return { ok: true, message: "OpenRouter API key configured" };
 }
 

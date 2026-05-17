@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getDataHome } from "../shared/paths";
-import { PACKAGE_NAME_REGEX, validatePackageManifest } from "./manifest";
-import type { InstalledAutomationPackage, PackagePermissionDecision } from "./types";
+import { PACKAGE_NAME_REGEX, validatePackageManifest, computePackageDigest } from "./manifest";
+import type { InstalledAutomationPackage, PackagePermissionDecision, TrustReviewRecord, PackageEvalRecord } from "./types";
 
 const PACKAGES_DIR_NAME = "packages";
 const REGISTRY_FILE = "registry.json";
@@ -108,6 +108,14 @@ export class PackageRegistry {
       return { success: false, error: `Installation failed: ${(err as Error).message}` };
     }
 
+    // Compute package digest after installation
+    let digestResult;
+    try {
+      digestResult = computePackageDigest(installDir);
+    } catch {
+      digestResult = undefined;
+    }
+
     const permissions: PackagePermissionDecision[] = manifest.permissions.map(p => ({
       permission: p,
       granted: false, // Default deny
@@ -127,6 +135,8 @@ export class PackageRegistry {
       workflows: manifest.workflows ?? [],
       helpers: manifest.helpers ?? [],
       evals: manifest.evals ?? [],
+      digest: digestResult?.digest,
+      signer: manifest.trust?.signer,
     };
 
     const registry = this.list();
@@ -312,6 +322,165 @@ export class PackageRegistry {
   public saveRegistry(packages: InstalledAutomationPackage[]): void {
     ensurePackagesDir(this.dataHome);
     fs.writeFileSync(getPackageRegistryPath(this.dataHome), JSON.stringify(packages, null, 2), "utf8");
+  }
+
+  /**
+   * Submit a trust review for a package with risk analysis.
+   */
+  submitReview(
+    packageName: string,
+    status: import("./types").TrustReviewStatus,
+    reviewedBy: string,
+    reason?: string,
+  ): { success: boolean; record?: TrustReviewRecord; error?: string } {
+    if (!PACKAGE_NAME_REGEX.test(packageName)) {
+      return { success: false, error: `Invalid package name: ${packageName}` };
+    }
+    const pkg = this.get(packageName);
+    if (!pkg) return { success: false, error: "Package not found" };
+
+    const installDir = pkg.installedPath;
+    let digestResult;
+    let fileEntries: import("./types").PackageFileEntry[] = [];
+    try {
+      digestResult = computePackageDigest(installDir);
+      fileEntries = digestResult.files;
+    } catch {
+      // Digest computation may fail if files are missing
+    }
+
+    // Generate risk summary based on requested permissions and provenance.
+    // Reviews happen before grants, so requested capability is the risk signal.
+    const warnings: string[] = [];
+    let riskLevel: "low" | "medium" | "high" | "critical" = "low";
+    const raiseRisk = (next: typeof riskLevel) => {
+      const rank = { low: 0, medium: 1, high: 2, critical: 3 };
+      if (rank[next] > rank[riskLevel]) riskLevel = next;
+    };
+
+    if (pkg.permissions.some(p => p.permission.kind === "terminal")) {
+      warnings.push("Terminal access requested");
+      raiseRisk("medium");
+    }
+    if (
+      pkg.permissions.some(
+        p =>
+          p.permission.kind === "filesystem" &&
+          ((p.permission as import("./types").FilesystemPermission).access ===
+            "write" ||
+            (p.permission as import("./types").FilesystemPermission).access ===
+              "read-write"),
+      )
+    ) {
+      warnings.push("Filesystem write access requested");
+      raiseRisk("high");
+    }
+    if (pkg.permissions.some(p => p.permission.kind === "helper")) {
+      warnings.push("Helper execution requested");
+      raiseRisk("medium");
+    }
+    if (!pkg.signer && !digestResult) {
+      warnings.push("No signer or digest available");
+      raiseRisk("high");
+    }
+
+    const record: TrustReviewRecord = {
+      id: `review-${Date.now()}-${packageName}`,
+      packageName,
+      version: pkg.version,
+      status,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy,
+      riskSummary: {
+        riskLevel,
+        warnings,
+        details: `Review of ${packageName}@${pkg.version}. ${reason ?? "No additional notes."}`,
+      },
+      permissions: pkg.permissions,
+      files: fileEntries.slice(0, 100), // Cap file list for display
+      digest: digestResult?.digest ?? "",
+      decisionAudit: [{ action: `review:${status}`, timestamp: new Date().toISOString(), by: reviewedBy, reason }],
+    };
+
+    // Persist review record
+    this.saveReviewRecord(record);
+
+    // Update package trust status
+    const registry = this.list();
+    const idx = registry.findIndex(p => p.name === packageName);
+    if (idx >= 0) {
+      registry[idx].trustStatus = status;
+      registry[idx].signer = registry[idx].signer || (status === "approved" ? "manual-review" : undefined);
+      this.saveRegistry(registry);
+    }
+
+    return { success: true, record };
+  }
+
+  /**
+   * Get trust review history for a package.
+   */
+  getReviewHistory(packageName: string): TrustReviewRecord[] {
+    if (!PACKAGE_NAME_REGEX.test(packageName)) return [];
+    const reviewPath = this.getReviewHistoryPath(packageName);
+    if (!fs.existsSync(reviewPath)) return [];
+    try {
+      const data = JSON.parse(fs.readFileSync(reviewPath, "utf8"));
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get eval history records.
+   */
+  getEvalHistory(packageName?: string): PackageEvalRecord[] {
+    const evalPath = this.getEvalHistoryPath();
+    if (!fs.existsSync(evalPath)) return [];
+    try {
+      const data = JSON.parse(fs.readFileSync(evalPath, "utf8"));
+      const records: PackageEvalRecord[] = Array.isArray(data) ? data : [];
+      return packageName ? records.filter(r => r.packageName === packageName) : records;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Record an eval run in history.
+   */
+  recordEvalRun(record: PackageEvalRecord): void {
+    const evalPath = this.getEvalHistoryPath();
+    let records: PackageEvalRecord[] = [];
+    if (fs.existsSync(evalPath)) {
+      try { records = JSON.parse(fs.readFileSync(evalPath, "utf8")); } catch { /* ignore */ }
+    }
+    records.unshift(record);
+    // Keep last 100 records
+    if (records.length > 100) records = records.slice(0, 100);
+    fs.mkdirSync(path.dirname(evalPath), { recursive: true });
+    fs.writeFileSync(evalPath, JSON.stringify(records, null, 2), "utf8");
+  }
+
+  private getReviewHistoryPath(packageName: string): string {
+    return path.join(getPackagesDir(this.dataHome), "reviews", `${packageName}.json`);
+  }
+
+  private getEvalHistoryPath(): string {
+    return path.join(getPackagesDir(this.dataHome), "eval-history.json");
+  }
+
+  private saveReviewRecord(record: TrustReviewRecord): void {
+    const reviewPath = this.getReviewHistoryPath(record.packageName);
+    let history: TrustReviewRecord[] = [];
+    if (fs.existsSync(reviewPath)) {
+      try { history = JSON.parse(fs.readFileSync(reviewPath, "utf8")); } catch { /* ignore */ }
+    }
+    history.unshift(record);
+    if (history.length > 50) history = history.slice(0, 50);
+    fs.mkdirSync(path.dirname(reviewPath), { recursive: true });
+    fs.writeFileSync(reviewPath, JSON.stringify(history, null, 2), "utf8");
   }
 
   private copyDirectorySafely(src: string, dest: string, state = { count: 0, size: 0 }): void {

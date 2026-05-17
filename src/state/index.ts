@@ -191,9 +191,15 @@ export interface StoredSecretGrant {
   id: string;
   secretId: string;
   action: string;
+  actions?: string[];
   domain: string | null;
+  siteScope?: string | null;
+  domainScope?: string | null;
+  packageScope?: string | null;
+  workflowScope?: string | null;
   expiresAt: string | null;
   revoked: boolean;
+  revokedAt?: string | null;
   createdAt: string;
 }
 
@@ -214,6 +220,12 @@ export interface StoredSecretAuditEvent {
   targetDomain: string | null;
   policyDecision: string;
   sessionId: string | null;
+  grantId?: string | null;
+  packageName?: string | null;
+  workflowId?: string | null;
+  site?: string | null;
+  deniedReason?: string | null;
+  redaction?: { rawSecretStored: boolean; output?: string } | null;
   timestamp: string;
 }
 
@@ -586,7 +598,10 @@ export class JsonFileStateStorage implements StateStorage {
   async revokeGrant(grantId: string): Promise<void> {
     const items = this.loadCollection<StoredSecretGrant>("secret_grants");
     const idx = items.findIndex((g) => g.id === grantId);
-    if (idx >= 0) { items[idx].revoked = true; this.saveCollection("secret_grants", items); }
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], revoked: true, revokedAt: new Date().toISOString() };
+      this.saveCollection("secret_grants", items);
+    }
   }
 
   // ── Network Rules ──

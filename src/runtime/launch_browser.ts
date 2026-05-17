@@ -449,9 +449,10 @@ async function startWslBridgeIfNeeded(
   }
 
   // Wait for bridge to be ready
+  const bridgeCheckUrl = `http://${listenHost}:${port}/json`;
   for (let i = 0; i < 10; i++) {
     try {
-      const response = await fetch(bridgeUrl, { signal: AbortSignal.timeout(2000) });
+      const response = await fetch(bridgeCheckUrl, { signal: AbortSignal.timeout(2000) });
       if (response.ok) {
         console.log("WSL CDP bridge ready.");
         return;
@@ -536,23 +537,28 @@ async function main(): Promise<void> {
   }
 
   // Resolve user data dir
-  const userDataDir = resolveUserDataDir(platform);
-  fs.mkdirSync(userDataDir, { recursive: true });
-  const launchProfileMode = resolveLaunchProfileMode();
+  let userDataDir = resolveUserDataDir(platform);
+  let effectiveProfileMode = resolveLaunchProfileMode();
 
-  if (launchProfileMode === "system" && (isChromeProfileInUse(userDataDir) || isChromeProcessRunning(platform))) {
-    throw new Error(
-      `Chrome's system profile is already running without a reachable CDP port ${port}. ` +
-      `Close all Chrome windows, then run this launcher once so the real profile starts with remote debugging. ` +
-      `For an isolated automation profile instead, set BROWSER_LAUNCH_PROFILE=isolated.`,
+  // If system profile is blocked by a running Chrome without CDP,
+  // automatically fall back to an isolated profile so the launcher
+  // succeeds without requiring the user to close their browser.
+  if (effectiveProfileMode === "system" && (isChromeProfileInUse(userDataDir) || isChromeProcessRunning(platform))) {
+    console.log(
+      `System Chrome profile is in use without a reachable CDP port ${port}. ` +
+      `Falling back to an isolated automation profile so Chrome can launch with remote debugging.`
     );
+    effectiveProfileMode = "isolated";
+    userDataDir = resolveIsolatedUserDataDir();
   }
+
+  fs.mkdirSync(userDataDir, { recursive: true });
 
   // Build Chrome args
   const chromeArgs = buildChromeArgs({ port, userDataDir, bindAddress });
 
   // Launch Chrome
-  console.log(`Launching Chrome with --remote-debugging-port=${port} using ${launchProfileMode} profile: ${userDataDir}`);
+  console.log(`Launching Chrome with --remote-debugging-port=${port} using ${effectiveProfileMode} profile: ${userDataDir}`);
   const chromeProcess = spawn(chromePath, chromeArgs, {
     detached: true,
     stdio: "ignore",

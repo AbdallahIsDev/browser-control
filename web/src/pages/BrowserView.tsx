@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "../api";
 import type { AppStatus } from "../types";
 
@@ -14,44 +19,60 @@ export function BrowserView() {
 			);
 	}, []);
 
-	if (error)
+	if (error) {
 		return (
-			<div className="panel error">Error loading browser status: {error}</div>
+			<PageShell>
+				<ErrorState message="Error loading browser status" details={error} />
+			</PageShell>
 		);
+	}
 
 	return (
-		<div className="panel">
-			<div className="panel-title">Browser Session</div>
-			{status?.browser?.activeSessions && status.browser.activeSessions > 0 ? (
-				<div className="grid-2">
-					<div className="panel">
-						<div style={{ color: "var(--fg-muted)", marginBottom: "4px" }}>
-							Provider
+		<PageShell>
+			<div className="space-y-4 md:space-y-6">
+				{status?.browser?.activeSessions &&
+				status.browser.activeSessions > 0 ? (
+					<>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<Card>
+								<CardHeader>
+									<CardTitle>Provider</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<p className="text-2xl font-semibold">
+										{status.browser.provider || "Unknown"}
+									</p>
+								</CardContent>
+							</Card>
+							<Card>
+								<CardHeader>
+									<CardTitle>Active Sessions</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<p className="text-2xl font-semibold">
+										{status.browser.activeSessions}
+									</p>
+								</CardContent>
+							</Card>
 						</div>
-						<div style={{ fontSize: "1.2rem", fontWeight: 600 }}>
-							{status.browser.provider || "Unknown"}
+						<div className="flex flex-col sm:flex-row gap-3">
+							<Button className="sm:w-auto w-full">Open URL</Button>
+							<Button variant="outline" className="sm:w-auto w-full">
+								Take Screenshot
+							</Button>
 						</div>
-					</div>
-					<div className="panel">
-						<div style={{ color: "var(--fg-muted)", marginBottom: "4px" }}>
-							Sessions
-						</div>
-						<div style={{ fontSize: "1.2rem", fontWeight: 600 }}>
-							{status.browser.activeSessions}
-						</div>
-					</div>
-				</div>
-			) : (
-				<div className="empty-state">No active browser sessions.</div>
-			)}
-			<div style={{ marginTop: "20px", display: "flex", gap: "12px" }}>
-				<button type="button" className="button button-primary">
-					Open URL
-				</button>
-				<button type="button" className="button">
-					Take Screenshot
-				</button>
+					</>
+				) : (
+					<Card>
+						<CardContent className="p-6">
+							<EmptyState
+								title="No active browser sessions"
+								description="Open a URL to start a session."
+							/>
+						</CardContent>
+					</Card>
+				)}
 			</div>
-		</div>
+		</PageShell>
 	);
 }

@@ -17,7 +17,15 @@ Symptoms:
 - `bc doctor` reports CDP warnings
 - `bc browser status` is disconnected/degraded
 
-Fix:
+Auto-launch (default):
+
+By default, `bc open <url>` automatically launches a managed browser if no browser is attachable. No manual launch step is required.
+
+```powershell
+bc open https://example.com
+```
+
+If auto-launch fails, check Chrome installation and try an explicit launch:
 
 ```powershell
 bc browser launch --port 9222 --profile default
@@ -30,6 +38,12 @@ Attach mode:
 bc config set browserMode attach
 bc config set browserDebugUrl http://127.0.0.1:9222
 bc browser attach --cdp-url http://127.0.0.1:9222
+```
+
+Disable auto-launch (strict attach-only):
+
+```powershell
+bc config set browserAutoLaunch false
 ```
 
 Terminal and filesystem workflows still work without Chrome.

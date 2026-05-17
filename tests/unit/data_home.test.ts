@@ -10,12 +10,146 @@ import {
 } from "../../src/data_home";
 import {
 	ensureDataHomeAtPath,
+	ensureDataHome,
+	getDataHome,
 	getDataHomeManifestPath,
 	getEvidenceScreenshotsDir,
 	getHelpersDir,
 	getInteropDir,
 	getRuntimeTempDir,
 } from "../../src/shared/paths";
+
+// ── Data Home Safety Guard Tests ─────────────────────────────────────
+
+test("getDataHome rejects BROWSER_CONTROL_HOME=os.homedir()", () => {
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	process.env.BROWSER_CONTROL_HOME = os.homedir();
+	try {
+		assert.throws(
+			() => getDataHome(),
+			/Refusing unsafe Browser Control data home/,
+			"should reject homedir as data home",
+		);
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("getDataHome rejects BROWSER_CONTROL_HOME=C:\\ (drive root)", () => {
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	process.env.BROWSER_CONTROL_HOME = "C:\\";
+	try {
+		assert.throws(
+			() => getDataHome(),
+			/Refusing unsafe Browser Control data home/,
+			"should reject drive root as data home",
+		);
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("ensureDataHomeAtPath(os.homedir()) rejects", () => {
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	try {
+		assert.throws(
+			() => ensureDataHomeAtPath(os.homedir()),
+			/Refusing unsafe Browser Control data home/,
+			"should reject homedir as ensureDataHomeAtPath argument",
+		);
+	} finally {
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("getDataHome default returns ~/.browser-control (not home root)", () => {
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_HOME;
+	try {
+		const result = getDataHome();
+		assert.ok(result.endsWith(".browser-control"), `default should end with .browser-control, got: ${result}`);
+		assert.notEqual(result, os.homedir(), "default should not equal homedir");
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("temp data homes under $TEMP are allowed", () => {
+	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-safe-test-"));
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpDir;
+	try {
+		const result = getDataHome();
+		assert.equal(result, path.resolve(tmpDir), "temp data home should be allowed");
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME=1 allows unsafe home", () => {
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = "1";
+	process.env.BROWSER_CONTROL_HOME = os.homedir();
+	try {
+		const result = getDataHome();
+		assert.equal(result, path.resolve(os.homedir()), "env override should allow unsafe home");
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
+
+test("unsafe home does not create any root-level BC folders on guard rejection", () => {
+	const previous = process.env.BROWSER_CONTROL_HOME;
+	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+	process.env.BROWSER_CONTROL_HOME = os.homedir();
+	try {
+		assert.throws(() => ensureDataHome(), /Refusing unsafe/);
+		// Verify no manifest.json, state, memory, browser, reports were created
+		const home = os.homedir();
+		assert.equal(fs.existsSync(path.join(home, "manifest.json")), false,
+			"manifest.json should not be created at home root after rejection");
+		assert.equal(fs.existsSync(path.join(home, "state")), false,
+			"state dir should not be created at home root after rejection");
+		assert.equal(fs.existsSync(path.join(home, "memory")), false,
+			"memory dir should not be created at home root after rejection");
+		assert.equal(fs.existsSync(path.join(home, "browser")), false,
+			"browser dir should not be created at home root after rejection");
+		assert.equal(fs.existsSync(path.join(home, "reports")), false,
+			"reports dir should not be created at home root after rejection");
+	} finally {
+		if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previous;
+		if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+	}
+});
 
 test("data home v2 creates manifest, target dirs, and non-destructive legacy aliases", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-"));

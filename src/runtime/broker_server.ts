@@ -140,7 +140,11 @@ export interface BrokerServerOptions {
 			command: string,
 			options?: Record<string, unknown>,
 		): Promise<unknown>;
-		termType?(sessionId: string, text: string): Promise<{ ok: true }>;
+		termType?(
+			sessionId: string,
+			text: string,
+			options?: { submit?: boolean },
+		): Promise<{ ok: true }>;
 		termRead?(
 			sessionId: string,
 			maxBytes?: number,
@@ -417,6 +421,7 @@ function createCallbacksFromDaemon(
 					return daemon.termType(
 						payload.sessionId as string,
 						payload.text as string,
+						{ submit: payload.submit !== false },
 					);
 				case "read":
 					if (!daemon.termRead)

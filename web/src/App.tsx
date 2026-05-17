@@ -1,5 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./App.css";
+import {
+	CheckSquare,
+	Globe,
+	Home,
+	Image,
+	Menu,
+	Moon,
+	Package,
+	Repeat,
+	Settings,
+	Sun,
+} from "lucide-react";
+import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
+import { Toolbar } from "@/components/layout/Toolbar";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "./api";
 import {
 	AdvancedView,
@@ -16,31 +31,78 @@ import {
 } from "./pages";
 import type { AppStatus } from "./types";
 
-type Page =
-	| "command"
-	| "terminal"
-	| "tasks"
-	| "automations"
-	| "browser"
-	| "trading"
-	| "workflows"
-	| "packages"
-	| "evidence"
-	| "settings"
-	| "advanced";
+const navConfig: NavItem[] = [
+	{ id: "command", label: "Home", icon: <Home size={16} /> },
+	{ id: "tasks", label: "Tasks", icon: <CheckSquare size={16} /> },
+	{ id: "browser", label: "Browser", icon: <Globe size={16} /> },
+	{ id: "workflows", label: "Workflows", icon: <Repeat size={16} /> },
+	{ id: "packages", label: "Skills", icon: <Package size={16} /> },
+	{ id: "evidence", label: "Evidence", icon: <Image size={16} /> },
+	{ id: "settings", label: "Settings", icon: <Settings size={16} /> },
+];
+
+const pageLabels: Record<string, string> = {
+	command: "Home",
+	terminal: "Terminal",
+	tasks: "Tasks",
+	automations: "Automations",
+	browser: "Browser",
+	trading: "Trading",
+	workflows: "Workflows",
+	packages: "Skills",
+	evidence: "Evidence",
+	settings: "Settings",
+	advanced: "Advanced",
+};
+
+/** Map status to a human-readable readiness state */
+function getReadiness(
+	status: AppStatus | null,
+	error: boolean,
+	loading: boolean,
+): {
+	text: string;
+	variant: "ok" | "warn" | "neutral";
+} {
+	if (error) return { text: "Runtime offline", variant: "neutral" };
+	if (loading) return { text: "Checking", variant: "neutral" };
+
+	if (!status) return { text: "Runtime starting", variant: "neutral" };
+
+	// Explicitly check connectivity first
+	const isConnected =
+		status.daemon?.state === "running" || status.broker?.reachable === true;
+
+	if (status.health?.overall === "healthy")
+		return { text: "Ready", variant: "ok" };
+	if (status.health?.overall === "degraded")
+		return { text: "Limited", variant: "warn" };
+	if (status.health?.overall === "unhealthy")
+		return { text: "Needs setup", variant: "warn" };
+
+	if (isConnected) return { text: "Ready", variant: "ok" };
+
+	return { text: "Runtime starting", variant: "neutral" };
+}
 
 export default function App() {
-	const [page, setPage] = useState<Page>(
-		(localStorage.getItem("bc-page") as Page) || "command",
-	);
-	const [theme, setTheme] = useState<"dark" | "light">(
-		(localStorage.getItem("bc-theme") as "dark" | "light") || "dark",
-	);
+	const [page, setPage] = useState<string>(() => {
+		const stored = localStorage.getItem("bc-page");
+		if (stored && stored in pageLabels) return stored;
+		return "command";
+	});
+	const [theme, setTheme] = useState<"dark" | "light">(() => {
+		const stored = localStorage.getItem("bc-theme");
+		return stored === "light" || stored === "dark" ? stored : "dark";
+	});
 	const [status, setStatus] = useState<AppStatus | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState(false);
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
+		document.documentElement.classList.toggle("dark", theme === "dark");
 		localStorage.setItem("bc-theme", theme);
 	}, [theme]);
 
@@ -53,8 +115,12 @@ export default function App() {
 			try {
 				const data = await apiFetch<AppStatus>("/api/status");
 				setStatus(data);
+				setError(false);
 			} catch (err) {
 				console.error("Failed to fetch status", err);
+				setError(true);
+			} finally {
+				setLoading(false);
 			}
 		};
 		refresh();
@@ -62,185 +128,89 @@ export default function App() {
 		return () => clearInterval(timer);
 	}, []);
 
-	type NavItem = {
-		id: Page;
-		label: string;
-		icon: string;
-	};
+	const handleSelect = useCallback((id: string) => {
+		setPage(id);
+		setSidebarOpen(false);
+	}, []);
 
-	const navItems: NavItem[] = [
-		{
-			id: "command",
-			label: "Command",
-			icon: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
-		},
-		{
-			id: "terminal",
-			label: "Terminal",
-			icon: "M4 6h16M4 12h16M4 18h12",
-		},
-		{
-			id: "tasks",
-			label: "Tasks",
-			icon: "M9 11l3 3L22 4m-2 12.035V20a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h11.5",
-		},
-		{
-			id: "automations",
-			label: "Automations",
-			icon: "M13 10V3L4 14h7v7l9-11h-7z",
-		},
-		{
-			id: "browser",
-			label: "Browser",
-			icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9h18",
-		},
-		{
-			id: "trading",
-			label: "Trading",
-			icon: "M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z",
-		},
-		{
-			id: "workflows",
-			label: "Workflows",
-			icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15",
-		},
-		{
-			id: "packages",
-			label: "Packages",
-			icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-		},
-		{
-			id: "evidence",
-			label: "Evidence",
-			icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
-		},
-		{
-			id: "settings",
-			label: "Settings",
-			icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
-		},
-		{
-			id: "advanced",
-			label: "Advanced",
-			icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z",
-		},
-	];
+	const health = getReadiness(status, error, loading);
+
+	const sidebarFooter = (
+		<div className="space-y-3">
+			<Button
+				variant="ghost"
+				size="sm"
+				className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+				onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+				aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+			>
+				{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+				{theme === "dark" ? "Light Mode" : "Dark Mode"}
+			</Button>
+		</div>
+	);
 
 	return (
 		<div className="premium-app-container sidebar-layout">
+			{/* Mobile sidebar overlay backdrop */}
 			{sidebarOpen && (
-				<button
-					type="button"
-					className="sidebar-backdrop"
+				<div
+					className="sidebar-overlay"
 					onClick={() => setSidebarOpen(false)}
-					aria-label="Close sidebar"
+					aria-hidden="true"
 				/>
 			)}
-			<aside className={`app-sidebar ${sidebarOpen ? "open" : ""}`}>
-				<div className="sidebar-brand">
-					<div className="brand-icon">BC</div>
-					<div className="brand-text">Browser Control</div>
-				</div>
 
-				<nav className="sidebar-nav">
-					{navItems.map((item) => (
-						<button
-							type="button"
-							key={item.id}
-							className={`nav-item ${page === item.id ? "active" : ""}`}
-							onClick={() => {
-								setPage(item.id);
-								setSidebarOpen(false);
-							}}
-						>
-							<svg
-								className="nav-icon"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								aria-hidden="true"
-								focusable="false"
-							>
-								<path d={item.icon} />
-							</svg>
-							<span className="nav-label">{item.label}</span>
-						</button>
-					))}
-				</nav>
+			<AppSidebar
+				items={navConfig}
+				active={page}
+				onSelect={handleSelect}
+				footer={sidebarFooter}
+				className={`${sidebarOpen ? "open fixed inset-y-0 left-0 md:relative" : "hidden md:flex"}`}
+			/>
 
-				<div className="sidebar-footer">
-					<div className="status-group">
-						<StatusIndicator
-							label="Agent"
-							value={status?.broker?.reachable ? "Online" : "Offline"}
-							ok={status?.broker?.reachable ?? false}
-						/>
-						<StatusIndicator
-							label="Daemon"
-							value={status?.daemon?.state || "Unknown"}
-							ok={status?.daemon?.state === "running"}
-						/>
-					</div>
-					<button
-						type="button"
-						className="theme-toggle-btn"
-						onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-					>
-						{theme === "dark" ? "Light Mode" : "Dark Mode"}
-					</button>
-				</div>
-			</aside>
-
-			<div className="workspace-main">
-				<header className="workspace-header">
-					<div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-						<button
-							type="button"
-							className="sidebar-toggle"
+			<div className="flex-1 flex flex-col min-w-0 bg-background">
+				<Toolbar>
+					<div className="flex items-center gap-3 min-w-0">
+						<Button
+							variant="ghost"
+							size="icon"
+							className="md:hidden shrink-0"
 							onClick={() => setSidebarOpen(!sidebarOpen)}
 							aria-label="Toggle navigation"
 						>
-							<svg
-								width="24"
-								height="24"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								aria-hidden="true"
-								focusable="false"
-							>
-								<line x1="3" y1="12" x2="21" y2="12" />
-								<line x1="3" y1="6" x2="21" y2="6" />
-								<line x1="3" y1="18" x2="21" y2="18" />
-							</svg>
-						</button>
-						<div className="header-page-title">
-							{navItems.find((i) => i.id === page)?.label}
-						</div>
+							<Menu size={20} />
+						</Button>
+						<h1 className="text-sm md:text-base font-semibold truncate">
+							{pageLabels[page] || "Browser Control"}
+						</h1>
 					</div>
-					<div className="header-metrics">
-						<div className="metric-item">
-							<span className="metric-label">Health</span>
+					<div className="flex items-center gap-2">
+						{/* Readiness pill */}
+						<div
+							className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium ${
+								health.variant === "ok"
+									? "bg-primary/10 text-primary"
+									: health.variant === "warn"
+										? "bg-amber-500/10 text-amber-600"
+										: "bg-muted text-muted-foreground"
+							}`}
+						>
 							<span
-								className={
-									status?.health?.overall === "healthy"
-										? "status-ok"
-										: "status-warn"
-								}
-							>
-								{status?.health?.overall || "Unknown"}
-							</span>
+								className={`w-1.5 h-1.5  ${
+									health.variant === "ok"
+										? "bg-primary"
+										: health.variant === "warn"
+											? "bg-amber-500"
+											: "bg-muted-foreground"
+								}`}
+							/>
+							{health.text}
 						</div>
 					</div>
-				</header>
+				</Toolbar>
 
-				<main className="workspace-content animate-fade-in">
+				<main className="flex-1 overflow-y-auto min-w-0">
 					{page === "command" && <CommandView />}
 					{page === "terminal" && <TerminalView />}
 					{page === "tasks" && <TasksView />}
@@ -254,25 +224,6 @@ export default function App() {
 					{page === "advanced" && <AdvancedView />}
 				</main>
 			</div>
-		</div>
-	);
-}
-
-function StatusIndicator({
-	label,
-	value,
-	ok,
-}: {
-	label: string;
-	value: string;
-	ok: boolean;
-}) {
-	return (
-		<div className="status-item">
-			<span className="status-label">{label}:</span>
-			<span className={`status-value ${ok ? "status-ok" : "status-warn"}`}>
-				{value}
-			</span>
 		</div>
 	);
 }

@@ -12,8 +12,10 @@
         "generateLocator",
         "highlight",
         "hover",
+        "launch",
         "list",
         "open",
+        "paste",
         "press",
         "provider",
         "screencast",
@@ -47,12 +49,15 @@
         "write"
       ],
       "provider": [
+        "catalog",
         "getActive",
+        "health",
         "list",
         "use"
       ],
       "service": [
         "list",
+        "proxy",
         "register",
         "remove",
         "resolve"
@@ -79,6 +84,7 @@
     },
     "source": "browser_control.ts#createBrowserControl",
     "topLevel": [
+      "benchmark",
       "browser",
       "browserActions",
       "close",
@@ -94,6 +100,7 @@
       "serviceActions",
       "session",
       "sessionManager",
+      "state",
       "status",
       "terminal",
       "terminalActions",
@@ -101,6 +108,7 @@
     ],
     "typeSignatures": {
       "BrowserControlAPI": {
+        "benchmark": "BenchmarkNamespace",
         "browser": "BrowserNamespace",
         "browserActions": "BrowserActions",
         "close": "(): void",
@@ -116,6 +124,7 @@
         "serviceActions": "ServiceActions",
         "session": "SessionNamespace",
         "sessionManager": "SessionManager",
+        "state": "StateStorage",
         "status": "(): Promise<SystemStatus>",
         "terminal": "TerminalNamespace",
         "terminalActions": "TerminalActions",
@@ -132,8 +141,10 @@
         "generateLocator": "(target: string): Promise<ActionResult<{ candidates: LocatorCandidate[]; }>>",
         "highlight": "(options: HighlightOptions): Promise<ActionResult<{ highlighted: string; }>>",
         "hover": "(options: { target: string; timeoutMs?: number | undefined; }): Promise<ActionResult<{ hovered: string; }>>",
+        "launch": "(options?: { port?: number | undefined; profile?: \"system\" | \"isolated\" | undefined; provider?: string | undefined; } | undefined): Promise<ActionResult<BrowserLaunchResult>>",
         "list": "(options?: { all?: boolean | undefined; } | undefined): Promise<ActionResult<AttachableBrowser[]>>",
         "open": "(options: { url: string; waitUntil?: \"load\" | \"domcontentloaded\" | \"networkidle\" | \"commit\" | undefined; }): Promise<ActionResult<{ url: string; title: string; }>>",
+        "paste": "(options: { text: string; target?: string | undefined; timeoutMs?: number | undefined; }): Promise<ActionResult<{ pasted: string; }>>",
         "press": "(options: { key: string; }): Promise<ActionResult<{ pressed: string; }>>",
         "provider": "ProviderNamespace",
         "screencast": "ScreencastNamespace",
@@ -167,12 +178,15 @@
         "write": "(options: { path: string; content: string; createDirs?: boolean | undefined; }): Promise<ActionResult<FileWriteResult>>"
       },
       "ProviderNamespace": {
+        "catalog": "(): ActionResult<ProviderCatalogEntry[]>",
         "getActive": "(): string",
+        "health": "(name?: string | undefined): Promise<ActionResult<ProviderHealthReport[]>>",
         "list": "(): ProviderListResult",
         "use": "(name: string): ActionResult<ProviderSelectionResult>"
       },
       "ServiceNamespace": {
         "list": "(): ActionResult<ServiceEntry[]>",
+        "proxy": "{ start(options?: { port?: number | undefined; allowRemote?: boolean | undefined; https?: boolean | undefined; certPath?: string | undefined; keyPath?: string | undefined; localCa?: boolean | undefined; caDir?: string | undefined; } | undefined): Promise<...>; stop(): Promise<...>; status(): ActionResult<...>; }",
         "register": "(options: { name: string; port: number; protocol?: \"http\" | \"https\" | undefined; path?: string | undefined; }): Promise<ActionResult<ServiceEntry>>",
         "remove": "(options: { name: string; }): ActionResult<{ removed: boolean; }>",
         "resolve": "(options: { name: string; }): Promise<ActionResult<{ url: string; service?: ServiceEntry | undefined; }>>"
@@ -188,13 +202,13 @@
         "exec": "(options: { command: string; sessionId?: string | undefined; timeoutMs?: number | undefined; }): Promise<ActionResult<ExecResult>>",
         "interrupt": "(options: { sessionId: string; }): Promise<ActionResult<{ interrupted: boolean; }>>",
         "onOutput": "(listener: (sessionId: string, data: string) => void): { dispose(): void; }",
-        "open": "(options?: { shell?: string | undefined; cwd?: string | undefined; name?: string | undefined; } | undefined): Promise<ActionResult<{ id: string; shell: string; cwd: string; status: string; }>>",
+        "open": "(options?: { shell?: string | undefined; cwd?: string | undefined; name?: string | undefined; cols?: number | undefined; rows?: number | undefined; } | undefined): Promise<ActionResult<{ id: string; shell: string; cwd: string; status: string; }>>",
         "read": "(options: { sessionId: string; maxBytes?: number | undefined; }): Promise<ActionResult<{ output: string; }>>",
         "resize": "(options: { sessionId: string; cols: number; rows: number; }): Promise<ActionResult<{ resized: boolean; }>>",
         "resume": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
         "snapshot": "(options?: { sessionId?: string | undefined; } | undefined): Promise<ActionResult<TerminalSnapshot | TerminalSnapshot[]>>",
         "status": "(options: { sessionId: string; }): Promise<ActionResult<unknown>>",
-        "type": "(options: { text: string; sessionId: string; }): Promise<ActionResult<{ typed: string; }>>"
+        "type": "(options: { text: string; sessionId: string; submit?: boolean | undefined; }): Promise<ActionResult<{ typed: string; }>>"
       }
     }
   },
@@ -212,6 +226,13 @@
       ],
       "kind": "type",
       "name": "A11ySnapshot"
+    },
+    {
+      "declarations": [
+        "src/trading/broker_adapter.ts"
+      ],
+      "kind": "type",
+      "name": "AccountRisk"
     },
     {
       "declarations": [
@@ -264,6 +285,13 @@
     },
     {
       "declarations": [
+        "src/trading/tradingview_adapter.ts"
+      ],
+      "kind": "type+value",
+      "name": "AnalysisOnlyTradingViewAdapter"
+    },
+    {
+      "declarations": [
         "src/browser/auth_state.ts"
       ],
       "kind": "type",
@@ -306,10 +334,66 @@
     },
     {
       "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkComparison"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkResult"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkRunOutput"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkRunRecord"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkSuiteName"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkSuiteResult"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/types.ts"
+      ],
+      "kind": "type",
+      "name": "BenchmarkTask"
+    },
+    {
+      "declarations": [
         "src/browser/network_interceptor.ts"
       ],
       "kind": "value",
       "name": "blockResource"
+    },
+    {
+      "declarations": [
+        "src/trading/broker_adapter.ts"
+      ],
+      "kind": "type",
+      "name": "BrokerAdapter"
     },
     {
       "declarations": [
@@ -331,6 +415,13 @@
       ],
       "kind": "type+value",
       "name": "BrowserActions"
+    },
+    {
+      "declarations": [
+        "src/providers/browserbase.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserbaseProvider"
     },
     {
       "declarations": [
@@ -565,10 +656,45 @@
     },
     {
       "declarations": [
+        "src/trading/tradingview_adapter.ts"
+      ],
+      "kind": "type",
+      "name": "ChartState"
+    },
+    {
+      "declarations": [
+        "src/providers/health.ts"
+      ],
+      "kind": "value",
+      "name": "checkProviderHealth"
+    },
+    {
+      "declarations": [
         "src/observability/recovery.ts"
       ],
       "kind": "value",
       "name": "classifyFailure"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "CleanupCandidate"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "value",
+      "name": "cleanupDataHome"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "CleanupResult"
     },
     {
       "declarations": [
@@ -604,6 +730,27 @@
       ],
       "kind": "type",
       "name": "CommandPolicy"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "CommandResult"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "CommandRunner"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "value",
+      "name": "compareBenchmarkRuns"
     },
     {
       "declarations": [
@@ -726,10 +873,45 @@
     },
     {
       "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "value",
+      "name": "createDefaultBenchmarkTasks"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "value",
+      "name": "createKnowledgeBackend"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "value",
+      "name": "createLocalhostCa"
+    },
+    {
+      "declarations": [
         "src/mcp/server.ts"
       ],
       "kind": "value",
       "name": "createMcpServer"
+    },
+    {
+      "declarations": [
+        "src/trading/order_ticket.ts"
+      ],
+      "kind": "value",
+      "name": "createOrderTicket"
+    },
+    {
+      "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "value",
+      "name": "createProofOfWorkChallenge"
     },
     {
       "declarations": [
@@ -793,6 +975,34 @@
       ],
       "kind": "type+value",
       "name": "DaemonTerminalRuntime"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "DataExportResult"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "DataHomeDirectoryReport"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "DataHomeLegacyAlias"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "DataHomeReport"
     },
     {
       "declarations": [
@@ -1076,6 +1286,13 @@
     },
     {
       "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "value",
+      "name": "exportDataHome"
+    },
+    {
+      "declarations": [
         "src/terminal/prompt.ts"
       ],
       "kind": "value",
@@ -1199,6 +1416,13 @@
       ],
       "kind": "value",
       "name": "formatActionResult"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "value",
+      "name": "formatDataHomeReport"
     },
     {
       "declarations": [
@@ -1566,6 +1790,13 @@
     },
     {
       "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "value",
+      "name": "getKnowledgeBackendCatalog"
+    },
+    {
+      "declarations": [
         "src/shared/paths.ts"
       ],
       "kind": "value",
@@ -1577,6 +1808,27 @@
       ],
       "kind": "value",
       "name": "getKnowledgeStats"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "value",
+      "name": "getLocalhostCaPaths"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "value",
+      "name": "getLocalhostCaStatus"
+    },
+    {
+      "declarations": [
+        "src/services/startup.ts"
+      ],
+      "kind": "value",
+      "name": "getLocalhostProxyStartupStatus"
     },
     {
       "declarations": [
@@ -1804,10 +2056,31 @@
     },
     {
       "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "value",
+      "name": "inspectDataHome"
+    },
+    {
+      "declarations": [
         "src/packages/types.ts"
       ],
       "kind": "type",
       "name": "InstalledAutomationPackage"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "value",
+      "name": "installLocalhostCaTrust"
+    },
+    {
+      "declarations": [
+        "src/services/startup.ts"
+      ],
+      "kind": "value",
+      "name": "installLocalhostProxyStartup"
     },
     {
       "declarations": [
@@ -1909,6 +2182,41 @@
     },
     {
       "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeBackend"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeBackendCatalogEntry"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeBackendConfig"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeBackendHealth"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "KnowledgeBackendType"
+    },
+    {
+      "declarations": [
         "src/knowledge/types.ts"
       ],
       "kind": "type",
@@ -1969,6 +2277,20 @@
       ],
       "kind": "value",
       "name": "listAuthSnapshots"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "type",
+      "name": "ListBenchmarkOptions"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "value",
+      "name": "listBenchmarkRuns"
     },
     {
       "declarations": [
@@ -2035,6 +2357,13 @@
     },
     {
       "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "LiveApproval"
+    },
+    {
+      "declarations": [
         "src/knowledge/store.ts"
       ],
       "kind": "value",
@@ -2091,6 +2420,69 @@
     },
     {
       "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaCreateOptions"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaCreateResult"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaOptions"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaPaths"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaStatus"
+    },
+    {
+      "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostCaTrustResult"
+    },
+    {
+      "declarations": [
+        "src/services/startup.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostProxyStartupOptions"
+    },
+    {
+      "declarations": [
+        "src/services/startup.ts"
+      ],
+      "kind": "type",
+      "name": "LocalhostProxyStartupStatus"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type+value",
+      "name": "LocalMarkdownKnowledgeBackend"
+    },
+    {
+      "declarations": [
         "src/harness/sandbox.ts"
       ],
       "kind": "type+value",
@@ -2112,10 +2504,31 @@
     },
     {
       "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "ManagedTrade"
+    },
+    {
+      "declarations": [
         "src/skill.ts"
       ],
       "kind": "type",
       "name": "ManifestValidationResult"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "MarketAnalysis"
+    },
+    {
+      "declarations": [
+        "src/trading/tradingview_adapter.ts"
+      ],
+      "kind": "type",
+      "name": "MarketAnalysisAdapter"
     },
     {
       "declarations": [
@@ -2224,6 +2637,13 @@
     },
     {
       "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "OpenPosition"
+    },
+    {
+      "declarations": [
         "src/skills/framer_skill.ts"
       ],
       "kind": "value",
@@ -2235,6 +2655,20 @@
       ],
       "kind": "value",
       "name": "openUrlInDefaultBrowser"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "OrderTicket"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "OrderType"
     },
     {
       "declarations": [
@@ -2298,6 +2732,13 @@
       ],
       "kind": "type+value",
       "name": "PackageRunner"
+    },
+    {
+      "declarations": [
+        "src/trading/broker_adapter.ts"
+      ],
+      "kind": "type+value",
+      "name": "PaperBrokerAdapter"
     },
     {
       "declarations": [
@@ -2399,6 +2840,13 @@
     },
     {
       "declarations": [
+        "src/trading/position_store.ts"
+      ],
+      "kind": "type+value",
+      "name": "PositionStore"
+    },
+    {
+      "declarations": [
         "src/browser/actions.ts"
       ],
       "kind": "type",
@@ -2434,6 +2882,34 @@
     },
     {
       "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "type",
+      "name": "ProofOfWorkChallenge"
+    },
+    {
+      "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "type",
+      "name": "ProofOfWorkOptions"
+    },
+    {
+      "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "type",
+      "name": "ProofOfWorkSolution"
+    },
+    {
+      "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "type",
+      "name": "ProofOfWorkVerification"
+    },
+    {
+      "declarations": [
         "src/providers/interface.ts"
       ],
       "kind": "type",
@@ -2445,6 +2921,13 @@
       ],
       "kind": "type",
       "name": "ProviderCapabilities"
+    },
+    {
+      "declarations": [
+        "src/providers/types.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderCatalogEntry"
     },
     {
       "declarations": [
@@ -2473,6 +2956,20 @@
       ],
       "kind": "type+value",
       "name": "ProviderError"
+    },
+    {
+      "declarations": [
+        "src/providers/health.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderHealthReport"
+    },
+    {
+      "declarations": [
+        "src/providers/health.ts"
+      ],
+      "kind": "type",
+      "name": "ProviderHealthState"
     },
     {
       "declarations": [
@@ -2602,6 +3099,13 @@
     },
     {
       "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type",
+      "name": "RankedKnowledgeEntry"
+    },
+    {
+      "declarations": [
         "src/browser/core.ts"
       ],
       "kind": "value",
@@ -2711,6 +3215,13 @@
       ],
       "kind": "value",
       "name": "registerCustomPrompt"
+    },
+    {
+      "declarations": [
+        "src/trading/policy.ts"
+      ],
+      "kind": "value",
+      "name": "requiresLiveOrderApproval"
     },
     {
       "declarations": [
@@ -2861,6 +3372,20 @@
     },
     {
       "declarations": [
+        "src/trading/risk_engine.ts"
+      ],
+      "kind": "type",
+      "name": "RiskDecision"
+    },
+    {
+      "declarations": [
+        "src/trading/risk_engine.ts"
+      ],
+      "kind": "type+value",
+      "name": "RiskEngine"
+    },
+    {
+      "declarations": [
         "src/policy/types.ts"
       ],
       "kind": "type",
@@ -2879,6 +3404,20 @@
       ],
       "kind": "type",
       "name": "RouteHandler"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "type",
+      "name": "RunBenchmarkOptions"
+    },
+    {
+      "declarations": [
+        "src/benchmarks/runner.ts"
+      ],
+      "kind": "value",
+      "name": "runBenchmarks"
     },
     {
       "declarations": [
@@ -2970,6 +3509,13 @@
       ],
       "kind": "type+value",
       "name": "Scheduler"
+    },
+    {
+      "declarations": [
+        "src/providers/health.ts"
+      ],
+      "kind": "value",
+      "name": "scoreProviderHealth"
     },
     {
       "declarations": [
@@ -3246,6 +3792,13 @@
     },
     {
       "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "value",
+      "name": "solveProofOfWorkForTest"
+    },
+    {
+      "declarations": [
         "src/browser/stagehand_core.ts"
       ],
       "kind": "type+value",
@@ -3299,6 +3852,13 @@
       ],
       "kind": "value",
       "name": "successResult"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "SupervisorDecision"
     },
     {
       "declarations": [
@@ -3554,6 +4114,62 @@
     },
     {
       "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "TradeMode"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "TradePlan"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "TradeSide"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "TradeStatus"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_supervisor.ts"
+      ],
+      "kind": "type+value",
+      "name": "TradeSupervisor"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_supervisor.ts"
+      ],
+      "kind": "type",
+      "name": "TradeSupervisorOptions"
+    },
+    {
+      "declarations": [
+        "src/trading/trade_plan.ts"
+      ],
+      "kind": "type",
+      "name": "TradeTarget"
+    },
+    {
+      "declarations": [
+        "src/trading/policy.ts"
+      ],
+      "kind": "type",
+      "name": "TradingPolicyDecision"
+    },
+    {
+      "declarations": [
         "src/policy/profiles.ts"
       ],
       "kind": "value",
@@ -3568,10 +4184,38 @@
     },
     {
       "declarations": [
+        "src/services/local_ca.ts"
+      ],
+      "kind": "value",
+      "name": "uninstallLocalhostCaTrust"
+    },
+    {
+      "declarations": [
+        "src/services/startup.ts"
+      ],
+      "kind": "value",
+      "name": "uninstallLocalhostProxyStartup"
+    },
+    {
+      "declarations": [
         "src/terminal/prompt.ts"
       ],
       "kind": "value",
       "name": "unregisterCustomPrompt"
+    },
+    {
+      "declarations": [
+        "src/knowledge/backends.ts"
+      ],
+      "kind": "type+value",
+      "name": "UnsupportedKnowledgeBackend"
+    },
+    {
+      "declarations": [
+        "src/providers/unsupported.ts"
+      ],
+      "kind": "type+value",
+      "name": "UnsupportedRemoteSandboxProvider"
     },
     {
       "declarations": [
@@ -3631,6 +4275,13 @@
     },
     {
       "declarations": [
+        "src/trading/policy.ts"
+      ],
+      "kind": "value",
+      "name": "validateOrderTicket"
+    },
+    {
+      "declarations": [
         "src/packages/manifest.ts"
       ],
       "kind": "value",
@@ -3656,6 +4307,13 @@
       ],
       "kind": "value",
       "name": "validateWorkflowGraph"
+    },
+    {
+      "declarations": [
+        "src/security/proof_of_work.ts"
+      ],
+      "kind": "value",
+      "name": "verifyProofOfWork"
     },
     {
       "declarations": [
@@ -3796,6 +4454,13 @@
       ],
       "kind": "type",
       "name": "WriteFileOptions"
+    },
+    {
+      "declarations": [
+        "src/trading/journal.ts"
+      ],
+      "kind": "value",
+      "name": "writeTradeJournalEntry"
     }
   ],
   "source": "src/index.ts"

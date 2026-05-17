@@ -77,6 +77,7 @@ Browser:
 - `highlight`
 - `bc_browser_attach`
 - `bc_browser_detach`
+- `bc_browser_launch`
 - `bc_browser_open`
 - `bc_browser_list`
 - `bc_browser_snapshot`

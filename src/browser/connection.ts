@@ -16,6 +16,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import { type Browser, type BrowserContext, chromium } from "playwright";
 import { DefaultPolicyEngine } from "../policy/engine";
 import {
@@ -24,6 +25,8 @@ import {
 } from "../policy/execution_router";
 import type { PolicyTaskIntent, RiskLevel, RoutedStep } from "../policy/types";
 import { BrowserlessProvider } from "../providers/browserless";
+import { BrowserbaseProvider } from "../providers/browserbase";
+import { UnsupportedRemoteSandboxProvider } from "../providers/unsupported";
 import { CustomBrowserProvider } from "../providers/custom";
 import { ProviderConfigError } from "../providers/errors";
 import type { BrowserProvider } from "../providers/interface";
@@ -102,6 +105,112 @@ function wslAttachHelp(port: number): string {
 function wslChromeLaunchHelp(): string {
 	if (!isLikelyWsl()) return "";
 	return " Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run `node cli.js browser attach --port=9222`.";
+}
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseEndpointPort(endpoint: string | undefined): number | undefined {
+	if (!endpoint) return undefined;
+	try {
+		const port = Number(new URL(endpoint).port);
+		return Number.isFinite(port) && port > 0 ? port : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function terminateManagedProcessTree(
+	child: import("node:child_process").ChildProcess,
+	port?: number,
+): void {
+	const pid = child.pid;
+	child.kill();
+	if (process.platform === "win32" && pid) {
+		spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
+			stdio: "ignore",
+			timeout: 5000,
+		});
+	}
+	if (port) {
+		stopWslBridge(port);
+	}
+}
+
+async function waitForManagedPortRelease(
+	port: number | undefined,
+	timeoutMs = 7000,
+): Promise<void> {
+	if (!port) return;
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!(await isChromeAlive(port))) {
+			return;
+		}
+		await delay(150);
+	}
+}
+
+function findFreeLoopbackPort(): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			const address = server.address();
+			server.close(() => {
+				if (typeof address === "object" && address?.port) {
+					resolve(address.port);
+					return;
+				}
+				reject(new Error("Failed to allocate a free managed browser port."));
+			});
+		});
+	});
+}
+
+function isLoopbackPortAvailable(port: number): Promise<boolean> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.once("error", (error: NodeJS.ErrnoException) => {
+			if (error.code === "EADDRINUSE" || error.code === "EACCES") {
+				resolve(false);
+				return;
+			}
+			reject(error);
+		});
+		server.listen(port, "127.0.0.1", () => {
+			server.close(() => resolve(true));
+		});
+	});
+}
+
+export async function resolveManagedLaunchPort(
+	options: { requestedPort?: number; configuredPort: number },
+	isPortAlive: (port: number) => Promise<boolean> = isChromeAlive,
+): Promise<number> {
+	const requestedPort = options.requestedPort;
+	const configuredPort = options.configuredPort;
+	const port = requestedPort ?? configuredPort;
+
+	const portBusy =
+		(await isPortAlive(port)) || !(await isLoopbackPortAvailable(port));
+	if (!portBusy) {
+		return port;
+	}
+
+	if (requestedPort !== undefined) {
+		throw new Error(
+			`Managed launch failed: Port ${port} is already in use by an existing process. Use 'bc browser attach' to connect to an existing browser, or specify an alternative port.`,
+		);
+	}
+
+	const fallbackPort = await findFreeLoopbackPort();
+	log.warn("Configured managed browser port is busy; using a free port", {
+		configuredPort,
+		fallbackPort,
+	});
+	return fallbackPort;
 }
 
 // ── Connection Types ────────────────────────────────────────────────
@@ -393,7 +502,10 @@ export class BrowserConnectionManager {
 		}
 
 		const config = loadConfig({ validate: false });
-		const port = options.port ?? config.chromeDebugPort;
+		const port = await resolveManagedLaunchPort({
+			requestedPort: options.port,
+			configuredPort: config.chromeDebugPort,
+		});
 
 		// Resolve or create profile
 		const profile = this.resolveProfile(options);
@@ -411,12 +523,6 @@ export class BrowserConnectionManager {
 			const needsBridge =
 				isWslCdpBridgeEnabled() && wslHostCandidates.length > 0;
 			const shouldLaunch = true;
-
-			if (await isChromeAlive(port)) {
-				throw new Error(
-					`Managed launch failed: Port ${port} is already in use by an existing process. Use 'bc browser attach' to connect to an existing browser, or specify an alternative port.`,
-				);
-			}
 
 			if (shouldLaunch) {
 				const platform = process.platform;
@@ -522,16 +628,9 @@ export class BrowserConnectionManager {
 				}
 			}
 			if (this.managedProcess) {
-				const pid = this.managedProcess.pid;
 				try {
-					this.managedProcess.kill();
-					if (process.platform === "win32" && pid) {
-						spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
-							stdio: "ignore",
-							timeout: 5000,
-						});
-					}
-					stopWslBridge(port);
+					terminateManagedProcessTree(this.managedProcess, port);
+					await waitForManagedPortRelease(port);
 				} catch (cleanupError: unknown) {
 					log.warn(
 						`Failed to clean partial managed browser launch: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
@@ -985,31 +1084,18 @@ export class BrowserConnectionManager {
 
 		// Terminate managed browser process if we launched it
 		if (this.managedProcess && this.connection.mode !== "attached") {
+			const port = parseEndpointPort(this.connection.cdpEndpoint);
 			try {
 				const pid = this.managedProcess.pid;
-				const port = this.connection.cdpEndpoint
-					? Number(new URL(this.connection.cdpEndpoint).port)
-					: undefined;
 				log.info("Terminating managed browser process", { pid });
 
-				// Try graceful kill first
-				this.managedProcess.kill();
-
-				// On Windows, detached processes often need taskkill to clean up the tree
-				if (process.platform === "win32" && pid) {
-					spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
-						stdio: "ignore",
-					});
-				}
-
-				if (port) {
-					stopWslBridge(port);
-				}
+				terminateManagedProcessTree(this.managedProcess, port);
 			} catch (error: unknown) {
 				log.warn(
 					`Failed to kill managed browser process: ${error instanceof Error ? error.message : String(error)}`,
 				);
 			}
+			await waitForManagedPortRelease(port);
 			this.managedProcess = null;
 		}
 
@@ -1263,6 +1349,18 @@ export class BrowserConnectionManager {
 				return new CustomBrowserProvider();
 			case "browserless":
 				return new BrowserlessProvider();
+			case "browserbase":
+				return new BrowserbaseProvider();
+			case "e2b":
+				return new UnsupportedRemoteSandboxProvider("e2b");
+			case "cubesandbox":
+				return new UnsupportedRemoteSandboxProvider("cubesandbox");
+			case "camofox":
+				return new UnsupportedRemoteSandboxProvider("camofox");
+			case "cloak":
+				return new UnsupportedRemoteSandboxProvider("cloak");
+			case "obscura":
+				return new UnsupportedRemoteSandboxProvider("obscura");
 			default:
 				throw new ProviderConfigError(
 					name,
