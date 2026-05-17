@@ -75,7 +75,11 @@ interface ReviewRecord {
 	digest?: string;
 }
 
-export function PackagesView() {
+interface PackagesViewProps {
+	onOpenTrading?: () => void;
+}
+
+export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 	const [packages, setPackages] = useState<PackageInfo[]>([]);
 	const [evalHistory, setEvalHistory] = useState<EvalRecord[]>([]);
 	const [reviewHistory, setReviewHistory] = useState<ReviewRecord[]>([]);
@@ -182,6 +186,45 @@ export function PackagesView() {
 	return (
 		<PageShell>
 			<div className="space-y-4 md:space-y-6">
+				<Card>
+					<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+						<div className="space-y-1">
+							<CardTitle>Optional automation skills</CardTitle>
+							<p className="text-sm text-muted-foreground">
+								Specialized use cases live here so Browser Control stays a
+								general automation product.
+							</p>
+						</div>
+					</CardHeader>
+					<CardContent>
+						<div className="rounded-md border border-border p-4">
+							<div className="flex flex-wrap items-start justify-between gap-4">
+								<div className="min-w-0 space-y-2">
+									<div className="flex flex-wrap items-center gap-2">
+										<h3 className="text-sm font-semibold">
+											TradingView ICT Analysis
+										</h3>
+										<Badge variant="secondary">Optional skill</Badge>
+										<Badge variant="secondary">Analysis only</Badge>
+									</div>
+									<p className="max-w-3xl text-sm text-muted-foreground">
+										Analyze a TradingView chart and prepare a reviewable trade
+										plan. Live orders still require exact explicit approval.
+									</p>
+								</div>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									onClick={onOpenTrading}
+									disabled={!onOpenTrading}
+								>
+									Open tools
+								</Button>
+							</div>
+						</div>
+					</CardContent>
+				</Card>
 				<Card>
 					<CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
 						<div>

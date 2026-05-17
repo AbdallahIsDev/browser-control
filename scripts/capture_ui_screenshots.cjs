@@ -45,6 +45,10 @@ const manifest = {
 };
 
 const EXTRA_PAGES = ["command", "browser", "automations", "trading", "advanced", "tasks", "workflows", "packages", "evidence", "settings", "terminal"];
+const PAGE_LABELS = {
+	command: "home",
+	packages: "skills",
+};
 
 async function waitForApp(page) {
 	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 30000 });
@@ -66,20 +70,22 @@ async function assertNotUnauthorized(page) {
 }
 
 async function navigateTo(page, targetPage) {
-	await page.evaluate((p) => {
+	const targetLabel = PAGE_LABELS[targetPage] || targetPage;
+	await page.evaluate(({ pageId, labelText }) => {
 		const hamburger = document.querySelector('button[aria-label="Toggle navigation"]');
 		if (hamburger && window.innerWidth <= 768) {
 			hamburger.click();
 		}
 		const labels = document.querySelectorAll(".nav-label");
 		for (const label of labels) {
-			if (label.textContent.toLowerCase() === p) {
+			if (label.textContent.toLowerCase() === labelText) {
 				label.closest("button")?.click();
 				return;
 			}
 		}
-		localStorage.setItem("bc-page", p);
-	}, targetPage);
+		localStorage.setItem("bc-page", pageId);
+		window.location.reload();
+	}, { pageId: targetPage, labelText: targetLabel });
 	await page.waitForTimeout(2000);
 	await assertNotUnauthorized(page);
 }
