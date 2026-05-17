@@ -1,21 +1,21 @@
 # Browser Control Premium Completion Tracker
 
-Updated: 2026-05-18 01:34 Africa/Cairo.
+Updated: 2026-05-18 01:40 Africa/Cairo.
 
 Overall status: **Partial**. P0-P8 plus safe-scope P10/P11/P12/P17 have current implementation/security/product evidence. P6 model routing is now Complete — real OpenRouter external provider verified with free model `google/gemma-4-26b-a4b-it:free`, fallback behavior, local API auth, local-only mode, and secret redaction all verified. P9 remains Partial until Browserbase credentials allow real launch/attach verification. P11 is now Complete — Qdrant/PageIndex adapters implemented with health checks, search/rank endpoints, CLI commands, Web API endpoints, and stale locator scoring. P13-P16 remain blocked/study-only per repo instructions.
 
-Current-session status: **Partial but improved**. Git baseline was recovered, reconciled, and pushed in commits `c319d0a` and `f06a73a`. Clinic-platform contamination was removed from the local worktree and origin history reconciliation; `rg "MadarCare|clinic-platform|CLINIC_|clinic dashboard|NestJS|Prisma|PostgreSQL|clinic owner" . --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' --glob '!dist-desktop/**' --glob '!dist-desktop-2/**'` returned no matches. Tasks tab, runtime badge, Evidence UX, desktop icon/build cleanup, Trading relocation, Trading skill UX polish, and Terminal error UX are implemented and locally verified; this is still not a full INSTRUCTIONS.md completion.
+Current-session status: **Partial but improved**. Git baseline was recovered, reconciled, and pushed in commits `c319d0a` and `f06a73a`. Clinic-platform contamination was removed from the local worktree and origin history reconciliation; `rg "MadarCare|clinic-platform|CLINIC_|clinic dashboard|NestJS|Prisma|PostgreSQL|clinic owner" . --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' --glob '!dist-desktop/**' --glob '!dist-desktop-2/**'` returned no matches. Tasks tab, runtime badge, Evidence UX, desktop icon/build cleanup, Trading relocation, Trading skill UX polish, Terminal error UX, and Automations UX are implemented and locally verified; this is still not a full INSTRUCTIONS.md completion.
 
 ## Verification Status
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Git baseline | Pass | Initial dirty state was recovered Browser Control source plus two remote contamination commits. Baseline fix committed as `c319d0a`; non-destructive reconciliation commit `f06a73a`; pushed to `origin/main`. |
-| Git status | Pending commit | `git status --short` currently shows only intentional current-session Terminal UX and tracker edits before the next atomic commit. |
+| Git status | Pending commit | `git status --short` currently shows only intentional current-session Automations UX and tracker edits before the next atomic commit. |
 | Biome | Pass | `npx biome check . --max-diagnostics=30` — exit 0, checked 78 files, no fixes applied. |
 | Typecheck | Pass | `npm run typecheck` — exit 0. |
 | Web typecheck | Pass | `npm run web:typecheck` — exit 0. |
-| Web build | Pass | `npm run web:build` — exit 0; Vite built 2013 modules, `dist/assets/index-DcIu2J1a.js` 500.02 kB; Vite emitted a size warning just over 500 kB. |
+| Web build | Pass | `npm run web:build` — exit 0; Vite built 2013 modules, `dist/assets/index-B5W2HymU.js` 501.81 kB; Vite emitted a size warning just over 500 kB. |
 | MCP tool count | Pass | `npx ts-node scratch/count_tools.ts` — `Total tools: 76`. |
 | State tests | Pass | `npm run test:state` — 25/25. |
 | MCP tests | Pass | `npm run test:mcp` — 26/26. |
@@ -36,6 +36,7 @@ Current-session status: **Partial but improved**. Git baseline was recovered, re
 | Trading relocation | Pass | Sidebar has no primary Trading tab. Browser Control a11y verified Skills page exposes `TradingView ICT Analysis` as an optional automation skill and `Open tools` reaches the existing Trading tools. |
 | Trading skill UX | Pass | Hidden Trading tool page now explains analysis-only scope, hides raw IDs behind details, caps default historical rows, and keeps approval actions visible. Desktop/mobile screenshots captured. |
 | Terminal UX | Pass | Terminal raw broker/HTTP/rate-limit errors are mapped to readable recovery messages with technical details secondary. Screenshot shows clean empty state without raw broker JSON. |
+| Automations UX | Pass | Automations page now explains purpose, shows saved count/status, hides technical IDs behind details, and keeps long prompts summarized with expandable full instructions. Desktop/mobile screenshots captured. |
 | Process cleanup | Pass | Verification web server stopped; `Get-Process "Browser Control"` and `Get-NetTCPConnection -LocalPort 7790` returned no active process/listener output. |
 
 ## Screenshot Artifacts
@@ -64,8 +65,8 @@ Source: `reports/ui-verification/`.
 | `browser-mobile.png` | Present | 11,728 bytes; mobile browser view. |
 | `tasks-desktop.png` | Present | 36,864 bytes; Tasks runtime-offline recovery state. |
 | `tasks-mobile.png` | Present | 18,909 bytes; mobile Tasks recovery state, no overflow. |
-| `automations-desktop.png` | Present | 37,744 bytes; automations view. |
-| `automations-mobile.png` | Present | 13,231 bytes; mobile automations view. |
+| `automations-desktop.png` | Present | 65,867 bytes; polished automations view with purpose, saved count/status, hidden technical IDs, and summarized prompts. |
+| `automations-mobile.png` | Present | 29,822 bytes; mobile automations view, no overflow. |
 | `advanced-desktop.png` | Present | 52,095 bytes; advanced view. |
 | `advanced-mobile.png` | Present | 34,889 bytes; mobile advanced view. |
 | `trading-desktop.png` | Present | 106,835 bytes; hidden Trading tools view with friendly copy, capped rows, collapsed technical IDs. |

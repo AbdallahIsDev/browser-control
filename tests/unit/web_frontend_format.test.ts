@@ -515,8 +515,15 @@ test("automations view uses shared components and DataTable", () => {
 	for (const expected of [
 		"@/components/layout/PageShell",
 		"@/components/ui/card",
+		"@/components/ui/badge",
+		"@/components/common/EmptyState",
 		"@/components/common/DataTable",
 		"@/components/common/ErrorState",
+		"Review saved jobs Browser Control can run again later.",
+		"Saved automations",
+		"Technical ID",
+		"What it does",
+		"Full instructions",
 	]) {
 		assert.match(
 			source,
