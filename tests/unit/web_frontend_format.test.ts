@@ -134,8 +134,32 @@ test("toolbar does not show Health unknown", () => {
 		/"Unknown"/,
 		"App should not display raw 'Unknown' health text",
 	);
-	assert.match(appSource, /Ready/, "Healthy state should show Ready");
-	assert.match(appSource, /Checking/, "Unknown state should show Checking");
+	assert.match(appSource, /Runtime ready/, "Healthy state should show ready");
+	assert.match(
+		appSource,
+		/Runtime starting/,
+		"Loading state should show starting",
+	);
+});
+
+test("toolbar exposes concrete runtime status labels", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+
+	for (const expected of [
+		"Runtime ready",
+		"Runtime starting",
+		"Runtime offline",
+		"Runtime degraded",
+		"Browser disconnected",
+		"API unavailable",
+		'role="status"',
+		"aria-label",
+	]) {
+		assert.match(appSource, new RegExp(expected));
+	}
 });
 
 test("settings view exposes credential vault and network rule controls", () => {
@@ -560,6 +584,41 @@ test("tasks view uses shared components and PageShell", () => {
 	assert.doesNotMatch(source, /className="panel"/);
 	assert.doesNotMatch(source, /<button\s/);
 	assert.doesNotMatch(source, /<table\s/);
+});
+
+test("tasks view has a broker-unavailable recovery state", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/TasksView.tsx"),
+		"utf8",
+	);
+
+	for (const expected of [
+		"TaskListResponse",
+		"Task runtime offline",
+		"Start Browser Control daemon",
+		"Task history will load automatically",
+	]) {
+		assert.match(source, new RegExp(expected));
+	}
+});
+
+test("evidence view explains evidence for non-technical users", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/EvidenceView.tsx"),
+		"utf8",
+	);
+
+	for (const expected of [
+		"Review screenshots, page changes, policy decisions, and audit events produced while Browser Control works.",
+		"Visual comparison",
+		"Page changes",
+		"Policy and safety decisions",
+		"Technical details",
+		"plain-language summary",
+		"<details",
+	]) {
+		assert.match(source, new RegExp(expected.replaceAll("/", "\\/")));
+	}
 });
 
 test("screenshot script handles auth token and rejects Unauthorized", () => {
