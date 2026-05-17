@@ -104,6 +104,11 @@ test("frontend exposes primary product views in simplified sidebar", () => {
 		/label: "Packages"/,
 		"Packages should be renamed to Skills in nav",
 	);
+	assert.doesNotMatch(
+		appSource,
+		/label: "Trading"/,
+		"Trading should not be a primary sidebar item",
+	);
 });
 
 test("home view has product-focused prompt composer UI", () => {
@@ -179,6 +184,20 @@ test("settings view exposes credential vault and network rule controls", () => {
 	]) {
 		assert.match(settingsSource, new RegExp(expected.replace("/", "\\/")));
 	}
+});
+
+test("skills view relocates TradingView as an optional automation skill", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/PackagesView.tsx"),
+		"utf8",
+	);
+
+	assert.match(source, /Optional automation skills/);
+	assert.match(source, /TradingView ICT Analysis/);
+	assert.match(source, /Optional skill/);
+	assert.match(source, /Analysis only/);
+	assert.match(source, /Live orders still require exact explicit approval/);
+	assert.match(source, /Open tools/);
 });
 
 test("settings view exposes browser provider health dashboard", () => {
@@ -646,6 +665,14 @@ test("screenshot script handles auth token and rejects Unauthorized", () => {
 			`Screenshot script should handle ${expected}`,
 		);
 	}
+	assert.ok(
+		source.includes('packages: "skills"'),
+		"Screenshot script should map Packages page id to Skills sidebar label",
+	);
+	assert.ok(
+		source.includes('localStorage.setItem("bc-page", pageId)'),
+		"Screenshot script should preserve page id when fallback navigation reloads",
+	);
 });
 
 test("pages use responsive mobile-first patterns for buttons and forms", () => {

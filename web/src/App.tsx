@@ -227,7 +227,9 @@ export default function App() {
 					{page === "browser" && <BrowserView />}
 					{page === "trading" && <TradingView />}
 					{page === "workflows" && <WorkflowsView />}
-					{page === "packages" && <PackagesView />}
+					{page === "packages" && (
+						<PackagesView onOpenTrading={() => handleSelect("trading")} />
+					)}
 					{page === "evidence" && <EvidenceView />}
 					{page === "settings" && <SettingsView />}
 					{page === "advanced" && <AdvancedView />}
