@@ -494,6 +494,8 @@ test("browser view uses shared components and PageShell", () => {
 		"@/components/ui/button",
 		"@/components/common/EmptyState",
 		"@/components/common/ErrorState",
+		"See the browser sessions Browser Control is using for live work.",
+		"Start from Home with a website task",
 	]) {
 		assert.match(
 			source,
