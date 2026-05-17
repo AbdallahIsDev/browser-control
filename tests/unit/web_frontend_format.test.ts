@@ -548,6 +548,17 @@ test("trading view uses shared components and PageShell", () => {
 		);
 	}
 
+	for (const expected of [
+		"TradingView analysis skill",
+		"without making trading a primary Browser Control workflow",
+		"TechnicalIdDetails",
+		"Technical job ID",
+		"Technical ticket ID",
+		"Showing latest 12",
+	]) {
+		assert.match(source, new RegExp(expected));
+	}
+
 	assert.doesNotMatch(source, /className="panel"/);
 	assert.doesNotMatch(source, /<button\s/);
 	assert.doesNotMatch(source, /<table\s/);
