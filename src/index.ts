@@ -590,6 +590,34 @@ export {
   tryDetectDefaultPort,
 } from "./services/detector";
 
+export {
+  createLocalhostCa,
+  getLocalhostCaPaths,
+  getLocalhostCaStatus,
+  installLocalhostCaTrust,
+  uninstallLocalhostCaTrust,
+} from "./services/local_ca";
+export type {
+  CommandResult,
+  CommandRunner,
+  LocalhostCaCreateOptions,
+  LocalhostCaCreateResult,
+  LocalhostCaOptions,
+  LocalhostCaPaths,
+  LocalhostCaStatus,
+  LocalhostCaTrustResult,
+} from "./services/local_ca";
+
+export {
+  getLocalhostProxyStartupStatus,
+  installLocalhostProxyStartup,
+  uninstallLocalhostProxyStartup,
+} from "./services/startup";
+export type {
+  LocalhostProxyStartupOptions,
+  LocalhostProxyStartupStatus,
+} from "./services/startup";
+
 export { ServiceActions } from "./service_actions";
 export type {
   ServiceActionContext,
@@ -722,6 +750,7 @@ export type {
   ProviderRegistryData,
   ProviderSelectionResult,
   ProviderListResult,
+  ProviderCatalogEntry,
 } from "./providers/types";
 
 export type {
@@ -743,6 +772,45 @@ export {
 export {
   BrowserlessProvider,
 } from "./providers/browserless";
+export {
+  BrowserbaseProvider,
+} from "./providers/browserbase";
+export {
+  UnsupportedRemoteSandboxProvider,
+} from "./providers/unsupported";
+export type {
+  ProviderHealthReport,
+  ProviderHealthState,
+} from "./providers/health";
+export {
+  checkProviderHealth,
+  scoreProviderHealth,
+} from "./providers/health";
+export {
+  createKnowledgeBackend,
+  getKnowledgeBackendCatalog,
+  LocalMarkdownKnowledgeBackend,
+  UnsupportedKnowledgeBackend,
+} from "./knowledge/backends";
+export type {
+  KnowledgeBackend,
+  KnowledgeBackendCatalogEntry,
+  KnowledgeBackendConfig,
+  KnowledgeBackendHealth,
+  KnowledgeBackendType,
+  RankedKnowledgeEntry,
+} from "./knowledge/backends";
+export {
+  createProofOfWorkChallenge,
+  solveProofOfWorkForTest,
+  verifyProofOfWork,
+} from "./security/proof_of_work";
+export type {
+  ProofOfWorkChallenge,
+  ProofOfWorkOptions,
+  ProofOfWorkSolution,
+  ProofOfWorkVerification,
+} from "./security/proof_of_work";
 
 export {
   ProviderError,

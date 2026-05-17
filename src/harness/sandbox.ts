@@ -35,7 +35,12 @@ export class LocalTempSandbox implements SandboxProvider {
   readonly kind = "local-temp" as const;
   private tempDir: string | null = null;
 
-  async run(command: string, files: string[], workDir: string): Promise<SandboxRunResult> {
+  async run(
+    command: string,
+    files: string[],
+    workDir: string,
+    options?: { env?: Record<string, string> },
+  ): Promise<SandboxRunResult> {
     const startMs = Date.now();
 
     try {
@@ -68,6 +73,7 @@ export class LocalTempSandbox implements SandboxProvider {
       // Run bounded command (max 30s timeout) without a shell.
       const output = execFileSync(parsed.executable, parsed.args, {
         cwd: this.tempDir,
+        env: { ...process.env, ...(options?.env ?? {}) },
         timeout: 30000,
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],

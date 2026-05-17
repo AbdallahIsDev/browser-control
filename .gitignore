@@ -3,6 +3,7 @@ node_modules/
 .interop/
 .worktrees/
 .vscode/
+.commandcode/
 desktop/BrowserControlLauncher/
 desktop/bin/
 

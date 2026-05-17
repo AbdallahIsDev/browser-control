@@ -4,6 +4,8 @@ import {
 	type StateStorage,
 	getStateStorage,
 } from "../state/index";
+import { redactUrl } from "../observability/redaction";
+import type { NetworkEntry } from "../observability/types";
 import trackerProfiles from "./tracker_profiles.json";
 
 const log = logger.withComponent("network-rules");
@@ -21,6 +23,34 @@ export type ResourceType =
 	| "fetch"
 	| "websocket"
 	| "other";
+
+type NetworkRouteRequest = {
+	url: () => string;
+	method?: () => string;
+	resourceType?: () => string;
+};
+
+type NetworkRoute = {
+	request: () => NetworkRouteRequest;
+	abort: (errorCode?: string) => Promise<void>;
+	continue: () => Promise<void>;
+	fallback?: () => Promise<void>;
+};
+
+export interface NetworkRouteEvidence extends NetworkEntry {
+	blocked: boolean;
+	domain?: string;
+	resourceType?: ResourceType;
+	matchedRuleId?: string;
+	matchedRuleType?: RuleType;
+	privacyProfile?: PrivacyProfileName;
+}
+
+export interface ApplyNetworkRulesOptions {
+	profile?: PrivacyProfileName;
+	sessionId?: string;
+	recordBlockedRequest?: (entry: NetworkRouteEvidence) => void;
+}
 
 export interface NetworkRule {
 	id: string;
@@ -77,6 +107,14 @@ function domainMatches(pattern: string, url: string): boolean {
 	}
 }
 
+function hostnameFromUrl(url: string): string | undefined {
+	try {
+		return new URL(url).hostname.toLowerCase();
+	} catch {
+		return undefined;
+	}
+}
+
 function detectResourceType(url: string, contentType?: string): ResourceType {
 	const ext = url.split("?")[0].split(".").pop()?.toLowerCase();
 	switch (ext) {
@@ -109,6 +147,23 @@ function detectResourceType(url: string, contentType?: string): ResourceType {
 			if (url.includes("/api/") || url.includes("graphql")) return "xhr";
 			return "other";
 	}
+}
+
+function normalizeResourceType(value: string | undefined): ResourceType {
+	if (value === "xhr") return "xhr";
+	if (value === "fetch") return "fetch";
+	if (
+		value === "script" ||
+		value === "stylesheet" ||
+		value === "image" ||
+		value === "font" ||
+		value === "media" ||
+		value === "websocket" ||
+		value === "other"
+	) {
+		return value;
+	}
+	return "other";
 }
 
 // ── NetworkRuleEngine ───────────────────────────────────────────────
@@ -216,24 +271,28 @@ export class NetworkRuleEngine {
 	): { decision: "allow" | "block" | "audit"; matchedRule?: NetworkRule } {
 		const activeRules = rules ?? [];
 		const privacyConfig = PRIVACY_PROFILES[profile ?? "balanced"];
-
-		for (const rule of activeRules) {
-			if (!rule.enabled) continue;
-			if (!domainMatches(rule.pattern, url)) continue;
+		const matches = activeRules.filter((rule) => {
+			if (!rule.enabled) return false;
+			if (!domainMatches(rule.pattern, url)) return false;
 			if (
 				rule.resourceTypes?.length &&
 				resourceType &&
 				!rule.resourceTypes.includes(resourceType)
 			) {
-				continue;
+				return false;
 			}
+			return true;
+		});
 
-			if (rule.ruleType === "denylist" || rule.ruleType === "tracker") {
-				return { decision: "block", matchedRule: rule };
-			}
-			if (rule.ruleType === "allowlist") {
-				return { decision: "allow", matchedRule: rule };
-			}
+		const allowRule = matches.find((rule) => rule.ruleType === "allowlist");
+		if (allowRule) return { decision: "allow", matchedRule: allowRule };
+
+		const denyRule = matches.find((rule) => rule.ruleType === "denylist");
+		if (denyRule) return { decision: "block", matchedRule: denyRule };
+
+		const trackerRule = matches.find((rule) => rule.ruleType === "tracker");
+		if (trackerRule && privacyConfig.blockTrackers) {
+			return { decision: "block", matchedRule: trackerRule };
 		}
 
 		if (privacyConfig.blockUnknown) {
@@ -244,47 +303,95 @@ export class NetworkRuleEngine {
 	}
 
 	async applyToPage(
-		page: { route: (pattern: string | RegExp, handler: (route: unknown) => Promise<void>) => Promise<void> },
-		profile?: PrivacyProfileName,
+		page: {
+			route: (
+				pattern: string | RegExp,
+				handler: (route: unknown) => Promise<void>,
+			) => Promise<unknown>;
+		},
+		options?: PrivacyProfileName | ApplyNetworkRulesOptions,
 	): Promise<void> {
 		const rules = await this.listRules();
-		const privacyConfig = PRIVACY_PROFILES[profile ?? "balanced"];
+		const applyOptions =
+			typeof options === "string" ? { profile: options } : (options ?? {});
+		const profile = applyOptions.profile ?? "balanced";
 
-		if (!privacyConfig.blockTrackers) return;
+		await page.route("**/*", async (route: unknown) => {
+			const routeObj = route as NetworkRoute;
+			const request = routeObj.request();
+			const requestUrl = request.url();
+			const resourceType = request.resourceType
+				? normalizeResourceType(request.resourceType())
+				: detectResourceType(requestUrl);
+			const result = this.evaluateRequest(requestUrl, resourceType, rules, profile);
 
-		const trackerPatterns = rules
-			.filter((r) => r.enabled && (r.ruleType === "denylist" || r.ruleType === "tracker"))
-			.map((r) => r.pattern);
+			if (result.decision === "block") {
+				await this.recordBlockedRequest({
+					url: requestUrl,
+					method: request.method?.() ?? "GET",
+					resourceType,
+					sessionId: applyOptions.sessionId,
+					matchedRule: result.matchedRule,
+					profile,
+					recordBlockedRequest: applyOptions.recordBlockedRequest,
+				});
+				await routeObj.abort("blockedbyclient").catch(() => routeObj.abort());
+				return;
+			}
 
-		for (const pattern of trackerPatterns) {
-			const regex = domainToRegex(pattern);
-			await page.route(regex, async (route: unknown) => {
-				const routeObj = route as { request(): { url(): string }; abort(): Promise<void> };
-				const requestUrl = routeObj.request().url();
-				const resourceType = detectResourceType(requestUrl);
-				const result = this.evaluateRequest(requestUrl, resourceType, rules, profile);
-				if (result.decision === "block") {
-					await routeObj.abort();
-				} else {
-					const continueRoute = route as { continue(): Promise<void> };
-					await continueRoute.continue();
-				}
-			});
-		}
+			if (routeObj.fallback) {
+				await routeObj.fallback();
+				return;
+			}
+			await routeObj.continue();
+		});
 	}
 
 	close(): void {}
-}
 
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function domainToRegex(pattern: string): RegExp {
-	if (pattern.startsWith("*.")) {
-		const suffix = pattern.slice(2).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		return new RegExp(`(^|\\.)${suffix}$`);
+	private async recordBlockedRequest(options: {
+		url: string;
+		method: string;
+		resourceType: ResourceType;
+		sessionId?: string;
+		matchedRule?: NetworkRule;
+		profile: PrivacyProfileName;
+		recordBlockedRequest?: (entry: NetworkRouteEvidence) => void;
+	}): Promise<void> {
+		const timestamp = new Date().toISOString();
+		const redactedUrl = redactUrl(options.url);
+		const entry: NetworkRouteEvidence = {
+			url: redactedUrl,
+			method: options.method,
+			status: 0,
+			error: "blocked by network privacy rule",
+			timestamp,
+			sessionId: options.sessionId,
+			blocked: true,
+			domain: hostnameFromUrl(options.url),
+			resourceType: options.resourceType,
+			matchedRuleId: options.matchedRule?.id,
+			matchedRuleType: options.matchedRule?.ruleType,
+			privacyProfile: options.profile,
+			redacted: true,
+		};
+		options.recordBlockedRequest?.(entry);
+		await this.storage.saveAuditEvent({
+			id: `network-block-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			action: "network_request_blocked",
+			sessionId: options.sessionId,
+			policyDecision: "deny",
+			details: JSON.stringify({
+				url: redactedUrl,
+				domain: entry.domain,
+				resourceType: entry.resourceType,
+				matchedRuleId: entry.matchedRuleId,
+				matchedRuleType: entry.matchedRuleType,
+				privacyProfile: entry.privacyProfile,
+			}),
+			timestamp,
+		});
 	}
-	const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	return new RegExp(`^${escaped}$`);
 }
 
 // ── Singleton ───────────────────────────────────────────────────────

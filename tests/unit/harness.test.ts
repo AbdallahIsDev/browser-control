@@ -166,6 +166,99 @@ describe("Harness Registry", () => {
 
     fs.rmSync(home, { recursive: true, force: true });
   });
+
+  it("generates helpers under data home, validates in sandbox, and activates", async () => {
+    const home = makeTempHome();
+    const registry = new HarnessRegistry({ dataHome: home });
+
+    const result = await registry.generateHelper({
+      id: "generated-login",
+      purpose: "Generated login helper",
+      taskTags: ["login"],
+      failureTypes: ["missing-selector"],
+      files: [{ path: "helper.js", content: "console.log('helper-ok');\n" }],
+      testCommand: "node helper.js",
+      activate: true,
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.helper.activated, true);
+    assert.strictEqual(result.validation.status, "passed");
+    assert.strictEqual(result.sandbox?.success, true);
+    assert.ok(result.helperDir.startsWith(getHarnessDir(home)));
+    assert.ok(fs.existsSync(path.join(result.helperDir, "helper.js")));
+
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it("executes activated helpers in sandbox with redacted structured input", async () => {
+    const home = makeTempHome();
+    const registry = new HarnessRegistry({ dataHome: home });
+
+    const result = await registry.generateHelper({
+      id: "input-helper",
+      purpose: "Helper that consumes operator input",
+      taskTags: ["checkout"],
+      failureTypes: ["missing-selector"],
+      files: [
+        {
+          path: "helper.js",
+          content:
+            "const input = JSON.parse(process.env.BC_HELPER_INPUT || '{}');\nconsole.log(JSON.stringify({ seen: input.target }));\n",
+        },
+      ],
+      testCommand: "node helper.js",
+      activate: true,
+    });
+    assert.strictEqual(result.success, true);
+
+    const executed = await registry.executeHelper("input-helper", {
+      target: "checkout-button",
+    });
+
+    assert.strictEqual(executed.sandbox?.success, true);
+    assert.match(executed.sandbox?.output ?? "", /"seen":"checkout-button"/);
+
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it("rolls back generated helper files and manifest when validation fails", async () => {
+    const home = makeTempHome();
+    const registry = new HarnessRegistry({ dataHome: home });
+
+    const first = await registry.generateHelper({
+      id: "generated-login",
+      purpose: "Generated login helper",
+      taskTags: ["login"],
+      failureTypes: ["missing-selector"],
+      files: [{ path: "helper.js", content: "console.log('v1');\n" }],
+      testCommand: "node helper.js",
+      activate: true,
+    });
+    assert.strictEqual(first.success, true);
+
+    const failed = await registry.generateHelper({
+      id: "generated-login",
+      purpose: "Generated login helper unsafe update",
+      taskTags: ["login"],
+      failureTypes: ["missing-selector"],
+      files: [{ path: "helper.js", content: "process.exit(1);\n" }],
+      testCommand: "node helper.js",
+      activate: true,
+    });
+
+    assert.strictEqual(failed.success, false);
+    assert.strictEqual(failed.rolledBack, true);
+    const helper = registry.get("generated-login");
+    assert.strictEqual(helper?.version, first.helper.version);
+    assert.strictEqual(helper?.activated, true);
+    assert.match(
+      fs.readFileSync(path.join(getHarnessDir(home), "helpers", "generated-login", "helper.js"), "utf8"),
+      /v1/,
+    );
+
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 });
 
 describe("LocalTempSandbox", () => {

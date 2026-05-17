@@ -5,10 +5,19 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { PackageRegistry } from "../../src/packages/registry";
-import { validatePackageManifest, safeResolveRelativePath } from "../../src/packages/manifest";
+import {
+  computePackageDigest,
+  safeResolveRelativePath,
+  validatePackageManifest,
+  verifyPackageSignature,
+} from "../../src/packages/manifest";
 import { MemoryStore } from "../../src/runtime/memory_store";
 import { createBrowserControl } from "../../src/browser_control";
 import { resetStateStorage } from "../../src/state/index";
+import {
+  ActionRecorder,
+  convertRecordingToPackage,
+} from "../../src/observability/recorder";
 
 describe("Automation Packages - Hardened", () => {
   let tmpDataHome: string;
@@ -74,6 +83,42 @@ describe("Automation Packages - Hardened", () => {
       const resolved = safeResolveRelativePath(fixturePath, "workflows/test-workflow.json");
       assert.ok(resolved.startsWith(path.resolve(fixturePath)));
     });
+
+    it("verifies package signatures with a public key over the computed digest", () => {
+      const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+      });
+      const digest = computePackageDigest(fixturePath).digest;
+      const signer = crypto.createSign("SHA256");
+      signer.update(digest);
+      signer.end();
+      const signature = signer.sign(privateKey, "base64");
+      const publicKeyPem = publicKey
+        .export({ type: "spki", format: "pem" })
+        .toString();
+
+      const verified = verifyPackageSignature(
+        fixturePath,
+        digest,
+        signature,
+        publicKeyPem,
+      );
+
+      assert.strictEqual(verified.valid, true, verified.error);
+
+      const wrongKey = crypto
+        .generateKeyPairSync("rsa", { modulusLength: 2048 })
+        .publicKey.export({ type: "spki", format: "pem" })
+        .toString();
+      const rejected = verifyPackageSignature(
+        fixturePath,
+        digest,
+        signature,
+        wrongKey,
+      );
+      assert.strictEqual(rejected.valid, false);
+      assert.match(rejected.error ?? "", /Signature verification failed/);
+    });
   });
 
   describe("Registry Operations", () => {
@@ -92,6 +137,30 @@ describe("Automation Packages - Hardened", () => {
       // Should ignore attempt to delete outside
       const result = registry.remove("../../../something");
       assert.strictEqual(result.success, false);
+    });
+
+    it("trust review reports risk from requested permissions before grants", () => {
+      const result = registry.install(fixturePath);
+      assert.strictEqual(result.success, true);
+
+      const review = registry.submitReview(
+        "basic-test-package",
+        "pending",
+        "security-reviewer",
+        "pre-grant review",
+      );
+
+      assert.strictEqual(review.success, true);
+      assert.ok(review.record);
+      assert.match(
+        review.record.riskSummary.warnings.join("\n"),
+        /Terminal access requested/,
+      );
+      assert.notStrictEqual(
+        review.record.riskSummary.riskLevel,
+        "low",
+        "packages requesting terminal access must not be low risk before grants",
+      );
     });
   });
 
@@ -208,6 +277,44 @@ describe("Automation Packages - Hardened", () => {
   });
 
   describe("Evaluation & Timeout", () => {
+    it("installs and evaluates a materialized recorder package draft", async () => {
+      const recorder = new ActionRecorder();
+      const session = recorder.start("Recorded Eval Package");
+      recorder.record("terminal-exec", { command: "echo draft-eval" });
+      recorder.stop();
+      const draft = convertRecordingToPackage(session);
+
+      const packageDir = path.join(tmpDataHome, "draft-package-source");
+      const workflowPath = path.join(packageDir, draft.manifest.workflows[0]);
+      const evalPath = path.join(packageDir, draft.manifest.evals[0]);
+      fs.mkdirSync(path.dirname(workflowPath), { recursive: true });
+      fs.mkdirSync(path.dirname(evalPath), { recursive: true });
+      fs.writeFileSync(
+        path.join(packageDir, "automation-package.json"),
+        JSON.stringify(draft.manifest, null, 2),
+      );
+      fs.writeFileSync(workflowPath, JSON.stringify(draft.workflow, null, 2));
+      fs.writeFileSync(evalPath, JSON.stringify(draft.evalDefinition, null, 2));
+
+      const bc = createBrowserControl({
+        memoryStore,
+        dataHome: tmpDataHome,
+        policyProfile: "trusted",
+      });
+      const installResult = await bc.package.install(packageDir);
+      assert.strictEqual(installResult.success, true, installResult.error);
+      const grantResult = bc.package.grantPermission(
+        draft.manifest.name,
+        "terminal",
+      );
+      assert.strictEqual(grantResult.success, true, grantResult.error);
+
+      const result = await bc.package.eval(draft.manifest.name);
+      assert.strictEqual(result.success, true, result.error);
+      const evalResults = result.data as any[];
+      assert.strictEqual(evalResults[0].status, "passed", evalResults[0].error);
+    });
+
     it("enforces timeout in evaluation", async () => {
       // Create a package with a workflow that would take time or just a long timeout
       const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });

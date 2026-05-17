@@ -133,6 +133,8 @@ export interface TerminalRuntime {
 		shell?: string;
 		cwd?: string;
 		name?: string;
+		cols?: number;
+		rows?: number;
 	}): Promise<{ id: string; shell: string; cwd: string; status: string }>;
 	exec(
 		command: string,
@@ -141,7 +143,11 @@ export interface TerminalRuntime {
 			timeoutMs?: number;
 		},
 	): Promise<import("./terminal/types").ExecResult>;
-	type(sessionId: string, text: string): Promise<void>;
+	type(
+		sessionId: string,
+		text: string,
+		options?: { submit?: boolean },
+	): Promise<void>;
 	read(sessionId: string, maxBytes?: number): Promise<string>;
 	snapshot(sessionId?: string): Promise<unknown>;
 	interrupt(sessionId: string): Promise<void>;
@@ -172,7 +178,13 @@ export interface TerminalRuntime {
 export class LocalTerminalRuntime implements TerminalRuntime {
 	constructor(private readonly tm: TerminalSessionManager) {}
 
-	async open(config: { shell?: string; cwd?: string; name?: string }) {
+	async open(config: {
+		shell?: string;
+		cwd?: string;
+		name?: string;
+		cols?: number;
+		rows?: number;
+	}) {
 		const session = await this.tm.create(config);
 		return {
 			id: session.id,
@@ -197,10 +209,14 @@ export class LocalTerminalRuntime implements TerminalRuntime {
 		return oneShotExec(command, { timeoutMs: options.timeoutMs });
 	}
 
-	async type(sessionId: string, text: string) {
+	async type(
+		sessionId: string,
+		text: string,
+		options: { submit?: boolean } = {},
+	) {
 		const session = this.tm.get(sessionId);
 		if (!session) throw new Error(`Terminal session not found: ${sessionId}`);
-		await session.write(text);
+		await session.write(text, options);
 	}
 
 	async read(sessionId: string, maxBytes?: number) {
@@ -290,7 +306,13 @@ export class LocalTerminalRuntime implements TerminalRuntime {
 export class DaemonTerminalRuntime implements TerminalRuntime {
 	constructor(private readonly daemon: import("./runtime/daemon").Daemon) {}
 
-	async open(config: { shell?: string; cwd?: string; name?: string }) {
+	async open(config: {
+		shell?: string;
+		cwd?: string;
+		name?: string;
+		cols?: number;
+		rows?: number;
+	}) {
 		const raw = await this.daemon.termOpen(config);
 		return {
 			id: raw.id as string,
@@ -318,8 +340,12 @@ export class DaemonTerminalRuntime implements TerminalRuntime {
 		};
 	}
 
-	async type(sessionId: string, text: string) {
-		await this.daemon.termType(sessionId, text);
+	async type(
+		sessionId: string,
+		text: string,
+		options: { submit?: boolean } = {},
+	) {
+		await this.daemon.termType(sessionId, text, options);
 	}
 
 	async read(sessionId: string, maxBytes?: number) {
@@ -533,13 +559,21 @@ export class BrokerTerminalRuntime implements TerminalRuntime {
 		throw lastError ?? new Error(`Broker API request failed: ${url}`);
 	}
 
-	async open(config: { shell?: string; cwd?: string; name?: string }) {
+	async open(config: {
+		shell?: string;
+		cwd?: string;
+		name?: string;
+		cols?: number;
+		rows?: number;
+	}) {
 		const raw = (await this.request(
 			"open",
 			{
 				shell: config.shell,
 				cwd: config.cwd,
 				name: config.name,
+				cols: config.cols,
+				rows: config.rows,
 			},
 			"POST",
 		)) as Record<string, unknown>;
@@ -574,8 +608,16 @@ export class BrokerTerminalRuntime implements TerminalRuntime {
 		};
 	}
 
-	async type(sessionId: string, text: string) {
-		await this.request("type", { sessionId, text }, "POST");
+	async type(
+		sessionId: string,
+		text: string,
+		options: { submit?: boolean } = {},
+	) {
+		await this.request(
+			"type",
+			{ sessionId, text, submit: options.submit !== false },
+			"POST",
+		);
 	}
 
 	async read(sessionId: string, maxBytes?: number) {
