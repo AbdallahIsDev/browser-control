@@ -66,7 +66,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   // ── Service path (Section 14) ───────────────────────────────────
   {
     matches: (action) => {
-      const serviceReadActions = ["service_list", "service_resolve"];
+      const serviceReadActions = ["service_list", "service_resolve", "service_proxy_status"];
       return serviceReadActions.includes(action);
     },
     path: "command",
@@ -74,7 +74,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   },
   {
     matches: (action) => {
-      const serviceMutationActions = ["service_register", "service_remove"];
+      const serviceMutationActions = ["service_register", "service_remove", "service_proxy_start", "service_proxy_stop"];
       return serviceMutationActions.includes(action);
     },
     path: "command",
@@ -84,11 +84,29 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   // ── Provider path (Section 15) ──────────────────────────────────
   {
     matches: (action) => {
-      const providerReadActions = ["browser_provider_list", "browser_provider_get_active"];
+      const providerReadActions = [
+        "browser_provider_list",
+        "browser_provider_get_active",
+        "browser_provider_health",
+        "browser_provider_catalog",
+      ];
       return providerReadActions.includes(action);
     },
     path: "command",
     risk: "low",
+  },
+  {
+    matches: (action, params) => {
+      if (action === "browser_provider_use") {
+        return typeof params.name === "string" && params.name !== "local";
+      }
+      if (action === "browser_provider_add") {
+        return ["custom", "browserless", "browserbase", "e2b", "cubesandbox", "camofox", "cloak", "obscura"].includes(String(params.type));
+      }
+      return false;
+    },
+    path: "command",
+    risk: "high",
   },
   {
     matches: (action) => {

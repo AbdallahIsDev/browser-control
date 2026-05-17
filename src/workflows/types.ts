@@ -12,9 +12,9 @@ export type WorkflowNodeKind = "terminal" | "filesystem" | "browser" | "approval
 
 export interface WorkflowNode { id: string; kind: WorkflowNodeKind; name?: string; input: Record<string, unknown>; retry?: RetryPolicy; timeoutMs?: number; loopConfig?: LoopConfig; }
 
-export interface WorkflowEdge { from: string; to: string; condition?: ConditionExpression; label?: string; }
+export interface WorkflowEdge { from: string; to: string; condition?: ConditionExpression; label?: string; role?: "body" | "exit"; }
 
-export interface WorkflowGraph { id: string; name: string; version: string; nodes: WorkflowNode[]; edges: WorkflowEdge[]; entryNodeId?: string; stateSchema?: Record<string, "string" | "number" | "boolean">; }
+export interface WorkflowGraph { id: string; name: string; version: string; nodes: WorkflowNode[]; edges: WorkflowEdge[]; entryNodeId?: string; stateSchema?: Record<string, "string" | "number" | "boolean">; initialState?: Record<string, string | number | boolean>; }
 
 export interface WorkflowState { values: Record<string, string | number | boolean>; updatedAt: string; nodeId: string; }
 
@@ -91,18 +91,35 @@ export function validateWorkflowGraph(graph: unknown): WorkflowValidationResult 
 
   if (c.entryNodeId && !nodeIds.has(c.entryNodeId)) errors.push(`Entry node "${c.entryNodeId}" not found`);
 
-  // Cycle detection (loop nodes may have self-referencing edges)
+  // Cycle detection: loop nodes may have body edges that return to the loop.
+  // We allow edges from body nodes back to their parent loop node.
   const outEdges = new Map<string, string[]>();
-  for (const e of c.edges) { if (!outEdges.has(e.from)) outEdges.set(e.from, []); outEdges.get(e.from)!.push(e.to); }
+  const inEdges = new Map<string, string[]>();
+  for (const e of c.edges) {
+    if (!outEdges.has(e.from)) outEdges.set(e.from, []);
+    outEdges.get(e.from)!.push(e.to);
+    if (!inEdges.has(e.to)) inEdges.set(e.to, []);
+    inEdges.get(e.to)!.push(e.from);
+  }
+  const loopSet = new Set(c.nodes.filter(n => isObject(n) && (n as WorkflowNode).kind === "loop").map(n => (isObject(n) ? n.id : "")));
+  // Find body nodes: nodes that are targets of a "body" role edge from a loop
+  const bodyNodesOfLoop = new Map<string, string>(); // bodyNodeId -> loopNodeId
+  for (const e of c.edges) {
+    if (e.role === "body" && loopSet.has(e.from)) {
+      bodyNodesOfLoop.set(e.to, e.from);
+    }
+  }
   const visiting = new Set<string>();
   const visited = new Set<string>();
-  const loopSet = new Set(c.nodes.filter(n => isObject(n) && (n as WorkflowNode).kind === "loop").map(n => (isObject(n) ? n.id : "")));
   const hasCycle = (nodeId: string): boolean => {
     if (visiting.has(nodeId)) return true;
     if (visited.has(nodeId)) return false;
     visiting.add(nodeId);
     for (const next of outEdges.get(nodeId) ?? []) {
+      // Allow self-loops on loop nodes
       if (loopSet.has(nodeId) && next === nodeId) continue;
+      // Allow body nodes to edge back to their parent loop
+      if (bodyNodesOfLoop.has(nodeId) && bodyNodesOfLoop.get(nodeId) === next) continue;
       if (hasCycle(next)) return true;
     }
     visiting.delete(nodeId);

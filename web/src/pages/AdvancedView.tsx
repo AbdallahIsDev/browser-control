@@ -1,10 +1,22 @@
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { apiFetch } from "../api";
 
 export function AdvancedView() {
 	const [cleanupConfirm, setCleanupConfirm] = useState("");
 	const [cleanupStatus, setCleanupStatus] = useState("");
 	const [isCleaning, setIsCleaning] = useState(false);
+	const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
 	const runDoctor = async () => {
 		try {
@@ -44,98 +56,83 @@ export function AdvancedView() {
 	};
 
 	return (
-		<div className="advanced-view">
-			<section className="panel">
-				<div className="panel-title">System Diagnostics</div>
-				<p style={{ marginBottom: "16px", color: "var(--text-secondary)" }}>
-					Run the system doctor to check for common issues and
-					misconfigurations.
-				</p>
-				<button
-					type="button"
-					className="button button-primary"
-					onClick={runDoctor}
-				>
-					Run Doctor Diagnostics
-				</button>
-			</section>
+		<PageShell>
+			<div className="space-y-4 md:space-y-6">
+				<Card>
+					<CardHeader>
+						<CardTitle>System Diagnostics</CardTitle>
+						<CardDescription>
+							Run the system doctor to check for common issues and
+							misconfigurations.
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<Button onClick={runDoctor}>Run Doctor Diagnostics</Button>
+					</CardContent>
+				</Card>
 
-			<section className="panel">
-				<div className="panel-title">Durable State & Storage Maintenance</div>
-				<div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-					<div>
-						<h4 style={{ marginBottom: "8px" }}>Runtime Cleanup</h4>
-						<p
-							style={{
-								marginBottom: "12px",
-								color: "var(--text-secondary)",
-								fontSize: "0.9rem",
-							}}
-						>
-							Deletes temporary profiles, downloads, and automation scratch
-							files. This is a destructive operation.
-						</p>
+				<Card>
+					<CardHeader>
+						<CardTitle>Durable State & Storage Maintenance</CardTitle>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<div>
+							<h4 className="text-sm font-medium mb-2">Runtime Cleanup</h4>
+							<p className="text-sm text-[--text-secondary] mb-4">
+								Deletes temporary profiles, downloads, and automation scratch
+								files. This is a destructive operation.
+							</p>
 
-						<div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-							<button
-								type="button"
-								className="button"
-								disabled={isCleaning}
-								onClick={() => performCleanup(true)}
-							>
-								Dry Run Cleanup
-							</button>
-
-							<div style={{ flex: 1, display: "flex", gap: "8px" }}>
-								<input
-									type="text"
-									placeholder='Type "DELETE_RUNTIME_TEMP" to confirm'
-									value={cleanupConfirm}
-									onChange={(e) => setCleanupConfirm(e.target.value)}
-									style={{
-										flex: 1,
-										padding: "8px 12px",
-										borderRadius: "6px",
-										border: "1px solid var(--border-strong)",
-										background: "var(--bg-app)",
-										color: "var(--text-primary)",
-									}}
-								/>
-								<button
-									type="button"
-									className="button"
-									style={{
-										backgroundColor: "#ef4444",
-										color: "white",
-										borderColor: "#ef4444",
-									}}
-									disabled={
-										isCleaning || cleanupConfirm !== "DELETE_RUNTIME_TEMP"
-									}
-									onClick={() => performCleanup(false)}
+							<div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+								<Button
+									variant="outline"
+									disabled={isCleaning}
+									onClick={() => performCleanup(true)}
+									className="sm:w-auto w-full"
 								>
-									Confirm Deletion
-								</button>
-							</div>
-						</div>
+									Dry Run Cleanup
+								</Button>
 
-						{cleanupStatus && (
-							<pre
-								style={{
-									marginTop: "16px",
-									padding: "12px",
-									background: "#000",
-									borderRadius: "6px",
-									fontSize: "0.85rem",
-									overflowX: "auto",
-								}}
-							>
-								{cleanupStatus}
-							</pre>
-						)}
-					</div>
-				</div>
-			</section>
-		</div>
+								<div className="flex flex-col sm:flex-row gap-2 flex-1 min-w-0">
+									<Input
+										placeholder='Type "DELETE_RUNTIME_TEMP" to confirm'
+										value={cleanupConfirm}
+										onChange={(e) => setCleanupConfirm(e.target.value)}
+										className="flex-1 w-full"
+									/>
+									<Button
+										variant="destructive"
+										disabled={
+											isCleaning || cleanupConfirm !== "DELETE_RUNTIME_TEMP"
+										}
+										onClick={() => setShowConfirmDialog(true)}
+										className="sm:w-auto w-full"
+									>
+										Confirm Deletion
+									</Button>
+								</div>
+							</div>
+
+							{cleanupStatus && (
+								<pre className="mt-4 p-3 bg-black rounded-md text-sm overflow-x-auto">
+									{cleanupStatus}
+								</pre>
+							)}
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+
+			<ConfirmDialog
+				open={showConfirmDialog}
+				onOpenChange={setShowConfirmDialog}
+				title="Confirm Runtime Cleanup"
+				description="This will permanently delete temporary profiles, downloads, and automation scratch files. Are you sure?"
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				variant="destructive"
+				onConfirm={() => performCleanup(false)}
+			/>
+		</PageShell>
 	);
 }

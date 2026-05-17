@@ -603,7 +603,12 @@ export class SqliteStateStorage implements StateStorage {
 
   async revokeGrant(grantId: string): Promise<void> {
     return this.safeExecute(() => {
-      this.db.prepare("UPDATE secret_grants SET revoked = 1 WHERE id = ?").run(grantId);
+      const row = this.db.prepare("SELECT data_json FROM secret_grants WHERE id = ?").get(grantId) as { data_json: string } | undefined;
+      if (!row) return;
+      const grant = JSON.parse(row.data_json) as StoredSecretGrant;
+      const revokedAt = new Date().toISOString();
+      const revokedGrant: StoredSecretGrant = { ...grant, revoked: true, revokedAt };
+      this.db.prepare("UPDATE secret_grants SET data_json = ?, revoked = 1 WHERE id = ?").run(JSON.stringify(revokedGrant), grantId);
     });
   }
 

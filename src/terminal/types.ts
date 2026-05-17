@@ -84,6 +84,11 @@ export interface TerminalSnapshot {
 	};
 }
 
+export interface TerminalWriteOptions {
+	/** Append Enter/newline after the input. Defaults to true for command submit. */
+	submit?: boolean;
+}
+
 // ── Terminal Session Status ──────────────────────────────────────────
 
 export type TerminalSessionStatus =
@@ -106,8 +111,8 @@ export interface TerminalSession {
 	/** Run a command and wait for completion. */
 	exec(command: string, options?: ExecOptions): Promise<ExecResult>;
 
-	/** Write raw data to the session stdin. Appends newline automatically. */
-	write(data: string): Promise<void>;
+	/** Write raw data to the session stdin. Appends newline by default. */
+	write(data: string, options?: TerminalWriteOptions): Promise<void>;
 
 	/** Read recent output from the session. */
 	read(maxBytes?: number): Promise<string>;

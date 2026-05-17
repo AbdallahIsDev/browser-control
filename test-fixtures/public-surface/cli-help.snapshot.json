@@ -96,6 +96,31 @@
         },
         {
           "commandPath": [
+            "data",
+            "doctor|cleanup|export"
+          ],
+          "description": "Inspect, clean, or export local data home",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "data doctor|cleanup|export [--json]"
+        },
+        {
+          "commandPath": [
+            "benchmark",
+            "run|results|compare"
+          ],
+          "description": "Run and inspect product benchmarks",
+          "flags": [
+            "json",
+            "suite"
+          ],
+          "jsonSupport": true,
+          "syntax": "benchmark run|results|compare [--suite=<name>] [--json]"
+        },
+        {
+          "commandPath": [
             "dashboard",
             "status"
           ],
@@ -202,6 +227,30 @@
         {
           "commandPath": [
             "workflow",
+            "events"
+          ],
+          "description": "Show workflow run events",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow events <runId> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
+            "edit-state"
+          ],
+          "description": "Edit workflow run state",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "workflow edit-state <runId> <key> <value> [--json]"
+        },
+        {
+          "commandPath": [
+            "workflow",
             "resume"
           ],
           "description": "Resume a workflow run",
@@ -275,6 +324,45 @@
           ],
           "jsonSupport": true,
           "syntax": "harness rollback <helperId> <version> [--json]"
+        },
+        {
+          "commandPath": [
+            "harness",
+            "generate"
+          ],
+          "description": "",
+          "flags": [
+            "files",
+            "id",
+            "json",
+            "purpose"
+          ],
+          "jsonSupport": true,
+          "syntax": "harness generate --id=<id> --purpose=<purpose> [--files=<path:content>] [--json]"
+        },
+        {
+          "commandPath": [
+            "Generate",
+            "a",
+            "helper"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Generate a helper"
+        },
+        {
+          "commandPath": [
+            "harness",
+            "execute"
+          ],
+          "description": "Execute a helper",
+          "flags": [
+            "input",
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "harness execute <helperId> [--input='<json>'] [--json]"
         }
       ],
       "section": "Self-Healing Harness (Section 29)"
@@ -435,6 +523,17 @@
           "flags": [],
           "jsonSupport": false,
           "syntax": "type <text>"
+        },
+        {
+          "commandPath": [
+            "paste"
+          ],
+          "description": "Paste/insert text into focused element",
+          "flags": [
+            "target"
+          ],
+          "jsonSupport": false,
+          "syntax": "paste <text> [--target=<ref-or-target>]"
         },
         {
           "commandPath": [
@@ -614,6 +713,17 @@
           "commandPath": [
             "browser",
             "provider",
+            "catalog"
+          ],
+          "description": "List supported browser provider types",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser provider catalog"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
             "use"
           ],
           "description": "Set active browser provider",
@@ -633,7 +743,7 @@
             "type"
           ],
           "jsonSupport": false,
-          "syntax": "browser provider add <name> --type=<type> --endpoint=<url>"
+          "syntax": "browser provider add <name> --type=<type> [--endpoint=<url>]"
         },
         {
           "commandPath": [
@@ -645,6 +755,17 @@
           "flags": [],
           "jsonSupport": false,
           "syntax": "browser provider remove <name>"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "provider",
+            "health"
+          ],
+          "description": "Run provider health diagnostics",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "browser provider health [name]"
         },
         {
           "commandPath": [
@@ -1133,6 +1254,16 @@
         },
         {
           "commandPath": [
+            "knowledge",
+            "backends"
+          ],
+          "description": "Manage knowledge backends",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge backends [list|health|search|rank]"
+        },
+        {
+          "commandPath": [
             "term",
             "open"
           ],
@@ -1387,6 +1518,76 @@
           "flags": [],
           "jsonSupport": false,
           "syntax": "service remove <name>"
+        },
+        {
+          "commandPath": [
+            "service",
+            "proxy",
+            "status"
+          ],
+          "description": "Show .localhost proxy status",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "service proxy status"
+        },
+        {
+          "commandPath": [
+            "service",
+            "proxy",
+            "start"
+          ],
+          "description": "",
+          "flags": [
+            "allow-remote",
+            "background",
+            "cert",
+            "https",
+            "key",
+            "local-ca",
+            "port"
+          ],
+          "jsonSupport": false,
+          "syntax": "service proxy start [--port=80|0] [--allow-remote=true] [--background=true] [--https=true --cert=<pem> --key=<pem>|--local-ca=true] Start .localhost proxy"
+        },
+        {
+          "commandPath": [
+            "service",
+            "proxy",
+            "stop"
+          ],
+          "description": "Stop managed .localhost proxy",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "service proxy stop"
+        },
+        {
+          "commandPath": [
+            "service",
+            "proxy",
+            "startup"
+          ],
+          "description": "",
+          "flags": [
+            "port",
+            "yes"
+          ],
+          "jsonSupport": false,
+          "syntax": "service proxy startup status|install|uninstall [--port=80] [--yes] Manage per-user OS startup"
+        },
+        {
+          "commandPath": [
+            "service",
+            "proxy",
+            "ca"
+          ],
+          "description": "",
+          "flags": [
+            "ca-dir",
+            "rotate",
+            "yes"
+          ],
+          "jsonSupport": false,
+          "syntax": "service proxy ca status|create|install|uninstall [--ca-dir=<dir>] [--rotate=true] [--yes] Manage trusted .localhost CA"
         }
       ],
       "section": "Service Management"
@@ -1513,6 +1714,16 @@
           "flags": [],
           "jsonSupport": false,
           "syntax": "knowledge delete <name-or-domain>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "backends"
+          ],
+          "description": "Manage knowledge backends",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "knowledge backends [list|health|search|rank]"
         }
       ],
       "section": "Knowledge"

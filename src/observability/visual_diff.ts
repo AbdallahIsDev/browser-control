@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getDataHome } from "../shared/paths";
-import { redactString } from "./redaction";
+import { PNG } from "pngjs";
+import { ensureDataHome, getReportsDir } from "../shared/paths";
+import { redactObject, redactString } from "./redaction";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("visual-diff");
@@ -13,6 +14,10 @@ export interface PixelDiffResult {
 	beforePath?: string;
 	afterPath?: string;
 	diffPath?: string;
+	width?: number;
+	height?: number;
+	changedPixelCount?: number;
+	changeRatio?: number;
 	changedPercent: number;
 	totalPixels: number;
 	differentPixels: number;
@@ -88,21 +93,61 @@ export function computePixelDiff(
 	afterPath: string,
 ): PixelDiffResult | null {
 	try {
-		const before = fs.readFileSync(beforePath);
-		const after = fs.readFileSync(afterPath);
-		const minLen = Math.min(before.length, after.length);
-		let differentPixels = 0;
-		for (let i = 0; i < minLen; i++) {
-			if (before[i] !== after[i]) differentPixels++;
+		ensureDataHome();
+		const before = PNG.sync.read(fs.readFileSync(beforePath));
+		const after = PNG.sync.read(fs.readFileSync(afterPath));
+		const width = Math.min(before.width, after.width);
+		const height = Math.min(before.height, after.height);
+		const diff = new PNG({ width, height });
+		let changedPixelCount = 0;
+
+		for (let y = 0; y < height; y++) {
+			for (let x = 0; x < width; x++) {
+				const idx = (width * y + x) << 2;
+				const beforeIdx = (before.width * y + x) << 2;
+				const afterIdx = (after.width * y + x) << 2;
+				const changed =
+					before.data[beforeIdx] !== after.data[afterIdx] ||
+					before.data[beforeIdx + 1] !== after.data[afterIdx + 1] ||
+					before.data[beforeIdx + 2] !== after.data[afterIdx + 2] ||
+					before.data[beforeIdx + 3] !== after.data[afterIdx + 3];
+				if (changed) {
+					changedPixelCount++;
+					diff.data[idx] = 255;
+					diff.data[idx + 1] = 0;
+					diff.data[idx + 2] = 0;
+					diff.data[idx + 3] = 255;
+				} else {
+					diff.data[idx] = after.data[afterIdx];
+					diff.data[idx + 1] = after.data[afterIdx + 1];
+					diff.data[idx + 2] = after.data[afterIdx + 2];
+					diff.data[idx + 3] = 80;
+				}
+			}
 		}
-		// Add size difference as changed pixels
-		differentPixels += Math.abs(before.length - after.length);
-		const totalPixels = Math.max(before.length, after.length);
+
+		const sizeDeltaPixels =
+			Math.abs(before.width * before.height - after.width * after.height);
+		const differentPixels = changedPixelCount + sizeDeltaPixels;
+		const totalPixels = Math.max(before.width * before.height, after.width * after.height);
+		const changeRatio = totalPixels === 0 ? 0 : differentPixels / totalPixels;
+		const evidenceDir = path.join(getReportsDir(), "evidence", "visual-diff");
+		fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
+		const diffPath = path.join(
+			evidenceDir,
+			`diff-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`,
+		);
+		fs.writeFileSync(diffPath, PNG.sync.write(diff), { mode: 0o600 });
 
 		return {
 			beforePath,
 			afterPath,
-			changedPercent: Math.round((differentPixels / totalPixels) * 10000) / 100,
+			diffPath,
+			width,
+			height,
+			changedPixelCount,
+			changeRatio,
+			changedPercent: Math.round(changeRatio * 10000) / 100,
 			totalPixels,
 			differentPixels,
 			timestamp: new Date().toISOString(),
@@ -115,8 +160,28 @@ export function computePixelDiff(
 
 // ── DOM Diff ────────────────────────────────────────────────────────
 
+function redactDomText(value?: string): string | undefined {
+	if (!value) return undefined;
+	return redactString(value).replace(/secret:\/\/[^\s"'<>]+/giu, "[REDACTED]");
+}
+
+function redactEvidenceValue(value: unknown): unknown {
+	const redacted = redactObject(value, 0);
+	if (typeof redacted === "string") return redactDomText(redacted);
+	if (Array.isArray(redacted)) return redacted.map(item => redactEvidenceValue(item));
+	if (redacted && typeof redacted === "object" && Object.getPrototypeOf(redacted) === Object.prototype) {
+		return Object.fromEntries(
+			Object.entries(redacted as Record<string, unknown>).map(([key, item]) => [
+				key,
+				redactEvidenceValue(item),
+			]),
+		);
+	}
+	return redacted;
+}
+
 function compareText(oldText?: string, newText?: string): { changed: boolean; oldText?: string; newText?: string } {
-	const safe = (t?: string) => t ? redactString(t) : undefined;
+	const safe = (t?: string) => redactDomText(t);
 	const oldSafe = safe(oldText);
 	const newSafe = safe(newText);
 	if (oldSafe === newSafe) return { changed: false };
@@ -142,7 +207,7 @@ export function computeDomDiff(
 			changed.push({
 				selector: sel,
 				role: n.role,
-				name: redactString(n.name ?? ""),
+				name: redactDomText(n.name ?? ""),
 				changed: true,
 				oldText: textDiff.oldText,
 				newText: textDiff.newText,
@@ -179,9 +244,9 @@ export function buildReplayView(
 		index: i + 1,
 		nodeId,
 		kind: (result.kind as string) ?? "unknown",
-		input: (result.input as Record<string, unknown>) ?? {},
-		output: result.output,
-		error: result.error as string | undefined,
+		input: redactEvidenceValue((result.input as Record<string, unknown>) ?? {}) as Record<string, unknown>,
+		output: redactEvidenceValue(result.output),
+		error: result.error ? redactString(String(result.error)) : undefined,
 		policyDecision: result.policyDecision as string | undefined,
 		retryCount: (result.retryCount as number) ?? 0,
 		durationMs: result.completedAt && result.startedAt
@@ -209,10 +274,15 @@ export function filterAuditEntries(
 	entries: AuditViewEntry[],
 	filter: AuditFilter,
 ): AuditViewEntry[] {
-	let result = entries;
+	let result = entries.map(entry => ({
+		...entry,
+		details: entry.details ? redactString(entry.details) : undefined,
+	}));
 	if (filter.sessionId) result = result.filter(e => e.sessionId === filter.sessionId);
 	if (filter.action) result = result.filter(e => e.action === filter.action);
 	if (filter.risk) result = result.filter(e => e.risk === filter.risk);
+	if (filter.workflowId) result = result.filter(e => e.details?.includes(filter.workflowId ?? ""));
+	if (filter.packageName) result = result.filter(e => e.details?.includes(filter.packageName ?? ""));
 	result.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 	if (filter.limit) result = result.slice(0, filter.limit);
 	return result;

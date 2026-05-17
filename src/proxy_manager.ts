@@ -1,7 +1,11 @@
 import fs from "node:fs";
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { request, type BrowserContextOptions } from "playwright";
 import type { Telemetry } from "./runtime/telemetry";
+import { ServiceRegistry, isValidServiceName, type ServiceEntry } from "./services/registry";
+import { getLocalhostCaStatus } from "./services/local_ca";
 
 export interface ProxyConfig {
   url: string;
@@ -33,10 +37,41 @@ export interface ProxyValidationResult extends ProxyValidationProbeResult {
   proxyUrl: string;
 }
 
+export interface LocalhostProxyStartResult {
+  enabled: true;
+  host: string;
+  port: number;
+  url: string;
+}
+
+export interface LocalhostProxyStatus {
+  enabled: boolean;
+  host: string;
+  port?: number;
+  url?: string;
+  httpsEnabled: boolean;
+  allowRemote: boolean;
+  activeConnections: number;
+}
+
+export interface LocalhostProxyOptions {
+  registry?: ServiceRegistry;
+  host?: string;
+  port?: number;
+  allowRemote?: boolean;
+  https?: boolean;
+  certPath?: string;
+  keyPath?: string;
+  localCa?: boolean;
+  caDir?: string;
+  reloadRegistryOnRequest?: boolean;
+}
+
 type ProxyConfigInput = string | Omit<ProxyConfig, "lastUsed"> & { lastUsed?: Date | string };
 
 const DEFAULT_COOLDOWN_MS = 60_000;
 const DEFAULT_MAX_FAILURES_BEFORE_DEAD = 3;
+const LOOPBACK_HOST = "127.0.0.1";
 
 function splitCsv(value: string): string[] {
   return value
@@ -290,6 +325,278 @@ export async function validateProxyPool(
   }
 
   return results;
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+function stripHostPort(host: string): string {
+  if (host.startsWith("[")) {
+    const end = host.indexOf("]");
+    return end === -1 ? host : host.slice(1, end);
+  }
+  return host.split(":")[0] ?? host;
+}
+
+export function resolveLocalhostProxyHost(hostHeader: string | undefined): {
+  serviceName?: string;
+  error?: string;
+} {
+  if (!hostHeader) return { error: "Host header is required." };
+  const hostname = stripHostPort(hostHeader).toLowerCase();
+  if (!hostname.endsWith(".localhost")) {
+    return { error: "Only .localhost hostnames are accepted by the local service proxy." };
+  }
+  const prefix = hostname.slice(0, -".localhost".length);
+  if (!prefix) return { error: "Service subdomain is required before .localhost." };
+  const labels = prefix.split(".");
+  if (labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(label))) {
+    return { error: "Invalid .localhost hostname labels." };
+  }
+  const serviceName = labels.at(-1) ?? "";
+  if (!isValidServiceName(serviceName)) {
+    return { error: `Invalid service name in .localhost hostname: ${serviceName}` };
+  }
+  return { serviceName };
+}
+
+function buildBackendUrl(entry: ServiceEntry, requestUrl: string | undefined): URL {
+  const basePath = entry.path === "/" ? "" : entry.path;
+  const suffix = requestUrl && requestUrl !== "/" ? requestUrl : "/";
+  return new URL(`${entry.protocol}://127.0.0.1:${entry.port}${basePath}${suffix}`);
+}
+
+function copyProxyHeaders(requestHeaders: IncomingMessage["headers"], target: URL): http.OutgoingHttpHeaders {
+  const headers: http.OutgoingHttpHeaders = {};
+  for (const [key, value] of Object.entries(requestHeaders)) {
+    const lower = key.toLowerCase();
+    if (
+      lower === "host" ||
+      lower === "connection" ||
+      lower === "keep-alive" ||
+      lower === "proxy-authenticate" ||
+      lower === "proxy-authorization" ||
+      lower === "te" ||
+      lower === "trailer" ||
+      lower === "transfer-encoding" ||
+      lower === "upgrade"
+    ) {
+      continue;
+    }
+    headers[key] = value;
+  }
+  headers.host = target.host;
+  headers["x-browser-control-localhost-proxy"] = "1";
+  return headers;
+}
+
+function copyUpstreamResponseHeaders(responseHeaders: IncomingMessage["headers"]): http.OutgoingHttpHeaders {
+  const headers: http.OutgoingHttpHeaders = {};
+  for (const [key, value] of Object.entries(responseHeaders)) {
+    const lower = key.toLowerCase();
+    if (
+      lower === "connection" ||
+      lower === "keep-alive" ||
+      lower === "proxy-authenticate" ||
+      lower === "proxy-authorization" ||
+      lower === "te" ||
+      lower === "trailer" ||
+      lower === "transfer-encoding" ||
+      lower === "upgrade"
+    ) {
+      continue;
+    }
+    headers[key] = value;
+  }
+  return headers;
+}
+
+function sendProxyError(response: ServerResponse, statusCode: number, message: string): void {
+  response.writeHead(statusCode, { "content-type": "application/json" });
+  response.end(JSON.stringify({ error: message }));
+}
+
+export class LocalhostProxyManager {
+  private readonly registry: ServiceRegistry;
+  private readonly host: string;
+  private readonly requestedPort: number;
+  private readonly allowRemote: boolean;
+  private readonly httpsEnabled: boolean;
+  private readonly certPath: string | undefined;
+  private readonly keyPath: string | undefined;
+  private readonly localCa: boolean;
+  private readonly caDir: string | undefined;
+  private readonly reloadRegistryOnRequest: boolean;
+  private server: http.Server | https.Server | null = null;
+  private activeConnections = 0;
+  private boundPort: number | undefined;
+
+  constructor(options: LocalhostProxyOptions = {}) {
+    this.registry = options.registry ?? new ServiceRegistry();
+    this.host = options.allowRemote ? "0.0.0.0" : (options.host ?? LOOPBACK_HOST);
+    this.requestedPort = options.port ?? 0;
+    this.allowRemote = options.allowRemote === true;
+    this.httpsEnabled = options.https === true;
+    this.certPath = options.certPath;
+    this.keyPath = options.keyPath;
+    this.localCa = options.localCa === true;
+    this.caDir = options.caDir;
+    this.reloadRegistryOnRequest = options.reloadRegistryOnRequest ?? !options.registry;
+  }
+
+  async start(): Promise<LocalhostProxyStartResult> {
+    if (this.server) {
+      const status = this.getStatus();
+      if (!status.port || !status.url) throw new Error("Localhost proxy server is not fully started.");
+      return { enabled: true, host: status.host, port: status.port, url: status.url };
+    }
+
+    const requestHandler = (requestMessage: IncomingMessage, response: ServerResponse) => {
+      void this.handleRequest(requestMessage, response);
+    };
+    const server = this.httpsEnabled
+      ? https.createServer(this.readTlsOptions(), requestHandler)
+      : http.createServer(requestHandler);
+    this.server = server;
+
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: NodeJS.ErrnoException) => {
+        server.off("listening", onListening);
+        reject(this.toListenError(error));
+      };
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(this.requestedPort, this.host);
+    });
+
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Unable to determine .localhost proxy listening address.");
+    }
+    this.boundPort = address.port;
+    return {
+      enabled: true,
+      host: this.host === "0.0.0.0" ? LOOPBACK_HOST : this.host,
+      port: this.boundPort,
+      url: `${this.httpsEnabled ? "https" : "http"}://${this.host === "0.0.0.0" ? LOOPBACK_HOST : this.host}:${this.boundPort}`,
+    };
+  }
+
+  async stop(): Promise<void> {
+    const server = this.server;
+    if (!server) return;
+    this.server = null;
+    this.boundPort = undefined;
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  getStatus(): LocalhostProxyStatus {
+    return {
+      enabled: Boolean(this.server),
+      host: this.host === "0.0.0.0" ? LOOPBACK_HOST : this.host,
+      ...(this.boundPort ? {
+        port: this.boundPort,
+        url: `${this.httpsEnabled ? "https" : "http"}://${this.host === "0.0.0.0" ? LOOPBACK_HOST : this.host}:${this.boundPort}`,
+      } : {}),
+      httpsEnabled: this.httpsEnabled,
+      allowRemote: this.allowRemote,
+      activeConnections: this.activeConnections,
+    };
+  }
+
+  private async handleRequest(requestMessage: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!this.allowRemote && !isLoopbackAddress(requestMessage.socket.remoteAddress)) {
+      sendProxyError(response, 403, "Localhost proxy accepts loopback clients only.");
+      return;
+    }
+
+    const resolvedHost = resolveLocalhostProxyHost(requestMessage.headers.host);
+    if (!resolvedHost.serviceName) {
+      sendProxyError(response, 400, resolvedHost.error ?? "Invalid .localhost host.");
+      return;
+    }
+
+    if (this.reloadRegistryOnRequest) {
+      this.registry.reload();
+    }
+    const service = this.registry.get(resolvedHost.serviceName);
+    if (!service) {
+      sendProxyError(response, 404, `No registered service for ${resolvedHost.serviceName}.localhost.`);
+      return;
+    }
+
+    const target = buildBackendUrl(service, requestMessage.url);
+    const transport = target.protocol === "https:" ? https : http;
+    this.activeConnections++;
+    const upstream = transport.request(target, {
+      method: requestMessage.method,
+      headers: copyProxyHeaders(requestMessage.headers, target),
+    }, (upstreamResponse) => {
+      response.writeHead(
+        upstreamResponse.statusCode ?? 502,
+        copyUpstreamResponseHeaders(upstreamResponse.headers),
+      );
+      upstreamResponse.pipe(response);
+    });
+
+    upstream.on("error", (error) => {
+      if (!response.headersSent) {
+        sendProxyError(response, 502, `Failed to reach registered service: ${error.message}`);
+      } else {
+        response.destroy(error);
+      }
+    });
+    upstream.on("close", () => {
+      this.activeConnections = Math.max(0, this.activeConnections - 1);
+    });
+    requestMessage.pipe(upstream);
+  }
+
+  private toListenError(error: NodeJS.ErrnoException): Error {
+    if (error.code === "EACCES") {
+      return new Error(
+        `Unable to bind .localhost proxy on ${this.host}:${this.requestedPort}. On Windows, ports 80/443 usually require administrator rights or an HTTP reservation.`,
+      );
+    }
+    if (error.code === "EADDRINUSE") {
+      return new Error(`Unable to bind .localhost proxy on ${this.host}:${this.requestedPort}; port is already in use.`);
+    }
+    return error;
+  }
+
+  private readTlsOptions(): https.ServerOptions {
+    const localCa = this.localCa ? getLocalhostCaStatus({ caDir: this.caDir }) : undefined;
+    const certSource = this.certPath ?? localCa?.certPath;
+    const keySource = this.keyPath ?? localCa?.keyPath;
+    if (this.localCa && !localCa?.ready) {
+      throw new Error(`HTTPS .localhost proxy local CA material is missing or incomplete. Run "bc service proxy ca create" first. CA dir: ${localCa?.caDir}`);
+    }
+    if (!certSource || !keySource) {
+      throw new Error("HTTPS .localhost proxy requires explicit --cert and --key files from a trusted local CA.");
+    }
+    const certPath = path.resolve(certSource);
+    const keyPath = path.resolve(keySource);
+    if (!fs.existsSync(certPath)) {
+      throw new Error(`HTTPS .localhost proxy certificate file not found: ${certPath}`);
+    }
+    if (!fs.existsSync(keyPath)) {
+      throw new Error(`HTTPS .localhost proxy key file not found: ${keyPath}`);
+    }
+    return {
+      cert: fs.readFileSync(certPath),
+      key: fs.readFileSync(keyPath),
+    };
+  }
 }
 
 async function runCli(argv = process.argv.slice(2)): Promise<number> {

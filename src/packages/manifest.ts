@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { z } from "zod";
 import { validateWorkflowGraph } from "../workflows/types";
 import { validateUiSpec } from "../operator/generated_ui";
-import type { AutomationPackageManifest } from "./types";
+import type { AutomationPackageManifest, PackageDigestResult, PackageFileEntry } from "./types";
 
 export interface ManifestValidationResult {
   valid: boolean;
@@ -247,4 +248,71 @@ export function validatePackageManifest(
     manifest: errors.length === 0 ? manifest : null,
     errors,
   };
+}
+
+/**
+ * Compute a deterministic SHA-256 digest over normalized package files.
+ * Files are sorted by relative path, content is hashed, and the combined
+ * hash of all entries produces a single package digest.
+ */
+export function computePackageDigest(packageRoot: string): PackageDigestResult {
+  const files: PackageFileEntry[] = [];
+  let totalBytes = 0;
+
+  const walkDir = (dir: string, base: string) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist" || entry.name === "src") continue;
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = path.join(dir, entry.name);
+      const relPath = path.relative(base, fullPath).replace(/\\/g, "/");
+      if (entry.isDirectory()) {
+        walkDir(fullPath, base);
+      } else if (entry.isFile()) {
+        const content = fs.readFileSync(fullPath);
+        const sha256 = crypto.createHash("sha256").update(content).digest("hex");
+        files.push({ path: relPath, size: content.length, sha256 });
+        totalBytes += content.length;
+      }
+    }
+  };
+
+  walkDir(packageRoot, packageRoot);
+  files.sort((a, b) => a.path.localeCompare(b.path));
+
+  const combined = files.map(f => `${f.sha256}  ${f.path}`).join("\n");
+  const digest = crypto.createHash("sha256").update(combined).digest("hex");
+
+  return { digest, files, totalBytes, fileCount: files.length };
+}
+
+/**
+ * Verify a package signature against its computed digest.
+ * Returns { valid: true } if signature matches, or { valid: false, error } otherwise.
+ */
+export function verifyPackageSignature(
+  packageRoot: string,
+  expectedDigest: string,
+  signature?: string,
+  publicKeyPem?: string,
+): { valid: boolean; error?: string; computedDigest: string } {
+  const result = computePackageDigest(packageRoot);
+  if (result.digest !== expectedDigest) {
+    return { valid: false, error: `Digest mismatch: expected ${expectedDigest.slice(0, 16)}..., got ${result.digest.slice(0, 16)}...`, computedDigest: result.digest };
+  }
+  if (signature) {
+    if (!publicKeyPem) {
+      return { valid: false, error: "Public key is required for signature verification", computedDigest: result.digest };
+    }
+    try {
+      const verifier = crypto.createVerify("SHA256");
+      verifier.update(result.digest);
+      verifier.end();
+      const verified = verifier.verify(publicKeyPem, signature, "base64");
+      if (!verified) return { valid: false, error: "Signature verification failed", computedDigest: result.digest };
+    } catch {
+      return { valid: false, error: "Invalid signature format", computedDigest: result.digest };
+    }
+  }
+  return { valid: true, computedDigest: result.digest };
 }

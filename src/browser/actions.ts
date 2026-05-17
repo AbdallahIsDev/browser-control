@@ -49,6 +49,18 @@ import {
 	ensureStructuredSessionRuntimeDir,
 	getSessionDownloadsDir,
 } from "../shared/paths";
+import {
+	CredentialVault,
+	containsSecretRef,
+	parseSecretRef,
+	redactKnownSecretValues,
+	redactSecretRefs,
+	type SecretAction,
+} from "../security/credential_vault";
+import {
+	NetworkRuleEngine,
+	type PrivacyProfileName,
+} from "../security/network_rules";
 import type { BrowserConnectionManager, BrowserDropResult } from "./connection";
 import { globalRefStore } from "./core";
 import {
@@ -135,6 +147,15 @@ export interface TypeOptions {
 	delayMs?: number;
 }
 
+export interface PasteOptions {
+	/** Text to paste/insert into the currently focused element. */
+	text: string;
+	/** Optional target to focus before pasting. */
+	target?: string;
+	/** Focus/click timeout in ms when target is provided. */
+	timeoutMs?: number;
+}
+
 export interface PressOptions {
 	/** Key to press (e.g., "Enter", "Tab", "ArrowDown"). */
 	key: string;
@@ -188,6 +209,25 @@ export interface BrowserCloseResult {
 	endpoint?: string;
 }
 
+export interface BrowserLaunchOptions {
+	/** Chrome remote-debugging port (default: from config). */
+	port?: number;
+	/** Launcher profile: "system" or "isolated" (default: from config). */
+	profile?: "system" | "isolated";
+	/** Provider to use for launch (default: active provider). */
+	provider?: string;
+}
+
+export interface BrowserLaunchResult {
+	launched: boolean;
+	mode: "managed" | "attached" | "restored";
+	connectionId?: string;
+	endpoint?: string;
+	port?: number;
+	profile?: string;
+	provider?: string;
+}
+
 // ── Section 27: File/Data Drop Options ─────────────────────────────────────
 
 export interface DropOptions {
@@ -208,6 +248,7 @@ export class BrowserActions {
 		string,
 		Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>
 	>();
+	private readonly networkPrivacyPages = new WeakSet<Page>();
 
 	constructor(context: BrowserActionContext) {
 		this.context = context;
@@ -366,13 +407,13 @@ export class BrowserActions {
 						// Bind the browser connection into the session (Issue 3)
 						this.bindBrowserToSession(bm);
 					} catch (attachError: unknown) {
-						if (config.browserMode !== "managed") {
+						if (config.browserMode !== "managed" && !config.browserAutoLaunch) {
 							const attachMsg =
 								attachError instanceof Error
 									? attachError.message
 									: String(attachError);
 							return this.failureWithDebug(
-								`No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach, so Browser Control will not launch a separate managed Chrome. Close all Chrome windows, run launch_browser.bat ${config.chromeDebugPort}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated.`,
+								`No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach and auto-launch is disabled. Close all Chrome windows, run launch_browser.bat ${config.chromeDebugPort}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated, or enable auto-launch with BROWSER_AUTO_LAUNCH=true.`,
 								attachError,
 								{
 									action: "browser_connect",
@@ -387,12 +428,16 @@ export class BrowserActions {
 							// Bind the browser connection into the session (Issue 3)
 							this.bindBrowserToSession(bm);
 						} catch (launchError: unknown) {
+							const attachMsg =
+								attachError instanceof Error
+									? attachError.message
+									: String(attachError);
 							const launchMsg =
 								launchError instanceof Error
 									? launchError.message
 									: String(launchError);
 							return this.failureWithDebug(
-								`No browser available and auto-launch failed: ${launchMsg}. Use 'bc browser attach' or 'bc browser launch' first.`,
+								`No browser was connected. Attach failed on port ${config.chromeDebugPort}: ${attachMsg}. Managed launch also failed: ${launchMsg}. Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
 								launchError,
 								{
 									action: "browser_connect",
@@ -436,6 +481,12 @@ export class BrowserActions {
 		return session?.id ?? "default";
 	}
 
+	private getNetworkPrivacyProfile(): PrivacyProfileName {
+		const profile = this.context.sessionManager.getActiveSession()?.policyProfile;
+		if (profile === "strict" || profile === "audit") return profile;
+		return "balanced";
+	}
+
 	private tryGetPage(): Page | null {
 		try {
 			return this.getPage();
@@ -450,8 +501,36 @@ export class BrowserActions {
 		const pageOrErr = await this.ensureBrowserConnected();
 		if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
 		const page = await this.getBestVisiblePage(pageOrErr);
-		await this.startObservability(page, this.getSessionId());
+		const sessionId = this.getSessionId();
+		await this.startObservability(page, sessionId);
+		await this.applyNetworkPrivacyRules(page, sessionId);
 		return page;
+	}
+
+	private async applyNetworkPrivacyRules(
+		page: Page,
+		sessionId: string,
+	): Promise<void> {
+		if (this.networkPrivacyPages.has(page)) return;
+		this.networkPrivacyPages.add(page);
+		try {
+			const engine = new NetworkRuleEngine();
+			await engine.applyToPage(page, {
+				profile: this.getNetworkPrivacyProfile(),
+				sessionId,
+				recordBlockedRequest: (entry) => {
+					getGlobalNetworkCapture({ captureSuccess: true }).recordEntry(
+						sessionId,
+						entry,
+					);
+				},
+			});
+		} catch (error: unknown) {
+			this.networkPrivacyPages.delete(page);
+			log.warn(
+				`Network privacy route unavailable: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	private async startObservability(
@@ -536,6 +615,74 @@ export class BrowserActions {
 				`Failed to record timeline event: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
+	}
+
+	private redactSecretMessage(message: string, secretValues: string[]): string {
+		return String(redactKnownSecretValues(redactSecretRefs(message), secretValues));
+	}
+
+	private secretAwarePolicyParams(
+		text: string,
+		extra: Record<string, unknown> = {},
+	): Record<string, unknown> {
+		const parsed = parseSecretRef(text);
+		if (!parsed && !containsSecretRef(text)) {
+			return { ...extra, text };
+		}
+		return {
+			...extra,
+			text: "[REDACTED_SECRET]",
+			secretRef: true,
+			secretScope: parsed?.scope ?? "embedded",
+		};
+	}
+
+	private async resolveSecretTextForBrowser(
+		text: string,
+		action: SecretAction,
+		page: Page,
+		sessionId: string,
+		policyDecision: PolicyDecision,
+	): Promise<{
+		text: string;
+		redactedText: string;
+		secretValues: string[];
+		usedSecret: boolean;
+	}> {
+		const parsed = parseSecretRef(text);
+		if (!parsed) {
+			if (containsSecretRef(text)) {
+				throw new Error(
+					"Embedded secret:// references are not supported for browser text actions; pass the secret ref as the full text value",
+				);
+			}
+			return { text, redactedText: text, secretValues: [], usedSecret: false };
+		}
+
+		let targetDomain: string | undefined;
+		try {
+			targetDomain = new URL(page.url()).hostname;
+		} catch {
+			targetDomain = undefined;
+		}
+
+		const vault = new CredentialVault();
+		const resolved = await vault.resolveForUse(text, {
+			action,
+			targetDomain,
+			site: targetDomain,
+			sessionId,
+			policyDecision,
+		});
+		if (!resolved.success) {
+			throw new Error(`Secret resolution denied: ${resolved.error}`);
+		}
+		return {
+			text: resolved.value,
+			redactedText: resolved.redactedValue,
+			secretValues: [resolved.value],
+			usedSecret: true,
+		};
 	}
 
 	private async closePage(page: Page): Promise<void> {
@@ -834,7 +981,7 @@ export class BrowserActions {
 	}
 
 	private async runLocatorActionWithRetry(
-		actionName: "click" | "fill" | "hover",
+		actionName: "click" | "fill" | "hover" | "paste",
 		target: string,
 		page: Page,
 		sessionId: string,
@@ -919,6 +1066,7 @@ export class BrowserActions {
 			const page = await this.getBestVisiblePage(pageOrErr as Page);
 
 			await this.startObservability(page, sessionId);
+			await this.applyNetworkPrivacyRules(page, sessionId);
 			await page.goto(resolvedUrl, {
 				waitUntil: options.waitUntil ?? "domcontentloaded",
 			});
@@ -1182,11 +1330,12 @@ export class BrowserActions {
 	async fill(options: FillOptions): Promise<ActionResult<{ filled: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
+		let secretValues: string[] = [];
 
 		// Policy check — fill with credentials is higher risk
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"browser_fill",
-			{ target: options.target, text: options.text },
+			this.secretAwarePolicyParams(options.text, { target: options.target }),
 		);
 		if (!isPolicyAllowed(policyEval))
 			return policyEval as ActionResult<{ filled: string }>;
@@ -1198,6 +1347,14 @@ export class BrowserActions {
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 5000;
+			const resolvedText = await this.resolveSecretTextForBrowser(
+				options.text,
+				"use-as-form-value",
+				page,
+				sessionId,
+				policyEval.policyDecision,
+			);
+			secretValues = resolvedText.secretValues;
 			const resolved = await this.runLocatorActionWithRetry(
 				"fill",
 				options.target,
@@ -1205,7 +1362,7 @@ export class BrowserActions {
 				sessionId,
 				async (target) => {
 					await this.prepareLocatorAction(page, target.locator, timeoutMs);
-					await target.locator.fill(options.text, { timeout: timeoutMs });
+					await target.locator.fill(resolvedText.text, { timeout: timeoutMs });
 					if (options.commit) await target.locator.press("Tab");
 				},
 			);
@@ -1259,7 +1416,10 @@ export class BrowserActions {
 				},
 			);
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = this.redactSecretMessage(
+				error instanceof Error ? error.message : String(error),
+				secretValues,
+			);
 			this.recordTimelineEvent({
 				action: "fill",
 				target: options.target,
@@ -1400,10 +1560,12 @@ export class BrowserActions {
 	async type(options: TypeOptions): Promise<ActionResult<{ typed: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
+		let secretValues: string[] = [];
+		let redactedText = redactSecretRefs(options.text);
 
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"browser_type",
-			{ text: options.text },
+			this.secretAwarePolicyParams(options.text),
 		);
 		if (!isPolicyAllowed(policyEval))
 			return policyEval as ActionResult<{ typed: string }>;
@@ -1414,12 +1576,21 @@ export class BrowserActions {
 			}>();
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
-			await page.keyboard.type(options.text, { delay: options.delayMs ?? 0 });
+			const resolvedText = await this.resolveSecretTextForBrowser(
+				options.text,
+				"type",
+				page,
+				sessionId,
+				policyEval.policyDecision,
+			);
+			secretValues = resolvedText.secretValues;
+			redactedText = resolvedText.redactedText;
+			await page.keyboard.type(resolvedText.text, { delay: options.delayMs ?? 0 });
 			await this.persistObservability(sessionId, page);
 
 			this.recordTimelineEvent({
 				action: "type",
-				target: options.text.substring(0, 50),
+				target: redactedText.substring(0, 50),
 				url: page.url(),
 				title: await page.title().catch(() => undefined),
 				policyDecision: policyEval.policyDecision,
@@ -1429,7 +1600,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ typed: options.text },
+				{ typed: resolvedText.usedSecret ? resolvedText.redactedText : options.text },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1439,10 +1610,13 @@ export class BrowserActions {
 				},
 			);
 		} catch (error: unknown) {
-			const message = error instanceof Error ? error.message : String(error);
+			const message = this.redactSecretMessage(
+				error instanceof Error ? error.message : String(error),
+				secretValues,
+			);
 			this.recordTimelineEvent({
 				action: "type",
-				target: options.text.substring(0, 50),
+				target: redactedText.substring(0, 50),
 				policyDecision: policyEval.policyDecision,
 				risk: policyEval.risk,
 				durationMs: Date.now() - startTime,
@@ -1451,6 +1625,119 @@ export class BrowserActions {
 			});
 			return this.failureWithDebug(`Type failed: ${message}`, error, {
 				action: "browser_type",
+				path: policyEval.path,
+				sessionId,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				auditId: policyEval.auditId,
+			});
+		}
+	}
+
+	/**
+	 * Paste/insert text into the focused element, optionally focusing a target first.
+	 */
+	async paste(options: PasteOptions): Promise<ActionResult<{ pasted: string }>> {
+		const sessionId = this.getSessionId();
+		const startTime = Date.now();
+		let secretValues: string[] = [];
+		let redactedText = redactSecretRefs(options.text);
+
+		const policyEval = this.context.sessionManager.evaluateAction(
+			"browser_paste",
+			this.secretAwarePolicyParams(options.text, { target: options.target }),
+		);
+		if (!isPolicyAllowed(policyEval))
+			return policyEval as ActionResult<{ pasted: string }>;
+
+		try {
+			const pageOrErr = await this.getConnectedPageForAction<{
+				pasted: string;
+			}>();
+			if ("success" in pageOrErr) return pageOrErr;
+			const page = pageOrErr;
+			const resolvedText = await this.resolveSecretTextForBrowser(
+				options.text,
+				"paste",
+				page,
+				sessionId,
+				policyEval.policyDecision,
+			);
+			secretValues = resolvedText.secretValues;
+			redactedText = resolvedText.redactedText;
+
+			if (options.target) {
+				const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 5000;
+				const resolved = await this.runLocatorActionWithRetry(
+					"paste",
+					options.target,
+					page,
+					sessionId,
+					async (target) => {
+						await this.prepareLocatorAction(page, target.locator, timeoutMs);
+						await target.locator.click({ timeout: timeoutMs });
+					},
+				);
+				if (!resolved) {
+					return this.failureWithDebug(
+						`Could not resolve paste target: ${options.target}`,
+						new Error(`Could not resolve paste target: ${options.target}`),
+						{
+							action: "browser_paste",
+							path: policyEval.path,
+							sessionId,
+							policyDecision: policyEval.policyDecision,
+							risk: policyEval.risk,
+							auditId: policyEval.auditId,
+						},
+					);
+				}
+			}
+
+			await page.keyboard.insertText(resolvedText.text);
+			await this.persistObservability(sessionId, page);
+
+			this.recordTimelineEvent({
+				action: "paste",
+				target: options.target ?? redactedText.substring(0, 50),
+				url: page.url(),
+				title: await page.title().catch(() => undefined),
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: true,
+			});
+
+			return successResult(
+				{
+					pasted: resolvedText.usedSecret
+						? resolvedText.redactedText
+						: options.text,
+				},
+				{
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
+		} catch (error: unknown) {
+			const message = this.redactSecretMessage(
+				error instanceof Error ? error.message : String(error),
+				secretValues,
+			);
+			this.recordTimelineEvent({
+				action: "paste",
+				target: options.target ?? redactedText.substring(0, 50),
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: false,
+				error: message,
+			});
+			return this.failureWithDebug(`Paste failed: ${message}`, error, {
+				action: "browser_paste",
 				path: policyEval.path,
 				sessionId,
 				policyDecision: policyEval.policyDecision,
@@ -2612,6 +2899,100 @@ export class BrowserActions {
 				risk: policyEval.risk,
 				auditId: policyEval.auditId,
 			});
+		}
+	}
+
+	/**
+	 * Launch a managed browser instance.
+	 *
+	 * This is an explicit launch action that starts a new managed Chrome
+	 * process. Unlike auto-launch fallback, this is a direct user request.
+	 */
+	async launch(
+		options: BrowserLaunchOptions = {},
+	): Promise<ActionResult<BrowserLaunchResult>> {
+		const sessionId = this.getSessionId();
+
+		const policyEval = this.context.sessionManager.evaluateAction(
+			"browser_launch",
+			options as Record<string, unknown>,
+		);
+		if (!isPolicyAllowed(policyEval))
+			return policyEval as ActionResult<BrowserLaunchResult>;
+
+		try {
+			const bm = this.context.sessionManager.getBrowserManager();
+			if (bm.isConnected()) {
+				const existing = bm.getConnection();
+				const port = existing?.cdpEndpoint
+					? parseInt(new URL(existing.cdpEndpoint).port, 10)
+					: undefined;
+				return successResult(
+					{
+						launched: false,
+						mode: existing?.mode ?? "managed",
+						connectionId: existing?.id,
+						endpoint: existing?.cdpEndpoint,
+						port,
+						profile: existing?.profile?.name,
+						provider: existing?.provider,
+					},
+					{
+						path: policyEval.path,
+						sessionId,
+						policyDecision: policyEval.policyDecision,
+						risk: policyEval.risk,
+						auditId: policyEval.auditId,
+					},
+				);
+			}
+
+			const config = loadConfig({ validate: false });
+			await bm.launchManaged({
+				actor: "human",
+				port: options.port ?? config.chromeDebugPort,
+				profileName: options.profile ?? config.browserLaunchProfile,
+				provider: options.provider,
+			});
+
+			this.bindBrowserToSession(bm);
+
+			const conn = bm.getConnection();
+			const port = conn?.cdpEndpoint
+				? parseInt(new URL(conn.cdpEndpoint).port, 10)
+				: undefined;
+			return successResult(
+				{
+					launched: true,
+					mode: conn?.mode ?? "managed",
+					connectionId: conn?.id,
+					endpoint: conn?.cdpEndpoint,
+					port,
+					profile: conn?.profile?.name,
+					provider: conn?.provider,
+				},
+				{
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			return this.failureWithDebug(
+				`Browser launch failed: ${message}. Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
+				error,
+				{
+					action: "browser_launch",
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
 		}
 	}
 

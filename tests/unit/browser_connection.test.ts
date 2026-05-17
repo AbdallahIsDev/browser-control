@@ -5,10 +5,6 @@ import path from "node:path";
 import fs from "node:fs";
 import { chromium } from "playwright";
 
-// Set up test data home before imports
-const testHome = path.join(os.tmpdir(), `bc-test-conn-${Date.now()}`);
-process.env.BROWSER_CONTROL_HOME = testHome;
-
 import { MemoryStore } from "../../src/memory_store";
 import { DefaultPolicyEngine } from "../../src/policy_engine";
 import {
@@ -23,32 +19,49 @@ import {
 import { BrowserProfileManager } from "../../src/browser_profiles";
 import { ProviderRegistry } from "../../src/providers/registry";
 
+let testHome = "";
+let previousBrowserControlHome: string | undefined;
+const tempHomes = new Set<string>();
+
+function createTempHome(prefix = "bc-test-conn-"): string {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempHomes.add(home);
+  return home;
+}
+
+function removeTempHomes(): void {
+  for (const home of Array.from(tempHomes)) {
+    try {
+      fs.rmSync(home, { recursive: true, force: true, maxRetries: 15, retryDelay: 250 });
+      tempHomes.delete(home);
+    } catch {
+      // Windows can release Chrome profile handles slightly after process exit.
+    }
+  }
+}
+
 describe("BrowserConnectionManager", () => {
   let store: MemoryStore;
   let trustedEngine: DefaultPolicyEngine;
 
   beforeEach(() => {
+    previousBrowserControlHome = process.env.BROWSER_CONTROL_HOME;
+    testHome = createTempHome();
+    process.env.BROWSER_CONTROL_HOME = testHome;
     trustedEngine = new DefaultPolicyEngine({ profileName: "trusted" });
-    if (!fs.existsSync(testHome)) {
-      fs.mkdirSync(testHome, { recursive: true });
-    }
-    const profilesDir = path.join(testHome, "profiles");
-    if (!fs.existsSync(profilesDir)) {
-      fs.mkdirSync(profilesDir, { recursive: true });
-    }
+    fs.mkdirSync(path.join(testHome, "browser", "profiles"), { recursive: true });
     store = new MemoryStore({ filename: ":memory:" });
   });
 
   afterEach(() => {
     store.close();
-    if (fs.existsSync(testHome)) {
-      try {
-        // Use a small delay to let file handles clear on Windows
-        fs.rmSync(testHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      } catch (e) {
-        // Silently ignore cleanup errors in tests; common on Windows and not a functional failure
-      }
+    removeTempHomes();
+    if (previousBrowserControlHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousBrowserControlHome;
     }
+    testHome = "";
   });
 
   describe("constructor", () => {
@@ -162,6 +175,56 @@ describe("BrowserConnectionManager", () => {
         assert.equal(await isChromeAlive(port), false, "Managed browser was NOT killed on disconnect");
       } finally {
         await manager.disconnect();
+      }
+    });
+
+    it("should run two sequential isolated managed launches in separate homes without locking Default Network", async () => {
+      const { isChromeAlive } = await import("../../src/runtime/launch_browser");
+      const originalHome = process.env.BROWSER_CONTROL_HOME;
+      const homes = [
+        createTempHome("bc-test-managed-seq-a-"),
+        createTempHome("bc-test-managed-seq-b-"),
+      ];
+
+      try {
+        for (const home of homes) {
+          process.env.BROWSER_CONTROL_HOME = home;
+          fs.mkdirSync(path.join(home, "browser", "profiles"), { recursive: true });
+
+          const isolatedStore = new MemoryStore({ filename: ":memory:" });
+          const manager = new BrowserConnectionManager({
+            memoryStore: isolatedStore,
+            policyEngine: trustedEngine,
+          });
+          const port = 21000 + Math.floor(Math.random() * 1000);
+
+          try {
+            const conn = await manager.launchManaged({
+              port,
+              profileName: `isolated-${path.basename(home)}`,
+              profileType: "isolated",
+            });
+            assert.equal(conn.mode, "managed");
+            assert.equal(conn.profile.type, "isolated");
+            assert.ok(
+              path.normalize(conn.profile.dataDir).startsWith(
+                path.normalize(path.join(home, "browser", "profiles")),
+              ),
+            );
+            assert.equal(await isChromeAlive(port), true);
+          } finally {
+            await manager.disconnect();
+            isolatedStore.close();
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            assert.equal(await isChromeAlive(port), false);
+          }
+        }
+      } finally {
+        if (originalHome === undefined) {
+          delete process.env.BROWSER_CONTROL_HOME;
+        } else {
+          process.env.BROWSER_CONTROL_HOME = originalHome;
+        }
       }
     });
   });

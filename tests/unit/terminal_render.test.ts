@@ -86,4 +86,48 @@ describe("Terminal Renderer", () => {
     assert.strictEqual(view.status, "idle"); // maps to idle in view
     assert.strictEqual(view.canAcceptInput, false);
   });
+
+  it("preserves common SGR styles as render segments", () => {
+    const snapshot: TerminalSnapshot = {
+      sessionId: "term-123",
+      shell: "bash",
+      cwd: "/app",
+      env: {},
+      status: "idle",
+      lastOutput: "\x1b[1;32mPASS\x1b[0m plain \x1b[4;31mFAIL\x1b[0m",
+      promptDetected: true,
+      scrollbackLines: 1,
+      createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString()
+    };
+
+    const view = buildTerminalView(snapshot);
+
+    assert.strictEqual(view.rows[0].text, "PASS plain FAIL");
+    assert.deepStrictEqual(view.rows[0].segments, [
+      { text: "PASS", bold: true, foreground: "green" },
+      { text: " plain " },
+      { text: "FAIL", underline: true, foreground: "red" }
+    ]);
+  });
+
+  it("honors carriage return and clear-line VT controls", () => {
+    const snapshot: TerminalSnapshot = {
+      sessionId: "term-123",
+      shell: "bash",
+      cwd: "/app",
+      env: {},
+      status: "running",
+      lastOutput: "Downloading 10%\r\x1b[KDownloading 90%",
+      promptDetected: false,
+      scrollbackLines: 1,
+      createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString()
+    };
+
+    const view = buildTerminalView(snapshot);
+
+    assert.strictEqual(view.rows.length, 1);
+    assert.strictEqual(view.rows[0].text, "Downloading 90%");
+  });
 });
