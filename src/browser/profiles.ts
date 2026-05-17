@@ -6,15 +6,15 @@
  *  - isolated: temporary profile discarded on close
  *  - named: user-created persistent profiles for different identities
  *
- * Profile data directories live under ~/.browser-control/profiles/<profile-id>/.
- * Profile metadata is stored in the filesystem registry at ~/.browser-control/profiles/registry.json.
+ * Profile data directories live under <data-home>/browser/profiles/<profile-id>/.
+ * Profile metadata is stored in <data-home>/browser/profiles/registry.json.
  */
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { getDataHome } from "../shared/paths";
 import { logger } from "../shared/logger";
+import { getProfilesDir as getCanonicalProfilesDir } from "../shared/paths";
 
 const log = logger.withComponent("browser_profiles");
 
@@ -49,7 +49,7 @@ export interface ProfileMetadata {
 
 /** Get the root directory for all browser profiles. */
 export function getProfilesDir(): string {
-  return path.join(getDataHome(), "profiles");
+  return getCanonicalProfilesDir();
 }
 
 /** Get the data directory for a specific profile. */
@@ -109,6 +109,7 @@ export class BrowserProfileManager {
 
   /** Ensure the default shared profile exists. */
   private ensureDefaultProfile(): void {
+    fs.mkdirSync(getProfileDataDir(DEFAULT_SHARED_PROFILE_ID), { recursive: true });
     if (!this.registry.profiles.find((p) => p.id === DEFAULT_SHARED_PROFILE_ID)) {
       const now = new Date().toISOString();
       this.registry.profiles.push({
@@ -132,7 +133,7 @@ export class BrowserProfileManager {
     }
 
     const id = type === "isolated"
-      ? `${ISOLATED_PROFILE_PREFIX}${Date.now()}`
+      ? `${ISOLATED_PROFILE_PREFIX}${Date.now()}-${randomUUID()}`
       : name.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
 
     const now = new Date().toISOString();
@@ -237,7 +238,7 @@ export class BrowserProfileManager {
 
   /** Create a temporary isolated profile. */
   createIsolatedProfile(): BrowserProfile {
-    const name = `isolated-${Date.now()}`;
+    const name = `isolated-${Date.now()}-${randomUUID()}`;
     return this.createProfile(name, "isolated");
   }
 

@@ -19,6 +19,7 @@ import {
 	type BrowserActionContext,
 	BrowserActions,
 	type BrowserCloseResult,
+	type BrowserLaunchResult,
 	type DropOptions,
 	type HighlightOptions,
 	type LocatorCandidate,
@@ -51,6 +52,13 @@ import type {
 	ProviderListResult,
 	ProviderSelectionResult,
 } from "./providers/types";
+import { checkProviderHealth, type ProviderHealthReport } from "./providers/health";
+import type { ProviderCatalogEntry } from "./providers/types";
+import {
+	LocalhostProxyManager,
+	type LocalhostProxyStartResult,
+	type LocalhostProxyStatus,
+} from "./proxy_manager";
 import { type ServiceActionContext, ServiceActions } from "./service_actions";
 import type { ServiceEntry } from "./services/registry";
 import { ServiceRegistry } from "./services/registry";
@@ -139,6 +147,11 @@ export interface BrowserNamespace {
 		text: string;
 		delayMs?: number;
 	}): Promise<ActionResult<{ typed: string }>>;
+	paste(options: {
+		text: string;
+		target?: string;
+		timeoutMs?: number;
+	}): Promise<ActionResult<{ pasted: string }>>;
 	press(options: { key: string }): Promise<ActionResult<{ pressed: string }>>;
 	scroll(options: {
 		direction: "up" | "down" | "left" | "right";
@@ -177,6 +190,12 @@ export interface BrowserNamespace {
 	}): Promise<ActionResult<{ attached: boolean; endpoint: string }>>;
 	/** Section 27: Clean detach without closing attached browsers. */
 	detach(): Promise<ActionResult<BrowserDetachResult>>;
+	/** Section 27: Launch a managed browser. */
+	launch(options?: {
+		port?: number;
+		profile?: "system" | "isolated";
+		provider?: string;
+	}): Promise<ActionResult<BrowserLaunchResult>>;
 	/** Section 27: Drop files or data onto page elements. */
 	drop(options: DropOptions): Promise<ActionResult<BrowserDropResult>>;
 	/** Section 27: List recent downloads. */
@@ -192,6 +211,8 @@ export interface TerminalNamespace {
 		shell?: string;
 		cwd?: string;
 		name?: string;
+		cols?: number;
+		rows?: number;
 	}): Promise<
 		ActionResult<{ id: string; shell: string; cwd: string; status: string }>
 	>;
@@ -203,6 +224,7 @@ export interface TerminalNamespace {
 	type(options: {
 		text: string;
 		sessionId: string;
+		submit?: boolean;
 	}): Promise<ActionResult<{ typed: string }>>;
 	read(options: {
 		sessionId: string;
@@ -276,6 +298,19 @@ export interface ServiceNamespace {
 		name: string;
 	}): Promise<ActionResult<{ url: string; service?: ServiceEntry }>>;
 	remove(options: { name: string }): ActionResult<{ removed: boolean }>;
+	proxy: {
+		start(options?: {
+			port?: number;
+			allowRemote?: boolean;
+			https?: boolean;
+			certPath?: string;
+			keyPath?: string;
+			localCa?: boolean;
+			caDir?: string;
+		}): Promise<ActionResult<LocalhostProxyStartResult>>;
+		stop(): Promise<ActionResult<{ stopped: boolean }>>;
+		status(): ActionResult<LocalhostProxyStatus>;
+	};
 }
 
 // ── Session Namespace ─────────────────────────────────────────────────
@@ -294,8 +329,10 @@ export interface SessionNamespace {
 
 export interface ProviderNamespace {
 	list(): ProviderListResult;
+	catalog(): ActionResult<ProviderCatalogEntry[]>;
 	use(name: string): ActionResult<ProviderSelectionResult>;
 	getActive(): string;
+	health(name?: string): Promise<ActionResult<ProviderHealthReport[]>>;
 }
 
 // ── Debug Namespace (Section 10) ──────────────────────────────────────
@@ -346,10 +383,13 @@ export interface DashboardNamespace {
 
 export interface WorkflowNamespace {
 	run(graphJson: string): Promise<ActionResult>;
+	runs(): ActionResult<import("./workflows/types").WorkflowRun[]>;
 	status(runId: string): ActionResult;
 	resume(runId: string): Promise<ActionResult>;
-	approve(runId: string, nodeId: string): ActionResult;
+	approve(runId: string, nodeId: string, approvedBy?: string): ActionResult;
 	cancel(runId: string): ActionResult;
+	events(runId: string): ActionResult;
+	editState(runId: string, key: string, value: string | number | boolean): ActionResult;
 }
 
 // ── Harness Namespace (Section 29) ────────────────────────────────────
@@ -363,6 +403,20 @@ export interface HarnessNamespace {
 	}): ActionResult;
 	validate(helperId: string): ActionResult;
 	rollback(helperId: string, version: string): ActionResult;
+	generate(input: {
+		id: string;
+		purpose: string;
+		files: Array<{ path: string; content: string }>;
+		taskTags?: string[];
+		failureTypes?: string[];
+		site?: string;
+		domains?: string[];
+		usage?: string;
+		version?: string;
+		testCommand?: string;
+		activate?: boolean;
+	}): Promise<ActionResult>;
+	execute(helperId: string, input?: Record<string, unknown>): Promise<ActionResult>;
 }
 
 // ── Package Namespace (Section 30) ────────────────────────────────────
@@ -392,6 +446,14 @@ export interface PackageNamespace {
 	eval(
 		name: string,
 	): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
+	review(
+		name: string,
+		status: import("./packages/types").TrustReviewStatus,
+		reviewedBy: string,
+		reason?: string,
+	): ActionResult<{ success: boolean; record?: import("./packages/types").TrustReviewRecord }>;
+	reviewHistory(name: string): ActionResult<import("./packages/types").TrustReviewRecord[]>;
+	evalHistory(name?: string): ActionResult<import("./packages/types").PackageEvalRecord[]>;
 }
 
 // ── Benchmark Namespace (Section 16) ─────────────────────────────────
@@ -520,6 +582,7 @@ export function createBrowserControl(
 	const terminalActions = new TerminalActions(terminalCtx);
 	const fsActions = new FsActions(fsCtx);
 	const serviceActions = new ServiceActions(serviceCtx);
+	let localhostProxy: LocalhostProxyManager | null = null;
 
 	const requireDebugPolicy = (
 		action: string,
@@ -534,6 +597,24 @@ export function createBrowserControl(
 
 	const providerNamespace: ProviderNamespace = {
 		list: () => sessionManager.getBrowserManager().getProviderRegistry().list(),
+		catalog: () => {
+			const policyEval = sessionManager.evaluateAction("browser_provider_catalog", {});
+			if (!isPolicyAllowed(policyEval))
+				return policyEval as ActionResult<ProviderCatalogEntry[]>;
+			return {
+				success: true,
+				path: policyEval.path,
+				sessionId: sessionManager.getActiveSession()?.id ?? "default",
+				data: sessionManager
+					.getBrowserManager()
+					.getProviderRegistry()
+					.catalog(),
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+				completedAt: new Date().toISOString(),
+			};
+		},
 		use: (name) => {
 			const policyEval = sessionManager.evaluateAction("browser_provider_use", {
 				name,
@@ -558,6 +639,33 @@ export function createBrowserControl(
 		},
 		getActive: () =>
 			sessionManager.getBrowserManager().getProviderRegistry().getActiveName(),
+		health: async (name) => {
+			const policyEval = sessionManager.evaluateAction("browser_provider_health", {
+				name,
+			});
+			if (!isPolicyAllowed(policyEval))
+				return policyEval as ActionResult<ProviderHealthReport[]>;
+			const registry = sessionManager.getBrowserManager().getProviderRegistry();
+			const listed = registry.list();
+			const names = name
+				? [name]
+				: [...new Set([...listed.builtIn, ...listed.providers.map((p) => p.name)])];
+			const reports = [];
+			for (const providerName of names) {
+				const config = registry.get(providerName);
+				if (config) reports.push(await checkProviderHealth(config));
+			}
+			return {
+				success: true,
+				path: policyEval.path,
+				sessionId: sessionManager.getActiveSession()?.id ?? "default",
+				data: reports,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				...(policyEval.auditId ? { auditId: policyEval.auditId } : {}),
+				completedAt: new Date().toISOString(),
+			};
+		},
 	};
 	const configNamespace: ConfigNamespace = {
 		list: () => getConfigEntries({ validate: false }),
@@ -612,7 +720,22 @@ export function createBrowserControl(
 				getGlobalNetworkCapture,
 			} = require("./observability/network_capture");
 			const capture = getGlobalNetworkCapture();
-			return capture.getEntries(options.sessionId ?? "default");
+			const sessionId = options.sessionId ?? "default";
+			const stored = capture.loadFromStore(sessionManager.getMemoryStore(), sessionId);
+			const live = capture.getEntries(sessionId);
+			const seen = new Set<string>();
+			return [...stored, ...live].filter((entry) => {
+				const key = [
+					entry.timestamp,
+					entry.method,
+					entry.url,
+					entry.status ?? "",
+					entry.error ?? "",
+				].join("|");
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			});
 		},
 		listBundles: () => {
 			requireDebugPolicy("debug_bundle_export", { list: true });
@@ -653,6 +776,54 @@ export function createBrowserControl(
 			fsWrite: (path: string, content: string) =>
 				fsActions.write({ path, content }),
 			browserOpen: (url: string) => browserActions.open({ url }),
+			browserClick: (target: string, timeoutMs?: number) =>
+				browserActions.click({ target, timeoutMs }),
+			browserFill: (target: string, text: string, timeoutMs?: number) =>
+				browserActions.fill({ target, text, timeoutMs }),
+			browserPress: (key: string) => browserActions.press({ key }),
+			browserSnapshot: () => browserActions.takeSnapshot(),
+			browserScreenshot: () => browserActions.screenshot(),
+			secretResolver: async (
+				secretRef: string,
+				action: string,
+				context: {
+					sessionId?: string;
+					packageName?: string;
+					workflowId?: string;
+				},
+			) => {
+				const policyEval = sessionManager.evaluateAction("secret_use", {
+					secretRef: true,
+					action,
+					packageName: context.packageName,
+					workflowId: context.workflowId,
+				});
+				if (!isPolicyAllowed(policyEval)) {
+					return {
+						success: false,
+						id: secretRef,
+						error: `Policy denied secret use: ${policyEval.error ?? "denied"}`,
+					};
+				}
+				const { CredentialVault } = require("./security/credential_vault");
+				const vault = new CredentialVault(getStateStorage(options.dataHome));
+				const resolved = await vault.resolveForUse(secretRef, {
+					action,
+					sessionId: context.sessionId ?? getActionSessionId(),
+					packageName: context.packageName,
+					workflowId: context.workflowId,
+					policyDecision: policyEval.policyDecision,
+				});
+				if (!resolved.success) {
+					return { success: false, id: secretRef, error: resolved.error };
+				}
+				return {
+					success: true,
+					id: secretRef,
+					value: resolved.value,
+					grantId: resolved.grantId,
+				};
+			},
 			verificationExecute: async (input: Record<string, unknown>) => {
 				const actual = input.actual ?? input.expression;
 				const expected = input.expected;
@@ -735,6 +906,7 @@ export function createBrowserControl(
 			fill: (o) => browserActions.fill(o),
 			hover: (o) => browserActions.hover(o),
 			type: (o) => browserActions.type(o),
+			paste: (o) => browserActions.paste(o),
 			press: (o) => browserActions.press(o),
 			scroll: (o) => browserActions.scroll(o),
 			screenshot: (o) => browserActions.screenshot(o),
@@ -802,6 +974,17 @@ export function createBrowserControl(
 					completedAt: new Date().toISOString(),
 				};
 			},
+			launch: async (options) => {
+				const result = await browserActions.launch({
+					port: options?.port,
+					profile: options?.profile,
+					provider: options?.provider,
+				});
+				return {
+					...result,
+					completedAt: new Date().toISOString(),
+				};
+			},
 			drop: (options) => browserActions.drop(options),
 			downloads: {
 				list: () => browserActions.downloadsList(),
@@ -839,6 +1022,85 @@ export function createBrowserControl(
 			list: () => serviceActions.list(),
 			resolve: (o) => serviceActions.resolve(o),
 			remove: (o) => serviceActions.remove(o),
+			proxy: {
+				start: async (o = {}) => {
+					const policyEval = sessionManager.evaluateAction("service_proxy_start", o);
+					if (!isPolicyAllowed(policyEval)) {
+						return policyEval as ActionResult<LocalhostProxyStartResult>;
+					}
+					try {
+						localhostProxy ??= new LocalhostProxyManager({
+							registry: sharedRegistry,
+							reloadRegistryOnRequest: true,
+							port: o.port ?? 0,
+							allowRemote: o.allowRemote === true,
+							https: o.https === true,
+							certPath: o.certPath,
+							keyPath: o.keyPath,
+							localCa: o.localCa === true,
+							caDir: o.caDir,
+						});
+						return successResult(await localhostProxy.start(), {
+							path: policyEval.path,
+							sessionId: sessionManager.getActiveSession()?.id ?? "default",
+							policyDecision: policyEval.policyDecision,
+							risk: policyEval.risk,
+							auditId: policyEval.auditId,
+						});
+					} catch (error) {
+						return failureResult(
+							error instanceof Error ? error.message : String(error),
+							{
+								path: policyEval.path,
+								sessionId: sessionManager.getActiveSession()?.id ?? "default",
+								policyDecision: policyEval.policyDecision,
+								risk: policyEval.risk,
+								auditId: policyEval.auditId,
+							},
+						);
+					}
+				},
+				stop: async () => {
+					const policyEval = sessionManager.evaluateAction("service_proxy_stop", {});
+					if (!isPolicyAllowed(policyEval)) {
+						return policyEval as ActionResult<{ stopped: boolean }>;
+					}
+					await localhostProxy?.stop();
+					localhostProxy = null;
+					return successResult(
+						{ stopped: true },
+						{
+							path: policyEval.path,
+							sessionId: sessionManager.getActiveSession()?.id ?? "default",
+							policyDecision: policyEval.policyDecision,
+							risk: policyEval.risk,
+							auditId: policyEval.auditId,
+						},
+					);
+				},
+				status: () => {
+					const policyEval = sessionManager.evaluateAction("service_proxy_status", {});
+					if (!isPolicyAllowed(policyEval)) {
+						return policyEval as ActionResult<LocalhostProxyStatus>;
+					}
+					return successResult(
+						localhostProxy?.getStatus() ?? {
+							enabled: false,
+							host: "127.0.0.1",
+							httpsEnabled: false,
+							allowRemote: false,
+							activeConnections: 0,
+						},
+						{
+							path: policyEval.path,
+							sessionId: sessionManager.getActiveSession()?.id ?? "default",
+							policyDecision: policyEval.policyDecision,
+							risk: policyEval.risk,
+							auditId: policyEval.auditId,
+						},
+					);
+				},
+			},
 		},
 		provider: providerNamespace,
 		debug: debugNamespace,
@@ -877,26 +1139,72 @@ export function createBrowserControl(
 				const runtime = buildWorkflowRuntime();
 				return attachPolicy(runtime.status(runId), policy.policy);
 			},
+			runs: () => {
+				const policy = evaluateActionPolicy("workflow_status", {});
+				if (policy.blocked) {
+					return policy.blocked as ActionResult<
+						import("./workflows/types").WorkflowRun[]
+					>;
+				}
+				const { WorkflowStore } = require("./workflows/store");
+				const store = new WorkflowStore(sessionManager.getMemoryStore());
+				return attachPolicy(
+					successResult(store.listRuns(), {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
 			resume: async (runId: string) => {
 				const policy = evaluateActionPolicy("workflow_resume", { runId });
 				if (policy.blocked) return policy.blocked;
 				const runtime = buildWorkflowRuntime();
 				return attachPolicy(await runtime.resume(runId), policy.policy);
 			},
-			approve: (runId: string, nodeId: string) => {
+			approve: (runId: string, nodeId: string, approvedBy?: string) => {
 				const policy = evaluateActionPolicy("workflow_approve", {
 					runId,
 					nodeId,
 				});
 				if (policy.blocked) return policy.blocked;
 				const runtime = buildWorkflowRuntime();
-				return attachPolicy(runtime.approve(runId, nodeId), policy.policy);
+				return attachPolicy(runtime.approve(runId, nodeId, approvedBy), policy.policy);
 			},
 			cancel: (runId: string) => {
 				const policy = evaluateActionPolicy("workflow_cancel", { runId });
 				if (policy.blocked) return policy.blocked;
 				const runtime = buildWorkflowRuntime();
 				return attachPolicy(runtime.cancel(runId), policy.policy);
+			},
+			events: (runId: string) => {
+				const policy = evaluateActionPolicy("workflow_events", { runId });
+				if (policy.blocked) return policy.blocked;
+				const { WorkflowStore } = require("./workflows/store");
+				const store = new WorkflowStore(sessionManager.getMemoryStore());
+				const run = store.getRun(runId);
+				if (!run) {
+					return attachPolicy(
+						failureResult(`Run not found: ${runId}`, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+				return attachPolicy(
+					successResult(run.events, {
+						path: "command",
+						sessionId: getActionSessionId(),
+					}),
+					policy.policy,
+				);
+			},
+			editState: (runId: string, key: string, value: string | number | boolean) => {
+				const policy = evaluateActionPolicy("workflow_edit_state", { runId, key });
+				if (policy.blocked) return policy.blocked;
+				const runtime = buildWorkflowRuntime();
+				return attachPolicy(runtime.editState(runId, key, value), policy.policy);
 			},
 		},
 		harness: {
@@ -974,6 +1282,71 @@ export function createBrowserControl(
 					}),
 					policy.policy,
 				);
+			},
+			generate: async (input) => {
+				const policy = evaluateActionPolicy("harness_generate", {
+					id: input.id,
+					purpose: input.purpose,
+				});
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				try {
+					const result = await registry.generateHelper({
+						id: input.id,
+						purpose: input.purpose,
+						files: input.files,
+						taskTags: input.taskTags,
+						failureTypes: input.failureTypes,
+						site: input.site,
+						domains: input.domains,
+						usage: input.usage,
+						version: input.version,
+						testCommand: input.testCommand,
+						activate: input.activate,
+					});
+					return attachPolicy(
+						successResult(result, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				} catch (err: unknown) {
+					return attachPolicy(
+						failureResult(err instanceof Error ? err.message : String(err), {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
+			},
+			execute: async (helperId: string, input?: Record<string, unknown>) => {
+				const policy = evaluateActionPolicy("harness_execute", {
+					helperId,
+				});
+				if (policy.blocked) return policy.blocked;
+				const { HarnessRegistry } = require("./harness/registry");
+				const registry = new HarnessRegistry();
+				try {
+					const result = await registry.executeHelper(helperId, input);
+					return attachPolicy(
+						successResult(result, {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				} catch (err: unknown) {
+					return attachPolicy(
+						failureResult(err instanceof Error ? err.message : String(err), {
+							path: "command",
+							sessionId: getActionSessionId(),
+						}),
+						policy.policy,
+					);
+				}
 			},
 		},
 		package: {
@@ -1158,6 +1531,42 @@ export function createBrowserControl(
 				const result = await evaluator.evaluate(name);
 				return attachPolicy(result, policy.policy);
 			},
+			review: (name: string, status: import("./packages/types").TrustReviewStatus, reviewedBy: string, reason?: string): ActionResult<{ success: boolean; record?: import("./packages/types").TrustReviewRecord }> => {
+				const policy = evaluateActionPolicy("package_review", { name, status });
+				if (policy.blocked) return policy.blocked as ActionResult<{ success: boolean; record?: import("./packages/types").TrustReviewRecord }>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				const result = registry.submitReview(name, status, reviewedBy, reason);
+				const responseData: { success: boolean; record?: import("./packages/types").TrustReviewRecord } = result.success
+					? { success: true, record: result.record }
+					: { success: false };
+				return attachPolicy(
+					result.success
+						? successResult(responseData, { path: "command", sessionId: getActionSessionId() })
+						: failureResult(result.error ?? "Review failed", { path: "command", sessionId: getActionSessionId() }),
+					policy.policy,
+				);
+			},
+			reviewHistory: (name: string): ActionResult<import("./packages/types").TrustReviewRecord[]> => {
+				const policy = evaluateActionPolicy("package_review_history", { name });
+				if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").TrustReviewRecord[]>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				return attachPolicy(
+					successResult(registry.getReviewHistory(name), { path: "command", sessionId: getActionSessionId() }),
+					policy.policy,
+				);
+			},
+			evalHistory: (name?: string): ActionResult<import("./packages/types").PackageEvalRecord[]> => {
+				const policy = evaluateActionPolicy("package_eval_history", { name });
+				if (policy.blocked) return policy.blocked as ActionResult<import("./packages/types").PackageEvalRecord[]>;
+				const { PackageRegistry } = require("./packages/registry");
+				const registry = new PackageRegistry(options.dataHome);
+				return attachPolicy(
+					successResult(registry.getEvalHistory(name), { path: "command", sessionId: getActionSessionId() }),
+					policy.policy,
+				);
+			},
 		},
 		benchmark: {
 			run: async (runOptions = {}) => {
@@ -1200,6 +1609,8 @@ export function createBrowserControl(
 			return serviceActions;
 		},
 		close() {
+			void localhostProxy?.stop();
+			localhostProxy = null;
 			sessionManager.close();
 			require("./state/index").resetStateStorage();
 		},

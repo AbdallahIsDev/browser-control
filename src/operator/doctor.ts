@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 
 import { isDebugPortReady } from "../browser/core";
@@ -6,6 +7,7 @@ import { getConfigValue, loadConfig, loadUserConfig } from "../shared/config";
 import { MemoryStore } from "../runtime/memory_store";
 import { ProviderRegistry } from "../providers/registry";
 import { loadProxyConfigs } from "../proxy_manager";
+import { getLocalhostCaStatus } from "../services/local_ca";
 import { detectShell, resolveNamedShell } from "../terminal/cross_platform";
 import { probeDaemonHealth } from "../session_manager";
 import { resolveChromePath } from "../runtime/launch_browser";
@@ -48,6 +50,24 @@ function resolvePackageJsonPath(): string {
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) throw new Error("Unable to locate browser-control package.json");
   return found;
+}
+
+function canConnectToLoopbackPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const done = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(300);
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+    socket.once("timeout", () => done(false));
+    socket.connect(port, "127.0.0.1");
+  });
 }
 
 async function runCheck(check: DoctorCheck): Promise<DoctorCheckResult> {
@@ -206,6 +226,41 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
         ? result("proxy.config", "Proxy Config", "network", "pass", `${active} active proxy entries found.`, "No action needed.", false)
         : result("proxy.config", "Proxy Config", "network", "warn", "Proxy config exists but no active proxy entries were found.", "Add an active proxy or remove stale proxy config.", false);
     },
+    async () => {
+      const conflicts = (
+        await Promise.all([80, 443].map(async (port) => ({
+          port,
+          listening: await canConnectToLoopbackPort(port),
+        })))
+      ).filter((entry) => entry.listening);
+      return conflicts.length === 0
+        ? result("localhostProxy.ports", ".localhost Proxy Ports", "network", "pass", "No listener detected on loopback ports 80/443.", "No action needed unless enabling default HTTP/HTTPS proxy ports.", false)
+        : result("localhostProxy.ports", ".localhost Proxy Ports", "network", "warn", `Loopback port(s) already listening: ${conflicts.map((entry) => entry.port).join(", ")}.`, "Use a non-default proxy port, stop the conflicting service, or reserve the intended Windows URL/port explicitly.", false);
+    },
+    async () =>
+      {
+        const ca = getLocalhostCaStatus({ caDir: path.join(config.dataHome, "certs", "localhost-ca") });
+        if (!ca.ready) {
+          return result(
+            "localhostProxy.https",
+            ".localhost Proxy HTTPS",
+            "network",
+            "warn",
+            `Local CA material is missing at ${ca.caDir}.`,
+            "Run bc service proxy ca create --yes, then bc service proxy ca install --yes if HTTPS .localhost is needed.",
+            false,
+          );
+        }
+        return result(
+          "localhostProxy.https",
+          ".localhost Proxy HTTPS",
+          "network",
+          ca.trusted === false ? "warn" : "pass",
+          `Local CA material exists at ${ca.caDir}; trust status is ${String(ca.trusted)}.`,
+          ca.trusted === true ? "No action needed." : "Run bc service proxy ca install --yes before relying on trusted HTTPS.",
+          false,
+        );
+      },
     async () => {
       if (!config.captchaProvider) return result("captcha.config", "CAPTCHA Config", "captcha", "pass", "CAPTCHA provider is not configured.", "No action needed.", false);
       return config.captchaApiKey

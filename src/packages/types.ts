@@ -58,3 +58,17 @@ export interface PackageEvalRecord {
   durationMs: number; totalEvals: number; passedEvals: number; failedEvals: number;
   failedStep?: string; debugReceiptId?: string; runAt: string;
 }
+
+export interface PackageFileEntry { path: string; size: number; sha256: string; }
+
+export interface PackageDigestResult { digest: string; files: PackageFileEntry[]; totalBytes: number; fileCount: number; }
+
+export interface TrustReviewRecord {
+  id: string; packageName: string; version: string; status: TrustReviewStatus;
+  reviewedAt: string; reviewedBy: string;
+  riskSummary: { riskLevel: "low" | "medium" | "high" | "critical"; warnings: string[]; details: string };
+  permissions: PackagePermissionDecision[];
+  files: PackageFileEntry[];
+  digest: string;
+  decisionAudit: Array<{ action: string; timestamp: string; by: string; reason?: string }>;
+}

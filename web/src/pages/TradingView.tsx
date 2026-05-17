@@ -1,4 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
+import { DataTable } from "@/components/common/DataTable";
+import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { PageShell } from "@/components/layout/PageShell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { apiFetch } from "../api";
 import type {
 	EvidenceRecord,
@@ -32,6 +47,21 @@ function normalizeJournal(payload: JournalEntry[] | TradingJournalSummary) {
 			evidencePath: record.path,
 		})),
 	];
+}
+
+function CompactRow({
+	label,
+	value,
+}: {
+	label: string;
+	value: React.ReactNode;
+}) {
+	return (
+		<div className="flex items-start justify-between gap-3">
+			<span className="text-muted-foreground">{label}</span>
+			<span className="min-w-0 text-right">{value}</span>
+		</div>
+	);
 }
 
 export function TradingView() {
@@ -102,176 +132,322 @@ export function TradingView() {
 		}
 	};
 
-	if (error) return <div className="panel error">{error}</div>;
+	if (error) {
+		return (
+			<PageShell>
+				<ErrorState message="Failed to load trading data" details={error} />
+			</PageShell>
+		);
+	}
 
 	return (
-		<div className="trading-layout">
-			<div className="grid-2" style={{ marginBottom: "20px" }}>
-				<div className="panel">
-					<div className="panel-title">Mode & Status</div>
-					<div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-						<div>
-							<strong>Mode:</strong> {status?.mode || "Analysis Only"}
-						</div>
-						<div>
-							<strong>Connection:</strong> {status?.connection || "Offline"}
-						</div>
-						{status?.staleChart && (
-							<div style={{ color: "var(--accent)" }}>
-								Warning: Stale chart data detected.
-							</div>
-						)}
-					</div>
+		<PageShell>
+			<div className="space-y-4 md:space-y-6">
+				<div className="mb-2">
+					<h2 className="text-lg font-semibold tracking-tight">Trading</h2>
+					<p className="text-sm text-muted-foreground mt-1">
+						Monitor trade plans, order tickets, and supervisor jobs.
+					</p>
 				</div>
-				<div className="panel">
-					<div className="panel-title">Active Supervisor Jobs</div>
-					{jobs.length === 0 ? (
-						<div className="empty-state">No active supervisor jobs.</div>
-					) : (
-						<table>
-							<thead>
-								<tr>
-									<th>Job ID</th>
-									<th>Plan</th>
-									<th>Status</th>
-								</tr>
-							</thead>
-							<tbody>
-								{jobs.map((j) => (
-									<tr key={j.id}>
-										<td>{j.id}</td>
-										<td>{j.planId}</td>
-										<td>{j.status}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					)}
-				</div>
-			</div>
-
-			<div className="panel">
-				<div className="panel-title">Trade Plans Workbench</div>
-				{plans.length === 0 ? (
-					<div className="empty-state">No trade plans found.</div>
-				) : (
-					<table>
-						<thead>
-							<tr>
-								<th>Symbol</th>
-								<th>Side</th>
-								<th>Mode</th>
-								<th>Status</th>
-								<th>Thesis</th>
-							</tr>
-						</thead>
-						<tbody>
-							{plans.map((p) => (
-								<tr key={p.id}>
-									<td>{p.symbol}</td>
-									<td>{p.side}</td>
-									<td>{p.mode}</td>
-									<td>{p.status}</td>
-									<td>{p.thesis}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+				{status && (
+					<StatusBadge label={status.mode || "Analysis Only"} variant="info" />
 				)}
-			</div>
+				{status?.staleChart && (
+					<Alert>
+						<AlertDescription>
+							Warning: stale chart data detected.
+						</AlertDescription>
+					</Alert>
+				)}
 
-			<div className="grid-2">
-				<div className="panel">
-					<div className="panel-title">Order Tickets & Approvals</div>
-					{actionMessage && (
-						<div className="inline-status" role="status">
-							{actionMessage}
-						</div>
-					)}
-					{tickets.length === 0 ? (
-						<div className="empty-state">No pending order tickets.</div>
-					) : (
-						<table>
-							<thead>
-								<tr>
-									<th>Ticket ID</th>
-									<th>Symbol</th>
-									<th>Status</th>
-									<th>Action</th>
-								</tr>
-							</thead>
-							<tbody>
-								{tickets.map((t) => (
-									<tr key={t.id}>
-										<td>{t.id}</td>
-										<td>{t.symbol}</td>
-										<td>{t.status}</td>
-										<td>
-											<button
-												type="button"
-												className="button button-primary"
-												style={{ padding: "4px 8px", marginRight: "4px" }}
-												disabled={
-													t.status !== "pending" || actingTicketId === t.id
-												}
-												onClick={() => updateTicket(t, "approve")}
-											>
-												Approve
-											</button>
-											<button
-												type="button"
-												className="button"
-												style={{ padding: "4px 8px" }}
-												disabled={
-													t.status !== "pending" || actingTicketId === t.id
-												}
-												onClick={() => updateTicket(t, "reject")}
-											>
-												Reject
-											</button>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					)}
-					<div
-						style={{
-							marginTop: "12px",
-							fontSize: "0.85rem",
-							color: "var(--fg-muted)",
-						}}
-					>
-						Risk Warning: Live order placement requires explicit approval.
-					</div>
-				</div>
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<Card>
+						<CardHeader>
+							<CardTitle>Mode & Status</CardTitle>
+						</CardHeader>
+						<CardContent>
+							<div className="space-y-3 text-sm">
+								<CompactRow
+									label="Mode"
+									value={status?.mode || "Analysis Only"}
+								/>
+								<CompactRow
+									label="Connection"
+									value={
+										<StatusBadge
+											label={status?.connection || "Offline"}
+											variant={
+												status?.connection === "Connected" ? "ok" : "warn"
+											}
+										/>
+									}
+								/>
+							</div>
+						</CardContent>
+					</Card>
 
-				<div className="panel">
-					<div className="panel-title">Journal & Evidence</div>
-					{journal.length === 0 ? (
-						<div className="empty-state">No journal entries.</div>
-					) : (
-						<ul style={{ paddingLeft: "20px", fontSize: "0.9rem" }}>
-							{journal.map((j) => (
-								<li key={j.id} style={{ marginBottom: "8px" }}>
-									<span style={{ color: "var(--fg-muted)" }}>
-										{new Date(j.timestamp).toLocaleTimeString()}:{" "}
-									</span>
-									{j.message}
-									{j.evidencePath && (
-										<a
-											href={`/api/evidence/${j.evidencePath}`}
-											style={{ marginLeft: "8px", color: "var(--accent)" }}
+					<Card>
+						<CardHeader>
+							<CardTitle>Active Supervisor Jobs</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{jobs.length === 0 ? (
+								<EmptyState title="No active supervisor jobs" />
+							) : (
+								<div className="space-y-3 md:hidden">
+									{jobs.slice(0, 12).map((job) => (
+										<div
+											key={job.id}
+											className="rounded-[8px] border border-border p-3 text-sm"
 										>
-											[Evidence]
-										</a>
-									)}
-								</li>
-							))}
-						</ul>
-					)}
+											<div className="mb-2 flex items-center justify-between gap-3">
+												<span className="min-w-0 truncate font-mono text-xs">
+													{job.id}
+												</span>
+												<Badge variant="secondary">{job.status}</Badge>
+											</div>
+											<CompactRow
+												label="Plan"
+												value={
+													<span className="font-mono text-xs">
+														{job.planId || "No plan"}
+													</span>
+												}
+											/>
+										</div>
+									))}
+								</div>
+							)}
+							{jobs.length > 0 && (
+								<div className="hidden md:block">
+									<DataTable
+										data={jobs}
+										columns={[
+											{
+												key: "id",
+												header: "Job ID",
+												cell: (j) => (
+													<span className="inline-block max-w-[240px] truncate font-mono text-xs">
+														{j.id}
+													</span>
+												),
+											},
+											{
+												key: "planId",
+												header: "Plan",
+												cell: (j) => j.planId,
+											},
+											{
+												key: "status",
+												header: "Status",
+												cell: (j) => (
+													<Badge variant="secondary">{j.status}</Badge>
+												),
+											},
+										]}
+									/>
+								</div>
+							)}
+						</CardContent>
+					</Card>
+				</div>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Trade Plans Workbench</CardTitle>
+					</CardHeader>
+					<CardContent>
+						{plans.length === 0 ? (
+							<EmptyState title="No trade plans found" />
+						) : (
+							<DataTable
+								data={plans}
+								columns={[
+									{ key: "symbol", header: "Symbol", cell: (p) => p.symbol },
+									{
+										key: "side",
+										header: "Side",
+										cell: (p) => (
+											<Badge
+												variant={p.side === "buy" ? "default" : "destructive"}
+											>
+												{p.side}
+											</Badge>
+										),
+									},
+									{ key: "mode", header: "Mode", cell: (p) => p.mode },
+									{
+										key: "status",
+										header: "Status",
+										cell: (p) => <Badge variant="secondary">{p.status}</Badge>,
+									},
+									{
+										key: "thesis",
+										header: "Thesis",
+										cell: (p) => (
+											<span className="max-w-[300px] truncate block">
+												{p.thesis}
+											</span>
+										),
+									},
+								]}
+							/>
+						)}
+					</CardContent>
+				</Card>
+
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<Card>
+						<CardHeader>
+							<CardTitle>Order Tickets & Approvals</CardTitle>
+							<CardDescription>
+								Risk Warning: Live order placement requires explicit approval.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							{actionMessage && (
+								<Alert className="mb-4">
+									<AlertDescription>{actionMessage}</AlertDescription>
+								</Alert>
+							)}
+							{tickets.length === 0 ? (
+								<EmptyState title="No pending order tickets" />
+							) : (
+								<div className="space-y-3 md:hidden">
+									{tickets.map((ticket) => (
+										<div
+											key={ticket.id}
+											className="rounded-[8px] border border-border p-3 text-sm"
+										>
+											<div className="mb-2 flex items-center justify-between gap-3">
+												<span className="min-w-0 truncate font-mono text-xs">
+													{ticket.id}
+												</span>
+												<Badge variant="secondary">{ticket.status}</Badge>
+											</div>
+											<div className="mb-3 space-y-2">
+												<CompactRow label="Symbol" value={ticket.symbol} />
+											</div>
+											<div className="grid grid-cols-2 gap-2">
+												<Button
+													size="sm"
+													onClick={() => updateTicket(ticket, "approve")}
+													disabled={
+														ticket.status !== "pending" ||
+														actingTicketId === ticket.id
+													}
+												>
+													Approve
+												</Button>
+												<Button
+													size="sm"
+													variant="outline"
+													onClick={() => updateTicket(ticket, "reject")}
+													disabled={
+														ticket.status !== "pending" ||
+														actingTicketId === ticket.id
+													}
+												>
+													Reject
+												</Button>
+											</div>
+										</div>
+									))}
+								</div>
+							)}
+							{tickets.length > 0 && (
+								<div className="hidden md:block">
+									<DataTable
+										data={tickets}
+										columns={[
+											{
+												key: "id",
+												header: "Ticket ID",
+												cell: (t) => (
+													<span className="inline-block max-w-[240px] truncate font-mono text-xs">
+														{t.id}
+													</span>
+												),
+											},
+											{
+												key: "symbol",
+												header: "Symbol",
+												cell: (t) => t.symbol,
+											},
+											{
+												key: "status",
+												header: "Status",
+												cell: (t) => (
+													<Badge variant="secondary">{t.status}</Badge>
+												),
+											},
+											{
+												key: "action",
+												header: "Action",
+												cell: (t) => (
+													<div className="flex flex-col gap-2 sm:flex-row">
+														<Button
+															size="sm"
+															onClick={() => updateTicket(t, "approve")}
+															disabled={
+																t.status !== "pending" ||
+																actingTicketId === t.id
+															}
+														>
+															Approve
+														</Button>
+														<Button
+															size="sm"
+															variant="outline"
+															onClick={() => updateTicket(t, "reject")}
+															disabled={
+																t.status !== "pending" ||
+																actingTicketId === t.id
+															}
+														>
+															Reject
+														</Button>
+													</div>
+												),
+											},
+										]}
+									/>
+								</div>
+							)}
+						</CardContent>
+					</Card>
+
+					<Card>
+						<CardHeader>
+							<CardTitle>Journal & Evidence</CardTitle>
+						</CardHeader>
+						<CardContent>
+							{journal.length === 0 ? (
+								<EmptyState title="No journal entries" />
+							) : (
+								<ul className="space-y-2 text-sm">
+									{journal.map((j) => (
+										<li key={j.id} className="flex items-start gap-2">
+											<span className="text-muted-foreground shrink-0">
+												{new Date(j.timestamp).toLocaleTimeString()}:
+											</span>
+											<span className="flex-1">{j.message}</span>
+											{j.evidencePath && (
+												<a
+													href={`/api/evidence/${j.evidencePath}`}
+													className="text-primary shrink-0"
+												>
+													[Evidence]
+												</a>
+											)}
+										</li>
+									))}
+								</ul>
+							)}
+						</CardContent>
+					</Card>
 				</div>
 			</div>
-		</div>
+		</PageShell>
 	);
 }

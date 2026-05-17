@@ -8,13 +8,23 @@ import {
 	type BrowserControlAPI,
 	createBrowserControl,
 } from "../browser_control";
+import {
+	type RecordedActionKind,
+	recordIfActive,
+} from "../observability/recorder";
 import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
 import { logger } from "../shared/logger";
 import { getDataHome } from "../shared/paths";
-import type { StateStorage, StoredAutomation } from "../state/index";
+import {
+	getStateStorage,
+	type StateStorage,
+	type StoredAutomation,
+} from "../state/index";
 import { validateResize } from "../terminal/actions";
+import { buildTerminalView } from "../terminal/render";
+import type { TerminalSnapshot } from "../terminal/types";
 import { fetchBrokerJson, listLogFiles, readRecentLogs } from "./bridge";
 import { WebEventHub } from "./events";
 import {
@@ -32,6 +42,14 @@ const webLogger = logger.withComponent("web");
 function errorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	return String(error);
+}
+
+function recordReplayAction(
+	kind: RecordedActionKind,
+	params: Record<string, unknown>,
+	result: Parameters<typeof recordIfActive>[2],
+): void {
+	recordIfActive(kind, params, result);
 }
 
 export interface WebAppServerOptions {
@@ -219,6 +237,18 @@ function asOptionalString(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+function asOptionalStringArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const strings = value.filter(
+		(item): item is string => typeof item === "string" && item.trim() !== "",
+	);
+	return strings.length > 0 ? strings : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function asAutomationSource(
 	value: unknown,
 ): StoredAutomation["source"] | undefined {
@@ -233,6 +263,10 @@ function optionalStateStorage(
 	api: BrowserControlAPI,
 ): StateStorage | undefined {
 	return (api as BrowserControlAPI & { state?: StateStorage }).state;
+}
+
+function vaultStateStorage(api: BrowserControlAPI): StateStorage {
+	return optionalStateStorage(api) ?? getStateStorage();
 }
 
 function asOptionalNumber(value: unknown): number | undefined {
@@ -494,6 +528,7 @@ export function createWebAppServer(
 	});
 
 	const server = http.createServer();
+	const localApiServers = new Set<http.Server>();
 	let currentInfo: WebAppServerInfo | null = null;
 	let allowedOrigins = options.allowedOrigins ?? [`http://${host}:${port}`];
 	const staticRoot = getStaticRoot();
@@ -525,6 +560,335 @@ export function createWebAppServer(
 
 		if (request.method === "GET" && pathname === "/api/capabilities") {
 			json(response, 200, await capabilities(api));
+			return;
+		}
+
+		// ── Credential Vault and Privacy Network Control ───────────────
+		if (request.method === "GET" && pathname === "/api/vault") {
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			json(response, 200, await vault.list());
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/vault") {
+			const body = await readJsonBody(request);
+			if (body.confirm !== "STORE_SECRET") {
+				json(response, 400, {
+					success: false,
+					error: "Secret storage requires confirm=STORE_SECRET.",
+				});
+				return;
+			}
+			const scope = asString(body.scope, "scope");
+			if (scope !== "site" && scope !== "package" && scope !== "workflow") {
+				json(response, 400, {
+					success: false,
+					error: "scope must be site, package, or workflow.",
+				});
+				return;
+			}
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			const stored = await vault.set(
+				scope,
+				asString(body.scopeName, "scopeName"),
+				asString(body.secretName, "secretName"),
+				asString(body.value, "value"),
+			);
+			await vaultStateStorage(api).saveSecretAuditEvent({
+				id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+				secretId: stored.id,
+				action: "set",
+				targetDomain: asOptionalString(body.scopeName) ?? null,
+				policyDecision: "confirmed",
+				sessionId: "web",
+				timestamp: new Date().toISOString(),
+			});
+			json(response, 200, {
+				id: stored.id,
+				scope: stored.scope,
+				scopeName: stored.scopeName,
+				secretName: stored.secretName,
+				createdAt: stored.createdAt,
+				updatedAt: stored.updatedAt,
+				hasValue: true,
+			});
+			return;
+		}
+
+		const vaultDeleteMatch = /^\/api\/vault\/([^/]+)$/u.exec(pathname);
+		if (request.method === "DELETE" && vaultDeleteMatch) {
+			const body = (await readJsonBody(request).catch(() => ({}))) as Record<
+				string,
+				unknown
+			>;
+			if (body.confirm !== "DELETE_SECRET") {
+				json(response, 400, {
+					success: false,
+					error: "Secret deletion requires confirm=DELETE_SECRET.",
+				});
+				return;
+			}
+			const secretId = decodeURIComponent(vaultDeleteMatch[1] ?? "");
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			await vault.delete(secretId);
+			await vaultStateStorage(api).saveSecretAuditEvent({
+				id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+				secretId,
+				action: "delete",
+				targetDomain: null,
+				policyDecision: "confirmed",
+				sessionId: "web",
+				timestamp: new Date().toISOString(),
+			});
+			json(response, 200, { success: true });
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/vault/grants") {
+			const secretId = requestUrl.searchParams.get("secretId") ?? undefined;
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			json(response, 200, await vault.listGrants(secretId));
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/vault/grants") {
+			const body = await readJsonBody(request);
+			const validSecretActions = [
+				"reveal",
+				"type",
+				"paste",
+				"use-as-header",
+				"use-as-form-value",
+			];
+			const actions =
+				asOptionalStringArray(body.actions) ??
+				(asOptionalString(body.action)
+					? [asString(body.action, "action")]
+					: []);
+			if (
+				actions.length === 0 ||
+				actions.some((action) => !validSecretActions.includes(action))
+			) {
+				json(response, 400, { success: false, error: "Invalid grant action." });
+				return;
+			}
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			const grant = await vault.grant(asString(body.secretId, "secretId"), {
+				actions: actions as never,
+				siteScope: asOptionalString(body.siteScope),
+				domainScope:
+					asOptionalString(body.domainScope) ?? asOptionalString(body.domain),
+				packageScope: asOptionalString(body.packageScope),
+				workflowScope: asOptionalString(body.workflowScope),
+				domain: asOptionalString(body.domain),
+				expiresAt: asOptionalString(body.expiresAt),
+			});
+			await vaultStateStorage(api).saveSecretAuditEvent({
+				id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+				secretId: grant.secretId,
+				action: `grant:${grant.actions.join(",")}`,
+				targetDomain: grant.domainScope ?? grant.domain ?? null,
+				policyDecision: "allowed",
+				sessionId: "web",
+				grantId: grant.id,
+				packageName: grant.packageScope ?? null,
+				workflowId: grant.workflowScope ?? null,
+				site: grant.siteScope ?? null,
+				redaction: { rawSecretStored: false, output: "[REDACTED_SECRET]" },
+				timestamp: new Date().toISOString(),
+			});
+			json(response, 200, grant);
+			return;
+		}
+
+		const grantDeleteMatch = /^\/api\/vault\/grants\/([^/]+)$/u.exec(pathname);
+		if (request.method === "DELETE" && grantDeleteMatch) {
+			const grantId = decodeURIComponent(grantDeleteMatch[1] ?? "");
+			const { CredentialVault } = await import("../security/credential_vault");
+			const vault = new CredentialVault(optionalStateStorage(api));
+			const existingGrant = (await vault.listGrants()).find(
+				(grant) => grant.id === grantId,
+			);
+			await vault.revokeGrant(grantId);
+			if (existingGrant) {
+				await vaultStateStorage(api).saveSecretAuditEvent({
+					id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+					secretId: existingGrant.secretId,
+					action: "grant:revoke",
+					targetDomain:
+						existingGrant.domainScope ?? existingGrant.domain ?? null,
+					policyDecision: "confirmed",
+					sessionId: "web",
+					grantId,
+					packageName: existingGrant.packageScope ?? null,
+					workflowId: existingGrant.workflowScope ?? null,
+					site: existingGrant.siteScope ?? null,
+					redaction: { rawSecretStored: false, output: "[REDACTED_SECRET]" },
+					timestamp: new Date().toISOString(),
+				});
+			}
+			json(response, 200, { success: true });
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/vault/audit") {
+			const limit = Number(requestUrl.searchParams.get("limit") ?? "100");
+			json(
+				response,
+				200,
+				await vaultStateStorage(api).listSecretAuditEvents(
+					Number.isFinite(limit) ? limit : 100,
+				),
+			);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/network/rules") {
+			const { NetworkRuleEngine } = await import("../security/network_rules");
+			const engine = new NetworkRuleEngine(optionalStateStorage(api));
+			json(response, 200, await engine.listRules());
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/network/rules") {
+			const body = await readJsonBody(request);
+			const ruleType = asString(body.ruleType, "ruleType");
+			if (
+				ruleType !== "allowlist" &&
+				ruleType !== "denylist" &&
+				ruleType !== "tracker"
+			) {
+				json(response, 400, { success: false, error: "Invalid ruleType." });
+				return;
+			}
+			const { NetworkRuleEngine } = await import("../security/network_rules");
+			const engine = new NetworkRuleEngine(optionalStateStorage(api));
+			const rule = await engine.addRule(
+				asString(body.pattern, "pattern"),
+				ruleType,
+				asOptionalStringArray(body.resourceTypes) as never,
+			);
+			json(response, 200, rule);
+			return;
+		}
+
+		const networkRuleDeleteMatch = /^\/api\/network\/rules\/([^/]+)$/u.exec(
+			pathname,
+		);
+		if (request.method === "DELETE" && networkRuleDeleteMatch) {
+			const { NetworkRuleEngine } = await import("../security/network_rules");
+			const engine = new NetworkRuleEngine(optionalStateStorage(api));
+			const removed = await engine.removeRule(
+				decodeURIComponent(networkRuleDeleteMatch[1] ?? ""),
+			);
+			json(response, 200, { removed });
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/network/blocked") {
+			const entries = api.debug
+				.network({
+					sessionId: requestUrl.searchParams.get("sessionId") || undefined,
+				})
+				.filter((entry) => {
+					const status = (entry as { status?: number | string }).status;
+					const errorText = String((entry as { error?: unknown }).error ?? "");
+					return status === 0 || /blocked|abort|deny/iu.test(errorText);
+				});
+			json(response, 200, entries);
+			return;
+		}
+
+		// ── Knowledge Backends ─────────────────────────────────────────
+		if (request.method === "GET" && pathname === "/api/knowledge/backends") {
+			const { getKnowledgeBackendCatalog, createKnowledgeBackend } =
+				await import("../knowledge/backends");
+			const catalog = getKnowledgeBackendCatalog();
+			const healthChecks = await Promise.all(
+				catalog.map(async (entry) => {
+					const backend = createKnowledgeBackend({ type: entry.type });
+					const health = await backend.health();
+					return {
+						type: entry.type,
+						label: entry.label,
+						default: entry.default,
+						remote: entry.remote,
+						status: entry.status,
+						health,
+					};
+				}),
+			);
+			json(response, 200, { catalog: healthChecks });
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname === "/api/knowledge/backends/health"
+		) {
+			const body = await readJsonBody(request);
+			const { createKnowledgeBackend } = await import("../knowledge/backends");
+			const backend = createKnowledgeBackend({
+				type: asString(body.type, "type") as
+					| "local-markdown"
+					| "qdrant"
+					| "pageindex",
+				endpoint: asOptionalString(body.endpoint),
+				apiKey: asOptionalString(body.apiKey),
+				collection: asOptionalString(body.collection),
+			});
+			const health = await backend.health();
+			json(response, health.ok ? 200 : 503, health);
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/knowledge/search") {
+			const body = await readJsonBody(request);
+			const { createKnowledgeBackend } = await import("../knowledge/backends");
+			const backend = createKnowledgeBackend({
+				type: (asOptionalString(body.type) ?? "local-markdown") as
+					| "local-markdown"
+					| "qdrant"
+					| "pageindex",
+				endpoint: asOptionalString(body.endpoint),
+				apiKey: asOptionalString(body.apiKey),
+				collection: asOptionalString(body.collection),
+			});
+			const results = await backend.search({
+				search: asOptionalString(body.query),
+				domain: asOptionalString(body.domain),
+				tags: asOptionalStringArray(body.tags) as string[] | undefined,
+			});
+			json(response, 200, { results });
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/knowledge/rank") {
+			const body = await readJsonBody(request);
+			const { createKnowledgeBackend } = await import("../knowledge/backends");
+			const backend = createKnowledgeBackend({
+				type: (asOptionalString(body.type) ?? "local-markdown") as
+					| "local-markdown"
+					| "qdrant"
+					| "pageindex",
+				endpoint: asOptionalString(body.endpoint),
+				apiKey: asOptionalString(body.apiKey),
+				collection: asOptionalString(body.collection),
+			});
+			const ranked = await backend.rankEntries({
+				domain: asOptionalString(body.domain),
+				query: asString(body.query, "query"),
+				entryType: asOptionalString(body.entryType) as never,
+				limit: Number.isFinite(Number(body.limit))
+					? Number(body.limit)
+					: undefined,
+			});
+			json(response, 200, { ranked });
 			return;
 		}
 
@@ -575,6 +939,40 @@ export function createWebAppServer(
 			return;
 		}
 
+		// ── Services / optional .localhost proxy ─────────────────────────
+		if (request.method === "GET" && pathname === "/api/services") {
+			const result = api.service.list();
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/services/proxy") {
+			const result = api.service.proxy.status();
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/services/proxy/start") {
+			const body = await readJsonBody(request);
+			const result = await api.service.proxy.start({
+				port: body.port === undefined ? undefined : Number(body.port),
+				allowRemote: body.allowRemote === true,
+				https: body.https === true,
+				certPath: typeof body.certPath === "string" ? body.certPath : undefined,
+				keyPath: typeof body.keyPath === "string" ? body.keyPath : undefined,
+				localCa: body.localCa === true,
+				caDir: typeof body.caDir === "string" ? body.caDir : undefined,
+			});
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/services/proxy/stop") {
+			const result = await api.service.proxy.stop();
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
 		// ── Config ───────────────────────────────────────────────────────
 		if (request.method === "GET" && pathname === "/api/config") {
 			json(response, 200, api.config.list());
@@ -584,20 +982,101 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/config/modelProvider") {
 			const body = await readJsonBody(request);
 			const { setUserConfigValue } = await import("../shared/config");
-			setUserConfigValue("modelProvider", body.modelProvider);
-			setUserConfigValue("modelEndpoint", body.modelEndpoint);
-			setUserConfigValue("modelApiKey", body.modelKey);
-			setUserConfigValue("modelName", body.modelName);
-			json(response, 200, { success: true });
+			const saved = [
+				setUserConfigValue("modelProvider", body.modelProvider),
+				setUserConfigValue("modelEndpoint", body.modelEndpoint),
+				setUserConfigValue("modelApiKey", body.modelKey),
+				setUserConfigValue("modelName", body.modelName),
+			];
+			json(response, 200, { success: true, saved });
 			return;
 		}
 
 		if (request.method === "POST" && pathname === "/api/config/localApi") {
 			const body = await readJsonBody(request);
+			const token = asOptionalString(body.token);
+			if (!token) {
+				json(response, 400, { success: false, error: "token is required" });
+				return;
+			}
 			const { startLocalApi } = await import("../model_router");
-			const { server, url, token } = startLocalApi({ port: Number(body.port) || 11435, allowRemote: body.allowRemote === true });
-			// Store the server for cleanup
-			json(response, 200, { success: true, url, token });
+			const { server, url } = await startLocalApi({
+				port: body.port === undefined ? 11435 : Number(body.port),
+				allowRemote: body.allowRemote === true,
+				token,
+			});
+			localApiServers.add(server);
+			server.once("close", () => localApiServers.delete(server));
+			json(response, 200, { success: true, url, tokenProvided: true });
+			return;
+		}
+
+		// ── Record / Replay Drafting ─────────────────────────────────────
+		if (request.method === "POST" && pathname === "/api/recordings/start") {
+			const body = await readJsonBody(request);
+			const { getRecorder } = await import("../observability/recorder");
+			const session = getRecorder().start(
+				asString(body.name, "name"),
+				typeof body.domain === "string" ? body.domain : undefined,
+			);
+			json(response, 200, { success: true, data: session });
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/recordings/actions") {
+			const body = await readJsonBody(request);
+			const { getRecorder } = await import("../observability/recorder");
+			const action = getRecorder().record(
+				asString(
+					body.kind,
+					"kind",
+				) as import("../observability/recorder").RecordedActionKind,
+				isRecord(body.params) ? body.params : {},
+				isRecord(body.result)
+					? (body.result as unknown as import("../shared/action_result").ActionResult)
+					: undefined,
+			);
+			json(response, 200, { success: true, data: action });
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/recordings/stop") {
+			const { getRecorder } = await import("../observability/recorder");
+			const session = getRecorder().stop();
+			json(response, session ? 200 : 404, {
+				success: Boolean(session),
+				data: session,
+				...(session ? {} : { error: "No active recording session" }),
+			});
+			return;
+		}
+
+		const recordingDraftMatch = /^\/api\/recordings\/([^/]+)\/draft$/u.exec(
+			pathname,
+		);
+		if (request.method === "GET" && recordingDraftMatch) {
+			const id = decodeURIComponent(recordingDraftMatch[1] ?? "");
+			const {
+				convertRecordingToPackage,
+				convertRecordingToWorkflow,
+				getRecorder,
+			} = await import("../observability/recorder");
+			const session = getRecorder().getSession(id);
+			if (!session) {
+				json(response, 404, {
+					success: false,
+					error: `Recording not found: ${id}`,
+				});
+				return;
+			}
+			json(response, 200, {
+				success: true,
+				data: {
+					session,
+					workflow: convertRecordingToWorkflow(session),
+					package: convertRecordingToPackage(session),
+				},
+			});
 			return;
 		}
 
@@ -685,6 +1164,137 @@ export function createWebAppServer(
 					sessionId: requestUrl.searchParams.get("sessionId") || undefined,
 				}),
 			);
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/debug/visual-diff") {
+			const body = await readJsonBody(request);
+			const beforePath = asString(body.beforePath, "beforePath");
+			const afterPath = asString(body.afterPath, "afterPath");
+			const { isSafeArtifactPath } = await import("../shared/paths");
+			if (!isSafeArtifactPath(beforePath) || !isSafeArtifactPath(afterPath)) {
+				json(response, 400, {
+					success: false,
+					error:
+						"beforePath and afterPath must be under Browser Control data home",
+				});
+				return;
+			}
+			const { computePixelDiff } = await import("../observability/visual_diff");
+			const result = computePixelDiff(beforePath, afterPath);
+			json(response, result ? 200 : 400, {
+				success: Boolean(result),
+				data: result,
+				...(result ? {} : { error: "Unable to compute visual diff" }),
+			});
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/debug/dom-diff") {
+			const body = await readJsonBody(request);
+			const { computeDomDiff } = await import("../observability/visual_diff");
+			json(
+				response,
+				200,
+				computeDomDiff(
+					Array.isArray(body.beforeNodes) ? body.beforeNodes : [],
+					Array.isArray(body.afterNodes) ? body.afterNodes : [],
+				),
+			);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/debug/replays") {
+			const { convertRecordingToReplayView, getRecorder } = await import(
+				"../observability/recorder"
+			);
+			const { buildReplayView } = await import("../observability/visual_diff");
+			const workflowRuns = api.workflow.runs();
+			const workflowViews = workflowRuns.success
+				? (workflowRuns.data ?? []).map((run) =>
+						buildReplayView({
+							id: run.id,
+							status: run.status,
+							startedAt: run.startedAt,
+							completedAt: run.completedAt,
+							nodeResults: Object.fromEntries(
+								Object.entries(run.nodeResults ?? {}).map(
+									([nodeId, result]) => [
+										nodeId,
+										{
+											...result,
+											kind: result.status,
+											input: {},
+										},
+									],
+								),
+							),
+						}),
+					)
+				: [];
+			const recordingViews = getRecorder()
+				.listSessions()
+				.map(convertRecordingToReplayView);
+			json(
+				response,
+				200,
+				[...workflowViews, ...recordingViews].sort((a, b) =>
+					b.startedAt.localeCompare(a.startedAt),
+				),
+			);
+			return;
+		}
+
+		const replayExecuteMatch =
+			/^\/api\/debug\/replays\/([^/]+)\/execute$/u.exec(pathname);
+		if (request.method === "POST" && replayExecuteMatch) {
+			const replayId = decodeURIComponent(replayExecuteMatch[1] ?? "");
+			const { convertRecordingToWorkflow, getRecorder } = await import(
+				"../observability/recorder"
+			);
+			const { buildReplayView } = await import("../observability/visual_diff");
+			const session = getRecorder().getSession(replayId);
+			if (!session) {
+				json(response, 404, {
+					success: false,
+					error: "Replay recording not found",
+				});
+				return;
+			}
+			const workflow = convertRecordingToWorkflow(session);
+			const result = await api.workflow.run(JSON.stringify(workflow));
+			if (!result.success) {
+				json(response, 400, {
+					success: false,
+					error: result.error ?? "Replay execution failed",
+					policyDecision: result.policyDecision,
+				});
+				return;
+			}
+			const run = result.data as import("../workflows/types").WorkflowRun;
+			json(response, 200, {
+				success: true,
+				data: buildReplayView({
+					id: run.id,
+					status: run.status,
+					startedAt: run.startedAt,
+					completedAt: run.completedAt,
+					nodeResults: Object.fromEntries(
+						Object.entries(run.nodeResults ?? {}).map(
+							([nodeId, nodeResult]) => [
+								nodeId,
+								{
+									...nodeResult,
+									kind: nodeResult.status,
+									input:
+										workflow.nodes.find((node) => node.id === nodeId)?.input ??
+										{},
+								},
+							],
+						),
+					),
+				}),
+			});
 			return;
 		}
 
@@ -795,9 +1405,39 @@ export function createWebAppServer(
 
 		if (request.method === "GET" && pathname === "/api/audit") {
 			const { getDefaultAuditLogger } = await import("../policy/audit");
+			const { filterAuditEntries } = await import(
+				"../observability/visual_diff"
+			);
 			const logger = getDefaultAuditLogger();
-			const entries = logger?.getAll(100) ?? [];
-			json(response, 200, entries);
+			const entries =
+				logger?.getAll(Number(requestUrl.searchParams.get("limit")) || 100) ??
+				[];
+			const viewEntries = entries.map((entry, index) => ({
+				id: `${entry.timestamp}-${index}`,
+				action: entry.step?.action ?? "unknown",
+				sessionId: entry.sessionId,
+				policyDecision: entry.decision,
+				risk: entry.risk,
+				details: JSON.stringify({
+					reason: entry.reason,
+					profile: entry.profile,
+					step: entry.step,
+					matchedRule: entry.matchedRule,
+				}),
+				timestamp: entry.timestamp,
+			}));
+			json(
+				response,
+				200,
+				filterAuditEntries(viewEntries, {
+					sessionId: requestUrl.searchParams.get("sessionId") || undefined,
+					workflowId: requestUrl.searchParams.get("workflowId") || undefined,
+					packageName: requestUrl.searchParams.get("packageName") || undefined,
+					action: requestUrl.searchParams.get("action") || undefined,
+					risk: requestUrl.searchParams.get("risk") || undefined,
+					limit: Number(requestUrl.searchParams.get("limit")) || undefined,
+				}),
+			);
 			return;
 		}
 
@@ -852,23 +1492,30 @@ export function createWebAppServer(
 			return;
 		}
 
-		const packageReviewMatch = /^\/api\/packages\/([^/]+)\/review$/u.exec(pathname);
+		const packageReviewMatch = /^\/api\/packages\/([^/]+)\/review$/u.exec(
+			pathname,
+		);
 		if (request.method === "POST" && packageReviewMatch) {
 			const name = decodeURIComponent(packageReviewMatch[1] ?? "");
 			const body = await readJsonBody(request);
-			const status = asOptionalString(body.status) || "unreviewed";
-			try {
-				const { PackageRegistry } = await import("../packages/registry");
-				const registry = new PackageRegistry();
-				const pkg = registry.get(name);
-				if (!pkg) { json(response, 404, { error: "Package not found" }); return; }
-				pkg.trustStatus = status as "unreviewed" | "pending" | "approved" | "rejected";
-				if (status === "approved" || status === "rejected") {
-					pkg.signer = pkg.signer || "manual-review";
-				}
-				registry.saveRegistry(registry.list());
-				json(response, 200, { success: true, name, trustStatus: status });
-			} catch (e) { json(response, 500, { error: String(e) }); }
+			const status = (asOptionalString(body.status) || "unreviewed") as
+				| "unreviewed"
+				| "pending"
+				| "approved"
+				| "rejected";
+			const reviewedBy = asOptionalString(body.reviewedBy) || "web-user";
+			const reason = asOptionalString(body.reason);
+			const result = api.package.review(name, status, reviewedBy, reason);
+			json(response, result.success ? 200 : 403, result);
+			return;
+		}
+
+		const packageReviewHistoryMatch =
+			/^\/api\/packages\/([^/]+)\/review-history$/u.exec(pathname);
+		if (request.method === "GET" && packageReviewHistoryMatch) {
+			const name = decodeURIComponent(packageReviewHistoryMatch[1] ?? "");
+			const result = api.package.reviewHistory(name);
+			json(response, result.success ? 200 : 403, { data: result.data ?? [] });
 			return;
 		}
 
@@ -877,6 +1524,13 @@ export function createWebAppServer(
 			const name = decodeURIComponent(packageEvalMatch[1] ?? "");
 			const result = await api.package.eval(name);
 			json(response, result.success ? 200 : 403, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/packages/eval-history") {
+			const pkgName = requestUrl.searchParams.get("package");
+			const result = api.package.evalHistory(pkgName ?? undefined);
+			json(response, result.success ? 200 : 403, { data: result.data ?? [] });
 			return;
 		}
 
@@ -1188,6 +1842,196 @@ export function createWebAppServer(
 			return;
 		}
 
+		// Workflow v2 routes
+		if (request.method === "POST" && pathname === "/api/workflows/run") {
+			const body = await readJsonBody(request);
+			const graph =
+				typeof body.graph === "string"
+					? body.graph
+					: JSON.stringify(body.graph ?? {});
+			const result = await api.workflow.run(graph);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "GET" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			pathname.endsWith("/events")
+		) {
+			const runId = pathname.slice(
+				"/api/workflows/runs/".length,
+				-"/events".length,
+			);
+			const result = api.workflow.events(runId);
+			json(response, result.success ? 200 : 404, result);
+			return;
+		}
+
+		if (
+			request.method === "GET" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			!pathname.includes("/state") &&
+			!pathname.includes("/events")
+		) {
+			const runId = decodeURIComponent(
+				pathname.slice("/api/workflows/runs/".length),
+			);
+			const result = api.workflow.status(runId);
+			json(response, result.success ? 200 : 404, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			pathname.endsWith("/state")
+		) {
+			const runId = pathname.slice(
+				"/api/workflows/runs/".length,
+				-"/state".length,
+			);
+			const body = await readJsonBody(request);
+			const result = api.workflow.editState(
+				runId,
+				String(body.key),
+				body.value as string | number | boolean,
+			);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			pathname.endsWith("/approve")
+		) {
+			const runId = pathname.slice(
+				"/api/workflows/runs/".length,
+				-"/approve".length,
+			);
+			const body = await readJsonBody(request);
+			const result = api.workflow.approve(
+				runId,
+				asString(body.nodeId, "nodeId"),
+				asOptionalString(body.approvedBy) ?? "user",
+			);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			pathname.endsWith("/resume")
+		) {
+			const runId = pathname.slice(
+				"/api/workflows/runs/".length,
+				-"/resume".length,
+			);
+			const result = await api.workflow.resume(runId);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/workflows/runs/") &&
+			pathname.endsWith("/cancel")
+		) {
+			const runId = pathname.slice(
+				"/api/workflows/runs/".length,
+				-"/cancel".length,
+			);
+			const result = api.workflow.cancel(runId);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/harness/generate") {
+			const body = await readJsonBody(request);
+			const result = await api.harness.generate({
+				id: asString(body.id, "id"),
+				purpose: asString(body.purpose, "purpose"),
+				files: Array.isArray(body.files)
+					? body.files
+					: [{ path: "helper.js", content: "" }],
+				taskTags: asOptionalStringArray(body.taskTags),
+				failureTypes: asOptionalStringArray(body.failureTypes),
+				site: asOptionalString(body.site),
+				domains: asOptionalStringArray(body.domains),
+				usage: asOptionalString(body.usage),
+				version: asOptionalString(body.version),
+				testCommand: asOptionalString(body.testCommand),
+				activate: body.activate === true,
+			});
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/harness") {
+			const result = api.harness.list();
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (request.method === "GET" && pathname === "/api/harness/find") {
+			const result = api.harness.find({
+				domain: requestUrl.searchParams.get("domain") ?? undefined,
+				taskTag: requestUrl.searchParams.get("taskTag") ?? undefined,
+				failureType: requestUrl.searchParams.get("failureType") ?? undefined,
+			});
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "GET" &&
+			pathname.startsWith("/api/harness/helpers/") &&
+			pathname.endsWith("/validate")
+		) {
+			const helperId = decodeURIComponent(
+				pathname.slice("/api/harness/helpers/".length, -"/validate".length),
+			);
+			const result = api.harness.validate(helperId);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/harness/helpers/") &&
+			pathname.endsWith("/execute")
+		) {
+			const helperId = decodeURIComponent(
+				pathname.slice("/api/harness/helpers/".length, -"/execute".length),
+			);
+			const body = await readJsonBody(request);
+			const result = await api.harness.execute(
+				helperId,
+				(body.input as Record<string, unknown> | undefined) ?? {},
+			);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
+		if (
+			request.method === "POST" &&
+			pathname.startsWith("/api/harness/helpers/") &&
+			pathname.endsWith("/rollback")
+		) {
+			const helperId = decodeURIComponent(
+				pathname.slice("/api/harness/helpers/".length, -"/rollback".length),
+			);
+			const body = await readJsonBody(request);
+			const result = api.harness.rollback(
+				helperId,
+				asString(body.version, "version"),
+			);
+			json(response, result.success ? 200 : 400, result);
+			return;
+		}
+
 		if (request.method === "GET" && pathname === "/api/saved-automations") {
 			const state = optionalStateStorage(api);
 			if (state) {
@@ -1321,6 +2165,30 @@ export function createWebAppServer(
 		}
 
 		if (
+			request.method === "GET" &&
+			pathname === "/api/browser/providers/catalog"
+		) {
+			const result = api.provider.catalog();
+			if (!result.success) {
+				json(response, 403, result);
+				return;
+			}
+			json(response, 200, result);
+			return;
+		}
+
+		if (
+			request.method === "GET" &&
+			pathname === "/api/browser/providers/health"
+		) {
+			const result = await api.provider.health(
+				requestUrl.searchParams.get("name") || undefined,
+			);
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
+		if (
 			request.method === "POST" &&
 			pathname === "/api/browser/providers/use"
 		) {
@@ -1333,10 +2201,25 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/terminal/sessions") {
 			const body = await readJsonBody(request);
+			const cols = asOptionalNumber(body.cols);
+			const rows = asOptionalNumber(body.rows);
+			if (cols !== undefined || rows !== undefined) {
+				const validation = validateResize(cols, rows);
+				if (!validation.valid) {
+					json(response, 400, {
+						success: false,
+						code: "bad_request",
+						error: validation.error,
+					});
+					return;
+				}
+			}
 			const result = await api.terminal.open({
 				shell: asOptionalString(body.shell),
 				cwd: asOptionalString(body.cwd),
 				name: asOptionalString(body.name),
+				cols,
+				rows,
 			});
 			events.emit("terminal.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
@@ -1345,18 +2228,20 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/terminal/exec") {
 			const body = await readJsonBody(request);
-			const result = await api.terminal.exec({
+			const params = {
 				command: asString(body.command, "command"),
 				sessionId: asOptionalString(body.sessionId),
 				timeoutMs: asOptionalNumber(body.timeoutMs),
-			});
+			};
+			const result = await api.terminal.exec(params);
+			recordReplayAction("terminal-exec", params, result);
 			events.emit("terminal.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
 		}
 
 		const termMatch =
-			/^\/api\/terminal\/sessions\/([^/]+)\/(input|read|snapshot|interrupt|status|resize)$/u.exec(
+			/^\/api\/terminal\/sessions\/([^/]+)\/(input|read|snapshot|render|interrupt|status|resize)$/u.exec(
 				pathname,
 			);
 		if (termMatch) {
@@ -1365,10 +2250,13 @@ export function createWebAppServer(
 			let result: unknown;
 			if (request.method === "POST" && action === "input") {
 				const body = await readJsonBody(request);
-				result = await api.terminal.type({
+				const params = {
 					sessionId,
 					text: asString(body.text, "text"),
-				});
+					submit: body.submit !== false,
+				};
+				result = await api.terminal.type(params);
+				recordReplayAction("terminal-type", params, result as never);
 			} else if (request.method === "POST" && action === "resize") {
 				const body = await readJsonBody(request);
 				const cols = Number(body.cols);
@@ -1395,6 +2283,19 @@ export function createWebAppServer(
 				});
 			} else if (request.method === "GET" && action === "snapshot") {
 				result = await api.terminal.snapshot({ sessionId });
+			} else if (request.method === "GET" && action === "render") {
+				const snapshotResult = await api.terminal.snapshot({ sessionId });
+				result =
+					snapshotResult.success &&
+					snapshotResult.data &&
+					!Array.isArray(snapshotResult.data)
+						? {
+								...snapshotResult,
+								data: buildTerminalView(
+									snapshotResult.data as TerminalSnapshot,
+								),
+							}
+						: snapshotResult;
 			} else if (request.method === "POST" && action === "interrupt") {
 				result = await api.terminal.interrupt({ sessionId });
 			} else if (request.method === "GET" && action === "status") {
@@ -1431,10 +2332,12 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/open") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.open({
+			const params = {
 				url: asString(body.url, "url"),
 				waitUntil: body.waitUntil as never,
-			});
+			};
+			const result = await api.browser.open(params);
+			recordReplayAction("browser-open", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1442,10 +2345,12 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/snapshot") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.snapshot({
+			const params = {
 				rootSelector: asOptionalString(body.rootSelector),
 				boxes: body.boxes === true,
-			});
+			};
+			const result = await api.browser.snapshot(params);
+			recordReplayAction("browser-snapshot", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1453,12 +2358,14 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/screenshot") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.screenshot({
+			const params = {
 				outputPath: asOptionalString(body.outputPath),
 				fullPage: body.fullPage === true,
 				target: asOptionalString(body.target),
 				annotate: body.annotate === true,
-			});
+			};
+			const result = await api.browser.screenshot(params);
+			recordReplayAction("browser-screenshot", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1473,11 +2380,13 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/click") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.click({
+			const params = {
 				target: asString(body.target, "target"),
 				timeoutMs: asOptionalNumber(body.timeoutMs),
 				force: body.force === true,
-			});
+			};
+			const result = await api.browser.click(params);
+			recordReplayAction("browser-click", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1485,12 +2394,14 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/fill") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.fill({
+			const params = {
 				target: asString(body.target, "target"),
 				text: asString(body.text, "text"),
 				timeoutMs: asOptionalNumber(body.timeoutMs),
 				commit: body.commit === true,
-			});
+			};
+			const result = await api.browser.fill(params);
+			recordReplayAction("browser-fill", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1498,9 +2409,11 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/browser/press") {
 			const body = await readJsonBody(request);
-			const result = await api.browser.press({
+			const params = {
 				key: asString(body.key, "key"),
-			});
+			};
+			const result = await api.browser.press(params);
+			recordReplayAction("browser-press", params, result);
 			events.emit("browser.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1566,10 +2479,12 @@ export function createWebAppServer(
 		}
 
 		if (request.method === "GET" && pathname === "/api/fs/read") {
-			const result = await api.fs.read({
+			const params = {
 				path: requestUrl.searchParams.get("path") || "",
 				maxBytes: Number(requestUrl.searchParams.get("maxBytes")) || undefined,
-			});
+			};
+			const result = await api.fs.read(params);
+			recordReplayAction("fs-read", params, result);
 			events.emit("filesystem.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1577,11 +2492,13 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/fs/write") {
 			const body = await readJsonBody(request);
-			const result = await api.fs.write({
+			const params = {
 				path: asString(body.path, "path"),
 				content: asString(body.content, "content"),
 				createDirs: body.createDirs !== false,
-			});
+			};
+			const result = await api.fs.write(params);
+			recordReplayAction("fs-write", params, result);
 			events.emit("filesystem.action", formatActionResult(result));
 			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
@@ -1886,6 +2803,12 @@ export function createWebAppServer(
 		async close(): Promise<void> {
 			termSub.dispose();
 			await events.close();
+			for (const localApiServer of localApiServers) {
+				await new Promise<void>((resolve) => {
+					localApiServer.close(() => resolve());
+				});
+			}
+			localApiServers.clear();
 			api.close();
 			if (!server.listening) return;
 			if ("closeAllConnections" in server) {

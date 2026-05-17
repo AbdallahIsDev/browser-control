@@ -27,6 +27,7 @@ import type {
 	TerminalSessionConfig,
 	TerminalSessionStatus,
 	TerminalSnapshot,
+	TerminalWriteOptions,
 } from "./types";
 
 const log = logger.withComponent("terminal");
@@ -148,7 +149,7 @@ export class PtyTerminalSession implements ITerminalSession {
 			if (!this._runningCommand) {
 				this._publicOutputBuffer = appendBoundedOutput(
 					this._publicOutputBuffer,
-					cleanPtySessionOutput(stripAnsi(data)),
+					cleanPtySessionOutput(data),
 				);
 			}
 			this._lastActivityAt = new Date().toISOString();
@@ -338,10 +339,10 @@ export class PtyTerminalSession implements ITerminalSession {
 		};
 	}
 
-	async write(data: string): Promise<void> {
+	async write(data: string, options: TerminalWriteOptions = {}): Promise<void> {
 		this.assertNotClosed();
 		if (this._process) {
-			this._process.write(`${data}\r`);
+			this._process.write(options.submit === false ? data : `${data}\r`);
 			this._lastActivityAt = new Date().toISOString();
 		}
 	}
@@ -528,7 +529,7 @@ export class PtyTerminalSession implements ITerminalSession {
 	/** Inject output into the buffer (used for buffer restoration on resume). */
 	injectOutput(output: string): void {
 		this._outputBuffer = output;
-		this._publicOutputBuffer = cleanPtySessionOutput(stripAnsi(output));
+		this._publicOutputBuffer = cleanPtySessionOutput(output);
 	}
 
 	/**

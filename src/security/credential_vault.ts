@@ -1,19 +1,21 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
-import { getDataHome, getSecretsDir } from "../shared/paths";
-import { logger } from "../shared/logger";
 import { redactString } from "../observability/redaction";
+import type { PolicyDecision } from "../policy/types";
 import {
 	type StateStorage,
+	type StoredSecretAuditEvent,
+	type StoredSecretGrant,
 	getStateStorage,
-	resetStateStorage,
 } from "../state/index";
+import { logger } from "../shared/logger";
+import {
+	type CredentialProtectionProviderStatus,
+	type CredentialProtectionService,
+	createCredentialProtectionService,
+} from "./credential_provider";
 
 const log = logger.withComponent("credential-vault");
-
-// ── Types ───────────────────────────────────────────────────────────
+const REDACTED_SECRET = "[REDACTED_SECRET]";
 
 export type SecretScope = "site" | "package" | "workflow";
 
@@ -23,6 +25,14 @@ export type SecretAction =
 	| "paste"
 	| "use-as-header"
 	| "use-as-form-value";
+
+const SECRET_ACTIONS = new Set<SecretAction>([
+	"reveal",
+	"type",
+	"paste",
+	"use-as-header",
+	"use-as-form-value",
+]);
 
 export interface SecretReference {
 	scope: SecretScope;
@@ -34,11 +44,52 @@ export interface SecretGrant {
 	id: string;
 	secretId: string;
 	action: SecretAction;
+	actions: SecretAction[];
+	siteScope?: string;
+	domainScope?: string;
+	packageScope?: string;
+	workflowScope?: string;
 	domain?: string;
 	expiresAt?: string;
 	revoked: boolean;
+	revokedAt?: string;
 	createdAt: string;
 }
+
+export interface SecretGrantInput {
+	action?: SecretAction;
+	actions?: SecretAction[];
+	siteScope?: string;
+	domainScope?: string;
+	packageScope?: string;
+	workflowScope?: string;
+	domain?: string;
+	expiresAt?: string;
+}
+
+export interface SecretUseContext {
+	action: SecretAction;
+	targetDomain?: string;
+	site?: string;
+	packageName?: string;
+	workflowId?: string;
+	sessionId?: string;
+	policyDecision?: PolicyDecision | "allow" | "deny";
+}
+
+export type SecretUseResolution =
+	| {
+			success: true;
+			id: string;
+			value: string;
+			grantId: string;
+			redactedValue: typeof REDACTED_SECRET;
+	  }
+	| {
+			success: false;
+			id: string;
+			error: string;
+	  };
 
 export interface StoredSecret {
 	id: string;
@@ -57,65 +108,24 @@ export interface SecretEntry {
 	createdAt: string;
 	updatedAt: string;
 	hasValue: boolean;
+	provider?: string;
 }
 
-// ── Encryption ──────────────────────────────────────────────────────
-
-function deriveKey(password: string, salt: Buffer): Buffer {
-	return crypto.pbkdf2Sync(password, salt, 100_000, 32, "sha256");
-}
-
-function machineIdentity(): string {
-	const hostname = os.hostname();
-	const homedir = os.homedir();
-	const userInfo = os.userInfo();
-	return `${hostname}:${userInfo.username}:${homedir}`;
-}
-
-function getVaultKeyPath(): string {
-	return path.join(getSecretsDir(), ".vault-key");
-}
-
-function ensureVaultKey(): Buffer {
-	const keyPath = getVaultKeyPath();
-	if (fs.existsSync(keyPath)) {
-		return fs.readFileSync(keyPath);
+function normalizeEncryptedValue(value: unknown): Buffer {
+	if (Buffer.isBuffer(value)) return value;
+	if (
+		typeof value === "object" &&
+		value !== null &&
+		(value as { type?: unknown }).type === "Buffer" &&
+		Array.isArray((value as { data?: unknown }).data)
+	) {
+		return Buffer.from((value as { data: number[] }).data);
 	}
-	fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
-	const salt = crypto.randomBytes(32);
-	const identity = machineIdentity();
-	const key = crypto.pbkdf2Sync(identity, salt, 100_000, 32, "sha256");
-	const storedKey = Buffer.concat([salt, key]);
-	fs.writeFileSync(keyPath, storedKey, { mode: 0o600 });
-	if (process.platform !== "win32") {
-		fs.chmodSync(keyPath, 0o600);
-	}
-	return key;
+	return Buffer.alloc(0);
 }
-
-function encrypt(plaintext: string): Buffer {
-	const key = ensureVaultKey();
-	const iv = crypto.randomBytes(16);
-	const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-	const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-	const authTag = cipher.getAuthTag();
-	return Buffer.concat([iv, authTag, encrypted]);
-}
-
-function decrypt(ciphertext: Buffer): string {
-	const key = ensureVaultKey();
-	const iv = ciphertext.subarray(0, 16);
-	const authTag = ciphertext.subarray(16, 32);
-	const encrypted = ciphertext.subarray(32);
-	const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-	decipher.setAuthTag(authTag);
-	return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
-}
-
-// ── Secret Reference Parsing ────────────────────────────────────────
 
 export function parseSecretRef(ref: string): SecretReference | null {
-	const match = /^secret:\/\/(site|package|workflow)\/([^/]+)\/(.+)$/.exec(ref);
+	const match = /^secret:\/\/(site|package|workflow)\/([^/]+)\/(.+)$/u.exec(ref);
 	if (!match) return null;
 	return {
 		scope: match[1] as SecretScope,
@@ -128,13 +138,120 @@ export function formatSecretRef(ref: SecretReference): string {
 	return `secret://${ref.scope}/${encodeURIComponent(ref.scopeName)}/${encodeURIComponent(ref.secretName)}`;
 }
 
-// ── CredentialVault ─────────────────────────────────────────────────
+export function containsSecretRef(value: unknown): boolean {
+	if (typeof value === "string") return parseSecretRef(value) !== null;
+	if (Array.isArray(value)) return value.some(containsSecretRef);
+	if (typeof value === "object" && value !== null) {
+		return Object.values(value).some(containsSecretRef);
+	}
+	return false;
+}
+
+export function redactSecretRefs(value: string): string {
+	return value.replace(
+		/secret:\/\/(?:site|package|workflow)\/[^/\s]+\/[^\s"'<>]+/gu,
+		REDACTED_SECRET,
+	);
+}
+
+export function redactKnownSecretValues(
+	value: unknown,
+	secretValues: string[],
+): unknown {
+	const activeSecrets = secretValues.filter(Boolean);
+	if (activeSecrets.length === 0) return value;
+	if (typeof value === "string") {
+		let out = value;
+		for (const secret of activeSecrets) {
+			out = out.split(secret).join(REDACTED_SECRET);
+		}
+		return redactString(redactSecretRefs(out));
+	}
+	if (Array.isArray(value)) {
+		return value.map((item) => redactKnownSecretValues(item, activeSecrets));
+	}
+	if (typeof value === "object" && value !== null) {
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [
+				key,
+				redactKnownSecretValues(item, activeSecrets),
+			]),
+		);
+	}
+	return value;
+}
+
+function isSecretAction(action: unknown): action is SecretAction {
+	return typeof action === "string" && SECRET_ACTIONS.has(action as SecretAction);
+}
+
+function normalizeGrantActions(input: SecretGrantInput): SecretAction[] {
+	const raw = input.actions?.length ? input.actions : [input.action ?? "reveal"];
+	const actions = Array.from(new Set(raw)).filter(isSecretAction);
+	if (actions.length === 0) throw new Error("Grant requires at least one action");
+	return actions;
+}
+
+function normalizeHost(value?: string): string | undefined {
+	if (!value) return undefined;
+	const trimmed = value.trim().toLowerCase();
+	if (!trimmed) return undefined;
+	try {
+		return new URL(trimmed).hostname.toLowerCase();
+	} catch {
+		return trimmed.replace(/^\*\./u, "");
+	}
+}
+
+function domainMatches(scope: string | undefined, target: string | undefined): boolean {
+	const normalizedScope = normalizeHost(scope);
+	const normalizedTarget = normalizeHost(target);
+	if (!normalizedScope) return true;
+	if (!normalizedTarget) return false;
+	return (
+		normalizedTarget === normalizedScope ||
+		normalizedTarget.endsWith(`.${normalizedScope}`)
+	);
+}
+
+function scopeMatches(expected: string | undefined, actual: string | undefined): boolean {
+	if (!expected) return true;
+	if (!actual) return false;
+	return expected === actual;
+}
+
+function storedGrantToGrant(grant: StoredSecretGrant): SecretGrant {
+	const rawActions = Array.isArray(grant.actions) ? grant.actions : [grant.action];
+	const actions = rawActions.filter(isSecretAction);
+	const action = actions[0] ?? "reveal";
+	return {
+		id: grant.id,
+		secretId: grant.secretId,
+		action,
+		actions: actions.length > 0 ? actions : [action],
+		siteScope: grant.siteScope ?? undefined,
+		domainScope: grant.domainScope ?? grant.domain ?? undefined,
+		packageScope: grant.packageScope ?? undefined,
+		workflowScope: grant.workflowScope ?? undefined,
+		domain: grant.domain ?? undefined,
+		expiresAt: grant.expiresAt ?? undefined,
+		revoked: grant.revoked,
+		revokedAt: grant.revokedAt ?? undefined,
+		createdAt: grant.createdAt,
+	};
+}
 
 export class CredentialVault {
-	private storage: StateStorage;
+	private readonly storage: StateStorage;
+	private readonly protector: CredentialProtectionService;
 
-	constructor(storage?: StateStorage) {
+	constructor(storage?: StateStorage, protector?: CredentialProtectionService) {
 		this.storage = storage ?? getStateStorage();
+		this.protector = protector ?? createCredentialProtectionService();
+	}
+
+	providerStatus(): CredentialProtectionProviderStatus[] {
+		return this.protector.status();
 	}
 
 	async set(
@@ -147,17 +264,7 @@ export class CredentialVault {
 		const id = formatSecretRef(ref);
 		const now = new Date().toISOString();
 		const existing = await this.storage.getSecret(id);
-		const encrypted = encrypt(value);
-
-		const stored: StoredSecret & { encryptedValue: Buffer } = {
-			id,
-			scope,
-			scopeName,
-			secretName,
-			createdAt: existing?.createdAt ?? now,
-			updatedAt: now,
-			encryptedValue: encrypted,
-		};
+		const encrypted = this.protector.protect(value);
 
 		await this.storage.saveSecret({
 			id,
@@ -165,41 +272,50 @@ export class CredentialVault {
 			scopeName,
 			secretName,
 			encryptedValue: encrypted,
-			createdAt: stored.createdAt,
-			updatedAt: stored.updatedAt,
+			createdAt: existing?.createdAt ?? now,
+			updatedAt: now,
 		});
 
-		log.info(`Secret stored: ${id}`);
-		return stored;
+		log.info("Secret stored", { id });
+		return {
+			id,
+			scope,
+			scopeName,
+			secretName,
+			createdAt: existing?.createdAt ?? now,
+			updatedAt: now,
+		};
 	}
 
 	async getValue(ref: string): Promise<string | null> {
 		const stored = await this.storage.getSecret(ref);
 		if (!stored) return null;
 		try {
-			return decrypt(stored.encryptedValue);
+			return this.protector.unprotect(
+				normalizeEncryptedValue(stored.encryptedValue),
+			);
 		} catch {
-			log.error(`Failed to decrypt secret: ${ref}`);
+			log.error("Failed to decrypt secret", { id: ref });
 			return null;
 		}
 	}
 
 	async delete(ref: string): Promise<boolean> {
 		await this.storage.deleteSecret(ref);
-		log.info(`Secret deleted: ${ref}`);
+		log.info("Secret deleted", { id: ref });
 		return true;
 	}
 
 	async list(): Promise<SecretEntry[]> {
 		const stored = await this.storage.listSecrets();
-		return stored.map((s) => ({
-			id: s.id,
-			scope: s.scope,
-			scopeName: s.scopeName,
-			secretName: s.secretName,
-			createdAt: s.createdAt,
-			updatedAt: s.updatedAt,
-			hasValue: s.encryptedValue.length > 0,
+		return stored.map((secret) => ({
+			id: secret.id,
+			scope: secret.scope,
+			scopeName: secret.scopeName,
+			secretName: secret.secretName,
+			createdAt: secret.createdAt,
+			updatedAt: secret.updatedAt,
+			hasValue: normalizeEncryptedValue(secret.encryptedValue).length > 0,
 		}));
 	}
 
@@ -209,30 +325,46 @@ export class CredentialVault {
 		return { id: ref, value };
 	}
 
-	// ── Grants ──────────────────────────────────────────────────────
-
 	async grant(
 		secretRef: string,
-		action: SecretAction,
+		actionOrInput: SecretAction | SecretGrantInput,
 		domain?: string,
 		expiresAt?: string,
 	): Promise<SecretGrant> {
+		const input: SecretGrantInput =
+			typeof actionOrInput === "string"
+				? { action: actionOrInput, domain, domainScope: domain, expiresAt }
+				: actionOrInput;
+		const actions = normalizeGrantActions(input);
+		const now = new Date().toISOString();
 		const grant: SecretGrant = {
 			id: `grant-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
 			secretId: secretRef,
-			action,
-			domain: domain || undefined,
-			expiresAt,
+			action: actions[0],
+			actions,
+			siteScope: input.siteScope,
+			domainScope: input.domainScope ?? input.domain,
+			packageScope: input.packageScope,
+			workflowScope: input.workflowScope,
+			domain: input.domain ?? input.domainScope,
+			expiresAt: input.expiresAt,
 			revoked: false,
-			createdAt: new Date().toISOString(),
+			createdAt: now,
 		};
+
 		await this.storage.saveGrant({
 			id: grant.id,
 			secretId: grant.secretId,
 			action: grant.action,
+			actions: grant.actions,
 			domain: grant.domain ?? null,
+			siteScope: grant.siteScope ?? null,
+			domainScope: grant.domainScope ?? null,
+			packageScope: grant.packageScope ?? null,
+			workflowScope: grant.workflowScope ?? null,
 			expiresAt: grant.expiresAt ?? null,
 			revoked: false,
+			revokedAt: null,
 			createdAt: grant.createdAt,
 		});
 		return grant;
@@ -245,61 +377,126 @@ export class CredentialVault {
 
 	async listGrants(secretRef?: string): Promise<SecretGrant[]> {
 		const stored = await this.storage.listGrants(secretRef);
-		return stored.map((g) => ({
-			id: g.id,
-			secretId: g.secretId,
-			action: g.action as SecretAction,
-			domain: g.domain ?? undefined,
-			expiresAt: g.expiresAt ?? undefined,
-			revoked: g.revoked,
-			createdAt: g.createdAt,
-		}));
+		return stored.map(storedGrantToGrant);
 	}
 
 	checkGrant(
 		secretRef: string,
 		action: SecretAction,
 		grant: SecretGrant,
-		domain?: string,
+		contextOrDomain: Partial<SecretUseContext> | string = {},
 	): boolean {
+		const context: SecretUseContext =
+			typeof contextOrDomain === "string"
+				? { targetDomain: contextOrDomain, action }
+				: { ...contextOrDomain, action: contextOrDomain.action ?? action };
 		if (grant.revoked) return false;
 		if (grant.secretId !== secretRef) return false;
-		if (grant.action !== action) return false;
+		if (!grant.actions.includes(action)) return false;
 		if (grant.expiresAt && new Date(grant.expiresAt) < new Date()) return false;
-		if (grant.domain && domain && grant.domain !== domain) return false;
-		if (grant.domain && !domain) return false;
-		if (!grant.domain && domain) return true;
+		if (!domainMatches(grant.domainScope ?? grant.domain, context.targetDomain)) {
+			return false;
+		}
+		if (!domainMatches(grant.siteScope, context.site ?? context.targetDomain)) {
+			return false;
+		}
+		if (!scopeMatches(grant.packageScope, context.packageName)) return false;
+		if (!scopeMatches(grant.workflowScope, context.workflowId)) return false;
 		return true;
 	}
 
 	async isActionGranted(
 		secretRef: string,
 		action: SecretAction,
-		domain?: string,
+		contextOrDomain?: Partial<SecretUseContext> | string,
 	): Promise<boolean> {
 		const grants = await this.listGrants(secretRef);
-		return grants.some((g) => this.checkGrant(secretRef, action, g, domain));
+		return grants.some((grant) =>
+			this.checkGrant(secretRef, action, grant, contextOrDomain ?? {}),
+		);
+	}
+
+	async resolveForUse(
+		secretRef: string,
+		context: SecretUseContext,
+	): Promise<SecretUseResolution> {
+		const parsed = parseSecretRef(secretRef);
+		if (!parsed) {
+			return this.deny(secretRef, context, "Invalid secret reference");
+		}
+
+		const grants = await this.listGrants(secretRef);
+		const grant = grants.find((candidate) =>
+			this.checkGrant(secretRef, context.action, candidate, context),
+		);
+		if (!grant) {
+			return this.deny(secretRef, context, "No active grant permits secret use");
+		}
+
+		const value = await this.getValue(secretRef);
+		if (value === null) {
+			return this.deny(secretRef, context, "Secret is missing or unreadable");
+		}
+
+		await this.auditSecretUse(secretRef, context, "allow", grant.id);
+		return {
+			success: true,
+			id: secretRef,
+			value,
+			grantId: grant.id,
+			redactedValue: REDACTED_SECRET,
+		};
+	}
+
+	private async deny(
+		secretRef: string,
+		context: SecretUseContext,
+		error: string,
+	): Promise<SecretUseResolution> {
+		await this.auditSecretUse(secretRef, context, "deny", undefined, error);
+		return { success: false, id: secretRef, error };
+	}
+
+	private async auditSecretUse(
+		secretRef: string,
+		context: SecretUseContext,
+		policyDecision: "allow" | "deny",
+		grantId?: string,
+		deniedReason?: string,
+	): Promise<void> {
+		const event: StoredSecretAuditEvent = {
+			id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			secretId: secretRef,
+			action: context.action,
+			targetDomain: normalizeHost(context.targetDomain) ?? null,
+			policyDecision,
+			sessionId: context.sessionId ?? null,
+			timestamp: new Date().toISOString(),
+			grantId: grantId ?? null,
+			packageName: context.packageName ?? null,
+			workflowId: context.workflowId ?? null,
+			site: context.site ?? null,
+			deniedReason: deniedReason ?? null,
+			redaction: { rawSecretStored: false, output: REDACTED_SECRET },
+		};
+		await this.storage.saveSecretAuditEvent(event);
 	}
 
 	close(): void {
-		// StateStorage managed by getStateStorage singleton
+		// StateStorage is owned by the state singleton or API container.
 	}
 }
 
-// ── Singleton ───────────────────────────────────────────────────────
-
-let _defaultVault: CredentialVault | null = null;
+let defaultVault: CredentialVault | null = null;
 
 export function getCredentialVault(): CredentialVault {
-	if (!_defaultVault) {
-		_defaultVault = new CredentialVault();
-	}
-	return _defaultVault;
+	if (!defaultVault) defaultVault = new CredentialVault();
+	return defaultVault;
 }
 
 export function resetCredentialVault(): void {
-	if (_defaultVault) {
-		_defaultVault.close();
-		_defaultVault = null;
+	if (defaultVault) {
+		defaultVault.close();
+		defaultVault = null;
 	}
 }

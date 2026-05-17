@@ -4,6 +4,14 @@
 
 import crypto from "node:crypto";
 import {
+	containsSecretRef,
+	redactKnownSecretValues,
+	redactSecretRefs,
+	type SecretAction,
+	type SecretUseContext,
+	parseSecretRef,
+} from "../security/credential_vault";
+import {
 	type WorkflowGraph,
 	type WorkflowNode,
 	type WorkflowRun,
@@ -25,14 +33,30 @@ export interface WorkflowEventSink {
 	emit(event: WorkflowEvent): void;
 }
 
+export type WorkflowSecretResolver = (
+	secretRef: string,
+	action: SecretAction,
+	context: Omit<SecretUseContext, "action">,
+) => Promise<
+	| { success: true; id: string; value: string; grantId?: string }
+	| { success: false; id?: string; error: string }
+>;
+
 export interface WorkflowExecutionContext {
 	terminalExec?: (command: string, timeoutMs?: number) => Promise<ActionResult>;
 	fsRead?: (path: string) => Promise<ActionResult>;
 	fsWrite?: (path: string, content: string) => Promise<ActionResult>;
 	browserOpen?: (url: string) => Promise<ActionResult>;
+	browserClick?: (target: string, timeoutMs?: number) => Promise<ActionResult>;
+	browserFill?: (target: string, text: string, timeoutMs?: number) => Promise<ActionResult>;
+	browserPress?: (key: string) => Promise<ActionResult>;
 	browserSnapshot?: () => Promise<ActionResult>;
+	browserScreenshot?: () => Promise<ActionResult>;
 	helperExecute?: (helperId: string, input: Record<string, unknown>) => Promise<ActionResult>;
 	verificationExecute?: (input: Record<string, unknown>) => Promise<ActionResult>;
+	secretResolver?: WorkflowSecretResolver;
+	packageName?: string;
+	workflowId?: string;
 	sessionId?: string;
 	eventSink?: WorkflowEventSink;
 	autoApprove?: boolean;
@@ -44,12 +68,34 @@ export class WorkflowRuntime {
 		private readonly ctx: WorkflowExecutionContext = {},
 	) {}
 
+	withExecutionScope(
+		scope: Pick<WorkflowExecutionContext, "packageName" | "workflowId">,
+	): WorkflowRuntime {
+		return new WorkflowRuntime(this.store, { ...this.ctx, ...scope });
+	}
+
 	private emit(evt: WorkflowEvent): void {
 		this.ctx.eventSink?.emit(evt);
 	}
 
+	private recordEvent(run: WorkflowRun, evt: WorkflowEvent): void {
+		run.events.push(evt);
+		this.emit(evt);
+	}
+
 	private now(): string {
 		return new Date().toISOString();
+	}
+
+	private valueContainsSecretRef(value: unknown): boolean {
+		if (typeof value === "string") {
+			return containsSecretRef(value) || redactSecretRefs(value) !== value;
+		}
+		if (Array.isArray(value)) return value.some((item) => this.valueContainsSecretRef(item));
+		if (typeof value === "object" && value !== null) {
+			return Object.values(value).some((item) => this.valueContainsSecretRef(item));
+		}
+		return false;
 	}
 
 	async run(graph: WorkflowGraph): Promise<ActionResult<WorkflowRun>> {
@@ -70,7 +116,7 @@ export class WorkflowRuntime {
 			graphName: graph.name,
 			status: "running",
 			currentNodeId: entryNodeId,
-			state: {},
+			state: { ...(graph.initialState ?? {}) },
 			nodeResults: {},
 			approvals: [],
 			artifacts: [],
@@ -81,13 +127,6 @@ export class WorkflowRuntime {
 			sessionId: this.ctx.sessionId,
 		};
 		this.store.saveRun(run);
-
-		this.emit({
-			type: "node-started",
-			runId: run.id,
-			nodeId: entryNodeId,
-			timestamp: this.now(),
-		});
 
 		return this.executeFrom(run, graph, entryNodeId);
 	}
@@ -108,7 +147,7 @@ export class WorkflowRuntime {
 		run.updatedAt = this.now();
 		this.store.saveRun(run);
 
-		this.emit({ type: "node-resumed", runId: run.id, nodeId: run.currentNodeId, timestamp: this.now() });
+		this.recordEvent(run, { type: "node-resumed", runId: run.id, nodeId: run.currentNodeId, timestamp: this.now() });
 		return this.executeFrom(run, graph, run.currentNodeId);
 	}
 
@@ -131,7 +170,7 @@ export class WorkflowRuntime {
 		if (!nextNode) {
 			run.status = "completed";
 			run.completedAt = this.now();
-			this.emit({ type: "workflow-completed", runId: run.id, timestamp: this.now() });
+			this.recordEvent(run, { type: "workflow-completed", runId: run.id, timestamp: this.now() });
 		}
 
 		this.store.saveRun(run);
@@ -162,22 +201,38 @@ export class WorkflowRuntime {
 		if (graph?.stateSchema && !(key in graph.stateSchema)) {
 			return failureResult(`State key "${key}" not in state schema`, { path: "command", sessionId: this.ctx.sessionId ?? "system" });
 		}
+		if (graph?.stateSchema && !this.isStateValueAllowed(graph.stateSchema[key], value)) {
+			return failureResult(`State key "${key}" requires ${graph.stateSchema[key]} value`, { path: "command", sessionId: this.ctx.sessionId ?? "system" });
+		}
 		run.state[key] = value;
 		run.updatedAt = this.now();
-		run.events.push({ type: "state-updated", runId: run.id, timestamp: this.now(), data: { key, value } });
+		this.recordEvent(run, { type: "state-updated", runId: run.id, timestamp: this.now(), data: { key, value } });
 		this.store.saveRun(run);
 		return successResult(run, { path: "command", sessionId: this.ctx.sessionId ?? "system" });
 	}
 
 	// ── Internal ────────────────────────────────────────────────────
 
+	private isStateValueAllowed(
+		expected: "string" | "number" | "boolean" | undefined,
+		value: string | number | boolean,
+	): boolean {
+		if (!expected) return true;
+		return typeof value === expected;
+	}
+
 	private resolveNextNode(
 		graph: WorkflowGraph,
 		currentNodeId: string,
 		state: Record<string, string | number | boolean>,
 	): string | undefined {
+		const node = graph.nodes.find((candidate) => candidate.id === currentNodeId);
 		const outgoing = graph.edges.filter(e => e.from === currentNodeId);
 		if (outgoing.length === 0) return undefined;
+		if (node?.kind === "loop") {
+			const exitEdge = outgoing.find((edge) => edge.role === "exit" || edge.label === "exit");
+			if (exitEdge) return exitEdge.to;
+		}
 		if (outgoing.length === 1) return outgoing[0].to;
 
 		// Branching: evaluate conditions
@@ -207,7 +262,7 @@ export class WorkflowRuntime {
 				run.status = "failed";
 				run.failures.push({ nodeId: currentNodeId, error: `Exceeded ${MAX_WORKFLOW_EXECUTION_STEPS} steps`, timestamp: this.now() });
 				run.updatedAt = run.completedAt = this.now();
-				this.emit({ type: "workflow-failed", runId: run.id, timestamp: this.now(), data: "max-steps" });
+				this.recordEvent(run, { type: "workflow-failed", runId: run.id, timestamp: this.now(), data: "max-steps" });
 				this.store.saveRun(run);
 				break;
 			}
@@ -249,7 +304,7 @@ export class WorkflowRuntime {
 
 			if (result.status === "pending-approval") {
 				run.status = "paused";
-				this.emit({ type: "node-paused", runId: run.id, nodeId: node.id, timestamp: this.now() });
+				this.recordEvent(run, { type: "node-paused", runId: run.id, nodeId: node.id, timestamp: this.now() });
 				this.store.saveRun(run);
 				return successResult(run, { path: "command", sessionId: this.ctx.sessionId ?? "system" });
 			}
@@ -257,14 +312,14 @@ export class WorkflowRuntime {
 			if (result.status === "failed") {
 				run.status = "failed";
 				run.completedAt = this.now();
-				this.emit({ type: "workflow-failed", runId: run.id, nodeId: node.id, timestamp: this.now() });
+				this.recordEvent(run, { type: "workflow-failed", runId: run.id, nodeId: node.id, timestamp: this.now() });
 				this.store.saveRun(run);
 				return failureResult(`Workflow failed at "${node.id}": ${result.error}`, { path: "command", sessionId: this.ctx.sessionId ?? "system" });
 			}
 
 			if (result.artifacts) run.artifacts.push(...result.artifacts);
 
-			this.emit({ type: "node-completed", runId: run.id, nodeId: node.id, timestamp: this.now(), data: result.output });
+			this.recordEvent(run, { type: "node-completed", runId: run.id, nodeId: node.id, timestamp: this.now(), data: result.output });
 
 			currentNodeId = this.resolveNextNode(graph, currentNodeId, run.state);
 			this.store.saveRun(run);
@@ -273,7 +328,7 @@ export class WorkflowRuntime {
 		if (run.status === "running") {
 			run.status = "completed";
 			run.completedAt = run.updatedAt = this.now();
-			this.emit({ type: "workflow-completed", runId: run.id, timestamp: this.now() });
+			this.recordEvent(run, { type: "workflow-completed", runId: run.id, timestamp: this.now() });
 			this.store.saveRun(run);
 		}
 
@@ -306,11 +361,11 @@ export class WorkflowRuntime {
 
 		for (iteration = 0; iteration < config.maxIterations; iteration++) {
 			if (timeoutAt && Date.now() >= timeoutAt) {
-				this.emit({ type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration, reason: "timeout" } });
+				this.recordEvent(run, { type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration, reason: "timeout" } });
 				break;
 			}
 
-			this.emit({ type: "loop-iteration", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iteration } });
+			this.recordEvent(run, { type: "loop-iteration", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iteration } });
 
 			// Execute body as linear path from bodyStart
 			const bodyResult = await this.executeLinearPath(run, graph, bodyStart, loopNode.id);
@@ -326,14 +381,14 @@ export class WorkflowRuntime {
 			if (config.requireStateChange && config.stateChangeField) {
 				const currentVal = run.state[config.stateChangeField];
 				if (currentVal === prevState) {
-					this.emit({ type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration + 1, reason: "no-state-change" } });
+					this.recordEvent(run, { type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration + 1, reason: "no-state-change" } });
 					break;
 				}
 			}
 		}
 
 		if (iteration >= config.maxIterations) {
-			this.emit({ type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration, reason: "max-iterations" } });
+			this.recordEvent(run, { type: "loop-completed", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iterations: iteration, reason: "max-iterations" } });
 		}
 
 		return {
@@ -396,14 +451,14 @@ export class WorkflowRuntime {
 
 	private async executeNode(node: WorkflowNode, run: WorkflowRun): Promise<WorkflowNodeResult> {
 		const startedAt = this.now();
-		this.emit({ type: "node-started", runId: run.id, nodeId: node.id, timestamp: startedAt });
+		this.recordEvent(run, { type: "node-started", runId: run.id, nodeId: node.id, timestamp: startedAt });
 
 		const maxAttempts = node.retry?.maxAttempts ?? 1;
 		let lastError = "";
 
 		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 			if (attempt > 1) {
-				this.emit({ type: "node-retried", runId: run.id, nodeId: node.id, timestamp: this.now(), data: { attempt } });
+				this.recordEvent(run, { type: "node-retried", runId: run.id, nodeId: node.id, timestamp: this.now(), data: { attempt } });
 				const delayMs = node.retry?.delayMs ?? 1000;
 				const backoff = node.retry?.backoff ?? "exponential";
 				const wait = backoff === "exponential" ? delayMs * (2 ** (attempt - 2)) : delayMs * (attempt - 1);
@@ -411,7 +466,7 @@ export class WorkflowRuntime {
 			}
 
 			try {
-				const result = await this.executeNodeKind(node);
+				const result = await this.executeNodeKind(node, run);
 				if (result.status === "completed" || result.status === "pending-approval") {
 					return { ...result, startedAt, retryCount: attempt - 1 };
 				}
@@ -421,35 +476,108 @@ export class WorkflowRuntime {
 			}
 		}
 
-		this.emit({ type: "node-failed", runId: run.id, nodeId: node.id, timestamp: this.now(), data: lastError });
+		this.recordEvent(run, { type: "node-failed", runId: run.id, nodeId: node.id, timestamp: this.now(), data: lastError });
 		run.failures.push({ nodeId: node.id, error: lastError, timestamp: this.now() });
 
 		return { nodeId: node.id, status: "failed", error: lastError, retryCount: maxAttempts - 1, startedAt, completedAt: this.now() };
 	}
 
-	private async executeNodeKind(node: WorkflowNode): Promise<WorkflowNodeResult> {
+	private async executeNodeKind(
+		node: WorkflowNode,
+		run: WorkflowRun,
+	): Promise<WorkflowNodeResult> {
 		switch (node.kind) {
 			case "terminal": {
 				if (!this.ctx.terminalExec) return this.failNode(node.id, "Terminal executor not available");
 				const command = String(node.input.command ?? "");
+				if (this.valueContainsSecretRef(command)) {
+					return this.failNode(node.id, "secret:// refs are not supported in terminal commands");
+				}
 				const result = await this.ctx.terminalExec(command, node.timeoutMs);
 				return this.nodeFromAction(node.id, result);
 			}
 			case "filesystem": {
 				const action = String(node.input.action ?? "read");
 				if (action === "read" && this.ctx.fsRead) {
+					if (this.valueContainsSecretRef(node.input.path)) {
+						return this.failNode(node.id, "secret:// refs are not supported in filesystem paths");
+					}
 					return this.nodeFromAction(node.id, await this.ctx.fsRead(String(node.input.path ?? "")));
 				}
 				if (action === "write" && this.ctx.fsWrite) {
-					return this.nodeFromAction(node.id, await this.ctx.fsWrite(String(node.input.path ?? ""), String(node.input.content ?? "")));
+					if (this.valueContainsSecretRef(node.input.path)) {
+						return this.failNode(node.id, "secret:// refs are not supported in filesystem paths");
+					}
+					const resolvedContent = await this.resolveSecretsInValue(
+						String(node.input.content ?? ""),
+						"use-as-form-value",
+						run,
+					);
+					return this.nodeFromAction(
+						node.id,
+						await this.ctx.fsWrite(String(node.input.path ?? ""), String(resolvedContent.value)),
+						resolvedContent.secretValues,
+					);
 				}
 				return this.failNode(node.id, `Filesystem action not available: ${action}`);
 			}
 			case "browser": {
-				if (this.ctx.browserOpen && node.input.url) {
+				const action = String(
+					node.input.action ??
+						(node.input.url
+							? "open"
+							: node.input.text
+								? "fill"
+								: node.input.target
+									? "click"
+									: node.input.key
+										? "press"
+										: "snapshot"),
+				);
+				if (action === "open" && this.ctx.browserOpen && node.input.url) {
+					if (this.valueContainsSecretRef(node.input.url)) {
+						return this.failNode(node.id, "secret:// refs are not supported in browser URLs");
+					}
 					return this.nodeFromAction(node.id, await this.ctx.browserOpen(String(node.input.url)));
 				}
-				return this.failNode(node.id, "Browser executor not available");
+				if (action === "click" && this.ctx.browserClick) {
+					if (this.valueContainsSecretRef(node.input.target)) {
+						return this.failNode(node.id, "secret:// refs are not supported in browser targets");
+					}
+					return this.nodeFromAction(
+						node.id,
+						await this.ctx.browserClick(String(node.input.target ?? ""), Number(node.input.timeoutMs) || undefined),
+					);
+				}
+				if (action === "fill" && this.ctx.browserFill) {
+					if (this.valueContainsSecretRef(node.input.target)) {
+						return this.failNode(node.id, "secret:// refs are not supported in browser targets");
+					}
+					const resolvedText = await this.resolveSecretsInValue(
+						String(node.input.text ?? ""),
+						"use-as-form-value",
+						run,
+					);
+					return this.nodeFromAction(
+						node.id,
+						await this.ctx.browserFill(
+							String(node.input.target ?? ""),
+							String(resolvedText.value),
+							Number(node.input.timeoutMs) || undefined,
+						),
+						resolvedText.secretValues,
+					);
+				}
+				if (action === "press" && this.ctx.browserPress) {
+					return this.nodeFromAction(node.id, await this.ctx.browserPress(String(node.input.key ?? "")));
+				}
+				if (action === "snapshot" && this.ctx.browserSnapshot) {
+					return this.nodeFromAction(node.id, await this.ctx.browserSnapshot());
+				}
+				if (action === "screenshot" && this.ctx.browserScreenshot) {
+					return this.nodeFromAction(node.id, await this.ctx.browserScreenshot());
+				}
+				return this.failNode(node.id, `Browser executor not available: ${action}`);
 			}
 			case "approval":
 				return { nodeId: node.id, status: "pending-approval", retryCount: 0, startedAt: this.now() };
@@ -468,13 +596,31 @@ export class WorkflowRuntime {
 			}
 			case "verification": {
 				if (!this.ctx.verificationExecute) return this.failNode(node.id, "Verification executor not available");
-				return this.nodeFromAction(node.id, await this.ctx.verificationExecute(node.input));
+				const resolvedInput = await this.resolveSecretsInRecord(
+					node.input,
+					"use-as-form-value",
+					run,
+				);
+				return this.nodeFromAction(
+					node.id,
+					await this.ctx.verificationExecute(resolvedInput.value),
+					resolvedInput.secretValues,
+				);
 			}
 			case "helper": {
 				if (!this.ctx.helperExecute) return this.failNode(node.id, "Helper executor not available");
 				const helperId = String(node.input.helperId ?? "");
 				if (!helperId) return this.failNode(node.id, "Helper node requires input.helperId");
-				return this.nodeFromAction(node.id, await this.ctx.helperExecute(helperId, node.input));
+				const resolvedInput = await this.resolveSecretsInRecord(
+					node.input,
+					"use-as-form-value",
+					run,
+				);
+				return this.nodeFromAction(
+					node.id,
+					await this.ctx.helperExecute(helperId, resolvedInput.value),
+					resolvedInput.secretValues,
+				);
 			}
 			default:
 				return this.failNode(node.id, `Unknown node kind: ${node.kind}`);
@@ -485,12 +631,75 @@ export class WorkflowRuntime {
 		return { nodeId, status: "failed", error, retryCount: 0, startedAt: this.now(), completedAt: this.now() };
 	}
 
-	private nodeFromAction(nodeId: string, result: ActionResult): WorkflowNodeResult {
+	private async resolveSecretsInRecord(
+		value: Record<string, unknown>,
+		action: SecretAction,
+		run: WorkflowRun,
+	): Promise<{ value: Record<string, unknown>; secretValues: string[] }> {
+		const resolved = await this.resolveSecretsInValue(value, action, run);
+		return {
+			value: resolved.value as Record<string, unknown>,
+			secretValues: resolved.secretValues,
+		};
+	}
+
+	private async resolveSecretsInValue(
+		value: unknown,
+		action: SecretAction,
+		run: WorkflowRun,
+	): Promise<{ value: unknown; secretValues: string[] }> {
+		if (typeof value === "string") {
+			const parsed = parseSecretRef(value);
+			if (!parsed) return { value, secretValues: [] };
+			if (!this.ctx.secretResolver) {
+				throw new Error("Secret resolver is not available for workflow execution");
+			}
+			const resolved = await this.ctx.secretResolver(value, action, {
+				sessionId: run.sessionId ?? this.ctx.sessionId,
+				packageName: this.ctx.packageName,
+				workflowId: this.ctx.workflowId ?? run.graphId,
+			});
+			if (!resolved.success) {
+				throw new Error(`Secret resolution denied: ${resolved.error}`);
+			}
+			return { value: resolved.value, secretValues: [resolved.value] };
+		}
+		if (Array.isArray(value)) {
+			const values: unknown[] = [];
+			const secretValues: string[] = [];
+			for (const item of value) {
+				const resolved = await this.resolveSecretsInValue(item, action, run);
+				values.push(resolved.value);
+				secretValues.push(...resolved.secretValues);
+			}
+			return { value: values, secretValues };
+		}
+		if (typeof value === "object" && value !== null) {
+			const entries: Array<[string, unknown]> = [];
+			const secretValues: string[] = [];
+			for (const [key, item] of Object.entries(value)) {
+				const resolved = await this.resolveSecretsInValue(item, action, run);
+				entries.push([key, resolved.value]);
+				secretValues.push(...resolved.secretValues);
+			}
+			return { value: Object.fromEntries(entries), secretValues };
+		}
+		return { value, secretValues: [] };
+	}
+
+	private nodeFromAction(
+		nodeId: string,
+		result: ActionResult,
+		secretValues: string[] = [],
+	): WorkflowNodeResult {
 		return {
 			nodeId,
 			status: result.success ? "completed" : "failed",
-			output: result.data,
-			error: result.error,
+			output: redactKnownSecretValues(result.data, secretValues),
+			error:
+				typeof result.error === "string"
+					? String(redactKnownSecretValues(result.error, secretValues))
+					: result.error,
 			retryCount: 0,
 			startedAt: this.now(),
 			completedAt: this.now(),

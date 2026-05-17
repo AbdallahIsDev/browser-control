@@ -366,6 +366,110 @@ describe("TerminalActions", () => {
 			);
 		});
 
+		it("passes terminal dimensions to the runtime when opening a session", async () => {
+			const received: Record<string, unknown>[] = [];
+			const mockRuntime: TerminalRuntime = {
+				open: async (config) => {
+					received.push(config as Record<string, unknown>);
+					return {
+						id: "sized-session",
+						shell: "bash",
+						cwd: "/tmp",
+						status: "idle",
+					};
+				},
+				exec: async () => ({
+					exitCode: 0,
+					stdout: "",
+					stderr: "",
+					durationMs: 0,
+					cwd: "/tmp",
+					timedOut: false,
+				}),
+				type: async () => {},
+				read: async () => "",
+				snapshot: async () => ({}),
+				interrupt: async () => {},
+				close: async () => {},
+				list: async () => [],
+				resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+				status: async (sessionId) => ({ sessionId, status: "fresh" }),
+				resize: async () => {},
+				onData: () => ({ dispose: () => {} }),
+			};
+			const customActions = new TerminalActions({
+				sessionManager,
+				terminalRuntime: mockRuntime,
+			});
+
+			const result = await customActions.open({
+				shell: "bash",
+				cols: 120,
+				rows: 40,
+			});
+
+			assert.equal(result.success, true, `open failed: ${result.error}`);
+			assert.deepEqual(
+				{ cols: received[0]?.cols, rows: received[0]?.rows },
+				{ cols: 120, rows: 40 },
+			);
+		});
+
+		it("can write terminal input without submitting a newline", async () => {
+			const calls: Array<{
+				sessionId: string;
+				text: string;
+				submit?: boolean;
+			}> = [];
+			const mockRuntime = {
+				open: async () => ({
+					id: "term-raw",
+					shell: "bash",
+					cwd: "/tmp",
+					status: "idle",
+				}),
+				exec: async () => ({
+					exitCode: 0,
+					stdout: "",
+					stderr: "",
+					durationMs: 0,
+					cwd: "/tmp",
+					timedOut: false,
+				}),
+				type: async (
+					sessionId: string,
+					text: string,
+					options?: { submit?: boolean },
+				) => {
+					calls.push({ sessionId, text, submit: options?.submit });
+				},
+				read: async () => "",
+				snapshot: async () => ({}),
+				interrupt: async () => {},
+				close: async () => {},
+				list: async () => [],
+				resume: async (sessionId: string) => ({ sessionId, status: "fresh" }),
+				status: async (sessionId: string) => ({ sessionId, status: "fresh" }),
+				resize: async () => {},
+				onData: () => ({ dispose: () => {} }),
+			} satisfies TerminalRuntime;
+			const customActions = new TerminalActions({
+				sessionManager,
+				terminalRuntime: mockRuntime,
+			});
+
+			const result = await customActions.type({
+				sessionId: "term-raw",
+				text: "pasted text",
+				submit: false,
+			});
+
+			assert.equal(result.success, true, `type failed: ${result.error}`);
+			assert.deepEqual(calls, [
+				{ sessionId: "term-raw", text: "pasted text", submit: false },
+			]);
+		});
+
 		it("terminal open binds terminal to session", async () => {
 			// Use the mock runtime to verify binding
 			const mockRuntime: TerminalRuntime = {

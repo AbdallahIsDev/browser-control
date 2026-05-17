@@ -19,13 +19,20 @@ export function applyNodePtyWindowsForkPatch(): void {
 
     if (isNodePtyConsoleAgent) {
       if (Array.isArray(forkArgs[1])) {
-        forkArgs[2] = { ...(forkArgs[2] ?? {}), windowsHide: true };
+        forkArgs[2] = { ...(forkArgs[2] ?? {}), windowsHide: true, silent: true };
       } else {
-        forkArgs[1] = { ...(forkArgs[1] ?? {}), windowsHide: true };
+        forkArgs[1] = { ...(forkArgs[1] ?? {}), windowsHide: true, silent: true };
       }
     }
 
-    return (originalFork as any).apply(mutableChildProcess, forkArgs);
+    const child = (originalFork as any).apply(mutableChildProcess, forkArgs);
+    if (isNodePtyConsoleAgent) {
+      child.stderr?.on("data", () => {});
+      child.stderr?.resume?.();
+      child.stdout?.on("data", () => {});
+      child.stdout?.resume?.();
+    }
+    return child;
   };
 
   patched = true;
