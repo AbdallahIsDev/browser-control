@@ -197,7 +197,7 @@ npm run web:dev           # Dev dashboard
 npm run web:build         # Build for production
 bc web open               # Launch in browser
 npm run desktop:dev       # Electron dev mode
-npm run desktop:build     # Package Electron app
+npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 ```
 
 <br/>

@@ -173,7 +173,11 @@ async function createWindow() {
 	const server = await startAppServer();
 
 	mainWindow = new BrowserWindow(
-		createBrowserWindowOptions(path.join(__dirname, "preload.cjs")),
+		createBrowserWindowOptions(
+			path.join(__dirname, "preload.cjs"),
+
+			path.join(__dirname, "icon.png"),
+		),
 	);
 
 	lockWindowNavigation(mainWindow, appOrigin);

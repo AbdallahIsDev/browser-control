@@ -24,6 +24,7 @@
 		"scripts/launch_browser.cjs",
 		"scripts/launch_browser.sh",
 		"scripts/install_wsl_bc.sh",
+		"scripts/desktop_after_pack.cjs",
 		"wsl_cdp_bridge.cjs",
 		"examples/",
 		"automation-packages/tradingview-ict-analysis/",
@@ -83,13 +84,16 @@
 		"appId": "dev.abdallah.browser-control",
 		"productName": "Browser Control",
 		"npmRebuild": false,
+		"afterPack": "scripts/desktop_after_pack.cjs",
 		"directories": {
-			"output": "dist-desktop-2"
+			"output": "dist-desktop"
 		},
 		"files": [
 			"dist/**/*",
 			"web/dist/**/*",
 			"desktop/**/*",
+			"!desktop/bin/**/*",
+			"!desktop/BrowserControlLauncher/**/*",
 			"cli.js",
 			"package.json",
 			"node_modules/**/*"
