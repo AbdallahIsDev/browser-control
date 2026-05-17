@@ -30,6 +30,12 @@ export function BrowserView() {
 	return (
 		<PageShell>
 			<div className="space-y-4 md:space-y-6">
+				<div>
+					<h2 className="text-lg font-semibold tracking-tight">Browser</h2>
+					<p className="mt-1 text-sm text-muted-foreground">
+						See the browser sessions Browser Control is using for live work.
+					</p>
+				</div>
 				{status?.browser?.activeSessions &&
 				status.browser.activeSessions > 0 ? (
 					<>
@@ -67,7 +73,7 @@ export function BrowserView() {
 						<CardContent className="p-6">
 							<EmptyState
 								title="No active browser sessions"
-								description="Open a URL to start a session."
+								description="Start from Home with a website task, and Browser Control will open or attach a browser session here."
 							/>
 						</CardContent>
 					</Card>
