@@ -248,6 +248,10 @@ test("terminal view uses shared components and real terminal control APIs", () =
 		"multiline or destructive-looking input",
 		"ResizeObserver",
 		"scrollWidth <= innerWidth",
+		"explainTerminalError",
+		"Terminal runtime is busy.",
+		"Terminal runtime is offline.",
+		"Technical details:",
 	]) {
 		assert.match(
 			terminalSource,

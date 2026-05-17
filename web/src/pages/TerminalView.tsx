@@ -118,6 +118,35 @@ function statusVariant(status: string): "ok" | "warn" | "info" | "neutral" {
 	return "neutral";
 }
 
+function explainTerminalError(raw: string): {
+	message: string;
+	details?: string;
+} {
+	const lower = raw.toLowerCase();
+	const details = `Technical details: ${raw}`;
+	if (lower.includes("http 429") || lower.includes("rate limit")) {
+		return {
+			message: "Terminal runtime is busy.",
+			details:
+				"Wait a moment and try again. Browser Control is protecting the terminal service from too many requests. " +
+				details,
+		};
+	}
+	if (
+		lower.includes("broker api error") ||
+		lower.includes("127.0.0.1:7788") ||
+		lower.includes("fetch failed")
+	) {
+		return {
+			message: "Terminal runtime is offline.",
+			details:
+				"Start the Browser Control daemon, then create or attach a terminal session again. " +
+				details,
+		};
+	}
+	return { message: raw };
+}
+
 function segmentClass(segment: TerminalSegment): string {
 	const foreground: Record<string, string> = {
 		black: "text-zinc-500",
@@ -213,6 +242,7 @@ export function TerminalView() {
 	);
 	const activeRows = activeSessionId ? (buffers[activeSessionId] ?? []) : [];
 	const activeView = activeSessionId ? views[activeSessionId] : undefined;
+	const terminalError = error ? explainTerminalError(error) : null;
 
 	const loadRender = useCallback(async (sessionId: string) => {
 		const result = await apiFetch<ApiResult<BrowserTerminalView>>(
@@ -628,7 +658,12 @@ export function TerminalView() {
 							</div>
 						</CardHeader>
 						<CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0">
-							{error && <ErrorState message={error} />}
+							{terminalError && (
+								<ErrorState
+									message={terminalError.message}
+									details={terminalError.details}
+								/>
+							)}
 							{notice && (
 								<p className="text-xs text-[--text-tertiary]" role="status">
 									{notice}
