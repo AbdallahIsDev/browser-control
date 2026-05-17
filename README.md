@@ -105,7 +105,7 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 }
 ```
 
-### Tool Categories (66 tools)
+### Tool Categories (76 tools)
 
 | Category | Key Tools |
 |----------|----------|
@@ -114,8 +114,8 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 | **Browser** | `open`, `snapshot`, `click`, `fill`, `hover`, `type`, `press`, `scroll`, `screenshot`, `tab_list/switch/close`, `screencast_start/stop`, `highlight`, `generate_locator` |
 | **Terminal** | `terminal_exec`, `terminal_open`, `read`, `write`, `interrupt`, `snapshot`, `list`, `close`, `resume` |
 | **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `move`, `delete`, `stat` |
-| **Debug** | `debug_health`, `debug_failure_bundle`, `get_console`, `get_network` |
-| **Provider** | `bc_browser_provider_list`, `use` (local, custom CDP, browserless) |
+| **Debug** | `debug_health`, `debug_failure_bundle`, `get_console`, `get_network`, replay and visual-diff evidence |
+| **Provider** | `bc_browser_provider_list`, `use`, `health`, `catalog` (local, custom CDP, browserless, Browserbase when configured) |
 | **Service** | `bc_service_list`, `resolve` |
 | **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel` |
 | **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback` |
@@ -140,10 +140,10 @@ browser-control/
 │   ├── policy/                 # Risk-based policy engine
 │   ├── mcp/                    # MCP server + tool registry
 │   ├── runtime/                # Daemon, broker, health, scheduler
-│   ├── observability/          # Debug bundles, console/network capture
+│   ├── observability/          # Debug bundles, console/network capture, recording, visual diff
 │   ├── operator/               # Doctor, setup, dashboard
-│   ├── providers/              # local / custom CDP / browserless
-│   ├── services/               # bc:// service registry
+│   ├── providers/              # local / custom CDP / browserless / Browserbase
+│   ├── services/               # bc:// registry and optional .localhost proxy
 │   ├── workflows/              # Workflow graph runtime
 │   ├── harness/                # Self-healing helper registry
 │   ├── packages/               # Automation package system
@@ -211,7 +211,7 @@ npm run desktop:build     # Package Electron app
 | ✅ Native terminal (PTY) | Stable |
 | ✅ Filesystem operations | Stable |
 | ✅ Policy engine (safe/balanced/trusted) | Stable |
-| ✅ MCP server (66 tools) | Stable |
+| ✅ MCP server (76 tools) | Stable |
 | ✅ CLI (`bc` command) | Stable |
 | ✅ TypeScript API | Stable |
 | ✅ Service registry (`bc://`) | Stable |
@@ -219,9 +219,9 @@ npm run desktop:build     # Package Electron app
 | ✅ Web dashboard (React/Vite) | Stable |
 | ✅ Electron desktop app | Stable |
 | 🔄 Self-healing harness | Active |
-| 🔄 Workflow graphs | Active |
-| 🔄 Automation packages | Active |
-| 🔄 Remote providers (browserless) | Active |
+| ✅ Workflow graph runtime, events, helpers | Active |
+| ✅ Automation packages, trust review, evals | Active |
+| 🔄 Remote providers (browserless, Browserbase when configured) | Active |
 | 🎯 Production hardening | Planned |
 | 🎯 Cross-platform package publishing | Planned |
 
@@ -234,7 +234,7 @@ See detailed roadmap: [docs/specs/v1-roadmap.md](docs/specs/v1-roadmap.md) | Pro
 Browser Control runs with the same authority as your user account. Treat it accordingly.
 
 - **Three policy profiles:** `safe` (denies high/critical), `balanced` (confirms high/critical, default), `trusted` (audits high, confirms critical)
-- **Secrets redaction:** Provider tokens, CAPTCHA keys, and OpenRouter keys are redacted from config output
+- **Secrets redaction:** Provider tokens, credential-vault secret refs, CAPTCHA keys, OpenRouter/model keys, and Browserbase URLs are redacted from CLI/API/MCP/UI output
 - **MCP security:** Only connect trusted agents. Use `safe`/`balanced` policy, scope working directories, avoid storing tokens in prompts
 - **Dedicated browser profiles:** Recommended — use `BROWSER_LAUNCH_PROFILE=isolated` for automation
 
@@ -249,7 +249,7 @@ Full security documentation: [SECURITY.md](SECURITY.md) | [docs/security.md](doc
 | [Getting Started](docs/getting-started.md) | Prerequisites, setup, first workflows |
 | [CLI Reference](docs/cli.md) | Full `bc` command reference (100+ subcommands) |
 | [TypeScript API](docs/api.md) | `createBrowserControl()` API surface |
-| [MCP Setup & Tools](docs/mcp.md) | MCP server config + all 66 tools |
+| [MCP Setup & Tools](docs/mcp.md) | MCP server config + all 76 tools |
 | [Architecture Overview](docs/architecture/overview.md) | System architecture, data flow, component map |
 | [Source Layout](docs/architecture/source-layout.md) | Directory structure and conventions |
 | [Browser Behavior](docs/browser.md) | Modes, profiles, CDP, remote providers |

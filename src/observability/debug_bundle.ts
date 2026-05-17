@@ -29,7 +29,7 @@ import type {
 } from "./types";
 import { OBSERVABILITY_KEYS } from "./types";
 import { generateRecoveryGuidance } from "./recovery";
-import { redactObject } from "./redaction";
+import { redactObject, redactString } from "./redaction";
 import type { MemoryStore } from "../runtime/memory_store";
 import type { A11yElement } from "../a11y_snapshot";
 
@@ -170,7 +170,7 @@ export async function buildDebugBundle(options: BundleBuilderOptions): Promise<D
     ...(fsEvidence ? { filesystem: fsEvidence } : {}),
   };
 
-  return redactObject(bundle) as DebugBundle;
+  return redactDebugBundle(bundle) as DebugBundle;
 }
 
 // ── Evidence Collectors ────────────────────────────────────────────────
@@ -272,6 +272,35 @@ function redactPolicyDecisions(
     ...d,
     reason: d.reason ? String(redactObject(d.reason)) : undefined,
   }));
+}
+
+function redactDebugBundle(bundle: DebugBundle): DebugBundle {
+  return redactEvidenceSecrets(redactObject(bundle)) as DebugBundle;
+}
+
+function redactEvidenceSecrets(value: unknown): unknown {
+  if (typeof value === "string") {
+    return redactString(value).replace(
+      /secret:\/\/[^\s"'<>),\]}]+/giu,
+      "[REDACTED_SECRET]",
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactEvidenceSecrets(item));
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        redactEvidenceSecrets(item),
+      ]),
+    );
+  }
+  return value;
 }
 
 function generateBundleId(): string {

@@ -770,6 +770,8 @@ export class Daemon {
 			shell: config.shell,
 			cwd: config.cwd,
 			name: config.name,
+			cols: config.cols,
+			rows: config.rows,
 		});
 
 		const session = await this.terminalManager.create(config);
@@ -810,13 +812,21 @@ export class Daemon {
 		});
 	}
 
-	async termType(sessionId: string, text: string): Promise<{ ok: true }> {
-		this.assertOperationAllowed("terminal_write", { sessionId, text });
+	async termType(
+		sessionId: string,
+		text: string,
+		options: { submit?: boolean } = {},
+	): Promise<{ ok: true }> {
+		this.assertOperationAllowed("terminal_write", {
+			sessionId,
+			text,
+			submit: options.submit !== false,
+		});
 		const session = this.terminalManager.get(sessionId);
 		if (!session) {
 			throw new Error(`Session not found: ${sessionId}`);
 		}
-		await session.write(text);
+		await session.write(text, options);
 		return { ok: true };
 	}
 
@@ -1849,6 +1859,7 @@ export class Daemon {
 							return this.termType(
 								payload.sessionId as string,
 								payload.text as string,
+								{ submit: payload.submit !== false },
 							);
 						case "read":
 							return this.termRead(

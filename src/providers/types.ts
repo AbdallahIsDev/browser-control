@@ -1,6 +1,6 @@
 export interface ProviderConfig {
   name: string;
-  type: "local" | "custom" | "browserless";
+  type: "local" | "custom" | "browserless" | "browserbase" | "e2b" | "cubesandbox" | "camofox" | "cloak" | "obscura";
   endpoint?: string;
   apiKey?: string;
   options?: Record<string, unknown>;
@@ -40,4 +40,18 @@ export interface ProviderListResult {
   providers: ProviderConfig[];
   activeProvider: string;
   builtIn: string[];
+}
+
+export interface ProviderCatalogEntry {
+  name: ProviderConfig["type"];
+  label: string;
+  description: string;
+  remote: boolean;
+  risk: "low" | "moderate" | "high";
+  requiresEndpoint: boolean;
+  requiresAuth: boolean;
+  launchSupported: boolean;
+  attachSupported: boolean;
+  defaultConfigured: boolean;
+  setupHint: string;
 }

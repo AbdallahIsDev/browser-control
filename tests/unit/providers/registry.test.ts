@@ -27,16 +27,51 @@ describe("ProviderRegistry", () => {
   });
 
   describe("built-in providers", () => {
-    it("should have local, custom, and browserless built-in", () => {
+    it("should have local, remote, sandbox, and anti-detect extension providers built-in", () => {
       const result = registry.list();
       const names = result.builtIn;
       assert.ok(names.includes("local"));
       assert.ok(names.includes("custom"));
       assert.ok(names.includes("browserless"));
+      assert.ok(names.includes("browserbase"));
+      assert.ok(names.includes("e2b"));
+      assert.ok(names.includes("cubesandbox"));
+      assert.ok(names.includes("camofox"));
+      assert.ok(names.includes("cloak"));
+      assert.ok(names.includes("obscura"));
     });
 
     it("local should be default active provider", () => {
       assert.equal(registry.getActiveName(), "local");
+    });
+
+    it("exposes a read-only provider catalog without secrets", () => {
+      const catalog = registry.catalog();
+      const browserbase = catalog.find((entry) => entry.name === "browserbase");
+      const e2b = catalog.find((entry) => entry.name === "e2b");
+      const cubesandbox = catalog.find((entry) => entry.name === "cubesandbox");
+      const camofox = catalog.find((entry) => entry.name === "camofox");
+      const local = catalog.find((entry) => entry.name === "local");
+
+      assert.ok(local);
+      assert.equal(local.remote, false);
+      assert.equal(local.defaultConfigured, true);
+      assert.ok(browserbase);
+      assert.equal(browserbase.remote, true);
+      assert.equal(browserbase.risk, "high");
+      assert.equal(browserbase.requiresAuth, true);
+      assert.ok(e2b);
+      assert.equal(e2b.remote, true);
+      assert.equal(e2b.risk, "high");
+      assert.equal(e2b.launchSupported, false);
+      assert.ok(cubesandbox);
+      assert.equal(cubesandbox.remote, true);
+      assert.equal(cubesandbox.launchSupported, false);
+      assert.ok(camofox);
+      assert.equal(camofox.risk, "high");
+      assert.equal(camofox.defaultConfigured, false);
+      assert.equal(camofox.launchSupported, false);
+      assert.doesNotMatch(JSON.stringify(catalog), /api[_-]?key=.*secret|token=.*secret/i);
     });
   });
 
@@ -84,11 +119,15 @@ describe("ProviderRegistry", () => {
     it("should list custom providers alongside built-ins", () => {
       registry.add({ name: "remote-a", type: "custom", endpoint: "ws://a:9222" });
       registry.add({ name: "remote-b", type: "browserless", endpoint: "https://b.example.com" });
+      registry.add({ name: "remote-c", type: "browserbase", endpoint: "wss://connect.browserbase.com?token=secret" });
+      registry.add({ name: "remote-d", type: "e2b", endpoint: "https://sandbox.example.com" });
       const names = registry.list().builtIn;
       assert.ok(names.includes("local"));
       const customNames = registry.list().providers.map((p) => p.name);
       assert.ok(customNames.includes("remote-a"));
       assert.ok(customNames.includes("remote-b"));
+      assert.ok(customNames.includes("remote-c"));
+      assert.ok(customNames.includes("remote-d"));
     });
 
     it("should not expose apiKey values in list output", () => {
@@ -209,9 +248,9 @@ describe("ProviderRegistry", () => {
 
   describe("save failure rollback", () => {
     function blockProviderRegistryWrites(home: string): void {
-      const providersPath = path.join(home, "providers");
-      fs.rmSync(providersPath, { recursive: true, force: true });
-      fs.writeFileSync(providersPath, "not a directory");
+      const configPath = path.join(home, "config");
+      fs.rmSync(configPath, { recursive: true, force: true });
+      fs.writeFileSync(configPath, "not a directory");
     }
 
     it("add() write failure returns success:false and does not leave mutated registry", () => {

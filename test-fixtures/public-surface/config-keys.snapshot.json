@@ -70,6 +70,16 @@
     },
     {
       "category": "browser",
+      "defaultValue": true,
+      "description": "Auto-launch managed browser when attach fails.",
+      "envVars": [
+        "BROWSER_AUTO_LAUNCH"
+      ],
+      "key": "browserAutoLaunch",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
       "defaultValue": "system",
       "description": "Visible launcher profile mode.",
       "envVars": [
@@ -245,6 +255,44 @@
     },
     {
       "category": "ai",
+      "defaultValue": "openrouter",
+      "description": "Preferred model provider for Browser Control model router.",
+      "envVars": [
+        "BROWSER_CONTROL_MODEL_PROVIDER"
+      ],
+      "key": "modelProvider",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
+      "description": "OpenAI-compatible model endpoint override.",
+      "envVars": [
+        "BROWSER_CONTROL_MODEL_ENDPOINT"
+      ],
+      "key": "modelEndpoint",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
+      "defaultValue": "[redacted]",
+      "description": "API key for the selected model provider.",
+      "envVars": [
+        "BROWSER_CONTROL_MODEL_API_KEY"
+      ],
+      "key": "modelApiKey",
+      "sensitive": true
+    },
+    {
+      "category": "ai",
+      "description": "Model name for the selected model provider.",
+      "envVars": [
+        "BROWSER_CONTROL_MODEL_NAME"
+      ],
+      "key": "modelName",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
       "defaultValue": "openai/gpt-4.1-mini",
       "description": "OpenRouter model for AI agent features.",
       "envVars": [
@@ -322,6 +370,10 @@
     },
     {
       "backedByConfigRegistry": true,
+      "name": "BROWSER_AUTO_LAUNCH"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "BROWSER_BIND_ADDRESS"
     },
     {
@@ -331,6 +383,22 @@
     {
       "backedByConfigRegistry": true,
       "name": "BROWSER_CONTROL_HOME"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_ENDPOINT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_NAME"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_PROVIDER"
     },
     {
       "backedByConfigRegistry": true,

@@ -1,15 +1,32 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import fs from "node:fs";
+import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { PNG } from "pngjs";
 import { WebSocket } from "ws";
 import type { BrowserControlAPI } from "../../src/browser_control";
+import { resetRecorder } from "../../src/observability/recorder";
 import { createBrokerServer } from "../../src/runtime/broker_server";
+import { resetCredentialVault } from "../../src/security/credential_vault";
 import type { ActionResult } from "../../src/shared/action_result";
+import { resetStateStorage } from "../../src/state/index";
 import { createWebAppServer } from "../../src/web/server";
+
+function writeTinyPng(
+	filePath: string,
+	rgba: [number, number, number, number],
+): void {
+	const png = new PNG({ width: 1, height: 1 });
+	png.data[0] = rgba[0];
+	png.data[1] = rgba[1];
+	png.data[2] = rgba[2];
+	png.data[3] = rgba[3];
+	fs.writeFileSync(filePath, PNG.sync.write(png));
+}
 
 function actionResult<T>(data: T): ActionResult<T> {
 	return {
@@ -121,6 +138,15 @@ function mockApi(): BrowserControlAPI {
 					elements: [],
 				} as never),
 			screenshot: async () => actionResult({ path: "shot.png", sizeBytes: 1 }),
+			click: async () => actionResult({ clicked: true } as never),
+			fill: async () => actionResult({ filled: true } as never),
+			press: async () => actionResult({ pressed: true } as never),
+			type: async () => actionResult({ typed: true } as never),
+			scroll: async () => actionResult({ scrolled: true } as never),
+			tabList: async () => actionResult([] as never),
+			tabSwitch: async () => actionResult({ switched: true } as never),
+			tabClose: async () => actionResult({ closed: true } as never),
+			close: async () => actionResult({ closed: true } as never),
 		},
 		package: {
 			list: () =>
@@ -132,12 +158,212 @@ function mockApi(): BrowserControlAPI {
 					},
 				] as never),
 		},
+		service: {
+			register: async () => actionResult({ name: "app", port: 3000 }),
+			list: () => actionResult([{ name: "app", port: 3000 }]),
+			resolve: async () => actionResult({ url: "http://127.0.0.1:3000" }),
+			remove: () => actionResult({ removed: true }),
+			proxy: {
+				start: async () =>
+					actionResult({
+						enabled: true,
+						host: "127.0.0.1",
+						port: 3210,
+						url: "http://127.0.0.1:3210",
+					}),
+				stop: async () => actionResult({ stopped: true }),
+				status: () =>
+					actionResult({
+						enabled: false,
+						host: "127.0.0.1",
+						httpsEnabled: false,
+						allowRemote: false,
+						activeConnections: 0,
+					}),
+			},
+		},
+		provider: {
+			list: () => ({
+				providers: [],
+				activeProvider: "local",
+				builtIn: ["local", "custom", "browserless", "browserbase"],
+			}),
+			catalog: () =>
+				actionResult([
+					{
+						name: "browserbase",
+						label: "Browserbase",
+						description: "Remote hosted browser sessions.",
+						remote: true,
+						risk: "high",
+						requiresEndpoint: false,
+						requiresAuth: true,
+						launchSupported: true,
+						attachSupported: true,
+						defaultConfigured: false,
+						setupHint: "Configure API key and project id.",
+					},
+				]),
+			use: () =>
+				actionResult({
+					success: true,
+					provider: "local",
+					previousProvider: "local",
+					persisted: true,
+				}),
+			getActive: () => "local",
+			health: async () =>
+				actionResult([
+					{
+						name: "local",
+						type: "local",
+						ok: true,
+						state: "healthy",
+						score: 100,
+						checkedAt: "2026-05-02T00:00:00.000Z",
+						latencyMs: 1,
+						authValid: null,
+						endpointReachable: true,
+						launchSupported: true,
+						attachSupported: true,
+						recentFailures: 0,
+						summary: "Local browser provider is available.",
+					},
+				]),
+		},
+		workflow: {
+			run: async (graphJson?: string) => {
+				const graph =
+					typeof graphJson === "string"
+						? (JSON.parse(graphJson) as {
+								id?: string;
+								name?: string;
+								nodes?: Array<{
+									id: string;
+									kind: string;
+									input: Record<string, unknown>;
+								}>;
+							})
+						: {};
+				const startedAt = "2026-05-02T00:00:00.000Z";
+				return actionResult({
+					id: "run-1",
+					graphId: graph.id ?? "graph-1",
+					graphName: graph.name ?? "Graph",
+					status: "completed",
+					state: {},
+					nodeResults: Object.fromEntries(
+						(graph.nodes ?? []).map((node, index) => [
+							node.id,
+							{
+								nodeId: node.id,
+								status: "completed",
+								output: { ok: true },
+								retryCount: 0,
+								startedAt,
+								completedAt: `2026-05-02T00:00:0${index + 1}.000Z`,
+							},
+						]),
+					),
+					approvals: [],
+					artifacts: [],
+					failures: [],
+					events: [],
+					startedAt,
+					updatedAt: "2026-05-02T00:00:01.000Z",
+					completedAt: "2026-05-02T00:00:01.000Z",
+				});
+			},
+			runs: () =>
+				actionResult([
+					{
+						id: "run-1",
+						graphId: "graph-1",
+						graphName: "Graph",
+						status: "completed",
+						state: {},
+						nodeResults: {
+							"node-1": {
+								nodeId: "node-1",
+								status: "completed",
+								output: { token: "secret://site/example.test/login" },
+								retryCount: 0,
+								startedAt: "2026-05-02T00:00:00.000Z",
+								completedAt: "2026-05-02T00:00:01.000Z",
+							},
+						},
+						approvals: [],
+						artifacts: [],
+						failures: [],
+						events: [],
+						startedAt: "2026-05-02T00:00:00.000Z",
+						updatedAt: "2026-05-02T00:00:01.000Z",
+						completedAt: "2026-05-02T00:00:01.000Z",
+					},
+				] as never),
+			status: () => actionResult({ id: "run-1", status: "completed" }),
+			resume: async () => actionResult({ id: "run-1", status: "completed" }),
+			approve: () => actionResult({ id: "run-1", approved: true }),
+			cancel: () => actionResult({ id: "run-1", status: "canceled" }),
+			events: () => actionResult([]),
+			editState: () => actionResult({ state: {} }),
+		},
 		close: () => undefined,
 	} as unknown as BrowserControlAPI;
 }
 
 function baseUrl(address: AddressInfo): string {
 	return `http://127.0.0.1:${address.port}`;
+}
+
+async function startOpenAiFixture(): Promise<{
+	url: string;
+	close: () => Promise<void>;
+}> {
+	const server = http.createServer((request, response) => {
+		const chunks: Buffer[] = [];
+		request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+		request.on("end", () => {
+			response.setHeader("Content-Type", "application/json");
+			if (request.url === "/v1/models") {
+				response.end(
+					JSON.stringify({
+						object: "list",
+						data: [{ id: "fixture-model", object: "model" }],
+					}),
+				);
+				return;
+			}
+			if (request.url === "/v1/chat/completions") {
+				response.end(
+					JSON.stringify({
+						id: "chatcmpl-fixture",
+						object: "chat.completion",
+						created: 1,
+						model: "fixture-model",
+						choices: [
+							{
+								index: 0,
+								message: { role: "assistant", content: "ok" },
+								finish_reason: "stop",
+							},
+						],
+						usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+					}),
+				);
+				return;
+			}
+			response.writeHead(404);
+			response.end(JSON.stringify({ error: "not found" }));
+		});
+	});
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const address = server.address();
+	assert.ok(address && typeof address === "object");
+	return {
+		url: `http://127.0.0.1:${address.port}/v1`,
+		close: () => new Promise((resolve) => server.close(() => resolve())),
+	};
 }
 
 test("web app server protects API routes and exposes status/capabilities", async (t) => {
@@ -170,6 +396,720 @@ test("web app server protects API routes and exposes status/capabilities", async
 			.available,
 		true,
 	);
+});
+
+test("web app server exposes credential vault without leaking secret values", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-vault-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const previousBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+	resetStateStorage();
+	resetCredentialVault();
+	t.after(() => {
+		resetCredentialVault();
+		resetStateStorage();
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		if (previousBackend === undefined)
+			delete process.env.BROWSER_CONTROL_STATE_BACKEND;
+		else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const rejected = await fetch(`${info.url}/api/vault`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			scope: "site",
+			scopeName: "example.test",
+			secretName: "login",
+			value: "super-secret-value",
+		}),
+	});
+	assert.equal(rejected.status, 400);
+
+	const created = await fetch(`${info.url}/api/vault`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			scope: "site",
+			scopeName: "example.test",
+			secretName: "login",
+			value: "super-secret-value",
+			confirm: "STORE_SECRET",
+		}),
+	});
+	assert.equal(created.status, 200);
+	const createdText = await created.text();
+	assert.doesNotMatch(createdText, /super-secret-value/);
+	const createdBody = JSON.parse(createdText) as {
+		id: string;
+		hasValue: boolean;
+	};
+	assert.equal(createdBody.id, "secret://site/example.test/login");
+	assert.equal(createdBody.hasValue, true);
+
+	const list = await fetch(`${info.url}/api/vault`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(list.status, 200);
+	const listText = await list.text();
+	assert.doesNotMatch(listText, /super-secret-value/);
+	assert.match(listText, /secret:\/\/site\/example.test\/login/);
+	const listBody = JSON.parse(listText) as Array<{
+		id: string;
+		hasValue: boolean;
+	}>;
+	assert.equal(listBody[0]?.hasValue, true);
+
+	const grant = await fetch(`${info.url}/api/vault/grants`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			secretId: createdBody.id,
+			actions: ["type", "use-as-form-value"],
+			domainScope: "example.test",
+			packageScope: "pkg.alpha",
+			workflowScope: "flow.login",
+		}),
+	});
+	assert.equal(grant.status, 200);
+	const grantBody = (await grant.json()) as {
+		id: string;
+		actions: string[];
+		domainScope: string;
+		packageScope: string;
+		workflowScope: string;
+		revoked: boolean;
+	};
+	assert.equal(grantBody.revoked, false);
+	assert.deepEqual(grantBody.actions, ["type", "use-as-form-value"]);
+	assert.equal(grantBody.domainScope, "example.test");
+	assert.equal(grantBody.packageScope, "pkg.alpha");
+	assert.equal(grantBody.workflowScope, "flow.login");
+
+	const revoked = await fetch(
+		`${info.url}/api/vault/grants/${encodeURIComponent(grantBody.id)}`,
+		{ method: "DELETE", headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(revoked.status, 200);
+	assert.equal(((await revoked.json()) as { success: boolean }).success, true);
+
+	const grantsAfterRevoke = await fetch(`${info.url}/api/vault/grants`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	const grantsText = await grantsAfterRevoke.text();
+	assert.doesNotMatch(grantsText, /super-secret-value/);
+	const grantsBody = JSON.parse(grantsText) as Array<{
+		id: string;
+		revoked: boolean;
+		revokedAt?: string;
+	}>;
+	assert.equal(
+		grantsBody.find((item) => item.id === grantBody.id)?.revoked,
+		true,
+	);
+
+	const audit = await fetch(`${info.url}/api/vault/audit`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	const auditText = await audit.text();
+	assert.doesNotMatch(auditText, /super-secret-value/);
+	assert.match(auditText, /grant:revoke/);
+});
+
+test("web app server saves model config redacted and starts authenticated local model API", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-model-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	const upstream = await startOpenAiFixture();
+	t.after(async () => {
+		await upstream.close();
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const saved = await fetch(`${info.url}/api/config/modelProvider`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			modelProvider: "openai-compatible",
+			modelEndpoint: upstream.url,
+			modelKey: "super-secret-model-key",
+			modelName: "fixture-model",
+		}),
+	});
+	assert.equal(saved.status, 200);
+	const savedText = await saved.text();
+	assert.doesNotMatch(savedText, /super-secret-model-key/);
+	assert.match(savedText, /\[redacted\]/);
+
+	const localApi = await fetch(`${info.url}/api/config/localApi`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ port: 0, token: "local-api-test-token" }),
+	});
+	assert.equal(localApi.status, 200);
+	const localApiBody = (await localApi.json()) as {
+		success: boolean;
+		url: string;
+		tokenProvided: boolean;
+	};
+	assert.equal(localApiBody.success, true);
+	assert.equal(localApiBody.tokenProvided, true);
+	assert.match(localApiBody.url, /^http:\/\/127\.0\.0\.1:\d+\/?$/u);
+	assert.doesNotMatch(localApiBody.url, /:0\/?$/u);
+
+	const denied = await fetch(`${localApiBody.url}/v1/models`);
+	assert.equal(denied.status, 401);
+
+	const chat = await fetch(`${localApiBody.url}/v1/chat/completions`, {
+		method: "POST",
+		headers: {
+			authorization: "Bearer local-api-test-token",
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ messages: [{ role: "user", content: "hello" }] }),
+	});
+	const chatText = await chat.text();
+	assert.equal(chat.status, 200, chatText);
+	assert.equal(
+		(JSON.parse(chatText) as { model: string }).model,
+		"fixture-model",
+	);
+});
+
+test("web app server exposes record to workflow and package draft flow", async (t) => {
+	resetRecorder();
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const started = await fetch(`${info.url}/api/recordings/start`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ name: "Checkout Capture", domain: "shop.test" }),
+	});
+	assert.equal(started.status, 200);
+	const startedBody = (await started.json()) as {
+		data: { id: string };
+	};
+	const recordingId = startedBody.data.id;
+
+	const filled = await fetch(`${info.url}/api/recordings/actions`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			kind: "browser-fill",
+			params: {
+				target: "#password",
+				text: "secret://site/shop.test/password",
+			},
+		}),
+	});
+	assert.equal(filled.status, 200);
+	const filledText = await filled.text();
+	assert.doesNotMatch(filledText, /secret:\/\/site/u);
+	assert.match(filledText, /\[REDACTED_SECRET\]/u);
+
+	const terminal = await fetch(`${info.url}/api/recordings/actions`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			kind: "terminal-exec",
+			params: { command: "npm test" },
+		}),
+	});
+	assert.equal(terminal.status, 200);
+
+	const stopped = await fetch(`${info.url}/api/recordings/stop`, {
+		method: "POST",
+		headers,
+	});
+	assert.equal(stopped.status, 200);
+
+	const draft = await fetch(
+		`${info.url}/api/recordings/${encodeURIComponent(recordingId)}/draft`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(draft.status, 200);
+	const draftText = await draft.text();
+	assert.doesNotMatch(draftText, /secret:\/\/site/u);
+	const draftBody = JSON.parse(draftText) as {
+		data: {
+			workflow: { nodes: Array<{ kind: string }> };
+			package: { manifest: { permissions: Array<Record<string, unknown>> } };
+		};
+	};
+	assert.deepEqual(
+		draftBody.data.workflow.nodes.map((node) => node.kind),
+		["browser", "terminal"],
+	);
+	assert.ok(
+		draftBody.data.package.manifest.permissions.some(
+			(permission) =>
+				permission.kind === "terminal" &&
+				Array.isArray(permission.commands) &&
+				permission.commands.includes("npm test"),
+		),
+	);
+});
+
+test("web app server records real browser terminal and filesystem actions into replay draft", async (t) => {
+	resetRecorder();
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => {
+		resetRecorder();
+		return server.close();
+	});
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const started = await fetch(`${info.url}/api/recordings/start`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ name: "Real Action Capture", domain: "shop.test" }),
+	});
+	assert.equal(started.status, 200);
+	const recordingId = ((await started.json()) as { data: { id: string } }).data
+		.id;
+
+	const opened = await fetch(`${info.url}/api/browser/open`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ url: "https://shop.test/cart" }),
+	});
+	assert.equal(opened.status, 200);
+
+	const filled = await fetch(`${info.url}/api/browser/fill`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			target: "#password",
+			text: "secret://site/shop.test/password",
+		}),
+	});
+	assert.equal(filled.status, 200);
+	assert.doesNotMatch(await filled.text(), /secret:\/\/site/u);
+
+	const terminal = await fetch(`${info.url}/api/terminal/exec`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ command: "npm test" }),
+	});
+	assert.equal(terminal.status, 200);
+
+	const written = await fetch(`${info.url}/api/fs/write`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			path: "reports/output.txt",
+			content: "secret://site/shop.test/token",
+		}),
+	});
+	assert.equal(written.status, 200);
+
+	const stopped = await fetch(`${info.url}/api/recordings/stop`, {
+		method: "POST",
+		headers,
+	});
+	assert.equal(stopped.status, 200);
+
+	const draft = await fetch(
+		`${info.url}/api/recordings/${encodeURIComponent(recordingId)}/draft`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(draft.status, 200);
+	const draftText = await draft.text();
+	assert.doesNotMatch(draftText, /secret:\/\/site/u);
+	const draftBody = JSON.parse(draftText) as {
+		data: {
+			workflow: {
+				nodes: Array<{ kind: string; input: Record<string, unknown> }>;
+			};
+			package: { manifest: { permissions: Array<Record<string, unknown>> } };
+		};
+	};
+	assert.deepEqual(
+		draftBody.data.workflow.nodes.map((node) => node.kind),
+		["browser", "browser", "terminal", "filesystem"],
+	);
+	assert.equal(
+		draftBody.data.workflow.nodes[0]?.input.url,
+		"https://shop.test/cart",
+	);
+	assert.equal(
+		draftBody.data.workflow.nodes[1]?.input.text,
+		"[REDACTED_SECRET]",
+	);
+	assert.ok(
+		draftBody.data.package.manifest.permissions.some(
+			(permission) =>
+				permission.kind === "filesystem" &&
+				Array.isArray(permission.paths) &&
+				permission.paths.includes("reports/output.txt") &&
+				permission.access === "write",
+		),
+	);
+
+	const replays = await fetch(`${info.url}/api/debug/replays`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(replays.status, 200);
+	const replayText = await replays.text();
+	assert.doesNotMatch(replayText, /secret:\/\/site/u);
+	const replayBody = JSON.parse(replayText) as Array<{
+		runId: string;
+		status: string;
+		steps: Array<{ kind: string; input: Record<string, unknown> }>;
+	}>;
+	const recordedReplay = replayBody.find(
+		(entry) => entry.runId === recordingId,
+	);
+	assert.equal(recordedReplay?.status, "recorded");
+	assert.deepEqual(
+		recordedReplay?.steps.map((step) => step.kind),
+		["browser-open", "browser-fill", "terminal-exec", "fs-write"],
+	);
+	assert.equal(recordedReplay?.steps[1]?.input.text, "[REDACTED_SECRET]");
+
+	const replayExecution = await fetch(
+		`${info.url}/api/debug/replays/${encodeURIComponent(recordingId)}/execute`,
+		{ method: "POST", headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(replayExecution.status, 200);
+	const replayExecutionText = await replayExecution.text();
+	assert.doesNotMatch(replayExecutionText, /secret:\/\/site/u);
+	const replayExecutionBody = JSON.parse(replayExecutionText) as {
+		success: boolean;
+		data: { status: string; steps: Array<{ input: Record<string, unknown> }> };
+	};
+	assert.equal(replayExecutionBody.success, true);
+	assert.equal(replayExecutionBody.data.status, "completed");
+	assert.equal(
+		replayExecutionBody.data.steps[1]?.input.text,
+		"[REDACTED_SECRET]",
+	);
+});
+
+test("web app server exposes visual, DOM, and filtered audit evidence safely", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-evidence-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	const { getDefaultAuditLogger, resetDefaultAuditLogger } = await import(
+		"../../src/policy/audit"
+	);
+	resetDefaultAuditLogger();
+	getDefaultAuditLogger().log({
+		timestamp: "2026-05-15T00:00:00.000Z",
+		sessionId: "session-1",
+		actor: "agent",
+		decision: "allow_with_audit",
+		reason: "token=superSecretToken12345",
+		profile: "balanced",
+		risk: "high",
+		step: {
+			id: "step-1",
+			path: "command",
+			action: "workflow_run",
+			params: { workflowId: "wf-1", packageName: "pkg-a" },
+			risk: "high",
+		},
+	});
+	t.after(() => {
+		resetDefaultAuditLogger();
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const beforePath = path.join(tmpHome, "before.png");
+	const afterPath = path.join(tmpHome, "after.png");
+	writeTinyPng(beforePath, [0, 0, 0, 255]);
+	writeTinyPng(afterPath, [255, 0, 0, 255]);
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const visual = await fetch(`${info.url}/api/debug/visual-diff`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ beforePath, afterPath }),
+	});
+	assert.equal(visual.status, 200);
+	const visualBody = (await visual.json()) as {
+		success: boolean;
+		data: { changedPixelCount: number; diffPath: string };
+	};
+	assert.equal(visualBody.success, true);
+	assert.equal(visualBody.data.changedPixelCount, 1);
+	assert.ok(
+		visualBody.data.diffPath.startsWith(
+			path.join(tmpHome, "reports", "evidence"),
+		),
+	);
+
+	const denied = await fetch(`${info.url}/api/debug/visual-diff`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ beforePath: "C:\\Windows\\win.ini", afterPath }),
+	});
+	assert.equal(denied.status, 400);
+
+	const dom = await fetch(`${info.url}/api/debug/dom-diff`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			beforeNodes: [{ selector: "#result", text: "Old" }],
+			afterNodes: [{ selector: "#result", text: "New secret://site/password" }],
+		}),
+	});
+	assert.equal(dom.status, 200);
+	assert.doesNotMatch(await dom.text(), /secret:\/\/site/u);
+
+	const audit = await fetch(
+		`${info.url}/api/audit?sessionId=session-1&workflowId=wf-1&packageName=pkg-a&risk=high`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(audit.status, 200);
+	const auditText = await audit.text();
+	assert.match(auditText, /workflow_run/);
+	assert.doesNotMatch(auditText, /superSecretToken12345/u);
+});
+
+test("web app server exposes real failure debug bundles without leaking secrets", async (t) => {
+	const tmpHome = fs.mkdtempSync(
+		path.join(os.tmpdir(), "bc-web-debug-bundle-"),
+	);
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const { collectFailureDebugMetadata } = await import(
+		"../../src/observability/action_debug"
+	);
+	const { listDebugBundles, loadDebugBundle } = await import(
+		"../../src/observability/debug_bundle"
+	);
+
+	const debug = await collectFailureDebugMetadata({
+		action: "browser_click",
+		sessionId: "session-debug",
+		executionPath: "a11y",
+		error: new Error("Selector failed with secret://site/password"),
+		page: {
+			url: () => "https://example.test/?token=superSecretToken12345",
+			title: async () => "Debug Failure",
+			screenshot: async () => Buffer.from("not-a-real-png"),
+			evaluate: async <T>() =>
+				[
+					{
+						ref: "e0",
+						role: "button",
+						name: "Submit",
+						text: "secret://site/password",
+					},
+				] as T,
+		},
+		policyDecision: "allow_with_audit",
+		policyReason: "token=superSecretToken12345",
+	});
+	assert.ok(debug.debugBundleId);
+
+	const api = mockApi();
+	api.debug = {
+		...api.debug,
+		listBundles: () => listDebugBundles(),
+		bundle: (bundleId: string) => loadDebugBundle(bundleId),
+	};
+
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = { authorization: "Bearer test-token" };
+
+	const listed = await fetch(`${info.url}/api/debug/bundles`, { headers });
+	assert.equal(listed.status, 200);
+	const listedText = await listed.text();
+	assert.match(listedText, /browser_click/u);
+	assert.doesNotMatch(listedText, /secret:\/\/site/u);
+	assert.doesNotMatch(listedText, /superSecretToken12345/u);
+
+	const detail = await fetch(
+		`${info.url}/api/debug/bundles/${encodeURIComponent(debug.debugBundleId)}`,
+		{ headers },
+	);
+	assert.equal(detail.status, 200);
+	const detailText = await detail.text();
+	assert.match(detailText, /Debug Failure/u);
+	assert.match(detailText, /browser_click/u);
+	assert.doesNotMatch(detailText, /secret:\/\/site/u);
+	assert.doesNotMatch(detailText, /superSecretToken12345/u);
+
+	const traversal = await fetch(`${info.url}/api/debug/bundles/..%2Fsecret`, {
+		headers,
+	});
+	assert.equal(traversal.status, 404);
+});
+
+test("web app server exposes service proxy status and controls", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const services = await fetch(`${info.url}/api/services`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(services.status, 200);
+	assert.match(await services.text(), /"app"/u);
+
+	const status = await fetch(`${info.url}/api/services/proxy`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(status.status, 200);
+	assert.match(await status.text(), /"enabled":false/u);
+
+	const started = await fetch(`${info.url}/api/services/proxy/start`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ port: 0 }),
+	});
+	assert.equal(started.status, 200);
+	assert.match(await started.text(), /127\.0\.0\.1:3210/u);
+
+	const stopped = await fetch(`${info.url}/api/services/proxy/stop`, {
+		method: "POST",
+		headers,
+	});
+	assert.equal(stopped.status, 200);
+	assert.match(await stopped.text(), /"stopped":true/u);
+});
+
+test("web app server exposes provider health diagnostics", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = { authorization: "Bearer test-token" };
+
+	const response = await fetch(`${info.url}/api/browser/providers/health`, {
+		headers,
+	});
+
+	assert.equal(response.status, 200);
+	const body = (await response.json()) as {
+		data: Array<{ name: string; state: string; score: number }>;
+	};
+	assert.equal(body.data[0].name, "local");
+	assert.equal(body.data[0].state, "healthy");
+	assert.equal(body.data[0].score, 100);
+});
+
+test("web app server exposes browser provider catalog metadata", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/api/browser/providers/catalog`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(response.status, 200);
+	const body = (await response.json()) as {
+		data: Array<{ name: string; risk: string; requiresAuth: boolean }>;
+	};
+	assert.equal(body.data[0].name, "browserbase");
+	assert.equal(body.data[0].risk, "high");
+	assert.equal(body.data[0].requiresAuth, true);
+	assert.doesNotMatch(JSON.stringify(body), /secret-token|apiKeyValue/u);
+});
+
+test("web app server exposes network rule management", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-rules-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const previousBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		if (previousBackend === undefined)
+			delete process.env.BROWSER_CONTROL_STATE_BACKEND;
+		else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const created = await fetch(`${info.url}/api/network/rules`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			pattern: "*.analytics.test",
+			ruleType: "denylist",
+			resourceTypes: ["script"],
+		}),
+	});
+	assert.equal(created.status, 200);
+	const createdBody = (await created.json()) as { id: string; pattern: string };
+	assert.equal(createdBody.pattern, "*.analytics.test");
+
+	const list = await fetch(`${info.url}/api/network/rules`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(list.status, 200);
+	const rules = (await list.json()) as Array<{ id: string; pattern: string }>;
+	assert.ok(rules.some((rule) => rule.id === createdBody.id));
+
+	const removed = await fetch(
+		`${info.url}/api/network/rules/${encodeURIComponent(createdBody.id)}`,
+		{ method: "DELETE", headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(removed.status, 200);
+	assert.equal(((await removed.json()) as { removed: boolean }).removed, true);
 });
 
 test("web app server executes terminal route and emits event", async (t) => {
@@ -217,6 +1157,201 @@ test("web app server executes terminal route and emits event", async (t) => {
 	};
 	assert.equal(event.type, "terminal.action");
 	assert.equal(event.payload.data.stdout, "ok\n");
+});
+
+test("terminal API preserves session size and non-submitting input", async (t) => {
+	const api = mockApi();
+	const openPayloads: unknown[] = [];
+	const inputPayloads: unknown[] = [];
+	api.terminal.open = async (options: unknown) => {
+		openPayloads.push(options);
+		return actionResult({
+			id: "term-sized",
+			shell: "powershell",
+			cwd: ".",
+			status: "idle",
+		});
+	};
+	api.terminal.type = async (options: unknown) => {
+		inputPayloads.push(options);
+		return actionResult({ typed: "paste" });
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const createResponse = await fetch(`${info.url}/api/terminal/sessions`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ name: "sized", cols: 132, rows: 42 }),
+	});
+	assert.equal(createResponse.status, 200);
+	assert.deepEqual(openPayloads, [
+		{ shell: undefined, cwd: undefined, name: "sized", cols: 132, rows: 42 },
+	]);
+
+	const inputResponse = await fetch(
+		`${info.url}/api/terminal/sessions/term-sized/input`,
+		{
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				authorization: "Bearer test-token",
+			},
+			body: JSON.stringify({ text: "paste without enter", submit: false }),
+		},
+	);
+	assert.equal(inputResponse.status, 200);
+	assert.deepEqual(inputPayloads, [
+		{ sessionId: "term-sized", text: "paste without enter", submit: false },
+	]);
+});
+
+test("terminal render endpoint returns browser-ready VT segments", async (t) => {
+	const api = mockApi();
+	api.terminal.snapshot = async () =>
+		actionResult({
+			sessionId: "term-render",
+			name: "build",
+			shell: "bash",
+			cwd: "/repo",
+			env: {},
+			status: "idle",
+			lastOutput: "\x1b[1;32mPASS\x1b[0m\nplain",
+			promptDetected: true,
+			scrollbackLines: 2,
+			createdAt: "2026-05-02T00:00:00.000Z",
+			lastActivityAt: "2026-05-02T00:00:00.000Z",
+		} as never);
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(
+		`${info.url}/api/terminal/sessions/term-render/render`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(response.status, 200);
+	const body = (await response.json()) as {
+		success: boolean;
+		data: { rows: Array<{ text: string; segments: unknown[] }> };
+	};
+
+	assert.equal(body.success, true);
+	assert.equal(body.data.rows[0].text, "PASS");
+	assert.deepEqual(body.data.rows[0].segments, [
+		{ text: "PASS", bold: true, foreground: "green" },
+	]);
+});
+
+test("web app exposes workflow v2 run, events, state edit, and helper APIs", async (t) => {
+	const api = mockApi() as BrowserControlAPI & {
+		workflow: {
+			run(graph: string): Promise<ActionResult<unknown>>;
+			runs(): ActionResult<unknown[]>;
+			status(runId: string): ActionResult<unknown>;
+			events(runId: string): ActionResult<unknown>;
+			editState(
+				runId: string,
+				key: string,
+				value: string | number | boolean,
+			): ActionResult<unknown>;
+		};
+		harness: {
+			generate(input: unknown): Promise<ActionResult<unknown>>;
+			execute(
+				helperId: string,
+				input?: Record<string, unknown>,
+			): Promise<ActionResult<unknown>>;
+		};
+	};
+	(api as unknown as { workflow: unknown }).workflow = {
+		run: async (graph: unknown) =>
+			actionResult({ id: "run-1", graph, status: "completed" }),
+		runs: () => actionResult([]),
+		status: () => actionResult({ id: "run-1", status: "completed" }),
+		events: () =>
+			actionResult([{ type: "workflow-completed", runId: "run-1" }]),
+		editState: (_runId: unknown, key: unknown, value: unknown) =>
+			actionResult({ key, value }),
+	};
+	(api as unknown as { harness: unknown }).harness = {
+		generate: async (input: unknown) =>
+			actionResult({
+				helper: { id: (input as { id?: string }).id },
+				activated: true,
+			}),
+		execute: async (helperId: string, input?: Record<string, unknown>) =>
+			actionResult({ helperId, input, validation: { status: "passed" } }),
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const run = await fetch(`${info.url}/api/workflows/run`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ graph: '{"id":"flow"}' }),
+	});
+	assert.equal(run.status, 200);
+	assert.equal(
+		((await run.json()) as { data: { id: string } }).data.id,
+		"run-1",
+	);
+
+	const events = await fetch(`${info.url}/api/workflows/runs/run-1/events`, {
+		headers,
+	});
+	assert.equal(events.status, 200);
+	assert.equal(
+		((await events.json()) as { data: Array<{ type: string }> }).data[0].type,
+		"workflow-completed",
+	);
+
+	const state = await fetch(`${info.url}/api/workflows/runs/run-1/state`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ key: "route", value: "right" }),
+	});
+	assert.equal(state.status, 200);
+	assert.equal(
+		((await state.json()) as { data: { key: string } }).data.key,
+		"route",
+	);
+
+	const generated = await fetch(`${info.url}/api/harness/generate`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			id: "helper-ui",
+			purpose: "UI helper",
+			taskTags: ["login"],
+			failureTypes: ["selector"],
+			files: [{ path: "helper.js", content: "console.log('ok')" }],
+		}),
+	});
+	assert.equal(generated.status, 200);
+
+	const executed = await fetch(
+		`${info.url}/api/harness/helpers/helper-ui/execute`,
+		{
+			method: "POST",
+			headers,
+			body: JSON.stringify({ input: { target: "login" } }),
+		},
+	);
+	assert.equal(executed.status, 200);
+	assert.equal(
+		((await executed.json()) as { data: { helperId: string } }).data.helperId,
+		"helper-ui",
+	);
 });
 
 test("web app server bridges task and automation endpoints through broker", async (t) => {

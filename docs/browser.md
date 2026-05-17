@@ -11,6 +11,7 @@ Config:
 
 ```powershell
 bc config set browserMode managed
+bc config set browserAutoLaunch true
 bc config set chromeDebugPort 9222
 bc config set chromeBindAddress 127.0.0.1
 bc config set browserDebugUrl http://127.0.0.1:9222
@@ -26,6 +27,43 @@ bc browser status
 bc open https://example.com
 bc snapshot
 ```
+
+## Browser Readiness
+
+`bc_browser_open` automatically ensures a browser is connected before navigating. The connection sequence is:
+
+1. **Already connected** — uses the existing browser page.
+2. **Reconnect** — attempts to reconnect to a previously managed browser.
+3. **Attach** — tries to attach to a running Chrome on the configured CDP port.
+4. **Auto-launch fallback** — if attach fails and `browserAutoLaunch` is `true` (default), launches a managed browser automatically.
+
+This means `bc open https://example.com` works as a single first command without needing a prior `bc browser launch` or `bc browser attach`, as long as `BROWSER_AUTO_LAUNCH` is not set to `false`.
+
+To disable auto-launch (strict attach-only mode):
+
+```powershell
+bc config set browserAutoLaunch false
+```
+
+Or via environment:
+
+```powershell
+$env:BROWSER_AUTO_LAUNCH = "false"
+```
+
+When auto-launch is disabled and no browser is attachable, browser commands return a detailed error with recovery guidance.
+
+## Explicit Launch
+
+The `bc_browser_launch` MCP tool (or `bc browser launch` CLI) explicitly starts a managed browser:
+
+```powershell
+bc browser launch
+bc browser launch --port 9223
+bc browser launch --profile isolated
+```
+
+If a browser is already connected, `launch` returns the existing connection metadata without starting a new process.
 
 ## Window Size and Viewport
 
