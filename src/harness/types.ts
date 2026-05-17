@@ -25,6 +25,45 @@ export interface HarnessHelperManifest {
   updatedAt: string;
 }
 
+export interface HarnessGeneratedFile {
+  path: string;
+  content: string;
+}
+
+export interface HarnessGenerateHelperInput {
+  id: string;
+  site?: string;
+  domains?: string[];
+  taskTags?: string[];
+  failureTypes?: string[];
+  files: HarnessGeneratedFile[];
+  usage?: string;
+  purpose: string;
+  version?: string;
+  testCommand?: string;
+  activate?: boolean;
+}
+
+export interface HarnessGenerateHelperResult {
+  success: boolean;
+  helper: HarnessHelperManifest;
+  helperDir: string;
+  validation: HelperValidationResult;
+  sandbox?: SandboxRunResult;
+  activated: boolean;
+  rolledBack: boolean;
+  error?: string;
+}
+
+export interface HarnessExecutionResult {
+  helperId: string;
+  helper: HarnessHelperManifest;
+  validation: HelperValidationResult;
+  sandbox?: SandboxRunResult;
+  input?: Record<string, unknown>;
+  executedAt: string;
+}
+
 // ── Validation ────────────────────────────────────────────────────────
 
 export interface HelperValidationCheck {
@@ -53,6 +92,11 @@ export interface SandboxRunResult {
 
 export interface SandboxProvider {
   kind: SandboxProviderKind;
-  run(command: string, files: string[], workDir: string): Promise<SandboxRunResult>;
+  run(
+    command: string,
+    files: string[],
+    workDir: string,
+    options?: { env?: Record<string, string> },
+  ): Promise<SandboxRunResult>;
   cleanup(): Promise<void>;
 }

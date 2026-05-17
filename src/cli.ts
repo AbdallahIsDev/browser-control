@@ -26,12 +26,15 @@ interface StoredBrowserConnectionState {
 
 const VALUE_FLAGS = new Set([
 	"action",
+	"activate",
 	"amount",
 	"api-key",
 	"browser-mode",
 	"browserless-api-key",
 	"browserless-endpoint",
+	"ca-dir",
 	"cdp-url",
+	"cert",
 	"chrome-bind-address",
 	"chrome-debug-port",
 	"chrome-path",
@@ -42,16 +45,21 @@ const VALUE_FLAGS = new Set([
 	"cwd",
 	"data",
 	"daemon-socket",
+	"days",
 	"debug-endpoint",
 	"delay",
+	"domains",
 	"endpoint",
 	"ext",
+	"failure-types",
 	"file",
 	"files",
 	"format",
 	"health-check-interval",
 	"help",
 	"host",
+	"id",
+	"input",
 	"iterations",
 	"key",
 	"kind",
@@ -72,26 +80,39 @@ const VALUE_FLAGS = new Set([
 	"profile",
 	"protocol",
 	"provider",
+	"purpose",
 	"query",
 	"region",
 	"retention",
+	"resource-types",
 	"root-selector",
+	"rule-type",
 	"screenshot-path",
 	"session",
 	"shell",
 	"show-actions",
 	"skill",
+	"scope",
+	"scope-name",
+	"secret-id",
+	"secret-name",
+	"site",
+	"status-file",
 	"style",
 	"suite",
 	"target",
 	"target-type",
+	"task-tags",
 	"terminal-shell",
+	"test-command",
 	"token",
 	"timeout",
 	"timeoutMs",
 	"type",
 	"url",
+	"usage",
 	"value",
+	"version",
 	"wait-until",
 	"annotation-position",
 ]);
@@ -422,6 +443,8 @@ Operator:
 Workflow Graph (Section 29):
   workflow run <graphPathOrName> [--json]                            Run a workflow graph
   workflow status <runId> [--json]                                   Show workflow run status
+  workflow events <runId> [--json]                                   Show workflow run events
+  workflow edit-state <runId> <key> <value> [--json]                 Edit workflow run state
   workflow resume <runId> [--json]                                   Resume a workflow run
   workflow approve <runId> <nodeId> [--json]                         Approve a workflow node
   workflow cancel <runId> [--json]                                   Cancel a workflow run
@@ -430,6 +453,9 @@ Self-Healing Harness (Section 29):
   harness list [--json]                                              List registered helpers
   harness validate <helperId> [--json]                               Validate a helper
   harness rollback <helperId> <version> [--json]                     Rollback a helper
+  harness generate --id=<id> --purpose=<purpose> [--files=<path:content>] [--json]
+                                                                     Generate a helper
+  harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
 
 Automation Packages (Section 30):
   package install <source> [--json]                                  Install a package from local directory
@@ -448,6 +474,7 @@ Browser Actions:
   fill <ref-or-target> <text>                                        Fill an element with text
   hover <ref-or-target>                                             Hover over an element
   type <text>                                                        Type text into focused element
+  paste <text> [--target=<ref-or-target>]                            Paste/insert text into focused element
   press <key>                                                        Press a keyboard key
   scroll <direction>                                                 Scroll (up/down/left/right)
   screenshot [--output=<path>] [--full-page] [--target=<ref>]         Take a screenshot
@@ -467,9 +494,11 @@ Browser Lifecycle:
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
   browser provider list                                              List browser providers
+  browser provider catalog                                           List supported browser provider types
   browser provider use <name>                                        Set active browser provider
-  browser provider add <name> --type=<type> --endpoint=<url>         Add or configure a browser provider
+  browser provider add <name> --type=<type> [--endpoint=<url>]       Add or configure a browser provider
   browser provider remove <name>                                     Remove a configured browser provider
+  browser provider health [name]                                     Run provider health diagnostics
   browser profile list                                                List browser profiles
   browser profile create <name> [--type=named]                       Create a browser profile
   browser profile use <name>                                          Activate a browser profile
@@ -515,6 +544,7 @@ Browser Lifecycle:
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
+  knowledge backends [list|health|search|rank]                       Manage knowledge backends
   term open [--shell=<name>] [--cwd=<path>] [--name=<name>]           Open a terminal session
   term exec "<command>" [--session=<id>] [--timeout=<ms>]             Execute a command
   term type "<text>" --session=<id>                                   Type into a session
@@ -538,6 +568,11 @@ Service Management:
   service list                                                        List registered services
   service resolve <name>                                              Resolve service to URL
   service remove <name>                                               Remove a service
+  service proxy status                                                Show .localhost proxy status
+  service proxy start [--port=80|0] [--allow-remote=true] [--background=true] [--https=true --cert=<pem> --key=<pem>|--local-ca=true] Start .localhost proxy
+  service proxy stop                                                  Stop managed .localhost proxy
+  service proxy startup status|install|uninstall [--port=80] [--yes] Manage per-user OS startup
+  service proxy ca status|create|install|uninstall [--ca-dir=<dir>] [--rotate=true] [--yes] Manage trusted .localhost CA
 
 Debug:
   debug bundle <id> [--output=<path>] [--yes]                          Retrieve a debug bundle
@@ -554,6 +589,7 @@ Knowledge:
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
+  knowledge backends [list|health|search|rank]                       Manage knowledge backends
 
 Flags:
   --json                                                             Raw JSON output
@@ -1969,13 +2005,40 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					}
 					break;
 				}
+				case "catalog": {
+					await requireCliPolicy("browser_provider_catalog", {}, jsonOutput);
+					const { ProviderRegistry } = await import("./providers/registry");
+					const registry = new ProviderRegistry();
+					const result = registry.catalog();
+					if (jsonOutput) {
+						outputJson(result);
+					} else {
+						console.log("Browser provider catalog:");
+						for (const entry of result) {
+							const flags = [
+								entry.remote ? "remote" : "local",
+								`risk=${entry.risk}`,
+								entry.requiresEndpoint ? "endpoint" : "no endpoint",
+								entry.requiresAuth ? "credential" : "no credential",
+							].join(", ");
+							console.log(`  ${entry.name}: ${entry.label} (${flags})`);
+							console.log(`    ${entry.description}`);
+						}
+					}
+					break;
+				}
 				case "use": {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Provider name is required");
 						process.exit(1);
 					}
-					await requireCliPolicy("browser_provider_use", { name }, jsonOutput);
+					await requireCliPolicy(
+						"browser_provider_use",
+						{ name },
+						jsonOutput,
+						flags.yes === "true",
+					);
 					const { ProviderRegistry } = await import("./providers/registry");
 					const registry = new ProviderRegistry();
 					const result = registry.select(name);
@@ -2003,17 +2066,29 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const providerType = flags.type as ProviderConfig["type"] | undefined;
 					const endpoint = flags.endpoint as string | undefined;
 					const apiKey = flags["api-key"] as string | undefined;
+					const validProviderTypes: ProviderConfig["type"][] = [
+						"browserless",
+						"browserbase",
+						"custom",
+						"e2b",
+						"cubesandbox",
+						"camofox",
+						"cloak",
+						"obscura",
+					];
 					if (!providerType) {
-						console.error("Error: --type is required (browserless, custom)");
-						process.exit(1);
-					}
-					if (providerType !== "browserless" && providerType !== "custom") {
 						console.error(
-							`Error: Invalid provider type "${providerType}". Must be browserless or custom.`,
+							"Error: --type is required (browserless, browserbase, custom, e2b, cubesandbox, camofox, cloak, obscura)",
 						);
 						process.exit(1);
 					}
-					if (!endpoint) {
+					if (!validProviderTypes.includes(providerType)) {
+						console.error(
+							`Error: Invalid provider type "${providerType}". Must be browserless, browserbase, custom, e2b, cubesandbox, camofox, cloak, or obscura.`,
+						);
+						process.exit(1);
+					}
+					if (!endpoint && providerType !== "browserbase") {
 						console.error("Error: --endpoint is required");
 						process.exit(1);
 					}
@@ -2021,14 +2096,15 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						"browser_provider_add",
 						{ name, type: providerType, endpoint },
 						jsonOutput,
+						flags.yes === "true",
 					);
 					const { ProviderRegistry } = await import("./providers/registry");
 					const registry = new ProviderRegistry();
 					const config: ProviderConfig = {
 						name,
 						type: providerType,
-						endpoint,
 					};
+					if (endpoint) config.endpoint = endpoint;
 					if (apiKey) config.apiKey = apiKey;
 					const result = registry.add(config);
 					if (jsonOutput) {
@@ -2044,6 +2120,41 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					}
 					break;
 				}
+				case "health": {
+					await requireCliPolicy(
+						"browser_provider_health",
+						{ name: positional[1] },
+						jsonOutput,
+					);
+					const { ProviderRegistry } = await import("./providers/registry");
+					const { checkProviderHealth } = await import("./providers/health");
+					const registry = new ProviderRegistry();
+					const listed = registry.list();
+					const names = positional[1]
+						? [positional[1]]
+						: [
+								...new Set([
+									...listed.builtIn,
+									...listed.providers.map((provider) => provider.name),
+								]),
+							];
+					const reports = [];
+					for (const providerName of names) {
+						const config = registry.get(providerName);
+						if (config) reports.push(await checkProviderHealth(config));
+					}
+					if (jsonOutput) {
+						outputJson(reports);
+					} else {
+						for (const report of reports) {
+							console.log(
+								`${report.name} (${report.type}): ${report.state} score=${report.score} latency=${report.latencyMs}ms`,
+							);
+							console.log(`  ${report.summary}`);
+						}
+					}
+					break;
+				}
 				case "remove": {
 					const name = positional[1];
 					if (!name) {
@@ -2054,6 +2165,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						"browser_provider_remove",
 						{ name },
 						jsonOutput,
+						flags.yes === "true",
 					);
 					const { ProviderRegistry } = await import("./providers/registry");
 					const registry = new ProviderRegistry();
@@ -2604,6 +2716,14 @@ export async function runCli(argv = process.argv): Promise<void> {
 			await handlePackage(args);
 			break;
 
+		case "vault":
+			await handleVault(args);
+			break;
+
+		case "network":
+			await handleNetwork(args);
+			break;
+
 		case "run":
 			await handleRun(args);
 			break;
@@ -2663,6 +2783,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 
 		case "type":
 			await handleBrowserAction("type", args);
+			break;
+
+		case "paste":
+			await handleBrowserAction("paste", args);
 			break;
 
 		case "press":
@@ -2953,10 +3077,152 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 			const deleted = deleteArtifact(artifact.filePath);
 			if (deleted) {
-				console.log(`Deleted: ${artifact.filePath}`);
-			} else {
-				console.error(`Error: Failed to delete ${artifact.filePath}`);
-				process.exit(1);
+			console.log(`Deleted: ${artifact.filePath}`);
+		} else {
+			console.error(`Error: Failed to delete ${artifact.filePath}`);
+			process.exit(1);
+		}
+		break;
+	}
+
+		case "backends": {
+			const backendSubcommand = positional[0] ?? "list";
+			const { getKnowledgeBackendCatalog, createKnowledgeBackend } = await import("./knowledge/backends");
+
+			switch (backendSubcommand) {
+				case "list": {
+					const catalog = getKnowledgeBackendCatalog();
+					if (jsonOutput) {
+						outputJson(catalog, false);
+					} else {
+						console.log("Knowledge Backend Catalog:\n");
+						for (const entry of catalog) {
+							const defaultTag = entry.default ? " [default]" : "";
+							const remoteTag = entry.remote ? " [remote]" : "";
+							const statusTag = entry.status === "extension-point" ? " [extension]" : "";
+							console.log(`  ${entry.type}${defaultTag}${remoteTag}${statusTag}`);
+							console.log(`    Label: ${entry.label}`);
+							console.log(`    Hint:  ${entry.setupHint}`);
+							console.log();
+						}
+					}
+					break;
+				}
+
+				case "health": {
+					const type = flags.type as string | undefined;
+					const endpoint = flags.endpoint as string | undefined;
+					const apiKey = flags["api-key"] as string | undefined;
+
+					if (type) {
+						const backend = createKnowledgeBackend({
+							type: type as never,
+							endpoint,
+							apiKey,
+						});
+						const health = await backend.health();
+						if (jsonOutput) {
+							outputJson(health, false);
+						} else {
+							const status = health.ok ? "OK" : "FAIL";
+							console.log(`${status} ${health.type}: ${health.summary}`);
+							console.log(`Checked: ${health.checkedAt}`);
+						}
+						if (!health.ok) process.exit(1);
+					} else {
+						const catalog = getKnowledgeBackendCatalog();
+						const results = await Promise.all(
+							catalog.map(async (entry) => {
+								const backend = createKnowledgeBackend({ type: entry.type });
+								return backend.health();
+							}),
+						);
+						if (jsonOutput) {
+							outputJson(results, false);
+						} else {
+							console.log("Knowledge Backend Health Checks:\n");
+							for (const health of results) {
+								const status = health.ok ? "OK" : "FAIL";
+								console.log(`  ${status} ${health.type}: ${health.summary}`);
+							}
+						}
+					}
+					break;
+				}
+
+				case "search": {
+					const query = flags.query as string | undefined;
+					const domain = flags.domain as string | undefined;
+					const type = flags.type as string | undefined;
+
+					if (!query && !domain) {
+						console.error("Error: --query or --domain is required");
+						process.exit(1);
+					}
+
+					const backend = createKnowledgeBackend({
+						type: (type as never) ?? "local-markdown",
+						endpoint: flags.endpoint as string | undefined,
+						apiKey: flags["api-key"] as string | undefined,
+					});
+					const results = await backend.search({
+						search: query,
+						domain,
+					});
+					if (jsonOutput) {
+						outputJson(results, false);
+					} else {
+						console.log(`Search results (${results.length}):\n`);
+						for (const r of results) {
+							console.log(`  ${r.summary.kind}: ${r.summary.identifier}`);
+							console.log(`    Verified: ${r.summary.verified}`);
+							console.log(`    Entries:  ${r.summary.entryCount}`);
+							console.log();
+						}
+					}
+					break;
+				}
+
+				case "rank": {
+					const query = flags.query as string | undefined;
+					const domain = flags.domain as string | undefined;
+					const entryType = flags["entry-type"] as string | undefined;
+					const limit = flags.limit ? Number(flags.limit) : 10;
+
+					if (!query) {
+						console.error("Error: --query is required");
+						process.exit(1);
+					}
+
+					const backend = createKnowledgeBackend({
+						type: ((flags.type as string) ?? "local-markdown") as never,
+						endpoint: flags.endpoint as string | undefined,
+						apiKey: flags["api-key"] as string | undefined,
+					});
+					const ranked = await backend.rankEntries({
+						domain,
+						query,
+						entryType: entryType as never,
+						limit: Number.isFinite(limit) ? limit : undefined,
+					});
+					if (jsonOutput) {
+						outputJson(ranked, false);
+					} else {
+						console.log(`Ranked results (${ranked.length}):\n`);
+						for (const r of ranked) {
+							console.log(`  [${r.score.toFixed(1)}] ${r.domain}: ${r.entry.description}`);
+							if (r.entry.selector) console.log(`    selector: ${r.entry.selector}`);
+							console.log(`    reasons: ${r.reasons.join(", ")}`);
+							console.log();
+						}
+					}
+					break;
+				}
+
+				default:
+					console.error(`Unknown backends command: ${backendSubcommand}`);
+					console.error("Supported: list, health, search, rank");
+					process.exit(1);
 			}
 			break;
 		}
@@ -3836,6 +4102,13 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 	const jsonOutput = flags.json === "true";
 	const { createBrowserControl } = await import("./browser_control");
 	const bc = createBrowserControl();
+	const parseStateValue = (rawValue: string): string | number | boolean => {
+		const trimmed = rawValue.trim();
+		if (trimmed === "true") return true;
+		if (trimmed === "false") return false;
+		if (trimmed !== "" && !Number.isNaN(Number(trimmed))) return Number(trimmed);
+		return rawValue;
+	};
 
 	try {
 		switch (subcommand) {
@@ -3877,6 +4150,32 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 				break;
 			}
+			case "events": {
+				const runId = positional[0];
+				if (!runId) {
+					console.error("Error: runId is required");
+					process.exit(1);
+				}
+				const result = await bc.workflow.events(runId);
+				outputJson(result, !jsonOutput);
+				break;
+			}
+			case "edit-state": {
+				const runId = positional[0];
+				const key = positional[1];
+				const rawValue = positional[2];
+				if (!runId || !key || rawValue === undefined) {
+					console.error("Error: runId, key, and value are required");
+					process.exit(1);
+				}
+				const result = await bc.workflow.editState(
+					runId,
+					key,
+					parseStateValue(rawValue),
+				);
+				outputJson(result, !jsonOutput);
+				break;
+			}
 			case "resume": {
 				const runId = positional[0];
 				if (!runId) {
@@ -3910,7 +4209,9 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 			}
 			default:
 				console.error(`Unknown workflow command: ${subcommand}`);
-				console.error("Available: run, status, resume, approve, cancel");
+				console.error(
+					"Available: run, status, events, edit-state, resume, approve, cancel",
+				);
 				process.exit(1);
 		}
 	} finally {
@@ -3952,9 +4253,58 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 				break;
 			}
+			case "generate": {
+				const id = flags.id ?? positional[0];
+				const purpose = flags.purpose ?? positional[1];
+				if (!id || !purpose) {
+					console.error("Error: --id and --purpose are required");
+					process.exit(1);
+				}
+				const filesFlag = flags.files;
+				const files = filesFlag
+					? filesFlag.split("\0").map((f) => {
+							const [path, ...rest] = f.split(":");
+							return { path: path ?? "", content: rest.join(":") || "" };
+						})
+					: [{ path: "helper.js", content: "" }];
+				const result = await bc.harness.generate({
+					id,
+					purpose,
+					files,
+					taskTags: flags["task-tags"]?.split(","),
+					failureTypes: flags["failure-types"]?.split(","),
+					site: flags.site,
+					domains: flags.domains?.split(","),
+					usage: flags.usage,
+					version: flags.version,
+					testCommand: flags["test-command"],
+					activate: flags.activate === "true",
+				});
+				outputJson(result, !jsonOutput);
+				break;
+			}
+			case "execute": {
+				const helperId = positional[0];
+				if (!helperId) {
+					console.error("Error: helperId is required");
+					process.exit(1);
+				}
+				let input: Record<string, unknown> = {};
+				if (flags.input) {
+					try {
+						input = JSON.parse(flags.input);
+					} catch {
+						console.error("Error: Invalid JSON in --input");
+						process.exit(1);
+					}
+				}
+				const result = await bc.harness.execute(helperId, input);
+				outputJson(result, !jsonOutput);
+				break;
+			}
 			default:
 				console.error(`Unknown harness command: ${subcommand}`);
-				console.error("Available: list, validate, rollback");
+				console.error("Available: list, validate, rollback, generate, execute");
 				process.exit(1);
 		}
 	} finally {
@@ -4065,6 +4415,197 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 	}
 }
 
+async function handleVault(args: ParsedArgs): Promise<void> {
+	const { subcommand, positional, flags } = args;
+	const jsonOutput = flags.json === "true";
+	const action = subcommand || "list";
+	const { CredentialVault } = await import("./security/credential_vault");
+	const vault = new CredentialVault();
+
+	try {
+		switch (action) {
+			case "list": {
+				outputJson(await vault.list(), !jsonOutput);
+				break;
+			}
+			case "set": {
+				const scope = flags.scope;
+				const scopeName = flags["scope-name"] ?? positional[0];
+				const secretName = flags["secret-name"] ?? positional[1];
+				const value = flags.value ?? positional[2];
+				if (
+					scope !== "site" &&
+					scope !== "package" &&
+					scope !== "workflow"
+				) {
+					console.error("Error: --scope must be site, package, or workflow");
+					process.exit(1);
+				}
+				if (!scopeName || !secretName || !value) {
+					console.error(
+						"Error: scope name, secret name, and value are required",
+					);
+					process.exit(1);
+				}
+				if (flags.confirm !== "STORE_SECRET") {
+					console.error(
+						"Error: storing a secret requires --confirm=STORE_SECRET",
+					);
+					process.exit(1);
+				}
+				const stored = await vault.set(scope, scopeName, secretName, value);
+				outputJson(
+					{
+						id: stored.id,
+						scope: stored.scope,
+						scopeName: stored.scopeName,
+						secretName: stored.secretName,
+						createdAt: stored.createdAt,
+						updatedAt: stored.updatedAt,
+						hasValue: true,
+					},
+					!jsonOutput,
+				);
+				break;
+			}
+			case "delete": {
+				const secretId = flags["secret-id"] ?? positional[0];
+				if (!secretId) {
+					console.error("Error: secret id is required");
+					process.exit(1);
+				}
+				if (flags.confirm !== "DELETE_SECRET") {
+					console.error(
+						"Error: deleting a secret requires --confirm=DELETE_SECRET",
+					);
+					process.exit(1);
+				}
+				await vault.delete(secretId);
+				outputJson({ success: true, id: secretId }, !jsonOutput);
+				break;
+			}
+			case "grants": {
+				const grantAction = positional[0] ?? "list";
+				if (grantAction === "list") {
+					outputJson(await vault.listGrants(flags["secret-id"]), !jsonOutput);
+					break;
+				}
+				if (grantAction === "add") {
+					const secretId = flags["secret-id"] ?? positional[1];
+					const actions = (flags.actions ?? flags.action ?? positional[2] ?? "")
+						.split(",")
+						.map((item) => item.trim())
+						.filter(Boolean);
+					if (!secretId || actions.length === 0) {
+						console.error("Error: secret id and action(s) are required");
+						process.exit(1);
+					}
+					if (flags.confirm !== "GRANT_SECRET") {
+						console.error(
+							"Error: granting secret use requires --confirm=GRANT_SECRET",
+						);
+						process.exit(1);
+					}
+					const grant = await vault.grant(secretId, {
+						actions: actions as never,
+						siteScope: flags["site-scope"],
+						domainScope: flags["domain-scope"] ?? flags.domain,
+						packageScope: flags["package-scope"],
+						workflowScope: flags["workflow-scope"],
+						domain: flags.domain,
+						expiresAt: flags["expires-at"],
+					});
+					outputJson(grant, !jsonOutput);
+					break;
+				}
+				if (grantAction === "revoke") {
+					const grantId = positional[1];
+					if (!grantId) {
+						console.error("Error: grant id is required");
+						process.exit(1);
+					}
+					await vault.revokeGrant(grantId);
+					outputJson({ success: true, id: grantId }, !jsonOutput);
+					break;
+				}
+				console.error(`Unknown vault grants command: ${grantAction}`);
+				console.error("Available: list, add, revoke");
+				process.exit(1);
+				break;
+			}
+			default:
+				console.error(`Unknown vault command: ${action}`);
+				console.error("Available: list, set, delete, grants");
+				process.exit(1);
+		}
+	} finally {
+		vault.close();
+	}
+}
+
+async function handleNetwork(args: ParsedArgs): Promise<void> {
+	const { subcommand, positional, flags } = args;
+	const jsonOutput = flags.json === "true";
+	if (subcommand !== "rules") {
+		console.error(`Unknown network command: ${subcommand}`);
+		console.error("Available: rules");
+		process.exit(1);
+	}
+	const rulesAction = positional[0] ?? "list";
+	const { NetworkRuleEngine } = await import("./security/network_rules");
+	const engine = new NetworkRuleEngine();
+
+	try {
+		switch (rulesAction) {
+			case "list": {
+				outputJson(await engine.listRules(), !jsonOutput);
+				break;
+			}
+			case "add": {
+				const pattern = flags.pattern ?? positional[1];
+				const ruleType = flags["rule-type"] ?? flags.type ?? positional[2];
+				if (!pattern) {
+					console.error("Error: rule pattern is required");
+					process.exit(1);
+				}
+				if (
+					ruleType !== "allowlist" &&
+					ruleType !== "denylist" &&
+					ruleType !== "tracker"
+				) {
+					console.error(
+						"Error: rule type must be allowlist, denylist, or tracker",
+					);
+					process.exit(1);
+				}
+				const resourceTypes = flags["resource-types"]
+					? flags["resource-types"].split(",").map((item) => item.trim())
+					: undefined;
+				outputJson(
+					await engine.addRule(pattern, ruleType, resourceTypes as never),
+					!jsonOutput,
+				);
+				break;
+			}
+			case "remove": {
+				const id = positional[1];
+				if (!id) {
+					console.error("Error: rule id is required");
+					process.exit(1);
+				}
+				outputJson({ removed: await engine.removeRule(id) }, !jsonOutput);
+				break;
+			}
+			default:
+				console.error(`Unknown network rules command: ${rulesAction}`);
+				console.error("Available: list, add, remove");
+				process.exit(1);
+		}
+	} finally {
+		engine.close();
+	}
+}
+
 // ── Top-level Browser Action Handler (Section 5) ────────────────────
 
 async function handleBrowserAction(
@@ -4165,6 +4706,20 @@ async function handleBrowserAction(
 				result = await browserActions.type({
 					text,
 					delayMs: flags.delay ? Number(flags.delay) : undefined,
+				});
+				break;
+			}
+
+			case "paste": {
+				const text = positional[0];
+				if (!text) {
+					console.error("Error: Text is required");
+					process.exit(1);
+				}
+				result = await browserActions.paste({
+					text,
+					target: flags.target,
+					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
 				});
 				break;
 			}
@@ -4491,9 +5046,345 @@ async function handleService(args: ParsedArgs): Promise<void> {
 				break;
 			}
 
+			case "proxy": {
+				const proxyAction = positional[0] || "status";
+				const { createBrowserControl } = await import("./browser_control");
+				const { getRuntimeDir } = await import("./shared/paths");
+				const bc = createBrowserControl();
+				const statusPath = path.join(getRuntimeDir(), "localhost-proxy.json");
+				const readProxyStatus = (): Record<string, unknown> | null => {
+					if (!fs.existsSync(statusPath)) return null;
+					try {
+						return JSON.parse(fs.readFileSync(statusPath, "utf8"));
+					} catch {
+						return null;
+					}
+				};
+				const isPidAlive = (pid: unknown): pid is number => {
+					if (!Number.isInteger(pid) || Number(pid) <= 0) return false;
+					try {
+						process.kill(Number(pid), 0);
+						return true;
+					} catch {
+						return false;
+					}
+				};
+				const writeProxyStatus = (data: Record<string, unknown>) => {
+					fs.mkdirSync(path.dirname(statusPath), { recursive: true });
+					fs.writeFileSync(statusPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+				};
+				try {
+					switch (proxyAction) {
+						case "status": {
+							const saved = readProxyStatus();
+							if (saved && isPidAlive(saved.pid)) {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: {
+										enabled: true,
+										background: true,
+										pid: saved.pid,
+										host: saved.host,
+										port: saved.port,
+										url: saved.url,
+										httpsEnabled: false,
+										allowRemote: saved.allowRemote === true,
+										activeConnections: 0,
+									},
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							result = bc.service.proxy.status();
+							break;
+						}
+						case "start": {
+							const rawPort = flags.port ? Number(flags.port) : 80;
+							if (Number.isNaN(rawPort) || rawPort < 0 || rawPort > 65535) {
+								console.error("Error: --port must be a valid TCP port");
+								process.exit(1);
+							}
+							if (flags.background === "true") {
+								if (flags.https === "true") {
+									console.error("Error: background HTTPS .localhost proxy is not supported; start it in the foreground so certificate/key errors are visible.");
+									process.exit(1);
+								}
+								const saved = readProxyStatus();
+								if (saved && isPidAlive(saved.pid)) {
+									result = {
+										success: true,
+										path: "command",
+										sessionId: "system",
+										data: saved,
+										completedAt: new Date().toISOString(),
+									};
+									break;
+								}
+								const { spawn } = await import("node:child_process");
+								const cliEntry = fs.existsSync(path.join(process.cwd(), "src", "cli.ts"))
+									? path.join(process.cwd(), "src", "cli.ts")
+									: process.argv[1];
+								const nodeArgs = cliEntry.endsWith(".ts")
+									? ["--require", "ts-node/register", "--require", "tsconfig-paths/register"]
+									: [];
+								const childArgs = [
+									...nodeArgs,
+									cliEntry,
+									"service",
+									"proxy",
+									"start",
+									"--json",
+									"--port",
+									String(rawPort),
+									...(flags["allow-remote"] === "true"
+										? ["--allow-remote", "true"]
+										: []),
+									"--status-file",
+									statusPath,
+								].filter((value): value is string => Boolean(value));
+								const child = spawn(process.execPath, childArgs, {
+									cwd: process.cwd(),
+									env: process.env,
+									detached: true,
+									stdio: "ignore",
+									windowsHide: true,
+								});
+								child.unref();
+								const deadline = Date.now() + 10_000;
+								let started: Record<string, unknown> | null = null;
+								while (Date.now() < deadline) {
+									await new Promise((resolve) => setTimeout(resolve, 100));
+									const candidate = readProxyStatus();
+									if (candidate && isPidAlive(candidate.pid)) {
+										started = candidate;
+										break;
+									}
+								}
+								if (!started) {
+									console.error("Error: background .localhost proxy did not report ready status");
+									process.exit(1);
+								}
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: started,
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							const started = await bc.service.proxy.start({
+								port: rawPort,
+								allowRemote: flags["allow-remote"] === "true",
+								https: flags.https === "true",
+								certPath: flags.cert,
+								keyPath: flags.key,
+								localCa: flags["local-ca"] === "true",
+								caDir: flags["ca-dir"],
+							});
+							if (started.success && flags["status-file"]) {
+								writeProxyStatus({
+									...((started.data ?? {}) as unknown as Record<string, unknown>),
+									pid: process.pid,
+									background: true,
+									startedAt: new Date().toISOString(),
+									allowRemote: flags["allow-remote"] === "true",
+								});
+							}
+							if (jsonOutput) outputJson(formatActionResult(started), false);
+							else if (started.success) {
+								const data = started.data as { url?: string };
+								console.log(`.localhost proxy: ${data.url || "started"}`);
+								console.log("Press Ctrl+C to stop.");
+							} else {
+								console.error(`Error: ${started.error}`);
+								process.exit(1);
+							}
+							if (flags.wait === "false") {
+								await bc.service.proxy.stop();
+								return;
+							}
+							const stopAndExit = async () => {
+								await bc.service.proxy.stop().catch(() => undefined);
+								if (flags["status-file"]) {
+									fs.rmSync(String(flags["status-file"]), { force: true });
+								}
+								bc.close();
+								process.exit(0);
+							};
+							process.once("SIGINT", () => {
+								void stopAndExit();
+							});
+							process.once("SIGTERM", () => {
+								void stopAndExit();
+							});
+							await new Promise<void>(() => undefined);
+							return;
+						}
+						case "stop": {
+							const saved = readProxyStatus();
+							if (saved && isPidAlive(saved.pid)) {
+								process.kill(Number(saved.pid), "SIGTERM");
+								let deadline = Date.now() + 1_000;
+								while (Date.now() < deadline && isPidAlive(saved.pid)) {
+									await new Promise((resolve) => setTimeout(resolve, 100));
+								}
+								if (isPidAlive(saved.pid)) {
+									process.kill(Number(saved.pid), "SIGKILL");
+									deadline = Date.now() + 3_000;
+									while (Date.now() < deadline && isPidAlive(saved.pid)) {
+										await new Promise((resolve) => setTimeout(resolve, 100));
+									}
+								}
+								fs.rmSync(statusPath, { force: true });
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: { stopped: true, pid: saved.pid },
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							result = await bc.service.proxy.stop();
+							break;
+						}
+						case "startup": {
+							const startupAction = positional[1] || "status";
+							const {
+								getLocalhostProxyStartupStatus,
+								installLocalhostProxyStartup,
+								uninstallLocalhostProxyStartup,
+							} = await import("./services/startup");
+							const startupOptions = {
+								startupDir: flags["startup-dir"],
+								command: flags.command,
+								port: flags.port ? Number(flags.port) : 80,
+								allowRemote: flags["allow-remote"] === "true",
+							};
+							if (Number.isNaN(startupOptions.port) || startupOptions.port < 0 || startupOptions.port > 65535) {
+								console.error("Error: --port must be a valid TCP port");
+								process.exit(1);
+							}
+							if (startupAction === "status") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: getLocalhostProxyStartupStatus(startupOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							await requireCliPolicy(
+								"service_proxy_start",
+								{ startup: true, action: startupAction, port: startupOptions.port },
+								jsonOutput,
+								flags.yes === "true",
+							);
+							if (startupAction === "install") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: installLocalhostProxyStartup(startupOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							if (startupAction === "uninstall") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: uninstallLocalhostProxyStartup(startupOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							console.error(`Unknown service proxy startup command: ${startupAction}`);
+							console.error("Available: status, install, uninstall");
+							process.exit(1);
+						}
+						case "ca": {
+							const caAction = positional[1] || "status";
+							const {
+								createLocalhostCa,
+								getLocalhostCaStatus,
+								installLocalhostCaTrust,
+								uninstallLocalhostCaTrust,
+							} = await import("./services/local_ca");
+							const caOptions = { caDir: flags["ca-dir"] };
+							if (caAction === "status") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: getLocalhostCaStatus(caOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							await requireCliPolicy(
+								"service_proxy_start",
+								{ localCa: true, action: caAction, caDir: flags["ca-dir"] },
+								jsonOutput,
+								flags.yes === "true",
+							);
+							if (caAction === "create") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: createLocalhostCa({
+										...caOptions,
+										rotate: flags.rotate === "true",
+										days: flags.days ? Number(flags.days) : undefined,
+									}),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							if (caAction === "install") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: installLocalhostCaTrust(caOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							if (caAction === "uninstall") {
+								result = {
+									success: true,
+									path: "command",
+									sessionId: "system",
+									data: uninstallLocalhostCaTrust(caOptions),
+									completedAt: new Date().toISOString(),
+								};
+								break;
+							}
+							console.error(`Unknown service proxy ca command: ${caAction}`);
+							console.error("Available: status, create, install, uninstall");
+							process.exit(1);
+						}
+						default:
+							console.error(`Unknown service proxy command: ${proxyAction}`);
+							console.error("Available: status, start, stop, startup, ca");
+							process.exit(1);
+					}
+				} finally {
+					if (proxyAction !== "start") bc.close();
+				}
+				break;
+			}
+
 			default:
 				console.error(`Unknown service command: ${subcommand}`);
-				console.error("Available: register, list, resolve, remove");
+				console.error("Available: register, list, resolve, remove, proxy");
 				process.exit(1);
 		}
 

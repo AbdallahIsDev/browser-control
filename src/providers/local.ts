@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import type {
@@ -24,6 +24,19 @@ import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveD
 import { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForManagedPortRelease(port: number | undefined, timeoutMs = 7000): Promise<void> {
+  if (!port) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isChromeAlive(port))) return;
+    await delay(150);
+  }
+}
 
 export class LocalBrowserProvider implements BrowserProvider {
   readonly name = "local";
@@ -158,21 +171,23 @@ export class LocalBrowserProvider implements BrowserProvider {
     }
 
     if (result.managedProcess && result.connection.mode !== "attached") {
+      const port = result.connection.cdpEndpoint
+        ? Number(new URL(result.connection.cdpEndpoint).port)
+        : undefined;
       try {
         const pid = result.managedProcess.pid;
         result.managedProcess.kill();
         if (process.platform === "win32" && pid) {
-          spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" });
+          spawnSync("taskkill", ["/pid", String(pid), "/f", "/t"], {
+            stdio: "ignore",
+            timeout: 5000,
+          });
         }
-        const port = result.connection.cdpEndpoint
-          ? Number(new URL(result.connection.cdpEndpoint).port)
-          : undefined;
-        if (port) {
-          stopWslBridge(port);
-        }
+        if (port) stopWslBridge(port);
       } catch {
         // ignore
       }
+      await waitForManagedPortRelease(port);
     }
   }
 

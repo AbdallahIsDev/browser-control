@@ -92,7 +92,9 @@ export class PackageRunner {
       });
     }
 
-    return this.runtime.run(graph);
+    return this.runtime
+      .withExecutionScope({ packageName, workflowId: graph.id })
+      .run(graph);
   }
 
   private applyExecutionBounds(graph: WorkflowGraph, maxNodeTimeoutMs: number): WorkflowGraph {

@@ -7,8 +7,18 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { redactObject, redactString } from "../observability/redaction";
 import { getDataHome } from "../shared/paths";
-import type { HarnessHelperManifest, HelperValidationResult, HelperValidationCheck } from "./types";
+import { LocalTempSandbox } from "./sandbox";
+import type {
+  HarnessExecutionResult,
+  HarnessGenerateHelperInput,
+  HarnessGenerateHelperResult,
+  HarnessHelperManifest,
+  HelperValidationCheck,
+  HelperValidationResult,
+  SandboxRunResult,
+} from "./types";
 
 const HARNESS_DIR_NAME = "harness";
 const REGISTRY_FILE = "registry.json";
@@ -270,8 +280,197 @@ export class HarnessRegistry {
     return { success: true };
   }
 
+  async generateHelper(
+    input: HarnessGenerateHelperInput,
+  ): Promise<HarnessGenerateHelperResult> {
+    if (!isSafeHelperId(input.id)) {
+      throw new Error(`Unsafe helper id: ${input.id}`);
+    }
+    if (!input.files.length) {
+      throw new Error("Generated helper requires at least one file");
+    }
+
+    ensureHarnessDir(this.dataHome);
+    const helperDir = getHelperDir(input.id, this.dataHome);
+    const previousHelpers = this.list();
+    const previousDir = fs.existsSync(helperDir)
+      ? fs.mkdtempSync(path.join(getHarnessDir(this.dataHome), "rollback-"))
+      : null;
+    if (previousDir) {
+      fs.cpSync(helperDir, previousDir, { recursive: true });
+    }
+
+    const version = input.version ?? `generated-${Date.now()}`;
+    const manifest: HarnessHelperManifest = {
+      id: input.id,
+      site: input.site,
+      domains: input.domains,
+      taskTags: input.taskTags ?? [],
+      failureTypes: input.failureTypes ?? [],
+      files: input.files.map((file) => file.path),
+      usage: input.usage ?? "Generated Browser Control helper",
+      purpose: input.purpose,
+      version,
+      testCommand: input.testCommand,
+      activated: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    let validation: HelperValidationResult = {
+      helperId: input.id,
+      status: "failed",
+      checks: [],
+    };
+    let sandbox: SandboxRunResult | undefined;
+    let activated = false;
+    let rolledBack = false;
+
+    try {
+      fs.mkdirSync(helperDir, { recursive: true });
+      for (const file of input.files) {
+        const target = resolveHelperFile(helperDir, file.path);
+        if (!target) {
+          throw new Error(`Unsafe helper file path: ${file.path}`);
+        }
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, file.content, "utf8");
+      }
+
+      this.register(manifest);
+      validation = this.validate(input.id);
+      if (validation.status === "passed" && input.testCommand) {
+        const sandboxProvider = new LocalTempSandbox();
+        try {
+          sandbox = await sandboxProvider.run(
+            input.testCommand,
+            manifest.files,
+            helperDir,
+          );
+        } finally {
+          await sandboxProvider.cleanup();
+        }
+        validation.checks.push(
+          sandbox.success
+            ? { name: "sandbox", status: "passed", message: sandbox.output }
+            : { name: "sandbox", status: "failed", message: sandbox.error },
+        );
+        if (!sandbox.success) validation.status = "failed";
+      }
+
+      if (validation.status !== "passed") {
+        this.restoreGeneratedHelper(input.id, previousHelpers, previousDir, helperDir);
+        rolledBack = true;
+        return {
+          success: false,
+          helper: manifest,
+          helperDir,
+          validation,
+          sandbox,
+          activated: false,
+          rolledBack,
+          error: "Generated helper failed validation",
+        };
+      }
+
+      if (input.activate !== false) {
+        const activation = this.activate(input.id);
+        activated = activation.status === "passed";
+        validation = activation;
+      }
+
+      return {
+        success: true,
+        helper: this.get(input.id) ?? manifest,
+        helperDir,
+        validation,
+        sandbox,
+        activated,
+        rolledBack,
+      };
+    } catch (error: unknown) {
+      this.restoreGeneratedHelper(input.id, previousHelpers, previousDir, helperDir);
+      rolledBack = true;
+      validation.checks.push({
+        name: "generation",
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        success: false,
+        helper: manifest,
+        helperDir,
+        validation,
+        sandbox,
+        activated: false,
+        rolledBack,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (previousDir && fs.existsSync(previousDir)) {
+        fs.rmSync(previousDir, { recursive: true, force: true });
+      }
+    }
+  }
+
+  async executeHelper(
+    helperId: string,
+    input: Record<string, unknown> = {},
+  ): Promise<HarnessExecutionResult> {
+    const helper = this.get(helperId);
+    if (!helper) throw new Error(`Helper not found: ${helperId}`);
+    if (!helper.activated) throw new Error(`Helper is not activated: ${helperId}`);
+    const validation = this.validate(helperId);
+    if (validation.status !== "passed") {
+      throw new Error(`Helper validation failed: ${helperId}`);
+    }
+    let sandbox: SandboxRunResult | undefined;
+    if (helper.testCommand) {
+      const sandboxProvider = new LocalTempSandbox();
+      try {
+        sandbox = await sandboxProvider.run(
+          helper.testCommand,
+          helper.files,
+          getHelperDir(helperId, this.dataHome),
+          { env: { BC_HELPER_INPUT: JSON.stringify(input) } },
+        );
+      } finally {
+        await sandboxProvider.cleanup();
+      }
+      sandbox = {
+        ...sandbox,
+        output: sandbox.output ? redactString(sandbox.output) : sandbox.output,
+        error: sandbox.error ? redactString(sandbox.error) : sandbox.error,
+      };
+    }
+    return {
+      helperId,
+      helper,
+      validation,
+      sandbox,
+      input: redactObject(input) as Record<string, unknown>,
+      executedAt: new Date().toISOString(),
+    };
+  }
+
   private saveRegistry(helpers: HarnessHelperManifest[]): void {
     ensureHarnessDir(this.dataHome);
     fs.writeFileSync(getHarnessRegistryPath(this.dataHome), JSON.stringify(helpers, null, 2), "utf8");
+  }
+
+  private restoreGeneratedHelper(
+    helperId: string,
+    previousHelpers: HarnessHelperManifest[],
+    previousDir: string | null,
+    helperDir: string,
+  ): void {
+    this.saveRegistry(previousHelpers);
+    fs.rmSync(helperDir, { recursive: true, force: true });
+    if (previousDir && fs.existsSync(previousDir)) {
+      fs.cpSync(previousDir, helperDir, { recursive: true });
+    }
+    if (!previousHelpers.some((helper) => helper.id === helperId)) {
+      fs.rmSync(helperDir, { recursive: true, force: true });
+    }
   }
 }

@@ -5,15 +5,30 @@ import { createBrowserControl, type BrowserControlAPI } from "../../../src/brows
 import { MemoryStore } from "../../../src/memory_store";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as fs from "node:fs";
+import { createCredentialProtectionService } from "../../../src/security/credential_provider";
+import {
+  CredentialVault,
+  resetCredentialVault,
+} from "../../../src/security/credential_vault";
+import { getStateStorage, resetStateStorage } from "../../../src/state/index";
 
 describe("MCP Tool Registry", () => {
   let api: BrowserControlAPI;
   let store: MemoryStore;
   let tempDir: string;
+  let originalHome: string | undefined;
+  let originalBackend: string | undefined;
 
   beforeEach(async () => {
+    originalHome = process.env.BROWSER_CONTROL_HOME;
+    originalBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
     store = new MemoryStore({ filename: ":memory:" });
-    tempDir = os.tmpdir();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-mcp-tools-"));
+    process.env.BROWSER_CONTROL_HOME = tempDir;
+    process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+    resetStateStorage();
+    resetCredentialVault();
     api = createBrowserControl({ memoryStore: store });
     // Create a session so tools have an active session to work with
     await api.session.create("test-session", { policyProfile: "trusted" });
@@ -22,6 +37,13 @@ describe("MCP Tool Registry", () => {
   afterEach(() => {
     // api.close() closes the MemoryStore; do NOT call store.close() separately
     api.close();
+    resetCredentialVault();
+    resetStateStorage();
+    if (originalHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = originalHome;
+    if (originalBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
+    else process.env.BROWSER_CONTROL_STATE_BACKEND = originalBackend;
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe("buildToolRegistry", () => {
@@ -43,6 +65,7 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_browser_fill"));
       assert.ok(names.includes("bc_browser_hover"));
       assert.ok(names.includes("bc_browser_type"));
+      assert.ok(names.includes("bc_browser_paste"));
       assert.ok(names.includes("bc_browser_press"));
       assert.ok(names.includes("bc_browser_scroll"));
       assert.ok(names.includes("bc_browser_screenshot"));
@@ -77,6 +100,11 @@ describe("MCP Tool Registry", () => {
       // Service tools (Section 14)
       assert.ok(names.includes("bc_service_list"));
       assert.ok(names.includes("bc_service_resolve"));
+
+      // Security/privacy tools
+      assert.ok(names.includes("bc_vault_list"));
+      assert.ok(names.includes("bc_network_rules_list"));
+      assert.ok(names.includes("bc_network_blocked_requests"));
     });
 
     it("has no duplicate tool names", () => {
@@ -126,6 +154,26 @@ describe("MCP Tool Registry", () => {
       assert.ok(result.path === "command" || result.path === "a11y" || result.path === "low_level");
       assert.equal(typeof result.sessionId, "string");
       assert.equal(typeof result.completedAt, "string");
+    });
+
+    it("bc_vault_list never returns raw secret values", async () => {
+      const vault = new CredentialVault(
+        getStateStorage(tempDir),
+        createCredentialProtectionService({
+          dataHome: tempDir,
+          preferWindowsDpapi: false,
+        }),
+      );
+      await vault.set("site", "example.test", "login", "mcp-raw-secret");
+
+      const tools = buildToolRegistry(api);
+      const vaultTool = tools.find((t) => t.name === "bc_vault_list")!;
+      const result = await vaultTool.handler({});
+      const serialized = JSON.stringify(result);
+
+      assert.equal(result.success, true);
+      assert.match(serialized, /secret:\/\/site\/example.test\/login/);
+      assert.doesNotMatch(serialized, /mcp-raw-secret/);
     });
 
     it("bc_session_create creates a session", async () => {
@@ -252,6 +300,36 @@ describe("MCP Tool Registry", () => {
       }
     });
 
+    it("provider health tool routes through policy and returns diagnostics", async () => {
+      const tools = buildToolRegistry(api);
+      const providerHealthTool = tools.find((t) => t.name === "bc_browser_provider_health")!;
+
+      assert.ok(providerHealthTool);
+      const result = await providerHealthTool.handler({ name: "local" });
+
+      assert.equal(result.success, true);
+      assert.ok(Array.isArray(result.data));
+      assert.equal((result.data as Array<{ name: string }>)[0]?.name, "local");
+    });
+
+    it("provider catalog tool routes through policy and returns non-secret setup metadata", async () => {
+      const tools = buildToolRegistry(api);
+      const providerCatalogTool = tools.find((t) => t.name === "bc_browser_provider_catalog")!;
+
+      assert.ok(providerCatalogTool);
+      const result = await providerCatalogTool.handler({});
+
+      assert.equal(result.success, true);
+      assert.ok(Array.isArray(result.data));
+      const browserbase = (result.data as Array<{ name: string; risk: string; requiresAuth: boolean }>).find(
+        (entry) => entry.name === "browserbase",
+      );
+      assert.ok(browserbase);
+      assert.equal(browserbase.risk, "high");
+      assert.equal(browserbase.requiresAuth, true);
+      assert.doesNotMatch(JSON.stringify(result.data), /secret-token|apiKeyValue/u);
+    });
+
     it("bc_service_list returns registered services", async () => {
       // Register a service via the API first
       await api.service.register({ name: "mcp-service", port: 5555 });
@@ -333,6 +411,41 @@ describe("MCP Tool Registry", () => {
       assert.equal(status.success, true);
       assert.equal(calls.resume, "term-1");
       assert.equal(calls.status, "term-1");
+    });
+
+    it("workflow edit-state MCP tool forwards parsed typed values", async () => {
+      const edits: Array<{ key: string; value: unknown; valueType: string }> = [];
+      api.workflow.editState = ((runId: string, key: string, value: string | number | boolean) => {
+        edits.push({ key, value, valueType: typeof value });
+        return {
+          success: true,
+          path: "command",
+          sessionId: "test-session",
+          data: { runId, key, value },
+          completedAt: new Date().toISOString(),
+        };
+      }) as typeof api.workflow.editState;
+
+      const tools = buildToolRegistry(api);
+      const editTool = tools.find((t) => t.name === "bc_workflow_edit_state")!;
+
+      const numberResult = await editTool.handler({
+        runId: "run-1",
+        key: "count",
+        value: "2",
+      });
+      const booleanResult = await editTool.handler({
+        runId: "run-1",
+        key: "enabled",
+        value: "true",
+      });
+
+      assert.equal(numberResult.success, true);
+      assert.equal(booleanResult.success, true);
+      assert.deepEqual(edits, [
+        { key: "count", value: 2, valueType: "number" },
+        { key: "enabled", value: true, valueType: "boolean" },
+      ]);
     });
   });
 

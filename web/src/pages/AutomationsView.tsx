@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { DataTable } from "@/components/common/DataTable";
+import { ErrorState } from "@/components/common/ErrorState";
+import { PageShell } from "@/components/layout/PageShell";
+import { Card, CardContent } from "@/components/ui/card";
 import { apiFetch } from "../api";
 import type { Automation } from "../types";
 
@@ -14,34 +18,36 @@ export function AutomationsView() {
 			);
 	}, []);
 
-	if (error)
+	if (error) {
 		return (
-			<div className="panel error">Error loading automations: {error}</div>
+			<PageShell>
+				<ErrorState message="Error loading automations" details={error} />
+			</PageShell>
 		);
+	}
 
 	return (
-		<div className="panel">
-			<div className="panel-title">Saved Automations</div>
-			{automations.length === 0 ? (
-				<div className="empty-state">No automations saved yet.</div>
-			) : (
-				<table>
-					<thead>
-						<tr>
-							<th>Name</th>
-							<th>Prompt</th>
-						</tr>
-					</thead>
-					<tbody>
-						{automations.map((a) => (
-							<tr key={a.id}>
-								<td>{a.name}</td>
-								<td>{a.prompt}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			)}
-		</div>
+		<PageShell>
+			<Card>
+				<CardContent>
+					<DataTable
+						data={automations}
+						emptyMessage="No automations saved yet."
+						columns={[
+							{ key: "name", header: "Name", cell: (a) => a.name },
+							{
+								key: "prompt",
+								header: "Prompt",
+								cell: (a) => (
+									<span className="max-w-[400px] truncate block">
+										{a.prompt}
+									</span>
+								),
+							},
+						]}
+					/>
+				</CardContent>
+			</Card>
+		</PageShell>
 	);
 }

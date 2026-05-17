@@ -53,6 +53,8 @@ export interface BrowserControlConfig {
   browserDebugUrl: string | undefined;
   /** Browser ownership mode (default: attach) */
   browserMode: "managed" | "attach";
+  /** Whether to auto-launch a managed browser when attach fails (default: true) */
+  browserAutoLaunch: boolean;
   /** Visible launcher profile mode (default: system) */
   browserLaunchProfile: "system" | "isolated";
   /** Explicit Chrome user-data-dir for visible launcher */
@@ -192,6 +194,7 @@ export type ConfigKey =
   | "chromePath"
   | "browserDebugUrl"
   | "browserMode"
+  | "browserAutoLaunch"
   | "browserLaunchProfile"
   | "browserUserDataDir"
   | "browserViewportWidth"
@@ -210,6 +213,10 @@ export type ConfigKey =
   | "browserlessApiKey"
   | "captchaProvider"
   | "captchaApiKey"
+  | "modelProvider"
+  | "modelEndpoint"
+  | "modelApiKey"
+  | "modelName"
   | "openrouterModel"
   | "openrouterBaseUrl"
   | "openrouterApiKey";
@@ -312,6 +319,7 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "chromePath", category: "browser", envVars: ["BROWSER_CHROME_PATH"], description: "Explicit Chrome executable path.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserDebugUrl", category: "browser", envVars: ["BROWSER_DEBUG_URL"], description: "Explicit CDP endpoint URL override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
   { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "attach", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
+  { key: "browserAutoLaunch", category: "browser", envVars: ["BROWSER_AUTO_LAUNCH"], description: "Auto-launch managed browser when attach fails.", defaultValue: () => true, parse: booleanValue },
   { key: "browserLaunchProfile", category: "browser", envVars: ["BROWSER_LAUNCH_PROFILE"], description: "Visible launcher profile mode.", defaultValue: () => "system", parse: requiredString, validate: ensureAllowed(["system", "isolated"]) },
   { key: "browserUserDataDir", category: "browser", envVars: ["BROWSER_USER_DATA_DIR"], description: "Explicit Chrome user-data-dir for visible launcher.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
@@ -340,6 +348,10 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
     },
   },
   { key: "captchaApiKey", category: "captcha", envVars: ["CAPTCHA_API_KEY"], description: "CAPTCHA provider API key.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "modelProvider", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_PROVIDER"], description: "Preferred model provider for Browser Control model router.", defaultValue: () => "openrouter", parse: requiredString, validate: ensureAllowed(["openrouter", "ollama", "openai-compatible"]) },
+  { key: "modelEndpoint", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_ENDPOINT"], description: "OpenAI-compatible model endpoint override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
+  { key: "modelApiKey", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_API_KEY"], description: "API key for the selected model provider.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "modelName", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_NAME"], description: "Model name for the selected model provider.", defaultValue: () => undefined, parse: optionalString },
   { key: "openrouterModel", category: "ai", envVars: ["OPENROUTER_MODEL", "AI_AGENT_MODEL"], description: "OpenRouter model for AI agent features.", defaultValue: () => "openai/gpt-4.1-mini", parse: requiredString },
   { key: "openrouterBaseUrl", category: "ai", envVars: ["OPENROUTER_BASE_URL"], description: "OpenRouter API base URL.", defaultValue: () => "https://openrouter.ai/api/v1", parse: requiredString, validate: ensureUrl },
   { key: "openrouterApiKey", category: "ai", envVars: ["OPENROUTER_API_KEY"], description: "OpenRouter API key.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
@@ -554,6 +566,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const chromePath = effective.chromePath as string | undefined;
   const browserDebugUrl = effective.browserDebugUrl as string | undefined;
   const browserMode = effective.browserMode as "managed" | "attach";
+  const browserAutoLaunch = effective.browserAutoLaunch as boolean;
   const browserLaunchProfile = effective.browserLaunchProfile as "system" | "isolated";
   const browserUserDataDir = effective.browserUserDataDir as string | undefined;
   const browserViewportWidth = effective.browserViewportWidth as number;
@@ -645,6 +658,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     chromePath,
     browserDebugUrl,
     browserMode,
+    browserAutoLaunch,
     browserLaunchProfile,
     browserUserDataDir,
     browserViewportWidth,

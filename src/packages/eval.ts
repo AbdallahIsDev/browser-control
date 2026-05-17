@@ -173,6 +173,23 @@ export class PackageEval {
 
     this.registry.updateEvalSummary(packageName, summary);
 
+    // Record eval history in state storage
+    const currentPkg = this.registry.get(packageName);
+    if (currentPkg) {
+      this.registry.recordEvalRun({
+        id: `eval-${Date.now()}-${packageName}`,
+        packageName,
+        version: currentPkg.version,
+        status: failedCount === 0 ? "passed" : "failed",
+        durationMs: totalDurationMs,
+        totalEvals: summary.total,
+        passedEvals: summary.passed,
+        failedEvals: summary.failed,
+        failedStep: evalResults.find(r => r.status === "failed")?.error,
+        runAt: summary.runAt,
+      });
+    }
+
     return successResult(evalResults, { path: "command", sessionId: this.sessionId });
   }
 }

@@ -57,11 +57,12 @@ export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         runId: { type: "string", description: "Workflow run ID to approve" },
         nodeId: { type: "string", description: "Paused approval node ID" },
+        approvedBy: { type: "string", description: "User who approved" },
         sessionId: sessionIdSchema,
       }, ["runId", "nodeId"]),
       handler: async (params) => {
         useRequestedSession(api, params);
-        return api.workflow.approve(params.runId as string, params.nodeId as string);
+        return api.workflow.approve(params.runId as string, params.nodeId as string, params.approvedBy as string | undefined);
       },
     },
     {
@@ -74,6 +75,41 @@ export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         useRequestedSession(api, params);
         return api.workflow.cancel(params.runId as string);
+      },
+    },
+    {
+      name: "bc_workflow_events",
+      description: "Get the event stream for a workflow run.",
+      inputSchema: buildSchema({
+        runId: { type: "string", description: "Workflow run ID" },
+        sessionId: sessionIdSchema,
+      }, ["runId"]),
+      handler: async (params) => {
+        useRequestedSession(api, params);
+        return api.workflow.events(params.runId as string);
+      },
+    },
+    {
+      name: "bc_workflow_edit_state",
+      description: "Edit a workflow run's state value.",
+      inputSchema: buildSchema({
+        runId: { type: "string", description: "Workflow run ID" },
+        key: { type: "string", description: "State key to edit" },
+        value: { type: "string", description: "New state value (string, number, or boolean)" },
+        sessionId: sessionIdSchema,
+      }, ["runId", "key", "value"]),
+      handler: async (params) => {
+        useRequestedSession(api, params);
+        const rawValue = params.value as string;
+        let value: string | number | boolean = rawValue;
+        if (rawValue === "true") value = true;
+        else if (rawValue === "false") value = false;
+        else if (!Number.isNaN(Number(rawValue)) && rawValue.trim() !== "") value = Number(rawValue);
+        return api.workflow.editState(
+          params.runId as string,
+          params.key as string,
+          value,
+        );
       },
     },
     {
@@ -128,6 +164,62 @@ export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         useRequestedSession(api, params);
         return api.harness.rollback(params.helperId as string, params.version as string);
+      },
+    },
+    {
+      name: "bc_harness_generate",
+      description: "Generate a self-healing helper. Writes files under data home, validates in sandbox, and optionally activates.",
+      inputSchema: buildSchema({
+        id: { type: "string", description: "Helper ID" },
+        purpose: { type: "string", description: "Helper purpose description" },
+        files: { type: "string", description: "JSON array of {path, content} file objects" },
+        taskTags: { type: "string", description: "Comma-separated task tags" },
+        failureTypes: { type: "string", description: "Comma-separated failure types" },
+        site: { type: "string", description: "Site name" },
+        domains: { type: "string", description: "Comma-separated domains" },
+        usage: { type: "string", description: "Usage instructions" },
+        version: { type: "string", description: "Version string" },
+        testCommand: { type: "string", description: "Sandbox test command" },
+        activate: { type: "boolean", description: "Auto-activate after validation" },
+        sessionId: sessionIdSchema,
+      }, ["id", "purpose", "files"]),
+      handler: async (params) => {
+        useRequestedSession(api, params);
+        let files: Array<{ path: string; content: string }>;
+        try {
+          files = JSON.parse(params.files as string);
+        } catch {
+          files = [{ path: "helper.js", content: "" }];
+        }
+        return api.harness.generate({
+          id: params.id as string,
+          purpose: params.purpose as string,
+          files,
+          taskTags: (params.taskTags as string | undefined)?.split(",").filter(Boolean),
+          failureTypes: (params.failureTypes as string | undefined)?.split(",").filter(Boolean),
+          site: params.site as string | undefined,
+          domains: (params.domains as string | undefined)?.split(",").filter(Boolean),
+          usage: params.usage as string | undefined,
+          version: params.version as string | undefined,
+          testCommand: params.testCommand as string | undefined,
+          activate: params.activate as boolean | undefined,
+        });
+      },
+    },
+    {
+      name: "bc_harness_execute",
+      description: "Execute a registered helper. Requires helper to be active and validated.",
+      inputSchema: buildSchema({
+        helperId: { type: "string", description: "Helper ID to execute" },
+        input: { type: "object", description: "Input parameters for the helper" },
+        sessionId: sessionIdSchema,
+      }, ["helperId"]),
+      handler: async (params) => {
+        useRequestedSession(api, params);
+        return api.harness.execute(
+          params.helperId as string,
+          params.input as Record<string, unknown> | undefined,
+        );
       },
     },
   ];

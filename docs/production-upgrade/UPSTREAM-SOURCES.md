@@ -2,7 +2,7 @@
 
 This document catalogs upstream projects that can inform Browser Control. It is not a dependency list. Each entry records the best reuse mode, current Browser Control coverage, and remaining gaps.
 
-Last reviewed: 2026-05-09
+Last reviewed: 2026-05-16
 
 ---
 
@@ -23,20 +23,20 @@ Last reviewed: 2026-05-09
 |---|---|---|---|
 | A11y browser action model | Implemented concept | `src/a11y_snapshot.ts`, `src/browser/actions.ts`, MCP ref tools | Needs stronger iframe/shadow DOM, React tree introspection, SPA navigation helpers, Web Vitals, init scripts, resource route filtering. |
 | Native terminal engine | Implemented | `src/terminal/*`, terminal resume tests | Browser-rendered terminal is a simple semantic adapter, not full wterm/libghostty terminal rendering. |
-| Browser terminal view | Partial | `src/terminal/render.ts`, `web/src/pages/*` | Simple semantic render adapter exists. No full VT renderer, DOM-native terminal input, multiplexed terminal panes, or wterm/localterm integration. |
-| Stable local URLs | Partial | `src/services/*`, `bc service register/resolve`, `bc://name` | No real `.localhost` proxy, HTTPS CA, OS startup, hidden random ports, worktree subdomains, Tailscale/public sharing. |
-| Remote browser providers | Partial | `src/providers/local.ts`, `custom.ts`, `browserless.ts` | No Browserbase provider, no provider health scoring, no provider marketplace, no anti-detect provider policy profile. |
-| Workflow graph | Implemented v1 | `src/workflows/*`, API/CLI/MCP workflow surface | Linear graph only. No conditional branching, loops, typed state transitions, graph UI editor, event streaming, or LangGraph-compatible persistence model. |
-| Self-healing harness | Implemented v1 | `src/harness/*`, local-temp sandbox | Registry/validation exists. Missing agent helper generation loop, hot-load execution adapter, browser replay tests, Docker/CubeSandbox/E2B providers. |
-| Automation packages | Implemented v1 | `src/packages/*`, `automation-packages/tradingview-ict-analysis/` | Local install/run/eval only. Missing registry/marketplace, signing, trust review workflow, package UI generation, remote package sources. |
-| Package/eval proof | Partial | `src/packages/eval.ts`, `src/benchmarks/*` | Needs real benchmark suites, browser-use/Webwright comparison tasks, dashboards, pass-rate reporting. |
-| Pro dashboard / generated UI | Partial | `web/src/App.tsx`, `src/web/server.ts`, `src/operator/generated_ui.ts` | Custom React UI plus native allowlisted JSON UI schema/action dispatcher exists. No json-render runtime, devtools, directives, renderer catalog, generated package config UI, or terminal-grade UI polish. |
-| Credential safety | Partial | redaction, policy credential gate, data-home `secrets/` folder | No real credential vault, OS keychain/DPAPI, per-site secret grants, reveal/typing approvals, rotation, or secret-use audit UI. |
-| Privacy/network control | Partial | `src/browser/network_interceptor.ts`, `src/observability/network_capture.ts`, policy blocked domains | Request intercept/block/mock/capture primitives exist. No uBlock/Pi-hole-style filter-list engine, subscriptions, tracker/ad profiles, request audit UI, or DNS/proxy rule packs. |
-| Memory / site knowledge | Implemented v1 | `src/knowledge/*` | Markdown/local query only. No Qdrant/PageIndex backend, semantic/site-memory ranking, stale locator scoring, or package-level memory sync. |
-| Local model / provider router | Partial | `src/ai_agent.ts`, OpenRouter/Stagehand config | Goal executor, OpenRouter model config, Stagehand hooks, and cost cap exist. No Ollama/OpenAI-compatible local API, multi-provider router, fallback graph, or chat-agent provider abstraction. |
-| Record/replay builder | Partial | screencast/action timeline in `src/observability/screencast.ts` | No workflow recorder that turns live actions into package/workflow drafts. |
-| Visual diff/debug | Partial | screenshots, debug bundles, screencast receipts, `src/snapshot_diff.ts` | A11y snapshot diff exists. No screenshot pixel diff, DOM structural diff, before/after visual comparison, visual regression gate, or replay debugger. |
+| Browser terminal view | Implemented for current scope | `src/terminal/render.ts`, `web/src/pages/TerminalView.tsx`, terminal/web tests | Semantic VT rendering, resize, copy/paste confirmation, attach/detach, and dashboard API surfaces exist. Full wterm/libghostty-grade rendering remains optional future work. |
+| Stable local URLs | Implemented for current scope | `src/services/*`, `src/proxy_manager.ts`, CLI/API/proxy tests | `bc://name` remains default; opt-in HTTP `.localhost`, explicit HTTPS/local CA, startup file management, stable backend restart routing, and doctor checks exist. Tailscale/public sharing remains later-only. |
+| Remote browser providers | Partial | `src/providers/*`, provider health/API/CLI/MCP/UI tests | Browserless/custom and Browserbase adapter/health/catalog exist with redaction and policy gates. Real Browserbase launch/attach remains blocked until credentials are configured. |
+| Workflow graph | Implemented for current scope | `src/workflows/*`, API/CLI/MCP/UI workflow tests | Branches, loops, state edits, event streams, approvals, helper nodes, and runtime persistence exist. A full visual graph editor remains future UX work. |
+| Self-healing harness | Implemented for current scope | `src/harness/*`, local-temp sandbox, workflow helper tests | Helper generation, sandbox validation, activation/rollback, and helper execution evidence exist. Heavy Docker/CubeSandbox/E2B providers remain later-only. |
+| Automation packages | Implemented for current scope | `src/packages/*`, `automation-packages/tradingview-ict-analysis/`, package/web tests | Local and fixture registry abstractions, digest/signature/trust review, permission grants, generated UI spec safety, eval history, CLI/API/UI surfaces exist. Public marketplace hosting remains future work. |
+| Package/eval proof | Implemented for current scope | `src/packages/eval.ts`, package eval tests, UI evidence | Eval history persists and is exposed through API/UI. Broader benchmark suites and third-party task comparisons remain future work. |
+| Pro dashboard / generated UI | Implemented for current scope | `web/src/components/*`, `web/src/pages/*`, screenshot artifacts | Dashboard now uses reusable shadcn/Radix-style primitives, shared layout/common components, loading/empty/error states, mobile screenshots, and generated package config surfaces. json-render remains optional future reuse. |
+| Credential safety | Implemented for current scope | `src/security/credential_provider.ts`, `src/security/credential_vault.ts`, vault/API/MCP/workflow/browser tests | OS-backed/fallback vault, secret grants, execution-time `secret://` resolution, redaction, and audit integration exist. Rotation UX remains future work. |
+| Privacy/network control | Implemented for current scope | `src/security/network_rules.ts`, `src/browser/network_interceptor.ts`, web tests | Catch-all request routing, hostname/resource evaluation, allow/deny/tracker precedence, redacted blocked evidence, API/UI management, and browser-action wiring exist. Full uBlock-compatible filter subscriptions/DNS packs remain future work. |
+| Memory / site knowledge | Implemented v2 | `src/knowledge/backends.ts`, `tests/unit/knowledge_backends.test.ts` | Local markdown knowledge with deterministic ranking and stale locator scoring. Qdrant/PageIndex adapters implemented with health checks, search/rank endpoints, CLI commands, and Web API endpoints. Local markdown remains default; external adapters require endpoint configuration. |
+| Local model / provider router | Partial | `src/model_router.ts`, `src/ai_agent.ts`, model/web tests | OpenRouter/Ollama/OpenAI-compatible router, fallback, local-only mode, loopback local API, bearer auth, token redaction, and doctor checks exist. Real OpenRouter/Ollama product runs remain blocked by missing API key/unreachable Ollama. |
+| Record/replay builder | Implemented for current scope | `src/observability/recorder.ts`, web recorder/replay tests | Browser/terminal/filesystem/API actions record into redacted workflow/package drafts with waits/assertions and replay execution through workflow runtime. Broader site-memory productization remains future work. |
+| Visual diff/debug | Implemented for current scope | `src/observability/visual_diff.ts`, `src/web/server.ts`, `web/src/pages/EvidenceView.tsx` | Decoded PNG pixel diff, DOM diff redaction, audit filters, replay debugger data, debug bundles, and UI evidence exist. |
 | CAPTCHA solver | Implemented v1 | `src/captcha_solver.ts`, `tests/unit/captcha_solver.test.ts` | 2captcha/Anti-Captcha/CapSolver support exists. Cap-style proof-of-work anti-abuse for public APIs/marketplace is separate and missing. |
 | Stealth / anti-detect controls | Partial and opt-in | `src/stealth.ts`, local provider stealth capability | Native stealth init-script controls exist. No Camofox/Cloak/Obscura provider; these remain risky/experimental and should not be defaults. |
 
@@ -138,6 +138,13 @@ Last reviewed: 2026-05-09
 - **Recommended mode:** Study only. Do not clone product.
 - **Current status:** Missing as chat product/API surface. Browser Control has an OpenRouter-backed goal executor but no Open-WebUI-style provider settings UI or OpenAI-compatible local API.
 
+### tinyhumansai/openhuman
+- **Repo:** https://github.com/tinyhumansai/openhuman
+- **Use for:** Local-first personal AI UX, private memory, connector onboarding, model/provider settings, desktop product framing.
+- **Recommended mode:** Study only. GPL-3.0 and product-scope mismatch mean no code copy.
+- **Current status:** Missing as personal-AI product. Browser Control has site knowledge, receipts, and model routing pieces, but no private user memory surface or connector-style onboarding.
+- **Best next feature:** Add a local memory/knowledge workspace view that links browser actions, receipts, learned selectors, and user preferences without turning Browser Control into a general personal AI app.
+
 ### ollama/ollama
 - **Repo:** https://github.com/ollama/ollama
 - **Use for:** Local/offline model backend.
@@ -155,6 +162,13 @@ Last reviewed: 2026-05-09
 - **Use for:** Vectorless long-document/site-doc memory, tree-index reasoning.
 - **Recommended mode:** Study/adapt. Good alternative to default vector DB.
 - **Current status:** Missing.
+
+### rohitg00/agentmemory
+- **Repo:** https://github.com/rohitg00/agentmemory
+- **Use for:** Persistent agent memory, MCP/REST memory surface, lifecycle hooks, hybrid search, session replay, memory governance UI.
+- **Recommended mode:** Study/adapt architecture and UX. Do not replace Browser Control state with a generic memory product.
+- **Current status:** Missing as shared memory service. Browser Control has SQLite state, site knowledge, screencast receipts, and debug logs, but not cross-session semantic memory with replayable agent/tool timelines.
+- **Best next feature:** Build a Browser Control memory timeline that indexes browser/terminal/filesystem actions, debug receipts, learned selectors, package runs, and policy decisions with explicit retention/delete controls.
 
 ### run-llama/llama_index
 - **Repo:** https://github.com/run-llama/llama_index
@@ -221,7 +235,21 @@ Last reviewed: 2026-05-09
 - **Repos:** https://github.com/browserbase/stagehand, https://github.com/browserbase/mcp-server-browserbase
 - **Use for:** Browserbase provider, AI-native browser actions, remote browser sessions, extraction.
 - **Recommended mode:** Optional provider/integration. Browser Control already has Stagehand peer dependency.
-- **Current status:** Partial. Browserless/custom providers exist; Browserbase missing.
+- **Current status:** Partial. Browserbase adapter, provider catalog, policy-gated health diagnostics, and redaction are implemented. Real credential-backed launch/attach remains blocked until `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` are configured.
+
+### bytedance/UI-TARS-desktop
+- **Repo:** https://github.com/bytedance/UI-TARS-desktop
+- **Use for:** Multimodal GUI/browser operator architecture, hybrid DOM+vision fallback, event-stream viewer, remote computer/browser operator UX, VLM-backed desktop automation.
+- **Recommended mode:** Study/adapt selectively. Browser Control should remain a11y-first and policy-gated; vision fallback must be explicit and recorded.
+- **Current status:** Missing as multimodal/vision operator. Browser Control has a11y snapshots, screenshots, recordings, and Playwright/CDP control, but no VLM planner or event-stream operator viewer.
+- **Best next feature:** Add optional policy-gated vision-assisted fallback for canvas/visual-only pages, with screenshot evidence and replay metadata.
+
+### trycua/cua
+- **Repo:** https://github.com/trycua/cua
+- **Use for:** Computer-use sandboxes, desktop-control SDK patterns, replayable trajectories, benchmark/eval harnesses for agents controlling full desktops.
+- **Recommended mode:** Study/adapt provider and eval ideas. Optional sandbox provider later.
+- **Current status:** Missing as isolated desktop sandbox/eval layer. Browser Control has local browser providers and tests, but no OS-level sandbox provider or computer-use benchmark harness.
+- **Best next feature:** Extend provider interfaces and CI fixtures so Browser Control can run browser tasks inside isolated desktop/browser sandboxes and export trajectories for regression testing.
 
 ### tiagozip/cap
 - **Repo:** https://github.com/tiagozip/cap
@@ -260,6 +288,7 @@ Last reviewed: 2026-05-09
 | Shubhamsaboo/awesome-llm-apps | Automation package examples/templates | Study/adapt package ideas | Missing |
 | levelsio/superlevels | OSS catalog/discovery inspiration | Study only | Missing |
 | clash-verge-rev/clash-verge-rev | Proxy profiles/rule UI | Study/adapt for network profiles | Partial proxy manager exists |
+| apernet/hysteria | QUIC/proxy transport design, proxy diagnostics, access-control/traffic-stat ideas | Study only; do not bundle default proxy | Proxy manager exists; privacy/network rules are browser-level and need better provider diagnostics |
 | trailbaseio/trailbase | Single-binary local backend, SQLite/auth/admin UI ideas | Study only | Partial SQLite/local app exists |
 | voidzero-dev/rolldown | Faster web build pipeline | Adopt later if Vite/Rolldown migration is easy | Web app currently Vite; no explicit Rolldown migration |
 | vercel-labs/zero-native | Future lightweight desktop/mobile shell | Study only; Electron works now | Electron desktop exists |
@@ -270,6 +299,9 @@ Last reviewed: 2026-05-09
 | microsoft/markitdown | Document-to-markdown ingestion for package knowledge | Optional helper/package dependency | Missing |
 | crawl4ai / trafilatura | Web extraction for site knowledge | Optional connector/package | Missing |
 | litellm / LocalAI / LM Studio / Jan | OpenAI-compatible local/provider patterns | Study/wrap later | Missing |
+| influxdata/telegraf | Plugin-style metrics/log collection, input/processor/output pipeline, config UX | Study/adapt observability architecture | Browser Control has logs/receipts but no pluggable telemetry pipeline/exporter model |
+| supertone-inc/supertonic | On-device multilingual TTS for future voice operator feedback | Study only, optional later | No voice interface; not core automation infrastructure |
+| danielmiessler/Personal_AI_Infrastructure | Personal AI infrastructure taxonomy, privacy/security framing, local-agent roadmap ideas | Study only | Useful strategy reference, not an implementation dependency |
 
 ---
 
@@ -292,6 +324,12 @@ Last reviewed: 2026-05-09
 | caamer20/Telegram-Drive | Avoid | Storage workaround, unrelated and policy-risky. |
 | nativefier | Avoid | Archived/unmaintained; use Electron/Tauri/zero-native study instead. |
 | py-ai | Avoid | Python SDK not relevant to TypeScript core. |
+| AUTOMATIC1111/stable-diffusion-webui | Avoid for core | Stable Diffusion image UI/plugin ecosystem, not browser/terminal automation. Can inspire extension UX only; AGPL means no code copy. |
+| Lordog/dive-into-llms | Avoid for implementation | Educational LLM tutorial, not production Browser Control infrastructure. |
+| datawhalechina/easy-vibe | Avoid for implementation | Beginner vibe-coding course, not reusable runtime architecture. |
+| yikart/AiToEarn | Avoid for implementation | AI monetization/resource list, not Browser Control infrastructure. |
+| ton-blockchain/acton | Avoid | TON smart-contract toolchain; unrelated to browser automation except generic CLI/test-UI inspiration. |
+| rasbt/LLMs-from-scratch | Avoid for implementation | Strong learning repo, but Browser Control should route/use models, not build or train LLMs from scratch. |
 | AI beginner/tutorial repos | Avoid for implementation | Useful learning material only, not production source. |
 | Fine-tuning stacks such as unsloth/axolotl/trl | Avoid for now | Browser Control should route models, not train them. |
 | GPU inference stacks such as vLLM/Ray Serve/Triton | Avoid for now | Overkill for local automation engine. |
@@ -308,20 +346,20 @@ Last reviewed: 2026-05-09
 | 06 A11y Snapshot | agent-browser, camofox-browser concepts | Study/adapt; avoid anti-detect defaults |
 | 07 MCP Integration | chrome-devtools-mcp, awesome-mcp-servers, Browserbase MCP | Study/adapt |
 | 08 Browser Profiles | browser-use, Browserbase, agent-browser cookie import | Study/adapt |
-| 09 Knowledge System | browser-harness, Qdrant, PageIndex, LlamaIndex | Study/adapt; optional adapters |
-| 10 Observability | chrome-devtools-mcp, Browserbase trace ideas, Webwright evidence | Study/adapt |
-| 11 Operator UX | browser-use, agent-browser doctor, Open-WebUI settings | Study/adapt |
+| 09 Knowledge System | browser-harness, Qdrant, PageIndex, LlamaIndex, agentmemory, openhuman | Study/adapt; optional adapters |
+| 10 Observability | chrome-devtools-mcp, Browserbase trace ideas, Webwright evidence, Telegraf | Study/adapt |
+| 11 Operator UX | browser-use, agent-browser doctor, Open-WebUI settings, UI-TARS-desktop | Study/adapt |
 | 12 Browser Terminal | wterm, localterm | Adopt/adapt |
 | 13 Terminal Resume | wterm, just-bash | Study/adapt |
 | 14 Stable URLs | portless, LocalCan | Optional dependency/wrapper |
-| 15 Remote Provider | Browserbase, Browserless, Stagehand, Camofox experimental | Wrap providers |
-| 16 Benchmarks | browser-use, Webwright, agent-eval, promptfoo | Study/adapt |
+| 15 Remote Provider | Browserbase, Browserless, Stagehand, Camofox experimental, Cua | Wrap providers |
+| 16 Benchmarks | browser-use, Webwright, agent-eval, promptfoo, Cua-Bench | Study/adapt |
 | 28 Pro Dashboard | json-render, Open-WebUI, browser-use web-ui | Adopt/study |
 | 29 Workflow + Harness | LangGraph, workflow-use, browser-harness, just-bash, CubeSandbox | Study/adapt; optional sandbox providers |
 | 30 Packages + Marketplace | agent-skills, skills, awesome-llm-apps, Cap | Study/adapt; Cap later |
-| 31 Privacy + Credential Safety | uBlock, Pi-hole, Clash Verge, OS keychain patterns | Study/adapt; reimplement policy core |
-| 32 Record/Replay + Memory | Webwright, workflow-use, Qdrant, PageIndex | Study/adapt |
-| 33 Local Model Router/API | Open-WebUI, Ollama, LiteLLM, LocalAI | Wrap optional providers |
+| 31 Privacy + Credential Safety | uBlock, Pi-hole, Clash Verge, Hysteria, OS keychain patterns | Study/adapt; reimplement policy core |
+| 32 Record/Replay + Memory | Webwright, workflow-use, Qdrant, PageIndex, agentmemory, Cua trajectories | Study/adapt |
+| 33 Local Model Router/API | Open-WebUI, Ollama, LiteLLM, LocalAI, openhuman | Wrap optional providers |
 | 34 Visual Diff + Audit UI | Browserbase trace, react-pdf-highlighter, debug tooling | Study/adapt |
 | 35 Localhost Proxy + Team/Cloud | portless, LocalCan, open-agents, Cap | Optional wrappers/study |
 

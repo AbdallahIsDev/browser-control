@@ -8,6 +8,7 @@
  *   - bc_browser_fill
  *   - bc_browser_hover
  *   - bc_browser_type
+ *   - bc_browser_paste
  *   - bc_browser_press
  *   - bc_browser_scroll
  *   - bc_browser_screenshot
@@ -15,6 +16,7 @@
  *   - bc_browser_tab_switch
  *   - bc_browser_tab_close
  *   - bc_browser_close
+ *   - bc_browser_launch
  *   - bc_browser_screencast_start
  *   - bc_browser_screencast_stop
  *   - bc_browser_screencast_status
@@ -141,6 +143,25 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         return api.browser.type({
           text: params.text as string,
           delayMs: params.delayMs as number | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_paste",
+      description: "Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs.",
+      inputSchema: buildSchema({
+        text: { type: "string", description: "Text to paste or a secret:// ref." },
+        target: { type: "string", description: "Optional element to focus before pasting: ref (@e3), CSS selector, or text match." },
+        timeoutMs: { type: "number", description: "Focus/click timeout in milliseconds. Default: 5000." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["text"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.paste({
+          text: params.text as string,
+          target: params.target as string | undefined,
+          timeoutMs: params.timeoutMs as number | undefined,
         });
       },
     },
@@ -376,6 +397,25 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.detach();
+      },
+    },
+
+    {
+      name: "bc_browser_launch",
+      description: "Launch a managed browser instance. Starts a new Chrome process with automation profile. Returns connection metadata including endpoint, port, profile, and provider.",
+      inputSchema: buildSchema({
+        port: { type: "number", description: "CDP port number for the launched browser. Default: from config (9222)." },
+        profile: { type: "string", description: "Launcher profile: 'system' (uses existing profile) or 'isolated' (clean profile). Default: from config.", enum: ["system", "isolated"] },
+        provider: { type: "string", description: "Provider to use for launch (e.g., 'local', 'browserless'). Default: active provider." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.launch({
+          port: params.port as number | undefined,
+          profile: params.profile as "system" | "isolated" | undefined,
+          provider: params.provider as string | undefined,
+        });
       },
     },
 

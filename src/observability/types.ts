@@ -38,6 +38,12 @@ export interface NetworkEntry {
   error?: string;
   timestamp: string;
   durationMs?: number;
+  blocked?: boolean;
+  domain?: string;
+  resourceType?: string;
+  matchedRuleId?: string;
+  matchedRuleType?: string;
+  privacyProfile?: string;
   /** Page or session context */
   pageUrl?: string;
   sessionId?: string;

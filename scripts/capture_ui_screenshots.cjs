@@ -4,11 +4,27 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
-const url = process.argv[2];
+const rawUrl = process.argv[2];
 
-if (!url) {
+if (!rawUrl) {
 	console.error("Usage: node scripts/capture_ui_screenshots.cjs <url>");
 	process.exit(2);
+}
+
+// Extract token from URL hash (#token=...) or env var
+let baseUrl = rawUrl;
+let token = process.env.BROWSER_CONTROL_WEB_TOKEN || "";
+const hashIdx = rawUrl.indexOf("#");
+if (hashIdx !== -1) {
+	const hash = rawUrl.slice(hashIdx + 1);
+	const parts = hash.split("&");
+	for (const part of parts) {
+		if (part.startsWith("token=")) {
+			token = part.slice("token=".length);
+			break;
+		}
+	}
+	baseUrl = rawUrl.slice(0, hashIdx);
 }
 
 const rootDir = path.resolve(__dirname, "..");
@@ -22,14 +38,50 @@ const outputs = {
 };
 
 const manifest = {
-	url,
+	url: baseUrl,
+	tokenProvided: !!token,
 	startedAt: new Date().toISOString(),
 	captures: [],
 };
 
+const EXTRA_PAGES = ["command", "browser", "automations", "trading", "advanced", "tasks", "workflows", "packages", "evidence", "settings", "terminal"];
+
 async function waitForApp(page) {
-	await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 30000 });
+	if (token) {
+		await page.evaluate((t) => {
+			sessionStorage.setItem("bc-token", t);
+		}, token);
+		await page.reload({ waitUntil: "networkidle", timeout: 30000 });
+	}
 	await page.waitForSelector(".premium-app-container", { timeout: 15000 });
+	await assertNotUnauthorized(page);
+}
+
+async function assertNotUnauthorized(page) {
+	const bodyText = await page.evaluate(() => document.body?.textContent || "");
+	if (bodyText.includes("Unauthorized")) {
+		throw new Error("Page contains 'Unauthorized' — authentication failed");
+	}
+}
+
+async function navigateTo(page, targetPage) {
+	await page.evaluate((p) => {
+		const hamburger = document.querySelector('button[aria-label="Toggle navigation"]');
+		if (hamburger && window.innerWidth <= 768) {
+			hamburger.click();
+		}
+		const labels = document.querySelectorAll(".nav-label");
+		for (const label of labels) {
+			if (label.textContent.toLowerCase() === p) {
+				label.closest("button")?.click();
+				return;
+			}
+		}
+		localStorage.setItem("bc-page", p);
+	}, targetPage);
+	await page.waitForTimeout(2000);
+	await assertNotUnauthorized(page);
 }
 
 async function capture(page, filePath) {
@@ -98,12 +150,37 @@ async function assertNoHorizontalOverflow(page) {
 		await capture(refresh, outputs.refresh);
 		await refresh.close();
 
+		// Extra page captures (desktop)
+		for (const p of EXTRA_PAGES) {
+			const extraPage = await browser.newPage({
+				viewport: { width: 1440, height: 900 },
+			});
+			await waitForApp(extraPage);
+			await navigateTo(extraPage, p);
+			const filePath = path.join(reportDir, `${p}-desktop.png`);
+			await capture(extraPage, filePath);
+			await extraPage.close();
+		}
+
+		// Extra page captures (mobile)
+		for (const p of EXTRA_PAGES) {
+			const extraMobile = await browser.newPage({
+				viewport: { width: 375, height: 812 },
+				isMobile: true,
+			});
+			await waitForApp(extraMobile);
+			await navigateTo(extraMobile, p);
+			await assertNoHorizontalOverflow(extraMobile);
+			const mFilePath = path.join(reportDir, `${p}-mobile.png`);
+			await capture(extraMobile, mFilePath);
+			await extraMobile.close();
+		}
+
 		manifest.finishedAt = new Date().toISOString();
 		fs.writeFileSync(outputs.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
 
-		for (const filePath of Object.values(outputs)) {
-			const stat = fs.statSync(filePath);
-			console.log(`${path.relative(rootDir, filePath)} ${stat.size} bytes`);
+		for (const capture of manifest.captures) {
+			console.log(`${capture.file} ${capture.bytes} bytes`);
 		}
 	} catch (error) {
 		console.error(error instanceof Error ? error.stack || error.message : error);

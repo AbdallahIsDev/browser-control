@@ -105,6 +105,10 @@ export interface TermOpenOptions {
 	cwd?: string;
 	/** Session name. */
 	name?: string;
+	/** Initial terminal columns. */
+	cols?: number;
+	/** Initial terminal rows. */
+	rows?: number;
 }
 
 export interface TermExecOptions {
@@ -121,6 +125,8 @@ export interface TermTypeOptions {
 	text: string;
 	/** Terminal session ID. */
 	sessionId: string;
+	/** Submit with Enter/newline. Defaults to true. */
+	submit?: boolean;
 }
 
 export interface TermReadOptions {
@@ -401,7 +407,12 @@ export class TerminalActions {
 		// Policy check
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"terminal_open",
-			{ shell: options.shell, cwd: options.cwd },
+			{
+				shell: options.shell,
+				cwd: options.cwd,
+				cols: options.cols,
+				rows: options.rows,
+			},
 		);
 		if (!isPolicyAllowed(policyEval))
 			return policyEval as ActionResult<{
@@ -410,6 +421,17 @@ export class TerminalActions {
 				cwd: string;
 				status: string;
 			}>;
+
+		if (options.cols !== undefined || options.rows !== undefined) {
+			const validation = validateResize(options.cols, options.rows);
+			if (!validation.valid) {
+				return failureResult(validation.error, {
+					path: policyEval.path,
+					sessionId,
+					policyDecision: "deny",
+				});
+			}
+		}
 
 		try {
 			await this.ensureDaemonRuntimeReady();
@@ -429,6 +451,8 @@ export class TerminalActions {
 				shell: options.shell,
 				cwd: options.cwd,
 				name: options.name,
+				cols: options.cols,
+				rows: options.rows,
 			});
 
 			// Bind the terminal to the session if there's an active session
@@ -548,7 +572,7 @@ export class TerminalActions {
 
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"terminal_write",
-			{ text: options.text },
+			{ text: options.text, submit: options.submit !== false },
 		);
 		if (!isPolicyAllowed(policyEval))
 			return policyEval as ActionResult<{ typed: string }>;
@@ -567,7 +591,9 @@ export class TerminalActions {
 				options.sessionId,
 			);
 			if (daemonGuard) return daemonGuard as ActionResult<{ typed: string }>;
-			await runtime.type(options.sessionId, options.text);
+			await runtime.type(options.sessionId, options.text, {
+				submit: options.submit !== false,
+			});
 
 			return successResult(
 				{ typed: options.text },

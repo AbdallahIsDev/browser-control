@@ -14,6 +14,7 @@ import { buildProviderTools } from "./tools/provider";
 import { buildStatusTools } from "./tools/status";
 import { buildWorkflowTools } from "./tools/workflow";
 import { buildPackageTools } from "./tools/package";
+import { buildSecurityTools } from "./tools/security";
 
 /**
  * Build the complete MCP tool registry for a Browser Control instance.
@@ -30,6 +31,7 @@ export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
     ...buildFsTools(api),
     ...buildDebugTools(api),
     ...buildServiceTools(api),
+    ...buildSecurityTools(api),
     ...buildWorkflowTools(api),
     ...buildPackageTools(api),
   ];
@@ -48,6 +50,7 @@ export function getToolCategories(api: BrowserControlAPI): Record<string, string
     fs: buildFsTools(api).map((t) => t.name),
     debug: buildDebugTools(api).map((t) => t.name),
     service: buildServiceTools(api).map((t) => t.name),
+    security: buildSecurityTools(api).map((t) => t.name),
     workflow: buildWorkflowTools(api).map((t) => t.name),
     package: buildPackageTools(api).map((t) => t.name),
   };
