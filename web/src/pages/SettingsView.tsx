@@ -167,7 +167,11 @@ export function SettingsView() {
 					"/api/browser/providers/health",
 				),
 			]);
-			setProviderList(list);
+			setProviderList({
+				providers: list.providers || [],
+				activeProvider: list.activeProvider || "local",
+				builtIn: list.builtIn || [],
+			});
 			setProviderName(list.activeProvider || "local");
 			setProviderCatalog(catalogResult.data || []);
 			setProviderHealth(healthResult.data || []);
@@ -227,7 +231,7 @@ export function SettingsView() {
 	};
 
 	const providerRows = [
-		...providerList.builtIn.map((name) => {
+		...(providerList.builtIn || []).map((name) => {
 			const health = providerHealth.find((entry) => entry.name === name);
 			return {
 				name,
@@ -237,7 +241,7 @@ export function SettingsView() {
 				health,
 			};
 		}),
-		...providerList.providers.map((provider) => ({
+		...(providerList.providers || []).map((provider) => ({
 			...provider,
 			endpoint: provider.endpoint || "Configured",
 			configured: true,
