@@ -16,6 +16,20 @@
 	color: var(--foreground);
 
 	overflow: hidden;
+
+	padding: 12px;
+
+	gap: 12px;
+}
+
+.app-sidebar {
+	height: calc(100vh - 24px);
+
+	border-radius: 20px;
+
+	box-shadow: var(--shadow-sm);
+
+	overflow: hidden;
 }
 
 /* Sidebar overlay backdrop for mobile */
@@ -40,11 +54,11 @@
 	.app-sidebar {
 		position: fixed;
 
-		left: 0;
+		left: 12px;
 
-		top: 0;
+		top: 12px;
 
-		bottom: 0;
+		bottom: 12px;
 
 		transform: translateX(-100%);
 

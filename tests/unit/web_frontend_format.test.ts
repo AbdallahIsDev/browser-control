@@ -199,57 +199,81 @@ test("no-token state shows locked dashboard with copyable CLI guidance", () => {
 		path.resolve(__dirname, "../../web/src/App.tsx"),
 		"utf8",
 	);
+	const lockedSource = fs.readFileSync(
+		path.resolve(
+			__dirname,
+			"../../web/src/components/layout/LockedDashboardScreen.tsx",
+		),
+		"utf8",
+	);
 
 	// Locked dashboard title
-	assert.match(
-		appSource,
-		/Local dashboard locked/,
-		"No-token state should show locked dashboard title",
-	);
+	assert.match(lockedSource, /Local dashboard locked/);
 
 	// CLI command hint — primary installed command
 	assert.match(
-		appSource,
+		lockedSource,
 		/bc web open/,
 		"No-token state should show installed CLI command hint (bc)",
 	);
 
 	assert.match(
-		appSource,
-		/Copy bc web open command/,
-		"No-token state should expose an accessible copy control for bc web open",
+		lockedSource,
+		/aria-label=\{`Copy command: \$\{command\}`\}/,
+		"Copy button should identify the exact command it copies",
 	);
 
 	assert.match(
-		appSource,
+		lockedSource,
 		/Copied/,
 		"No-token copy control should provide copied feedback",
 	);
 
 	assert.match(
-		appSource,
+		lockedSource,
 		/navigator\.clipboard\.writeText/,
 		"No-token state should copy the command programmatically",
 	);
 
 	assert.match(
-		appSource,
+		lockedSource,
 		/bc web open --port=0/,
 		"No-token state should show port-busy fallback command",
 	);
 
 	// Dev fallback command hint
 	assert.match(
-		appSource,
+		lockedSource,
 		/npm run cli -- web open/,
 		"No-token state should show dev fallback command hint",
 	);
 
 	// Tokenized URL hint in locked dashboard
 	assert.match(
-		appSource,
+		lockedSource,
 		/tokenized URL/,
 		"No-token state should explain tokenized URL format",
+	);
+
+	assert.doesNotMatch(
+		lockedSource,
+		/Click anywhere to copy/,
+		"Locked copy cards must not imply whole-card copy behavior",
+	);
+	assert.doesNotMatch(
+		lockedSource,
+		/<button[^>]+className=\{cardClassName\}/,
+		"Whole command card should not be the copy target",
+	);
+	assert.match(
+		lockedSource,
+		/lg:grid-cols-3/,
+		"Locked command cards should render as a 3-column desktop row",
+	);
+	assert.match(
+		lockedSource,
+		/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(320px,0\.85fr\)\]/,
+		"Locked top section should use two columns on desktop",
 	);
 
 	// Locked dashboard replaces page content
@@ -265,6 +289,63 @@ test("no-token state shows locked dashboard with copyable CLI guidance", () => {
 		/authState !== "no-token" && \(/,
 		"Sidebar should not render in the no-token state",
 	);
+});
+
+test("app shell has floating collapsible sidebar with one top-bar theme toggle", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+	const sidebarSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/components/layout/AppSidebar.tsx"),
+		"utf8",
+	);
+	const cssSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.css"),
+		"utf8",
+	);
+	const toolbarSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/components/layout/Toolbar.tsx"),
+		"utf8",
+	);
+
+	assert.match(appSource, /bc-sidebar-collapsed/);
+	assert.match(sidebarSource, /collapsed\?: boolean/);
+	assert.match(
+		sidebarSource,
+		/aria-label=\{collapsed \? "Expand sidebar" : "Collapse sidebar"\}/,
+	);
+	assert.match(sidebarSource, /title=\{item\.label\}/);
+	assert.match(sidebarSource, /aria-label=\{item\.label\}/);
+	assert.match(sidebarSource, /w-\[76px\]/);
+	assert.match(sidebarSource, /w-\[260px\]/);
+	assert.match(cssSource, /padding: 12px/);
+	assert.match(cssSource, /border-radius: 20px/);
+	assert.doesNotMatch(sidebarSource, /border-r/);
+	assert.doesNotMatch(toolbarSource, /border-b/);
+	assert.doesNotMatch(appSource, /Light Mode|Dark Mode/);
+	assert.doesNotMatch(appSource, /const sidebarFooter/);
+});
+
+test("top-bar badges use real state or honest unknown fallbacks", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+
+	assert.match(appSource, /Provider unknown/);
+	assert.match(appSource, /Policy unknown/);
+	assert.match(appSource, /status\.provider\?\.active/);
+	assert.doesNotMatch(
+		appSource,
+		/status\.policyProfile[\s\S]*\?\s*status\.policyProfile[\s\S]*:\s*"Balanced"/,
+		"Policy badge must not fall back to Balanced when state is missing",
+	);
+	assert.match(appSource, /aria-label="Authentication status"/);
+	assert.match(appSource, /aria-label="Browser provider status"/);
+	assert.match(appSource, /aria-label="Policy profile status"/);
+	assert.match(appSource, /aria-label="Clear stored sign-in token"/);
+	assert.doesNotMatch(appSource, />Forget</);
 });
 
 test("toolbar shows Forget button for unauthorized and api-error states", () => {

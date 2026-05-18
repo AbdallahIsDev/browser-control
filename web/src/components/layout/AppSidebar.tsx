@@ -1,6 +1,12 @@
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import BcLogo from "@/assets/branding/bc-logo.svg?react";
 import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type NavItem = {
@@ -17,6 +23,8 @@ interface AppSidebarProps {
 	footer?: ReactNode;
 	className?: string;
 	locked?: boolean;
+	collapsed?: boolean;
+	onToggleCollapsed?: () => void;
 }
 
 export function AppSidebar({
@@ -32,48 +40,91 @@ export function AppSidebar({
 	footer,
 	className,
 	locked,
+	collapsed = false,
+	onToggleCollapsed,
 }: AppSidebarProps) {
 	return (
 		<aside
 			className={cn(
-				"app-sidebar w-[260px] shrink-0 flex flex-col bg-card border-r border-border z-100 transition-transform duration-300",
+				"app-sidebar shrink-0 flex flex-col bg-card z-100 transition-[width,transform] duration-300",
+				collapsed ? "w-[76px]" : "w-[260px]",
 				className,
 			)}
+			data-collapsed={collapsed ? "true" : "false"}
 		>
-			<div className="p-4 flex items-center gap-3 border-b border-border">
+			<div
+				className={cn(
+					"flex",
+					collapsed
+						? "flex-col items-center gap-2 p-2"
+						: "items-center gap-3 p-3",
+				)}
+			>
 				<div className="w-8 h-8 flex items-center justify-center">
 					{brand.icon}
 				</div>
-				<span className="font-semibold text-sm tracking-tight truncate">
-					{brand.text}
-				</span>
+				{!collapsed && (
+					<span className="font-semibold text-sm tracking-tight truncate">
+						{brand.text}
+					</span>
+				)}
+				{onToggleCollapsed && (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						className={cn("hidden md:inline-flex", !collapsed && "ml-auto")}
+						onClick={onToggleCollapsed}
+						aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+						title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+					>
+						{collapsed ? (
+							<PanelLeftOpen size={16} />
+						) : (
+							<PanelLeftClose size={16} />
+						)}
+					</Button>
+				)}
 			</div>
 
 			{!locked && (
 				<nav className="flex-1 p-2 overflow-y-auto">
 					{items.map((item) => (
-						<Button
-							key={item.id}
-							type="button"
-							variant={active === item.id ? "default" : "ghost"}
-							size="sm"
-							className={cn(
-								"mb-0.5 w-full justify-start gap-3",
-								active !== item.id &&
-									"text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-							)}
-							onClick={() => onSelect(item.id)}
-						>
-							<span className="w-4 h-4 shrink-0">{item.icon}</span>
-							<span className="nav-label truncate font-medium">
+						<Tooltip key={item.id}>
+							<TooltipTrigger
+								render={
+									<Button
+										type="button"
+										variant={active === item.id ? "default" : "ghost"}
+										size={collapsed ? "icon" : "sm"}
+										className={cn(
+											"mb-0.5 w-full gap-3",
+											collapsed ? "justify-center" : "justify-start",
+											active !== item.id &&
+												"text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+										)}
+										onClick={() => onSelect(item.id)}
+										aria-label={item.label}
+										title={item.label}
+									>
+										<span className="w-4 h-4 shrink-0">{item.icon}</span>
+										{!collapsed && (
+											<span className="nav-label truncate font-medium">
+												{item.label}
+											</span>
+										)}
+									</Button>
+								}
+							/>
+							<TooltipContent side="right" hidden={!collapsed}>
 								{item.label}
-							</span>
-						</Button>
+							</TooltipContent>
+						</Tooltip>
 					))}
 				</nav>
 			)}
 
-			{footer && <div className="p-3 border-t border-border">{footer}</div>}
+			{footer && !collapsed && <div className="p-3">{footer}</div>}
 		</aside>
 	);
 }
