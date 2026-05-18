@@ -39,21 +39,21 @@ export async function apiFetch<T>(
 	const contentType = response.headers.get("content-type");
 	const isJson = contentType?.includes("application/json");
 
-	let body: any;
+	let body: unknown;
 	try {
 		body = isJson && text ? JSON.parse(text) : text;
-	} catch (e) {
+	} catch (_e) {
 		throw new Error(
 			`Failed to parse response from ${path} (${response.status}): ${text.slice(0, 50)}...`,
 		);
 	}
 
 	if (!response.ok) {
-		throw new Error(
+		const errorMessage =
 			typeof body === "string"
 				? body || response.statusText
-				: body?.error || response.statusText,
-		);
+				: (body as { error?: string })?.error || response.statusText;
+		throw new Error(errorMessage);
 	}
 
 	return body as T;

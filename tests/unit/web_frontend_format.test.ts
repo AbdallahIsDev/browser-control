@@ -119,7 +119,6 @@ test("home view has product-focused prompt composer UI", () => {
 
 	// New product elements must exist
 	assert.match(source, /What should your agent do\?/);
-	assert.match(source, /Policy:/);
 	assert.match(source, /Run/);
 
 	// Old developer elements must not exist

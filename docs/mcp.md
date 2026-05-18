@@ -99,6 +99,9 @@ Browser:
 - `bc_browser_screencast_start`
 - `bc_browser_screencast_status`
 - `bc_browser_screencast_stop`
+- `bc_browser_paste`
+- `bc_browser_provider_catalog`
+- `bc_browser_provider_health`
 
 Provider:
 
@@ -132,6 +135,13 @@ Filesystem:
 - `bc_fs_delete`
 - `bc_fs_stat`
 
+Network:
+- `bc_network_rules_list`
+- `bc_network_blocked_requests`
+
+Vault:
+- `bc_vault_list`
+
 Debug:
 
 - `debug_health`
@@ -153,6 +163,8 @@ Workflow:
 - `bc_workflow_resume`
 - `bc_workflow_approve`
 - `bc_workflow_cancel`
+- `bc_workflow_events`
+- `bc_workflow_edit_state`
 
 Harness:
 
@@ -160,6 +172,8 @@ Harness:
 - `bc_harness_find_helper`
 - `bc_harness_validate_helper`
 - `bc_harness_rollback`
+- `bc_harness_generate`
+- `bc_harness_execute`
 
 Packages:
 

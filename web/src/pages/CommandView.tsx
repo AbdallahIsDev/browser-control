@@ -1,7 +1,6 @@
 import { ArrowRight, Paperclip } from "lucide-react";
 import { useRef, useState } from "react";
 import { PageShell } from "@/components/layout/PageShell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "../api";
@@ -34,41 +33,18 @@ const SUGGESTIONS = [
 
 export function CommandView() {
 	const [prompt, setPrompt] = useState("");
-	const [notice, setNotice] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
 	const handleRun = async () => {
 		if (!prompt) return;
-		setNotice("Starting task...");
 		try {
 			await apiFetch("/api/tasks", {
 				method: "POST",
 				body: JSON.stringify({ prompt, action: prompt.slice(0, 48) }),
 			});
-			setNotice("Task started.");
 			setPrompt("");
 		} catch (err: unknown) {
-			setNotice(`Error: ${err instanceof Error ? err.message : String(err)}`);
-		}
-	};
-
-	const handleSaveAutomation = async () => {
-		if (!prompt) return;
-		setNotice("Saving automation...");
-		try {
-			await apiFetch("/api/saved-automations", {
-				method: "POST",
-				body: JSON.stringify({
-					name: prompt.slice(0, 48),
-					description: "Saved from Home",
-					category: "General",
-					prompt,
-					approvalRequired: true,
-				}),
-			});
-			setNotice("Automation saved.");
-		} catch (err: unknown) {
-			setNotice(`Error: ${err instanceof Error ? err.message : String(err)}`);
+			console.error("Task failed", err);
 		}
 	};
 
@@ -86,22 +62,13 @@ export function CommandView() {
 
 	return (
 		<PageShell className="flex items-center justify-center min-h-[70vh]">
-			<div className="w-full max-w-[800px] space-y-8 p-6">
+			<div className="w-full max-w-[600px] flex flex-col items-center space-y-8 p-6">
 				{/* Headline */}
 				<div className="text-center space-y-3">
 					<h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground">
 						What should your agent do?
 					</h2>
 				</div>
-
-				{/* Notice */}
-				{notice && (
-					<div className="flex justify-center">
-						<Badge variant="secondary" className="w-fit text-xs">
-							{notice}
-						</Badge>
-					</div>
-				)}
 
 				{/* Suggestion chips */}
 				<div className="flex flex-wrap gap-2 justify-center pt-2">
@@ -120,7 +87,7 @@ export function CommandView() {
 				</div>
 
 				{/* Prompt composer */}
-				<div className="relative border border-border/50 rounded shadow-sm bg-card">
+				<div className="w-full relative border border-border/50 rounded shadow-sm bg-card">
 					<Textarea
 						ref={textareaRef}
 						placeholder="Ask Browser Control to research a website, fill a form, upload content, monitor a page, or run a workflow..."
@@ -141,27 +108,15 @@ export function CommandView() {
 							<Paperclip size={16} />
 						</Button>
 
-						<div className="flex items-center gap-2">
-							{prompt && (
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={handleSaveAutomation}
-									className="h-8 px-3 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-								>
-									Save as workflow
-								</Button>
-							)}
-							<Button
-								onClick={handleRun}
-								disabled={!prompt}
-								size="icon"
-								className="h-8 w-8"
-								aria-label="Run task"
-							>
-								<ArrowRight size={16} />
-							</Button>
-						</div>
+						<Button
+							onClick={handleRun}
+							disabled={!prompt}
+							size="icon"
+							className="h-8 w-8"
+							aria-label="Run task"
+						>
+							<ArrowRight size={16} />
+						</Button>
 					</div>
 				</div>
 			</div>

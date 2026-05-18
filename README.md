@@ -225,7 +225,7 @@ npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 | 🎯 Production hardening | Planned |
 | 🎯 Cross-platform package publishing | Planned |
 
-See detailed roadmap: [docs/specs/v1-roadmap.md](docs/specs/v1-roadmap.md) | Production upgrade tracker: [docs/production-upgrade/STATUS.md](docs/production-upgrade/STATUS.md)
+See detailed roadmap: [docs/specs/2026-04-20-browser-control-v1-unified-automation-roadmap.md](docs/specs/2026-04-20-browser-control-v1-unified-automation-roadmap.md) | Production upgrade tracker: [docs/production-upgrade/STATUS.md](docs/production-upgrade/STATUS.md)
 
 <br/>
 
