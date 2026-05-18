@@ -655,7 +655,7 @@ export function EvidenceView() {
 																	{step.policyDecision || "-"}
 																</TableCell>
 																<TableCell>{step.retryCount}</TableCell>
-																<TableCell className="text-xs text-rose-400">
+																<TableCell className="text-xs text-destructive">
 																	{step.error?.slice(0, 60)}
 																</TableCell>
 															</TableRow>

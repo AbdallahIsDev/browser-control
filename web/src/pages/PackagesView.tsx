@@ -268,7 +268,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 								{(Array.isArray(packages) ? packages : []).map((pkg) => (
 									<div
 										key={pkg.name}
-										className="rounded-md border border-[--border-subtle] bg-[--bg-card] p-4 space-y-3"
+										className="rounded-md border border-border/60 bg-card p-4 space-y-3"
 									>
 										<div className="flex flex-wrap items-start justify-between gap-3">
 											<div className="min-w-0">
@@ -276,17 +276,17 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 													<span className="font-semibold text-sm">
 														{pkg.name}
 													</span>
-													<span className="text-xs text-[--text-tertiary]">
+													<span className="text-xs text-muted-foreground">
 														v{pkg.version}
 													</span>
 													{pkg.signer && (
-														<span className="text-xs text-[--text-tertiary]">
+														<span className="text-xs text-muted-foreground">
 															signed: {pkg.signer}
 														</span>
 													)}
 													{pkg.digest && (
 														<span
-															className="font-mono text-xs text-[--text-tertiary]"
+															className="font-mono text-xs text-muted-foreground"
 															title={pkg.digest}
 														>
 															{pkg.digest.slice(0, 12)}...
@@ -305,7 +305,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 													))}
 												</div>
 												{pkg.lastEvalResult && (
-													<p className="mt-2 text-xs text-[--text-tertiary]">
+													<p className="mt-2 text-xs text-muted-foreground">
 														Eval: {pkg.lastEvalResult.passed}/
 														{pkg.lastEvalResult.total} passed at{" "}
 														{pkg.lastEvalResult.runAt?.slice(0, 19)}
@@ -410,7 +410,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 							</div>
 						)}
 						{notice && (
-							<p className="mt-3 text-xs text-[--text-secondary]">{notice}</p>
+							<p className="mt-3 text-xs text-muted-foreground">{notice}</p>
 						)}
 					</CardContent>
 				</Card>
@@ -478,7 +478,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 							{reviewHistory.map((review) => (
 								<div
 									key={review.id}
-									className="rounded-md border border-[--border-subtle] p-3 space-y-2"
+									className="rounded-md border border-border/60 p-3 space-y-2"
 								>
 									<div className="flex items-center gap-2 flex-wrap">
 										<StatusBadge
@@ -505,19 +505,19 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 												{review.riskSummary.riskLevel} risk
 											</Badge>
 										)}
-										<span className="text-xs text-[--text-tertiary]">
+										<span className="text-xs text-muted-foreground">
 											{review.reviewedBy} @ {review.reviewedAt?.slice(0, 19)}
 										</span>
 									</div>
 									{review.riskSummary?.warnings &&
 										review.riskSummary.warnings.length > 0 && (
-											<div className="text-xs text-[--text-secondary]">
+											<div className="text-xs text-muted-foreground">
 												<strong>Warnings:</strong>{" "}
 												{review.riskSummary.warnings.join(", ")}
 											</div>
 										)}
 									{review.digest && (
-										<div className="font-mono text-xs text-[--text-tertiary]">
+										<div className="font-mono text-xs text-muted-foreground">
 											Digest: {review.digest}
 										</div>
 									)}

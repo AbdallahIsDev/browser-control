@@ -218,10 +218,10 @@ test("resolveUserDataDir keeps isolated Browser Control profile as explicit opt-
     assert.equal(typeof launcher.getProfilesDir, "function");
 
     const profilesDir = launcher.getProfilesDir();
-    assert.equal(profilesDir, path.join(tmpHome, "profiles"));
+    assert.equal(profilesDir, path.join(tmpHome, "browser", "profiles"));
 
     const userDataDir = launcher.resolveUserDataDir("win32", { BROWSER_LAUNCH_PROFILE: "isolated" });
-    assert.equal(userDataDir, path.join(tmpHome, "profiles", "BrowserControlProfile"));
+    assert.equal(userDataDir, path.join(tmpHome, "browser", "profiles", "BrowserControlProfile"));
     assert.ok(!userDataDir.includes(path.join("Google", "Chrome")));
     assert.ok(!userDataDir.startsWith(process.env.LOCALAPPDATA));
   } finally {
@@ -234,6 +234,66 @@ test("resolveUserDataDir keeps isolated Browser Control profile as explicit opt-
       delete process.env.LOCALAPPDATA;
     } else {
       process.env.LOCALAPPDATA = origLocalAppData;
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("resolveAttachableLaunchTarget falls back to isolated profile when system profile is busy and fallback is allowed", () => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-attachable-fallback-"));
+  const fakeLocalAppData = path.join(tmpHome, "LocalAppData");
+  const systemDir = path.join(fakeLocalAppData, "Google", "Chrome", "User Data");
+  fs.mkdirSync(systemDir, { recursive: true });
+  fs.writeFileSync(path.join(systemDir, "SingletonLock"), "");
+
+  const origHome = process.env.BROWSER_CONTROL_HOME;
+  try {
+    process.env.BROWSER_CONTROL_HOME = tmpHome;
+    const result = launcher.resolveAttachableLaunchTarget({
+      platform: "win32",
+      env: { LOCALAPPDATA: fakeLocalAppData },
+      profileMode: "system",
+      allowProfileFallback: true,
+      port: 9222,
+    });
+
+    assert.equal(result.profileMode, "isolated");
+    assert.equal(result.userDataDir, path.join(tmpHome, "browser", "profiles", "BrowserControlProfile"));
+  } finally {
+    if (origHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = origHome;
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+test("resolveAttachableLaunchTarget fails when system profile is busy and fallback is disallowed", () => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-attachable-no-fallback-"));
+  const fakeLocalAppData = path.join(tmpHome, "LocalAppData");
+  const systemDir = path.join(fakeLocalAppData, "Google", "Chrome", "User Data");
+  fs.mkdirSync(systemDir, { recursive: true });
+  fs.writeFileSync(path.join(systemDir, "SingletonLock"), "");
+
+  const origHome = process.env.BROWSER_CONTROL_HOME;
+  try {
+    process.env.BROWSER_CONTROL_HOME = tmpHome;
+    assert.throws(
+      () => launcher.resolveAttachableLaunchTarget({
+        platform: "win32",
+        env: { LOCALAPPDATA: fakeLocalAppData },
+        profileMode: "system",
+        allowProfileFallback: false,
+        port: 9222,
+      }),
+      /System Chrome profile is already in use/,
+    );
+  } finally {
+    if (origHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = origHome;
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
@@ -311,7 +371,7 @@ test("writeDebugState writes metadata to the data home .interop directory", () =
     assert.equal(state.wslPreferredUrl, "http://172.24.0.1:9999");
     assert.ok(state.updatedAt.length > 0);
 
-    const metadataPath = path.join(tmpHome, ".interop", "chrome-debug.json");
+    const metadataPath = path.join(tmpHome, "interop", "chrome-debug.json");
     assert.ok(fs.existsSync(metadataPath), "chrome-debug.json should exist in data home");
 
     const saved = JSON.parse(fs.readFileSync(metadataPath, "utf8"));

@@ -16,6 +16,7 @@ interface AppSidebarProps {
 	onSelect: (id: string) => void;
 	footer?: ReactNode;
 	className?: string;
+	locked?: boolean;
 }
 
 export function AppSidebar({
@@ -30,6 +31,7 @@ export function AppSidebar({
 	onSelect,
 	footer,
 	className,
+	locked,
 }: AppSidebarProps) {
 	return (
 		<aside
@@ -47,25 +49,29 @@ export function AppSidebar({
 				</span>
 			</div>
 
-			<nav className="flex-1 p-2 overflow-y-auto">
-				{items.map((item) => (
-					<Button
-						key={item.id}
-						type="button"
-						variant={active === item.id ? "default" : "ghost"}
-						size="sm"
-						className={cn(
-							"mb-0.5 w-full justify-start gap-3",
-							active !== item.id &&
-								"text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-						)}
-						onClick={() => onSelect(item.id)}
-					>
-						<span className="w-4 h-4 shrink-0">{item.icon}</span>
-						<span className="nav-label truncate font-medium">{item.label}</span>
-					</Button>
-				))}
-			</nav>
+			{!locked && (
+				<nav className="flex-1 p-2 overflow-y-auto">
+					{items.map((item) => (
+						<Button
+							key={item.id}
+							type="button"
+							variant={active === item.id ? "default" : "ghost"}
+							size="sm"
+							className={cn(
+								"mb-0.5 w-full justify-start gap-3",
+								active !== item.id &&
+									"text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+							)}
+							onClick={() => onSelect(item.id)}
+						>
+							<span className="w-4 h-4 shrink-0">{item.icon}</span>
+							<span className="nav-label truncate font-medium">
+								{item.label}
+							</span>
+						</Button>
+					))}
+				</nav>
+			)}
 
 			{footer && <div className="p-3 border-t border-border">{footer}</div>}
 		</aside>

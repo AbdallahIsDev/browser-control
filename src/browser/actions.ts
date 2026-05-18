@@ -424,7 +424,18 @@ export class BrowserActions {
 						}
 						// Attach failed — try launching managed browser
 						try {
-							await bm.launchManaged({ actor: "human" });
+							if (config.browserMode === "managed") {
+								await bm.launchManaged({
+									actor: "human",
+									profileName: config.browserLaunchProfile,
+								});
+							} else {
+								await bm.launchAttachable({
+									actor: "human",
+									port: config.chromeDebugPort,
+									profile: config.browserLaunchProfile,
+								});
+							}
 							// Bind the browser connection into the session (Issue 3)
 							this.bindBrowserToSession(bm);
 						} catch (launchError: unknown) {
@@ -437,7 +448,9 @@ export class BrowserActions {
 									? launchError.message
 									: String(launchError);
 							return this.failureWithDebug(
-								`No browser was connected. Attach failed on port ${config.chromeDebugPort}: ${attachMsg}. Managed launch also failed: ${launchMsg}. Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
+								`No browser was connected. Attach failed on port ${config.chromeDebugPort}: ${attachMsg}. ` +
+									`${config.browserMode === "managed" ? "Managed launch" : "Attach-mode launch"} also failed: ${launchMsg}. ` +
+									`Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
 								launchError,
 								{
 									action: "browser_connect",
@@ -2457,17 +2470,20 @@ export class BrowserActions {
 			});
 			fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 			const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}.png`;
+			const restoreOverlays = await this.hideBrowserControlScreenshotOverlays(
+				page,
+			);
 
 			// Handle annotation: inject temporary overlays before screenshot
 			let annotationInjected = false;
-			if (options.annotate) {
-				annotationInjected = await this.injectAnnotationOverlays(
-					page,
-					options.refs,
-				);
-			}
-
 			try {
+				await this.removeAnnotationOverlays(page);
+				if (options.annotate) {
+					annotationInjected = await this.injectAnnotationOverlays(
+						page,
+						options.refs,
+					);
+				}
 				if (options.target) {
 					const resolved = await this.resolveTarget(options.target, page);
 					if (resolved) {
@@ -2491,6 +2507,7 @@ export class BrowserActions {
 				if (annotationInjected) {
 					await this.removeAnnotationOverlays(page);
 				}
+				await restoreOverlays();
 			}
 
 			if (fs.existsSync(outputPath)) fs.rmSync(outputPath, { force: true });
@@ -2624,6 +2641,39 @@ export class BrowserActions {
 			});
 		} catch {
 			// Ignore cleanup errors
+		}
+	}
+
+	private async hideBrowserControlScreenshotOverlays(
+		page: Page,
+	): Promise<() => Promise<void>> {
+		const cleanupAttribute = "data-browser-control-screenshot-overlay-style";
+		try {
+			await page.evaluate((attribute) => {
+				const existing = document.querySelector(`[${attribute}]`);
+				if (existing) existing.remove();
+				const style = document.createElement("style");
+				style.setAttribute(attribute, "true");
+				style.textContent = `
+          [data-browser-control-highlight-root],
+          [data-browser-control-screencast-root] {
+            visibility: hidden !important;
+          }
+        `;
+				document.head.appendChild(style);
+			}, cleanupAttribute);
+			return async () => {
+				try {
+					await page.evaluate((attribute) => {
+						const style = document.querySelector(`[${attribute}]`);
+						if (style) style.remove();
+					}, cleanupAttribute);
+				} catch {
+					// Ignore cleanup errors
+				}
+			};
+		} catch {
+			return async () => undefined;
 		}
 	}
 

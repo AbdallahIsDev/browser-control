@@ -363,7 +363,7 @@ export function SettingsView() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<div>
-							<Label className="text-xs text-[--text-tertiary]">
+							<Label className="text-xs text-muted-foreground">
 								Data Home Directory
 							</Label>
 							<p className="mt-1 rounded-md border border-input px-3 py-2 text-sm font-mono break-all">
@@ -371,7 +371,7 @@ export function SettingsView() {
 							</p>
 						</div>
 						<div>
-							<Label className="text-xs text-[--text-tertiary]">
+							<Label className="text-xs text-muted-foreground">
 								Browser Provider
 							</Label>
 							<div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -393,7 +393,7 @@ export function SettingsView() {
 						</div>
 						<div className="space-y-3">
 							<div>
-								<Label className="text-xs text-[--text-tertiary]">
+								<Label className="text-xs text-muted-foreground">
 									Provider Catalog
 								</Label>
 								<p className="text-xs text-muted-foreground mt-1">
@@ -437,7 +437,7 @@ export function SettingsView() {
 						<div className="space-y-3">
 							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
 								<div>
-									<Label className="text-xs text-[--text-tertiary]">
+									<Label className="text-xs text-muted-foreground">
 										Provider Health
 									</Label>
 									<p className="text-xs text-muted-foreground mt-1">
@@ -643,7 +643,7 @@ export function SettingsView() {
 											<TableRow>
 												<TableCell
 													colSpan={7}
-													className="text-center text-[--text-tertiary]"
+													className="text-center text-muted-foreground"
 												>
 													No providers available.
 												</TableCell>
@@ -664,7 +664,7 @@ export function SettingsView() {
 						<div className="flex flex-col sm:flex-row sm:items-center gap-3">
 							<Label
 								htmlFor="model-provider"
-								className="text-xs text-[--text-tertiary] shrink-0"
+								className="text-xs text-muted-foreground shrink-0"
 							>
 								Provider:
 							</Label>
@@ -693,7 +693,7 @@ export function SettingsView() {
 							<div>
 								<Label
 									htmlFor="model-endpoint"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Endpoint:
 								</Label>
@@ -709,7 +709,7 @@ export function SettingsView() {
 						<div>
 							<Label
 								htmlFor="model-key"
-								className="text-xs text-[--text-tertiary]"
+								className="text-xs text-muted-foreground"
 							>
 								API Key:
 							</Label>
@@ -725,7 +725,7 @@ export function SettingsView() {
 						<div>
 							<Label
 								htmlFor="model-name"
-								className="text-xs text-[--text-tertiary]"
+								className="text-xs text-muted-foreground"
 							>
 								Model Name:
 							</Label>
@@ -773,7 +773,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="secret-scope"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Scope
 								</Label>
@@ -794,7 +794,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="secret-scope-name"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Scope Name
 								</Label>
@@ -809,7 +809,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="secret-name"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Secret Name
 								</Label>
@@ -824,7 +824,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="secret-value"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Value
 								</Label>
@@ -863,7 +863,7 @@ export function SettingsView() {
 										<TableRow>
 											<TableCell
 												colSpan={4}
-												className="text-center text-[--text-tertiary]"
+												className="text-center text-muted-foreground"
 											>
 												No secrets stored.
 											</TableCell>
@@ -889,7 +889,7 @@ export function SettingsView() {
 								</TableBody>
 							</Table>
 						</div>
-						<p className="text-xs text-[--text-tertiary]">
+						<p className="text-xs text-muted-foreground">
 							{secretGrants.filter((grant) => !grant.revoked).length} active
 							grant(s); raw values are never displayed.
 						</p>
@@ -905,7 +905,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="network-pattern"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Domain Pattern
 								</Label>
@@ -920,7 +920,7 @@ export function SettingsView() {
 							<div className="sm:flex-1 min-w-0">
 								<Label
 									htmlFor="network-rule-type"
-									className="text-xs text-[--text-tertiary]"
+									className="text-xs text-muted-foreground"
 								>
 									Type
 								</Label>
@@ -991,7 +991,7 @@ export function SettingsView() {
 										<TableRow>
 											<TableCell
 												colSpan={5}
-												className="text-center text-[--text-tertiary]"
+												className="text-center text-muted-foreground"
 											>
 												No network rules configured.
 											</TableCell>

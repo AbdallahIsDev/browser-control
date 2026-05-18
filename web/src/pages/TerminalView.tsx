@@ -527,7 +527,7 @@ export function TerminalView() {
 						<CardHeader className="flex-row items-center justify-between gap-3 space-y-0 p-4">
 							<div className="min-w-0">
 								<CardTitle className="text-sm">Terminal Sessions</CardTitle>
-								<p className="mt-1 text-xs text-[--text-tertiary]">
+								<p className="mt-1 text-xs text-muted-foreground">
 									{sessions.length} active
 								</p>
 							</div>
@@ -628,7 +628,7 @@ export function TerminalView() {
 										? activeSession.name || activeSession.id
 										: "Terminal"}
 								</CardTitle>
-								<p className="mt-1 truncate text-xs text-[--text-tertiary]">
+								<p className="mt-1 truncate text-xs text-muted-foreground">
 									{activeSession
 										? `${activeSession.shell} · ${activeSession.cwd}`
 										: "Attach or create a terminal session."}
@@ -665,7 +665,7 @@ export function TerminalView() {
 								/>
 							)}
 							{notice && (
-								<p className="text-xs text-[--text-tertiary]" role="status">
+								<p className="text-xs text-muted-foreground" role="status">
 									{notice}
 								</p>
 							)}
@@ -710,14 +710,14 @@ export function TerminalView() {
 										>
 											Clear
 										</Button>
-										<span className="ml-auto text-xs text-[--text-tertiary]">
+										<span className="ml-auto text-xs text-muted-foreground">
 											{terminalSize.cols}x{terminalSize.rows}
 											{activeView?.canAcceptInput === false ? " · busy" : ""}
 										</span>
 									</div>
 									<div
 										ref={viewportRef}
-										className="min-h-[280px] flex-1 overflow-hidden rounded-md border border-[--border-subtle] bg-[#090d12]"
+										className="min-h-[280px] flex-1 overflow-hidden rounded-md border border-border bg-zinc-950"
 									>
 										<div
 											ref={outputRef}
@@ -744,7 +744,7 @@ export function TerminalView() {
 									<div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
 										<Label
 											htmlFor="terminal-command"
-											className="truncate text-xs text-[--text-tertiary]"
+											className="truncate text-xs text-muted-foreground"
 										>
 											{activeSession.cwd || "~"}$
 										</Label>

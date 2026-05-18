@@ -183,6 +183,9 @@ test("source guards cover prior browser feature review regressions", () => {
 	assert.doesNotMatch(actions, /background-image/);
 	assert.match(actions, /overlay\.style\.pointerEvents = ["']none["']/);
 	assert.match(actions, /data-browser-control-annotation-root/);
+	assert.match(actions, /hideBrowserControlScreenshotOverlays/);
+	assert.match(actions, /data-browser-control-highlight-root/);
+	assert.match(actions, /data-browser-control-screencast-root/);
 
 	assert.match(cli, /const fileValues = \[flags\.file, flags\.files\]/);
 	assert.match(

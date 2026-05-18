@@ -78,7 +78,7 @@ export function AdvancedView() {
 					<CardContent className="space-y-4">
 						<div>
 							<h4 className="text-sm font-medium mb-2">Runtime Cleanup</h4>
-							<p className="text-sm text-[--text-secondary] mb-4">
+							<p className="text-sm text-muted-foreground mb-4">
 								Deletes temporary profiles, downloads, and automation scratch
 								files. This is a destructive operation.
 							</p>
