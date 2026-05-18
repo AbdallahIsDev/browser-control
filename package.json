@@ -67,6 +67,7 @@
 		"web:serve": "ts-node src/web/server.ts",
 		"web:build": "cd web && npm run build",
 		"web:typecheck": "cd web && npx tsc --noEmit",
+		"react:doctor": "node scripts/react_doctor.cjs",
 		"test:web": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/web_app_server.test.ts tests/unit/web_frontend_format.test.ts",
 		"test:state": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/state_storage.test.ts tests/unit/sqlite_storage.test.ts tests/unit/sqlite_recovery.test.ts tests/unit/data_home.test.ts tests/unit/cleanup_safety.test.ts tests/unit/profile_migration.test.ts",
 		"test:trading": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/trading_supervisor.test.ts",

@@ -166,6 +166,111 @@ test("toolbar exposes concrete runtime status labels", () => {
 	}
 });
 
+test("toolbar hides Provider and Policy pills when no token exists", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+
+	// Provider and Policy pills should be inside an authState !== "no-token" conditional
+	assert.match(
+		appSource,
+		/authState !== "no-token"/,
+		"Provider/Policy pills must be conditional on authState !== 'no-token'",
+	);
+
+	// Forget button must be conditional on storedTokenExists
+	assert.match(
+		appSource,
+		/storedTokenExists/,
+		"Forget button must only appear when a stored token exists",
+	);
+
+	// No-token hint text should exist (toolbar hint)
+	assert.match(
+		appSource,
+		/to get a tokenized URL/,
+		"No-token state should show a hint to the user",
+	);
+});
+
+test("no-token state shows locked dashboard with CLI guidance", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+
+	// Locked dashboard title
+	assert.match(
+		appSource,
+		/Local dashboard locked/,
+		"No-token state should show locked dashboard title",
+	);
+
+	// CLI command hint — primary installed command
+	assert.match(
+		appSource,
+		/bc web open/,
+		"No-token state should show installed CLI command hint (bc)",
+	);
+
+	// Dev fallback command hint
+	assert.match(
+		appSource,
+		/npm run cli -- web open/,
+		"No-token state should show dev fallback command hint",
+	);
+
+	// Tokenized URL hint in locked dashboard
+	assert.match(
+		appSource,
+		/tokenized URL/,
+		"No-token state should explain tokenized URL format",
+	);
+
+	// Locked dashboard replaces page content
+	assert.match(
+		appSource,
+		/authState === "no-token" \? \(/,
+		"Locked dashboard should be rendered instead of page content when no token",
+	);
+
+	// Toolbar shows visible command hint
+	assert.match(
+		appSource,
+		/bc web open/,
+		"Toolbar no-token hint should reference installed CLI command (bc)",
+	);
+});
+
+test("toolbar shows Forget button for unauthorized and api-error states", () => {
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
+
+	// hasToken() is used to control Forget visibility
+	assert.match(
+		appSource,
+		/const storedTokenExists = hasToken\(\);/,
+		"storedTokenExists must be derived from hasToken()",
+	);
+
+	// Verify Auth labels exist for all states
+	for (const label of [
+		"Signed in",
+		"Unauthorized",
+		"Sign-in required",
+		"API unavailable",
+	]) {
+		assert.match(
+			appSource,
+			new RegExp(label.replace(/[-]/g, "[-]")),
+			`${label} auth label must be present`,
+		);
+	}
+});
+
 test("settings view exposes credential vault and network rule controls", () => {
 	const settingsSource = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/SettingsView.tsx"),
@@ -743,4 +848,22 @@ test("PageShell provides content wrapper with responsive padding", () => {
 		/flex-1 min-w-0/,
 		"PageShell should fill available space without overflow",
 	);
+});
+
+test("react doctor quality gate is available as a non-blocking dashboard audit", () => {
+	const rootPackage = JSON.parse(
+		fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"),
+	) as { scripts?: Record<string, string> };
+	const scriptPath = path.resolve(__dirname, "../../scripts/react_doctor.cjs");
+
+	assert.equal(
+		rootPackage.scripts?.["react:doctor"],
+		"node scripts/react_doctor.cjs",
+	);
+	assert.equal(fs.existsSync(scriptPath), true);
+
+	const source = fs.readFileSync(scriptPath, "utf8");
+	assert.match(source, /web\/src/);
+	assert.match(source, /accessibility/i);
+	assert.match(source, /React dashboard doctor/);
 });

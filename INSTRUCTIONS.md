@@ -2,7 +2,17 @@
 
 This file is the source of truth for the next AI coding session.
 
-Latest user correction, 2026-05-18:
+Latest verification update, 2026-05-18:
+
+- The Skills tab now visibly exposes TradingView/Trading as an optional automation skill card and Trading remains absent from the primary sidebar. Evidence: `web/src/pages/PackagesView.tsx`, `tests/unit/web_frontend_format.test.ts`, `reports/ui-verification/packages-desktop.png`, `reports/ui-verification/packages-mobile.png`.
+- The Home page now matches the user mockup direction: centered heading, centered suggestion chips, narrower centered prompt composer, no task/activity section, and no context status row inside the primary Home surface. Evidence: `web/src/pages/CommandView.tsx`, `reports/ui-verification/command-desktop.png`, `reports/ui-verification/command-mobile.png`.
+- Task/activity empty and recovery states now belong to the Tasks tab. Evidence: `web/src/pages/TasksView.tsx`, `reports/ui-verification/tasks-desktop.png`, `reports/ui-verification/tasks-mobile.png`.
+- Context status remains available in the shell toolbar, not deleted. Evidence: `web/src/App.tsx`.
+- React dashboard audit tooling now exists as a non-blocking dev quality gate: `npm run react:doctor`. Current run scanned 50 live React/CSS files under `web/src`, reported 0 accessibility/product errors and 5 size-only warnings.
+- P9 Browserbase/provider health implementation evidence exists, but real Browserbase launch/attach remains blocked in this environment because `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` are not configured. Evidence: `src/providers/browserbase.ts`, `src/providers/health.ts`, `src/providers/registry.ts`, provider focused tests 48/48, `npm run test:browser-features` 173/173.
+- Later-only safe-scope audit: Qdrant/PageIndex adapters are optional and not default; proof-of-work exists as a bounded primitive; CubeSandbox/E2B/Camofox/Cloak/Obscura remain unsupported high-risk extension points, not runnable defaults. Evidence: `src/knowledge/backends.ts`, `src/security/proof_of_work.ts`, `src/providers/unsupported.ts`, targeted tests 38/38.
+
+Previous user correction, 2026-05-18:
 
 - The Skills tab currently does **not** visibly show Trading/TradingView, despite prior tracker text saying Trading was relocated there. Treat this as an open regression until verified in the real app. Trading must remain out of the primary sidebar, but it must be reachable as an optional skill/package/use-case card from Skills or Packages.
 - The Home page should match the supplied user mockup: centered heading, centered suggestion chips, centered prompt composer, narrower composer width, no task/activity section on Home, and no noisy context status row in the primary Home surface.

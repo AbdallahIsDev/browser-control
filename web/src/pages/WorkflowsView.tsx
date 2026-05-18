@@ -865,7 +865,7 @@ export function WorkflowsView() {
 									Generate Helper
 								</Button>
 								{generateResult && (
-									<p className="text-xs text-[--text-secondary]">
+									<p className="text-xs text-muted-foreground">
 										{generateResult}
 									</p>
 								)}
@@ -877,7 +877,7 @@ export function WorkflowsView() {
 								<div className="flex flex-col sm:flex-row sm:items-center gap-2">
 									<Label
 										htmlFor="helper-id-input"
-										className="text-xs text-[--text-tertiary]"
+										className="text-xs text-muted-foreground"
 									>
 										Helper ID:
 									</Label>
@@ -892,7 +892,7 @@ export function WorkflowsView() {
 								<div className="flex flex-col sm:flex-row sm:items-center gap-2">
 									<Label
 										htmlFor="helper-input-json"
-										className="text-xs text-[--text-tertiary]"
+										className="text-xs text-muted-foreground"
 									>
 										Input JSON:
 									</Label>
@@ -914,7 +914,7 @@ export function WorkflowsView() {
 									Execute Helper
 								</Button>
 								{helperResult && (
-									<p className="text-xs text-[--text-secondary]">
+									<p className="text-xs text-muted-foreground">
 										{helperResult}
 									</p>
 								)}

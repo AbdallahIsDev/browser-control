@@ -12,11 +12,11 @@ export function LoadingState({
 	return (
 		<div
 			className={cn(
-				"flex items-center gap-3 py-8 text-sm text-[--text-tertiary]",
+				"flex items-center gap-3 py-8 text-sm text-muted-foreground",
 				className,
 			)}
 		>
-			<div className="h-4 w-4 animate-spin rounded-full border-2 border-[--text-tertiary] border-t-transparent" />
+			<div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
 			<span>{message}</span>
 		</div>
 	);

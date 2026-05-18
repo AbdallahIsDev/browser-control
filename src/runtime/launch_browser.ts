@@ -23,6 +23,23 @@ interface ChromeDebugState {
 
 type LaunchProfileMode = "system" | "isolated";
 
+interface LaunchAttachableBrowserOptions {
+  port: number;
+  bindAddress: string;
+  chromePath?: string;
+  profile?: LaunchProfileMode;
+  env?: NodeJS.ProcessEnv;
+  allowProfileFallback?: boolean;
+}
+
+interface AttachableLaunchResult {
+  launched: boolean;
+  port: number;
+  bindAddress: string;
+  userDataDir: string;
+  profileMode: LaunchProfileMode;
+}
+
 const CHROME_CANDIDATES: Record<string, string[]> = {
   win32: [
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -99,6 +116,36 @@ function resolveUserDataDir(platform: NodeJS.Platform, env: NodeJS.ProcessEnv = 
   return resolveLaunchProfileMode(env) === "isolated"
     ? resolveIsolatedUserDataDir()
     : resolveSystemChromeUserDataDir(platform, env);
+}
+
+function resolveAttachableLaunchTarget(
+  options: {
+    platform: NodeJS.Platform;
+    env: NodeJS.ProcessEnv;
+    profileMode: LaunchProfileMode;
+    allowProfileFallback: boolean;
+    port: number;
+  },
+): { userDataDir: string; profileMode: LaunchProfileMode } {
+  const profileEnv = { ...options.env, BROWSER_LAUNCH_PROFILE: options.profileMode };
+  let userDataDir = resolveUserDataDir(options.platform, profileEnv);
+  let profileMode = options.profileMode;
+
+  if (
+    profileMode === "system" &&
+    (isChromeProfileInUse(userDataDir) || isChromeProcessRunning(options.platform))
+  ) {
+    if (!options.allowProfileFallback) {
+      throw new Error(
+        `System Chrome profile is already in use without a reachable CDP port ${options.port}. ` +
+          `Close Chrome first, or explicitly opt into an isolated Browser Control profile.`,
+      );
+    }
+    profileMode = "isolated";
+    userDataDir = resolveIsolatedUserDataDir();
+  }
+
+  return { userDataDir, profileMode };
 }
 
 function isChromeProfileInUse(userDataDir: string): boolean {
@@ -374,6 +421,98 @@ async function isChromeAlive(port: number): Promise<boolean> {
   return waitForCdp(port, 2000, { quiet: true });
 }
 
+async function launchAttachableBrowser(
+  options: LaunchAttachableBrowserOptions,
+): Promise<AttachableLaunchResult> {
+  const env = options.env ?? process.env;
+  const platform = process.platform;
+  const profileMode = options.profile ?? resolveLaunchProfileMode(env);
+
+  ensureDataHome();
+
+  const chromePath = resolveChromePath(platform, options.chromePath ?? env.BROWSER_CHROME_PATH);
+  const wslHostCandidates = getWslHostCandidates();
+  const needsBridge = isWslCdpBridgeEnabled(env) && wslHostCandidates.length > 0;
+
+  if (await isChromeAlive(options.port)) {
+    writeDebugState({
+      port: options.port,
+      bindAddress: options.bindAddress,
+      wslHostCandidates,
+    });
+    if (needsBridge) {
+      await startWslBridgeIfNeeded(
+        options.port,
+        wslHostCandidates,
+        resolveWslBridgeScriptPath(),
+      );
+    }
+    const existingTarget = resolveAttachableLaunchTarget({
+      platform,
+      env,
+      profileMode,
+      allowProfileFallback: options.allowProfileFallback === true,
+      port: options.port,
+    });
+    return {
+      launched: false,
+      port: options.port,
+      bindAddress: options.bindAddress,
+      userDataDir: existingTarget.userDataDir,
+      profileMode: existingTarget.profileMode,
+    };
+  }
+
+  const target = resolveAttachableLaunchTarget({
+    platform,
+    env,
+    profileMode,
+    allowProfileFallback: options.allowProfileFallback === true,
+    port: options.port,
+  });
+  fs.mkdirSync(target.userDataDir, { recursive: true });
+
+  const chromeArgs = buildChromeArgs({
+    port: options.port,
+    userDataDir: target.userDataDir,
+    bindAddress: options.bindAddress,
+  });
+
+  const chromeProcess = spawn(chromePath, chromeArgs, {
+    detached: true,
+    stdio: "ignore",
+    ...(platform === "win32" ? { windowsHide: false } : {}),
+  });
+  chromeProcess.unref();
+
+  const ready = await waitForCdp(options.port, 15000);
+  if (!ready) {
+    throw new Error(`Chrome did not become ready on port ${options.port} within 15 seconds.`);
+  }
+
+  writeDebugState({
+    port: options.port,
+    bindAddress: options.bindAddress,
+    wslHostCandidates,
+  });
+
+  if (needsBridge) {
+    await startWslBridgeIfNeeded(
+      options.port,
+      wslHostCandidates,
+      resolveWslBridgeScriptPath(),
+    );
+  }
+
+  return {
+    launched: true,
+    port: options.port,
+    bindAddress: options.bindAddress,
+    userDataDir: target.userDataDir,
+    profileMode: target.profileMode,
+  };
+}
+
 async function startWslBridgeIfNeeded(
   port: number,
   wslHostCandidates: string[],
@@ -590,6 +729,7 @@ export { main as _main };
 export {
   resolveChromePath,
   resolveUserDataDir,
+  resolveAttachableLaunchTarget,
   resolveLaunchProfileMode,
   resolveSystemChromeUserDataDir,
   resolveIsolatedUserDataDir,
@@ -608,9 +748,13 @@ export {
   startWslBridgeIfNeeded,
   stopWslBridge,
   waitForCdp,
+  launchAttachableBrowser,
   buildChromeArgs,
   writeDebugState,
   getProfilesDir,
+  type LaunchProfileMode,
+  type LaunchAttachableBrowserOptions,
+  type AttachableLaunchResult,
   type LaunchOptions,
   type ChromeDebugState,
 };

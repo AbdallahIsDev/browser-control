@@ -38,10 +38,12 @@ import {
 	isChromeAlive,
 	isLikelyWsl,
 	isWslCdpBridgeEnabled,
+	launchAttachableBrowser,
 	resolveChromePath,
 	resolveWslBridgeScriptPath,
 	startWslBridgeIfNeeded,
 	stopWslBridge,
+	type LaunchProfileMode,
 	waitForCdp,
 	writeDebugState,
 } from "../runtime/launch_browser";
@@ -285,6 +287,8 @@ export interface ConnectOptions {
 	sessionId?: string;
 	/** Provider to use for this connection */
 	provider?: string;
+	/** Visible launcher profile mode for attach-style auto-launch */
+	profile?: LaunchProfileMode;
 	/** Explicit user confirmation for high-risk CLI/browser operations */
 	confirmed?: boolean;
 }
@@ -786,6 +790,36 @@ export class BrowserConnectionManager {
 					`If you want a managed browser instead, use 'bc browser launch'.${wslAttachHelp(port)}`,
 			);
 		}
+	}
+
+	async launchAttachable(
+		options: ConnectOptions = {},
+	): Promise<BrowserConnection> {
+		await this.evaluatePolicy("browser_launch", options);
+
+		const config = loadConfig({ validate: false });
+		const port = options.port ?? config.chromeDebugPort;
+		const bindAddress = config.chromeBindAddress;
+		const profile = options.profile ?? config.browserLaunchProfile;
+
+		log.info("Launching attachable visible browser", {
+			port,
+			profile,
+		});
+
+		await launchAttachableBrowser({
+			port,
+			bindAddress,
+			profile,
+			allowProfileFallback: true,
+		});
+
+		return this.attach({
+			...options,
+			port,
+			actor: options.actor ?? "human",
+			confirmed: true,
+		});
 	}
 
 	/**

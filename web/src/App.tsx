@@ -7,6 +7,8 @@ import {
 	Home,
 	Image,
 	KeyRound,
+	Lock,
+	LogOut,
 	Menu,
 	Monitor,
 	Moon,
@@ -15,6 +17,7 @@ import {
 	Settings,
 	Shield,
 	Sun,
+	Terminal,
 } from "lucide-react";
 import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
 import { Toolbar } from "@/components/layout/Toolbar";
@@ -95,7 +98,13 @@ function getReadiness(
 	if (error) return { text: "API unavailable", variant: "warn" };
 	if (loading) return { text: "Runtime starting", variant: "neutral" };
 
-	if (!status) return { text: "Runtime starting", variant: "neutral" };
+	// No status and not loading — show context-appropriate label
+	if (!status) {
+		if (!hasToken()) {
+			return { text: "Not signed in", variant: "neutral" };
+		}
+		return { text: "No runtime info", variant: "neutral" };
+	}
 
 	const daemonState = status.daemon?.state;
 	const brokerReachable = status.broker?.reachable === true;
@@ -140,7 +149,6 @@ export default function App() {
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	useEffect(() => {
-		document.documentElement.dataset.theme = theme;
 		document.documentElement.classList.toggle("dark", theme === "dark");
 		localStorage.setItem("bc-theme", theme);
 	}, [theme]);
@@ -200,7 +208,7 @@ export default function App() {
 
 	const health = getReadiness(status, apiState !== "ready", loading);
 
-	// Only derive provider/policy from live status, never from stale state
+	// Always derive provider/policy — use status when live, fallback labels otherwise
 	const policyLabel =
 		status && apiState === "ready"
 			? status.policyProfile
@@ -223,31 +231,77 @@ export default function App() {
 	const authVariant = AUTH_VARIANTS[authState];
 	const authLabel = AUTH_LABELS[authState];
 
+	const handleForgetToken = useCallback(() => {
+		sessionStorage.removeItem("bc-token");
+		window.location.reload();
+	}, []);
+
+	const storedTokenExists = hasToken();
+
 	const toolbarContext = (
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
+			{/* Auth pill — always visible */}
 			<div
 				className={`flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border ${
 					authVariant === "ok"
 						? "border-primary/20"
 						: authVariant === "warn"
-							? "border-amber-500/20"
+							? "border-border/50"
 							: "border-border/20"
 				}`}
 			>
 				<KeyRound size={12} />
 				Auth: {authLabel}
+				{/* Forget button — only when there is a stored token to clear */}
+				{storedTokenExists && (
+					<button
+						type="button"
+						onClick={handleForgetToken}
+						className="ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
+						aria-label="Clear stored session token"
+					>
+						<LogOut size={10} />
+						Forget
+					</button>
+				)}
 			</div>
-			{status && apiState === "ready" && (
+			{/* Provider & Policy pills — hidden when no token exists */}
+			{authState !== "no-token" && (
 				<>
-					<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+					<div
+						className={`flex items-center gap-1.5 px-3 py-1 rounded ${
+							authState !== "authenticated"
+								? "bg-muted/20 border-border/10 opacity-60 text-[10px]"
+								: "bg-muted/30 border-border/20"
+						} border`}
+					>
 						<Monitor size={12} />
 						Provider: {browserLabel}
 					</div>
-					<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+					<div
+						className={`flex items-center gap-1.5 px-3 py-1 rounded ${
+							authState !== "authenticated"
+								? "bg-muted/20 border-border/10 opacity-60 text-[10px]"
+								: "bg-muted/30 border-border/20"
+						} border`}
+					>
 						<Shield size={12} />
 						Policy: {policyLabel}
 					</div>
 				</>
+			)}
+			{/* Hint for no-token state */}
+			{authState === "no-token" && (
+				<div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+					<Terminal size={12} />
+					<span>
+						Run{" "}
+						<code className="bg-muted/60 px-1 py-0.5 rounded text-[11px] font-mono">
+							bc web open
+						</code>{" "}
+						to get a tokenized URL
+					</span>
+				</div>
 			)}
 		</div>
 	);
@@ -271,10 +325,11 @@ export default function App() {
 		<div className="premium-app-container sidebar-layout">
 			{/* Mobile sidebar overlay backdrop */}
 			{sidebarOpen && (
-				<div
+				<button
+					type="button"
 					className="sidebar-overlay"
 					onClick={() => setSidebarOpen(false)}
-					aria-hidden="true"
+					aria-label="Close navigation"
 				/>
 			)}
 
@@ -283,6 +338,7 @@ export default function App() {
 				active={page}
 				onSelect={handleSelect}
 				footer={sidebarFooter}
+				locked={authState === "no-token"}
 				className={`${sidebarOpen ? "open fixed inset-y-0 left-0 md:relative" : "hidden md:flex"}`}
 			/>
 
@@ -299,7 +355,9 @@ export default function App() {
 							<Menu size={20} />
 						</Button>
 						<h1 className="text-sm md:text-base font-semibold truncate">
-							{pageLabels[page] || "Browser Control"}
+							{authState === "no-token"
+								? "Locked dashboard"
+								: pageLabels[page] || "Browser Control"}
 						</h1>
 					</div>
 					<div className="flex items-center gap-2" role="status">
@@ -309,7 +367,7 @@ export default function App() {
 								health.variant === "ok"
 									? "bg-primary/10 text-primary"
 									: health.variant === "warn"
-										? "bg-amber-500/10 text-amber-600"
+										? "bg-muted/80 text-muted-foreground"
 										: "bg-muted text-muted-foreground"
 							}`}
 						>
@@ -318,7 +376,7 @@ export default function App() {
 									health.variant === "ok"
 										? "bg-primary"
 										: health.variant === "warn"
-											? "bg-amber-500"
+											? "bg-muted-foreground"
 											: "bg-muted-foreground"
 								}`}
 							/>
@@ -328,19 +386,61 @@ export default function App() {
 				</Toolbar>
 
 				<main className="flex-1 overflow-y-auto min-w-0">
-					{page === "command" && <CommandView />}
-					{page === "terminal" && <TerminalView />}
-					{page === "tasks" && <TasksView />}
-					{page === "automations" && <AutomationsView />}
-					{page === "browser" && <BrowserView />}
-					{page === "trading" && <TradingView />}
-					{page === "workflows" && <WorkflowsView />}
-					{page === "packages" && (
-						<PackagesView onOpenTrading={() => handleSelect("trading")} />
+					{authState === "no-token" ? (
+						<div className="flex items-center justify-center min-h-[70vh] px-6">
+							<div className="max-w-md text-center space-y-6">
+								<div className="space-y-3">
+									<div className="mx-auto w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center">
+										<Lock size={28} className="text-muted-foreground/60" />
+									</div>
+									<h2 className="text-2xl font-semibold tracking-tight">
+										Local dashboard locked
+									</h2>
+									<p className="text-sm text-muted-foreground leading-relaxed">
+										Open Browser Control from the CLI to get a one-time local
+										token.
+									</p>
+								</div>
+								<div className="space-y-2">
+									<code className="block text-sm bg-muted/60 border border-border/50 px-4 py-2.5 rounded font-mono">
+										bc web open
+									</code>
+									<p className="text-xs text-muted-foreground/60">
+										Installed package:{" "}
+										<code className="bg-muted/30 px-1 rounded font-mono">
+											bc web open
+										</code>
+										<br />
+										Source checkout:{" "}
+										<code className="bg-muted/30 px-1 rounded font-mono">
+											npm run cli -- web open
+										</code>
+										<br />
+										Or open{" "}
+										<code className="bg-muted/30 px-1 rounded font-mono">
+											{window.location.origin}/#token=&lt;your-token&gt;
+										</code>
+									</p>
+								</div>
+							</div>
+						</div>
+					) : (
+						<>
+							{page === "command" && <CommandView />}
+							{page === "terminal" && <TerminalView />}
+							{page === "tasks" && <TasksView />}
+							{page === "automations" && <AutomationsView />}
+							{page === "browser" && <BrowserView />}
+							{page === "trading" && <TradingView />}
+							{page === "workflows" && <WorkflowsView />}
+							{page === "packages" && (
+								<PackagesView onOpenTrading={() => handleSelect("trading")} />
+							)}
+							{page === "evidence" && <EvidenceView />}
+							{page === "settings" && <SettingsView />}
+							{page === "advanced" && <AdvancedView />}
+						</>
 					)}
-					{page === "evidence" && <EvidenceView />}
-					{page === "settings" && <SettingsView />}
-					{page === "advanced" && <AdvancedView />}
 				</main>
 			</div>
 		</div>

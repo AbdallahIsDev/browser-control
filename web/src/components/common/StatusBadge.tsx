@@ -8,9 +8,9 @@ interface StatusBadgeProps {
 
 const colorMap = {
 	ok: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-	warn: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+	warn: "text-destructive bg-destructive/10 border-destructive/20",
 	info: "text-sky-400 bg-sky-500/10 border-sky-500/20",
-	neutral: "text-muted-foreground bg-muted/50 border-border",
+	neutral: "text-muted-foreground bg-muted/50 border-border/40",
 };
 
 export function StatusBadge({

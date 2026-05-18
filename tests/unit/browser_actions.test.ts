@@ -72,7 +72,7 @@ type MockPage = {
 		insertText: (text: string) => Promise<void>;
 		press: (key: string) => Promise<void>;
 	};
-	evaluate: () => Promise<unknown[]>;
+	evaluate: (...args: unknown[]) => Promise<unknown>;
 	close: () => Promise<void>;
 };
 
@@ -106,7 +106,9 @@ function createUnavailableBrowserManager() {
 	const attempts = {
 		attach: 0,
 		launchManaged: 0,
+		launchAttachable: 0,
 		attachOptions: [] as Array<{ port?: number; actor?: string }>,
+		launchAttachableOptions: [] as Array<Record<string, unknown>>,
 	};
 
 	const manager = {
@@ -123,16 +125,31 @@ function createUnavailableBrowserManager() {
 			attempts.launchManaged += 1;
 			throw new Error("launch unavailable in test");
 		},
+		launchAttachable: async (options?: Record<string, unknown>) => {
+			attempts.launchAttachable += 1;
+			attempts.launchAttachableOptions.push(options ?? {});
+			throw new Error("attachable launch unavailable in test");
+		},
 	} as unknown as BrowserConnectionManager;
 
 	return { manager, attempts };
 }
 
-function createAttachFailLaunchSucceedManager(pages: MockPage[]): TestBrowserManager & { attempts: { attach: number; launchManaged: number; attachOptions: Array<{ port?: number; actor?: string }> } } {
+function createAttachFailLaunchSucceedManager(pages: MockPage[]): TestBrowserManager & {
+	attempts: {
+		attach: number;
+		launchManaged: number;
+		launchAttachable: number;
+		attachOptions: Array<{ port?: number; actor?: string }>;
+		launchAttachableOptions: Array<Record<string, unknown>>;
+	};
+} {
 	const attempts = {
 		attach: 0,
 		launchManaged: 0,
+		launchAttachable: 0,
 		attachOptions: [] as Array<{ port?: number; actor?: string }>,
+		launchAttachableOptions: [] as Array<Record<string, unknown>>,
 	};
 	const calls = { disconnect: 0 };
 	const context = {
@@ -166,8 +183,102 @@ function createAttachFailLaunchSucceedManager(pages: MockPage[]): TestBrowserMan
 			attempts.launchManaged += 1;
 			connected = true;
 		},
+		launchAttachable: async (options?: Record<string, unknown>) => {
+			attempts.launchAttachable += 1;
+			attempts.launchAttachableOptions.push(options ?? {});
+			connected = true;
+		},
 		reconnectActiveManaged: async () => false,
 		disconnect: async () => { calls.disconnect += 1; connected = false; },
+	} as unknown as TestBrowserManager;
+
+	return Object.assign(manager, { calls, attempts });
+}
+
+function createAttachFailLaunchCaptureManager(
+	pages: MockPage[],
+): TestBrowserManager & {
+	attempts: {
+		attach: number;
+		launchManaged: number;
+		launchAttachable: number;
+		attachOptions: Array<{ port?: number; actor?: string }>;
+		launchOptions: Array<Record<string, unknown>>;
+		launchAttachableOptions: Array<Record<string, unknown>>;
+	};
+} {
+	const attempts = {
+		attach: 0,
+		launchManaged: 0,
+		launchAttachable: 0,
+		attachOptions: [] as Array<{ port?: number; actor?: string }>,
+		launchOptions: [] as Array<Record<string, unknown>>,
+		launchAttachableOptions: [] as Array<Record<string, unknown>>,
+	};
+	const calls = { disconnect: 0 };
+	const context = {
+		pages: () => pages,
+		newCDPSession: async (page: MockPage) => ({
+			on: () => undefined,
+			off: () => undefined,
+			detach: async () => undefined,
+			send: async (method: string) => {
+				if (method === "Target.getTargetInfo") {
+					return { targetInfo: { targetId: page.targetId ?? page.url() } };
+				}
+				if (method === "Browser.getWindowForTarget") {
+					return {
+						windowId: page.windowId ?? 1,
+						bounds: { windowState: "normal" },
+					};
+				}
+				if (method === "Target.activateTarget") {
+					page.calls.activateTarget += 1;
+					return {};
+				}
+				return {};
+			},
+		}),
+	};
+	for (const page of pages) {
+		page.context = () => context;
+	}
+
+	let connected = false;
+	const manager = {
+		getContext: () => (connected ? context : null),
+		getBrowser: () => (connected ? { contexts: () => [context] } : null),
+		isConnected: () => connected,
+		getConnection: () =>
+			connected
+				? mockConnection({
+						id: "conn-launched",
+						mode: "managed",
+						cdpEndpoint: "http://127.0.0.1:9222",
+						profile: { name: "system" },
+						provider: "local",
+					})
+				: null,
+		attach: async (options?: { port?: number; actor?: string }) => {
+			attempts.attach += 1;
+			attempts.attachOptions.push(options ?? {});
+			throw new Error("attach unavailable in test");
+		},
+		launchManaged: async (options?: Record<string, unknown>) => {
+			attempts.launchManaged += 1;
+			attempts.launchOptions.push(options ?? {});
+			connected = true;
+		},
+		launchAttachable: async (options?: Record<string, unknown>) => {
+			attempts.launchAttachable += 1;
+			attempts.launchAttachableOptions.push(options ?? {});
+			connected = true;
+		},
+		reconnectActiveManaged: async () => false,
+		disconnect: async () => {
+			calls.disconnect += 1;
+			connected = false;
+		},
 	} as unknown as TestBrowserManager;
 
 	return Object.assign(manager, { calls, attempts });
@@ -577,10 +688,11 @@ describe("BrowserActions", () => {
 			}
 		});
 
-		it("auto-launches managed Chrome as fallback when attach fails (default behavior)", async () => {
+		it("auto-launches an attachable visible Chrome when attach fails in attach mode", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const page = createMockPage("chrome://newtab/", { hasBrowserWindow: true });
 			const manager = createAttachFailLaunchSucceedManager([page]);
+			process.env.BROWSER_MODE = "attach";
 
 			try {
 				const isolatedSessionManager = new SessionManager({
@@ -599,7 +711,8 @@ describe("BrowserActions", () => {
 				});
 
 				assert.equal(manager.attempts.attach, 1);
-				assert.equal(manager.attempts.launchManaged, 1);
+				assert.equal(manager.attempts.launchAttachable, 1);
+				assert.equal(manager.attempts.launchManaged, 0);
 				assert.equal(result.success, true);
 				assert.equal(page.calls.goto.length, 1);
 				assert.equal(page.calls.goto[0], "https://example.com");
@@ -611,9 +724,48 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("passes the configured launch profile into auto-launch fallback", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("chrome://newtab/", {
+				hasBrowserWindow: true,
+			});
+			const manager = createAttachFailLaunchCaptureManager([page]);
+			process.env.BROWSER_MODE = "attach";
+			process.env.BROWSER_LAUNCH_PROFILE = "system";
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.open({
+					url: "https://example.com",
+				});
+
+				assert.equal(result.success, true);
+				assert.equal(manager.attempts.launchAttachable, 1);
+				assert.equal(manager.attempts.launchManaged, 0);
+				assert.equal(
+					manager.attempts.launchAttachableOptions[0]?.profile,
+					"system",
+				);
+			} finally {
+				delete process.env.BROWSER_LAUNCH_PROFILE;
+				isolatedStore.close();
+			}
+		});
+
 		it("fails with both attach and launch reasons when both paths fail", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const { manager, attempts } = createUnavailableBrowserManager();
+			process.env.BROWSER_MODE = "attach";
 
 			try {
 				const isolatedSessionManager = new SessionManager({
@@ -632,7 +784,8 @@ describe("BrowserActions", () => {
 				});
 
 				assert.equal(attempts.attach, 1);
-				assert.equal(attempts.launchManaged, 1);
+				assert.equal(attempts.launchAttachable, 1);
+				assert.equal(attempts.launchManaged, 0);
 				assert.equal(result.success, false);
 				assert.ok(
 					result.error?.includes("Attach failed on port 9222"),
@@ -643,11 +796,11 @@ describe("BrowserActions", () => {
 					"error should include attach reason text",
 				);
 				assert.ok(
-					result.error?.includes("Managed launch also failed"),
+					result.error?.includes("Attach-mode launch also failed"),
 					"error should include launch failure",
 				);
 				assert.ok(
-					result.error?.includes("launch unavailable in test"),
+					result.error?.includes("attachable launch unavailable in test"),
 					"error should include launch reason text",
 				);
 				assert.ok(
@@ -1100,6 +1253,42 @@ describe("BrowserActions", () => {
 				);
 				assert.equal(fs.existsSync(manifestPath), true);
 				assert.equal(fs.existsSync(screenshotPath), true);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("hides Browser Control overlays before plain screenshots by default", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const visiblePage = createMockPage("https://example.com", {
+				hasBrowserWindow: true,
+			});
+			let evaluateCalls = 0;
+			visiblePage.evaluate = async () => {
+				evaluateCalls += 1;
+				return undefined;
+			};
+			const manager = createConnectedBrowserManager([visiblePage]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.screenshot();
+
+				assert.equal(result.success, true);
+				assert.ok(
+					evaluateCalls >= 3,
+					"plain screenshots should hide and then restore Browser Control overlays",
+				);
 			} finally {
 				isolatedStore.close();
 			}
