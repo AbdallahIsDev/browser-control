@@ -185,10 +185,10 @@ export function TradingView() {
 		);
 	}
 
-	const visibleJobs = jobs.slice(0, 12);
-	const visiblePlans = plans.slice(0, 12);
-	const visibleTickets = tickets.slice(0, 12);
-	const visibleJournal = journal.slice(0, 20);
+	const visibleJobs = Array.isArray(jobs) ? jobs.slice(0, 12) : [];
+	const visiblePlans = Array.isArray(plans) ? plans.slice(0, 12) : [];
+	const visibleTickets = Array.isArray(tickets) ? tickets.slice(0, 12) : [];
+	const visibleJournal = Array.isArray(journal) ? journal.slice(0, 20) : [];
 
 	return (
 		<PageShell>
@@ -241,7 +241,7 @@ export function TradingView() {
 							<CardTitle>Active Supervisor Jobs</CardTitle>
 						</CardHeader>
 						<CardContent>
-							{jobs.length === 0 ? (
+							{visibleJobs.length === 0 ? (
 								<EmptyState title="No active supervisor jobs" />
 							) : (
 								<div className="space-y-3 md:hidden">

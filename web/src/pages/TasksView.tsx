@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageShell } from "@/components/layout/PageShell";
+import { Card, CardContent } from "@/components/ui/card";
 import {
 	Table,
 	TableBody,
@@ -57,9 +59,9 @@ export function TasksView() {
 	if (error) {
 		return (
 			<PageShell className="flex items-center justify-center min-h-[50vh]">
-				<EmptyState
-					title="Task runtime offline"
-					description="Task progress, approvals, screenshots, and results will appear here."
+				<ErrorState
+					message="Task runtime offline"
+					details="Task progress, approvals, screenshots, and results will appear here."
 				/>
 			</PageShell>
 		);
@@ -70,7 +72,10 @@ export function TasksView() {
 			availability.recovery || "Start Browser Control daemon to monitor tasks.";
 		return (
 			<PageShell className="flex items-center justify-center min-h-[50vh]">
-				<EmptyState title="Task runtime offline" description={recovery} />
+				<EmptyState
+					title="Task runtime offline"
+					description={`${recovery} Task history will load automatically.`}
+				/>
 			</PageShell>
 		);
 	}
@@ -85,31 +90,33 @@ export function TasksView() {
 						description="Task progress, approvals, screenshots, and results will appear here."
 					/>
 				) : (
-					<div className="overflow-hidden border border-border rounded shadow-sm bg-card">
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Task</TableHead>
-									<TableHead className="w-[120px]">Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{tasks.map((t) => (
-									<TableRow key={t.id}>
-										<TableCell className="max-w-[600px] truncate">
-											{t.prompt || t.id}
-										</TableCell>
-										<TableCell>
-											<StatusBadge
-												label={t.status}
-												variant={STATUS_MAP[t.status] || "neutral"}
-											/>
-										</TableCell>
+					<Card>
+						<CardContent className="p-0">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead>Task</TableHead>
+										<TableHead className="w-[120px]">Status</TableHead>
 									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</div>
+								</TableHeader>
+								<TableBody>
+									{tasks.map((t) => (
+										<TableRow key={t.id}>
+											<TableCell className="max-w-[600px] truncate">
+												{t.prompt || t.id}
+											</TableCell>
+											<TableCell>
+												<StatusBadge
+													label={t.status}
+													variant={STATUS_MAP[t.status] || "neutral"}
+												/>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						</CardContent>
+					</Card>
 				)}
 			</div>
 		</PageShell>
