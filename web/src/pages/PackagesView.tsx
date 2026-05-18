@@ -197,15 +197,19 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 						</div>
 					</CardHeader>
 					<CardContent>
-						<div className="rounded-md border border-border p-4">
+						<div className="rounded border border-border bg-card p-4">
 							<div className="flex flex-wrap items-start justify-between gap-4">
 								<div className="min-w-0 space-y-2">
 									<div className="flex flex-wrap items-center gap-2">
 										<h3 className="text-sm font-semibold">
 											TradingView ICT Analysis
 										</h3>
-										<Badge variant="secondary">Optional skill</Badge>
-										<Badge variant="secondary">Analysis only</Badge>
+										<Badge variant="secondary" className="rounded">
+											Optional skill
+										</Badge>
+										<Badge variant="secondary" className="rounded">
+											Analysis only
+										</Badge>
 									</div>
 									<p className="max-w-3xl text-sm text-muted-foreground">
 										Analyze a TradingView chart and prepare a reviewable trade
@@ -217,6 +221,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 									size="sm"
 									variant="outline"
 									onClick={onOpenTrading}
+									className="rounded"
 									disabled={!onOpenTrading}
 								>
 									Open tools
