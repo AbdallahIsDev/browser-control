@@ -2,14 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import "./App.css";
 import {
-	Check,
 	CheckSquare,
-	Copy,
 	Globe,
 	Home,
 	Image,
 	KeyRound,
-	Lock,
 	LogOut,
 	Menu,
 	Monitor,
@@ -22,6 +19,7 @@ import {
 	Terminal,
 } from "lucide-react";
 import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
+import { LockedDashboardScreen } from "@/components/layout/LockedDashboardScreen";
 import { Toolbar } from "@/components/layout/Toolbar";
 import { Button } from "@/components/ui/button";
 import {
@@ -137,66 +135,6 @@ function getReadiness(
 	return { text: "Runtime starting", variant: "neutral" };
 }
 
-function CommandCopyCard({
-	command,
-	label,
-	description,
-	ariaLabel,
-	compact = false,
-}: {
-	command: string;
-	label: string;
-	description: string;
-	ariaLabel: string;
-	compact?: boolean;
-}) {
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = useCallback(async () => {
-		await navigator.clipboard.writeText(command);
-		setCopied(true);
-		window.setTimeout(() => setCopied(false), 1500);
-	}, [command]);
-
-	return (
-		<button
-			type="button"
-			onClick={() => {
-				void handleCopy();
-			}}
-			className={`w-full rounded-2xl border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-				compact
-					? "bg-muted/35 border-border/50 px-4 py-3 hover:bg-muted/55"
-					: "bg-card border-border/60 px-5 py-4 hover:bg-card/90"
-			}`}
-			aria-label={ariaLabel}
-		>
-			<div className="flex items-start justify-between gap-4">
-				<div className="min-w-0 space-y-1">
-					<p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
-						{label}
-					</p>
-					<code className="block overflow-x-auto text-sm font-semibold text-foreground">
-						{command}
-					</code>
-					<p className="text-sm text-muted-foreground">{description}</p>
-				</div>
-				<div className="shrink-0 rounded-full border border-border/60 bg-background/80 p-2 text-muted-foreground">
-					{copied ? <Check size={16} /> : <Copy size={16} />}
-				</div>
-			</div>
-			<div
-				className={`mt-3 text-xs font-medium ${
-					copied ? "text-primary" : "text-muted-foreground/70"
-				}`}
-				aria-live="polite"
-			>
-				{copied ? "Copied" : "Click anywhere to copy"}
-			</div>
-		</button>
-	);
-}
-
 export default function App() {
 	const [page, setPage] = useState<string>(() => {
 		const stored = localStorage.getItem("bc-page");
@@ -214,6 +152,9 @@ export default function App() {
 	);
 	const [apiState, setApiState] = useState<ApiState>("ready");
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+		return localStorage.getItem("bc-sidebar-collapsed") === "true";
+	});
 	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	useEffect(() => {
@@ -224,6 +165,10 @@ export default function App() {
 	useEffect(() => {
 		localStorage.setItem("bc-page", page);
 	}, [page]);
+
+	useEffect(() => {
+		localStorage.setItem("bc-sidebar-collapsed", String(sidebarCollapsed));
+	}, [sidebarCollapsed]);
 
 	useEffect(() => {
 		// Don't poll if no token is present
@@ -276,29 +221,29 @@ export default function App() {
 
 	const health = getReadiness(status, apiState !== "ready", loading);
 
-	// Always derive provider/policy — use status when live, fallback labels otherwise
+	// Always derive provider/policy from live state or honest fallbacks.
 	const policyLabel =
 		status && apiState === "ready"
 			? status.policyProfile
 				? status.policyProfile.charAt(0).toUpperCase() +
 					status.policyProfile.slice(1)
-				: "Balanced"
+				: "Policy unknown"
 			: apiState === "unavailable"
 				? "Unavailable"
-				: "—";
+				: "Policy unknown";
+	const activeProvider =
+		status?.browser?.provider || (status ? status.provider?.active : undefined);
 	const browserLabel =
 		status && apiState === "ready"
-			? status.browser?.provider
-				? status.browser.provider.charAt(0).toUpperCase() +
-					status.browser.provider.slice(1)
-				: "Not configured"
+			? activeProvider
+				? activeProvider.charAt(0).toUpperCase() + activeProvider.slice(1)
+				: "Provider unknown"
 			: apiState === "unavailable"
 				? "Unavailable"
-				: "—";
+				: "Provider unknown";
 
 	const authVariant = AUTH_VARIANTS[authState];
 	const authLabel = AUTH_LABELS[authState];
-	const noTokenSourceCommand = "npm run cli -- web open";
 
 	const handleForgetToken = useCallback(() => {
 		sessionStorage.removeItem("bc-token");
@@ -326,7 +271,6 @@ export default function App() {
 					{theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
 				</TooltipContent>
 			</Tooltip>
-			{/* Auth pill — always visible */}
 			<div
 				className={`flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border ${
 					authVariant === "ok"
@@ -335,23 +279,24 @@ export default function App() {
 							? "border-border/50"
 							: "border-border/20"
 				}`}
+				role="status"
+				aria-label="Authentication status"
 			>
 				<KeyRound size={12} />
 				Auth: {authLabel}
-				{/* Forget button — only when there is a stored token to clear */}
 				{storedTokenExists && (
 					<button
 						type="button"
 						onClick={handleForgetToken}
 						className="ml-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
-						aria-label="Clear stored session token"
+						aria-label="Clear stored sign-in token"
+						title="Clear stored sign-in token"
 					>
 						<LogOut size={10} />
-						Forget
+						Clear token
 					</button>
 				)}
 			</div>
-			{/* Provider & Policy pills — hidden when no token exists */}
 			{authState !== "no-token" && (
 				<>
 					<div
@@ -360,6 +305,8 @@ export default function App() {
 								? "bg-muted/20 border-border/10 opacity-60 text-[10px]"
 								: "bg-muted/30 border-border/20"
 						} border`}
+						role="status"
+						aria-label="Browser provider status"
 					>
 						<Monitor size={12} />
 						Provider: {browserLabel}
@@ -370,6 +317,8 @@ export default function App() {
 								? "bg-muted/20 border-border/10 opacity-60 text-[10px]"
 								: "bg-muted/30 border-border/20"
 						} border`}
+						role="status"
+						aria-label="Policy profile status"
 					>
 						<Shield size={12} />
 						Policy: {policyLabel}
@@ -383,21 +332,6 @@ export default function App() {
 					<span>Open from CLI for a one-time local token</span>
 				</div>
 			)}
-		</div>
-	);
-
-	const sidebarFooter = (
-		<div className="space-y-3">
-			<Button
-				variant="ghost"
-				size="sm"
-				className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-				onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-				aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-			>
-				{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-				{theme === "dark" ? "Light Mode" : "Dark Mode"}
-			</Button>
 		</div>
 	);
 
@@ -419,9 +353,12 @@ export default function App() {
 						items={navConfig}
 						active={page}
 						onSelect={handleSelect}
-						footer={sidebarFooter}
 						locked={false}
-						className={`${sidebarOpen ? "open fixed inset-y-0 left-0 md:relative" : "hidden md:flex"}`}
+						collapsed={sidebarCollapsed}
+						onToggleCollapsed={() =>
+							setSidebarCollapsed((collapsed) => !collapsed)
+						}
+						className={`${sidebarOpen ? "open" : "hidden md:flex"}`}
 					/>
 				)}
 
@@ -472,87 +409,7 @@ export default function App() {
 
 					<main className="flex-1 overflow-y-auto min-w-0">
 						{authState === "no-token" ? (
-							<div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-5 py-10 md:min-h-[calc(100vh-4rem)] md:px-8">
-								<div className="w-full max-w-3xl rounded-[28px] border border-border/60 bg-card/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur md:p-10">
-									<div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-										<div className="space-y-5">
-											<div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-border/60 bg-muted/40">
-												<Lock size={28} className="text-muted-foreground/70" />
-											</div>
-											<div className="space-y-3">
-												<p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/70">
-													Auth required
-												</p>
-												<h2 className="text-3xl font-semibold tracking-tight text-balance md:text-4xl">
-													Local dashboard locked
-												</h2>
-												<p className="max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
-													Open the dashboard from the CLI to mint a one-time
-													local tokenized URL. Bare URLs without a token stay
-													locked by design.
-												</p>
-											</div>
-											<div className="grid gap-3">
-												<CommandCopyCard
-													command="bc web open"
-													label="Installed command"
-													description="Starts the local dashboard and opens a one-time tokenized URL."
-													ariaLabel="Copy bc web open command"
-												/>
-												<CommandCopyCard
-													command="bc web open --port=0"
-													label="Port-busy fallback"
-													description="Use this when port 7790 is already taken by another process."
-													ariaLabel="Copy bc web open --port=0 command"
-													compact
-												/>
-												<CommandCopyCard
-													command={noTokenSourceCommand}
-													label="Source checkout"
-													description="Use this inside the repo when running Browser Control from source."
-													ariaLabel="Copy source checkout web open command"
-													compact
-												/>
-											</div>
-										</div>
-										<div className="space-y-4 rounded-3xl border border-border/50 bg-background/70 p-5">
-											<h3 className="text-sm font-semibold tracking-tight text-foreground">
-												If the page stays locked
-											</h3>
-											<div className="space-y-3 text-sm text-muted-foreground">
-												<p>
-													1. Run{" "}
-													<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-														bc web open
-													</code>
-													.
-												</p>
-												<p>
-													2. If port 7790 is busy, use{" "}
-													<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-														bc web open --port=0
-													</code>
-													.
-												</p>
-												<p>
-													3. From source, use{" "}
-													<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-														{noTokenSourceCommand}
-													</code>
-													.
-												</p>
-											</div>
-											<div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-												Valid token URLs look like{" "}
-												<code className="font-mono">
-													{window.location.origin}/#token=&lt;one-time-token&gt;
-												</code>
-												.
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
+							<LockedDashboardScreen />
 						) : (
 							<>
 								{page === "command" && <CommandView />}

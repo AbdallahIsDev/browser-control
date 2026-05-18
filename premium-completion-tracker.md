@@ -2,7 +2,96 @@
 
 Updated: 2026-05-18 Africa/Cairo.
 
-Overall status: **Partial**. All quality gates pass.
+Overall status: **Partial**. Current locked-dashboard and app-shell UI chunk is implemented and verified. The broader `INSTRUCTIONS.md` Missing Premium Features backlog remains incomplete.
+
+---
+
+## Locked Dashboard + Floating Sidebar Shell — Verified UI Chunk (2026-05-18)
+
+### Status
+
+Partial relative to `INSTRUCTIONS.md`; complete for this UI chunk.
+
+### Implemented
+
+- Simplified locked dashboard into `LockedDashboardScreen`, `AuthHelpPanel`, `CommandCopyCard`, and `CommandInlineCopy`.
+- Replaced whole-card copy behavior with explicit command-row copy buttons.
+- Removed misleading “Click anywhere to copy” copy.
+- Added exact accessible copy labels: `Copy command: <command>`.
+- Added copied feedback and verified clipboard writes `bc web open`.
+- Changed locked layout to desktop two-column intro/help and three command cards per row when width allows.
+- Added floating rounded sidebar panel with window margin.
+- Added desktop sidebar collapse/expand state persisted in `localStorage` via `bc-sidebar-collapsed`.
+- Kept collapsed desktop sidebar as icon rail with logo icon, nav icons, accessible names, and tooltip titles.
+- Moved sidebar toggle into the sidebar header; this keeps the control near the thing it controls, avoids page-title clutter, and remains reachable when collapsed.
+- Removed duplicate sidebar bottom theme toggle; top-bar theme toggle remains available.
+- Removed hard sidebar vertical border and toolbar bottom border.
+- Connected provider/policy top-bar badges to live status fields or honest unknown/unavailable fallbacks.
+- Replaced ambiguous `Forget` copy with `Clear token` and accessible label `Clear stored sign-in token`.
+
+### Verification
+
+| Gate | Result |
+|------|--------|
+| `npx biome check . --max-diagnostics=30` | Pass |
+| `npm run react:doctor` | Pass, 0 errors; existing size-only warnings remain |
+| `npm run typecheck` | Pass |
+| `npm run web:typecheck` | Pass |
+| `npm run web:build` | Pass; existing >500 kB chunk warning remains |
+| `npm run test:web` | Pass, 67/67 |
+| `npm run test:desktop` | Pass, 3/3 |
+| Browser Control a11y verification | Pass for locked/authenticated shell and collapsed sidebar |
+| Playwright mobile fallback | Pass; 375x812 no horizontal overflow |
+| Copy command verification | Pass; clipboard contains `bc web open` |
+| Desktop offscreen Electron screenshot | Pass; `desktop-shell.png` nonempty |
+| Process cleanup | Desktop process cleaned; repo-local random-port web server stopped; only pre-existing global port 7790 server remains |
+
+### Fresh screenshots/artifacts
+
+| Path | Purpose |
+|------|---------|
+| `reports/ui-verification/locked-dashboard-desktop-dark.png` | Locked dashboard desktop dark |
+| `reports/ui-verification/locked-dashboard-desktop-light.png` | Locked dashboard desktop light |
+| `reports/ui-verification/locked-dashboard-mobile.png` | Locked dashboard mobile 375x812 |
+| `reports/ui-verification/sidebar-expanded-desktop.png` | Authenticated expanded sidebar |
+| `reports/ui-verification/sidebar-collapsed-desktop.png` | Authenticated collapsed icon rail |
+| `reports/ui-verification/topbar-authenticated-desktop.png` | Authenticated top bar badges |
+| `reports/ui-verification/mobile-shell.png` | Authenticated mobile shell |
+| `reports/ui-verification/command-desktop.png` | Command/Home desktop |
+| `reports/ui-verification/command-mobile.png` | Command/Home mobile |
+| `reports/ui-verification/desktop-shell.png` | Electron desktop shell |
+| `reports/ui-verification/screenshot-manifest.json` | Current screenshot manifest from `capture_ui_screenshots.cjs` |
+
+### UX blacklist review
+
+Reviewed: Home, Tasks, Browser, Workflows, Skills, Evidence, Settings, Terminal, Packages, Automations, Advanced, locked dashboard.
+
+Findings fixed in this chunk:
+
+- Locked dashboard copy affordance was ambiguous; fixed with command-row copy buttons.
+- Sidebar felt pinned and bordered; fixed with floating rounded panel.
+- Duplicate theme toggle existed in sidebar bottom and top bar; sidebar copy removed.
+- Icon-only collapsed nav needed accessible labels; added `aria-label`, `title`, and tooltip content.
+- Top bar badge fallbacks could imply known provider/policy state; now use unknown/unavailable fallbacks when state is missing.
+
+Remaining non-blocking product debt:
+
+- Evidence and Settings still expose advanced/debug-heavy content by design; not rewritten in this UI chunk.
+- `INSTRUCTIONS.md` P0/P1/P2 premium missing features remain incomplete and must be implemented separately.
+
+### Branding
+
+- Active nav remains blue primary.
+- No orange primary UI was introduced in this chunk.
+- Existing favicon SVG uses `prefers-color-scheme`; no favicon implementation change was needed.
+- Electron icon test passed and desktop screenshot is nonblank.
+
+### Remaining blockers
+
+- P0 native JS dialog detection/action/tool is not implemented.
+- P0 raw CDP passthrough tool is not implemented.
+- P1/P2 premium backlog items listed in `INSTRUCTIONS.md` are not complete.
+- Final full release gates (`test:ci`, `build`, `test:package`, `npm pack --dry-run --json`, `desktop:build`) still need to be rerun after all required backlog work, not just this UI chunk.
 
 ---
 
