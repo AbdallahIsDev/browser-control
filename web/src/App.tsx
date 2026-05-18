@@ -215,7 +215,7 @@ export default function App() {
 							{pageLabels[page] || "Browser Control"}
 						</h1>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2" role="status">
 						{/* Readiness pill */}
 						<div
 							className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
