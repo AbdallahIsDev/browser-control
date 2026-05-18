@@ -24,27 +24,36 @@ if (hashToken) {
 
 export async function apiFetch<T>(
 	path: string,
-
 	options: RequestInit = {},
 ): Promise<T> {
 	const response = await fetch(path, {
 		...options,
-
 		headers: {
 			"content-type": "application/json",
-
 			authorization: `Bearer ${getToken()}`,
-
 			...(options.headers || {}),
 		},
 	});
 
 	const text = await response.text();
+	const contentType = response.headers.get("content-type");
+	const isJson = contentType?.includes("application/json");
 
-	const body = text ? JSON.parse(text) : {};
+	let body: any;
+	try {
+		body = isJson && text ? JSON.parse(text) : text;
+	} catch (e) {
+		throw new Error(
+			`Failed to parse response from ${path} (${response.status}): ${text.slice(0, 50)}...`,
+		);
+	}
 
 	if (!response.ok) {
-		throw new Error(body.error || response.statusText);
+		throw new Error(
+			typeof body === "string"
+				? body || response.statusText
+				: body?.error || response.statusText,
+		);
 	}
 
 	return body as T;
