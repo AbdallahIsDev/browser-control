@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/EmptyState";
-import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingState } from "@/components/common/LoadingState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageShell } from "@/components/layout/PageShell";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Table,
 	TableBody,
@@ -59,10 +56,10 @@ export function TasksView() {
 
 	if (error) {
 		return (
-			<PageShell>
-				<ErrorState
-					message="Tasks could not load"
-					details={`Browser Control could not read task history. ${error}`}
+			<PageShell className="flex items-center justify-center min-h-[50vh]">
+				<EmptyState
+					title="Task runtime offline"
+					description="Task progress, approvals, screenshots, and results will appear here."
 				/>
 			</PageShell>
 		);
@@ -70,83 +67,49 @@ export function TasksView() {
 
 	if (availability?.available === false) {
 		const recovery =
-			availability.recovery ||
-			"Start Browser Control daemon, then return here. Task history will load automatically when the runtime reconnects.";
+			availability.recovery || "Start Browser Control daemon to monitor tasks.";
 		return (
-			<PageShell>
-				<div className="space-y-4 md:space-y-6">
-					<Card>
-						<CardContent className="p-6">
-							<EmptyState
-								title="Task runtime offline"
-								description={
-									availability.error ||
-									"Start Browser Control daemon to queue and monitor tasks."
-								}
-								action={
-									<div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-left text-xs text-muted-foreground">
-										{recovery}
-									</div>
-								}
-							/>
-						</CardContent>
-					</Card>
-				</div>
+			<PageShell className="flex items-center justify-center min-h-[50vh]">
+				<EmptyState title="Task runtime offline" description={recovery} />
 			</PageShell>
 		);
 	}
 
 	return (
 		<PageShell>
-			<div className="space-y-4 md:space-y-6">
+			<div className="space-y-6">
+				<h2 className="text-2xl font-semibold">Tasks</h2>
 				{tasks.length === 0 ? (
-					<Card>
-						<CardContent className="p-6">
-							<EmptyState
-								title="No tasks"
-								description="Submit a task from the Command view to get started."
-							/>
-						</CardContent>
-					</Card>
+					<EmptyState
+						title="No tasks running"
+						description="Task progress, approvals, screenshots, and results will appear here."
+					/>
 				) : (
-					<Card>
-						<CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-							<CardTitle className="flex items-center gap-2">
-								Tasks <Badge variant="secondary">{tasks.length}</Badge>
-							</CardTitle>
-						</CardHeader>
-						<CardContent>
-							<div className="overflow-x-auto">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>ID</TableHead>
-											<TableHead>Prompt</TableHead>
-											<TableHead>Status</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{tasks.map((t) => (
-											<TableRow key={t.id}>
-												<TableCell className="font-mono text-sm">
-													{t.id}
-												</TableCell>
-												<TableCell className="max-w-[400px] truncate">
-													{t.prompt}
-												</TableCell>
-												<TableCell>
-													<StatusBadge
-														label={t.status}
-														variant={STATUS_MAP[t.status] || "neutral"}
-													/>
-												</TableCell>
-											</TableRow>
-										))}
-									</TableBody>
-								</Table>
-							</div>
-						</CardContent>
-					</Card>
+					<div className="overflow-hidden border border-border rounded shadow-sm bg-card">
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Task</TableHead>
+									<TableHead className="w-[120px]">Status</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{tasks.map((t) => (
+									<TableRow key={t.id}>
+										<TableCell className="max-w-[600px] truncate">
+											{t.prompt || t.id}
+										</TableCell>
+										<TableCell>
+											<StatusBadge
+												label={t.status}
+												variant={STATUS_MAP[t.status] || "neutral"}
+											/>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</div>
 				)}
 			</div>
 		</PageShell>

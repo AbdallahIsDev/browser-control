@@ -2,6 +2,14 @@
 
 This file is the source of truth for the next AI coding session.
 
+Latest user correction, 2026-05-18:
+
+- The Skills tab currently does **not** visibly show Trading/TradingView, despite prior tracker text saying Trading was relocated there. Treat this as an open regression until verified in the real app. Trading must remain out of the primary sidebar, but it must be reachable as an optional skill/package/use-case card from Skills or Packages.
+- The Home page should match the supplied user mockup: centered heading, centered suggestion chips, centered prompt composer, narrower composer width, no task/activity section on Home, and no noisy context status row in the primary Home surface.
+- The context status row must not be deleted. Move it to a better secondary location, such as a compact status/details area in the shell, Settings, Advanced, or an expandable context drawer. Choose the best UX based on current architecture.
+- The Home task/activity section should move to the Tasks tab. Tasks should own task/activity history, status, empty states, recovery messages, and related task details.
+- "react-doctor" means a React app quality/audit command or tool that checks the dashboard for React-specific issues, performance risks, bad patterns, accessibility/heading problems, and gives a report with fixes. Do not treat it as a product replacement experiment. Evaluate whether an appropriate React audit command/tool can be added safely as a non-blocking dev quality gate.
+
 The previous session fixed the third-pass blocker cleanup. Do not confuse that blocker cleanup with the premium feature backlog. The blockers are verified fixed; the large premium backlog is still mostly partial or not started.
 
 Your job in the next session is to implement the remaining premium feature backlog in the priority order below, without restarting from scratch and without breaking the verified blocker fixes.
@@ -90,6 +98,7 @@ ExperimentalWarning: SQLite is an experimental feature
 8. Tracker accuracy
    - `premium-completion-tracker.md` was rewritten.
    - Treat it as the current blocker-cleanup evidence file, not as proof that backlog features are implemented.
+   - As of the 2026-05-18 user correction, the tracker entry claiming Trading relocation is complete is not trusted until the real Skills tab visibly exposes the TradingView/Trading skill.
 
 9. Newly found observability warning
    - Real bug found and fixed in `src/browser/actions.ts`.
@@ -175,9 +184,12 @@ Implement the missing premium feature backlog in this priority order:
 7. Visual Diff, Replay Debugger, and Audit Viewer.
 8. Optional Portless-Style `.localhost` Proxy.
 9. Browserbase Provider and Provider Health Scoring.
-10. Later-only experiments: CubeSandbox, Qdrant/PageIndex, Cap anti-abuse, zero-native, Rolldown, deepsec, react-doctor, Camofox/Cloak/Obscura.
+10. Later-only experiments: CubeSandbox, Qdrant/PageIndex, Cap anti-abuse, zero-native, Rolldown, deepsec, Camofox/Cloak/Obscura.
+11. React dashboard audit tooling ("react-doctor") as a non-blocking developer quality gate if a safe, stable command/tool is available.
 
 Do not implement later-only experiments unless the user explicitly asks.
+
+Do not classify react-doctor as a risky product experiment by default. The user intends it as a React dashboard audit/report command, similar in spirit to Biome but React-specific.
 
 If the session cannot complete all priority items, complete them in order and leave a precise, truthful tracker showing what remains.
 
@@ -611,6 +623,10 @@ Implement:
    - Avoid UI cards inside UI cards.
    - Avoid mobile overflow.
    - Keep existing dark/light theme.
+   - Home must be a focused command surface: centered heading, centered suggestion chips, centered prompt composer, narrower composer width, and no task/activity feed in the primary Home view.
+   - Move the Home task/activity feed into the Tasks tab.
+   - Keep context status available, but move it out of the primary Home command surface into a lower-noise secondary location.
+   - Skills must visibly expose installed/optional automation skills. TradingView/Trading must be reachable there or in Packages as an optional skill/package card, while remaining absent from the primary sidebar.
 
 Tests:
 
@@ -1236,14 +1252,18 @@ Do not implement these unless the user explicitly asks:
    - Study for future security audit harness.
    - Do not add giant agent fanout now.
 
-7. react-doctor.
-   - Optional CI/dev check for dashboard.
-   - Do not block core without user approval.
-
-8. Camofox/Cloak/Obscura.
+7. Camofox/Cloak/Obscura.
    - Risky anti-detect providers.
    - Never default.
    - Require explicit opt-in, policy warnings, and abuse-risk docs.
+
+React dashboard audit tooling:
+
+- The user means a React-specific audit/report command similar in role to Biome, not a product feature.
+- Evaluate stable options before adding a dependency. Prefer existing scripts or well-supported tools.
+- The report should help identify React app problems such as invalid component patterns, accessibility/heading issues, render/performance risks, hook misuse, and UI quality regressions.
+- If added, expose it as a non-blocking dev command such as `npm run react:doctor` or `npm run web:doctor`.
+- Do not make it a release blocker until the project has a stable command, documented output, and user approval.
 
 ==================================================
 GENERAL IMPLEMENTATION GUIDANCE
