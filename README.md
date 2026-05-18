@@ -29,7 +29,7 @@ Browser Control is a **local automation engine** that gives AI agents and operat
 
 Every action is gated by a **policy engine** (`safe` / `balanced` / `trusted` profiles) and returns a structured `ActionResult` with success/failure, risk level, and optional debug evidence.
 
-It exposes this surface through **five execution surfaces**: CLI (`bc`), TypeScript API, MCP server, web dashboard, and Electron desktop app.
+It exposes this surface through **five operator surfaces**: CLI (`bc`), TypeScript API, MCP server, authenticated local web dashboard, and Electron desktop app.
 
 > **Not a native desktop GUI automation product.** The browser path targets Chromium/CDP and semantic accessibility snapshots. It does not automate native OS windows or non-browser desktop apps.
 
@@ -66,6 +66,7 @@ First setup:
 bc setup --non-interactive --profile balanced
 bc doctor
 bc status
+bc web open
 ```
 
 **WSL users:** Run `sh scripts/install_wsl_bc.sh` if `bc` resolves to the Linux calculator instead.
@@ -86,13 +87,18 @@ bc open https://example.com
 bc snapshot
 bc screenshot
 bc click "@e3"
+
+# Auth state + profiles
+bc browser profile create work --type named
+bc browser auth export auth-state.json --live
+bc browser auth import auth-state.json --stored
 ```
 
 <br/>
 
 ## 🔌 MCP Server — AI Agent Integration
 
-Browser Control exposes its full action surface as an MCP stdio server. AI agents (Claude Desktop, Codex, Cursor, etc.) can control your local browser, terminal, and filesystem through it.
+Browser Control exposes its full action surface as an MCP stdio server. AI agents (Claude Desktop, Codex, Cursor, etc.) can control your local browser, terminal, filesystem, workflows, packages, and operator services through it.
 
 ```json
 {
@@ -105,20 +111,20 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 }
 ```
 
-### Tool Categories (76 tools)
+### Tool Categories
 
 | Category | Key Tools |
 |----------|----------|
-| **Status** | `status` — daemon, broker, sessions, services, policy, health |
-| **Session** | `bc_session_create`, `list`, `select`, `status` |
-| **Browser** | `open`, `snapshot`, `click`, `fill`, `hover`, `type`, `press`, `scroll`, `screenshot`, `tab_list/switch/close`, `screencast_start/stop`, `highlight`, `generate_locator` |
-| **Terminal** | `terminal_exec`, `terminal_open`, `read`, `write`, `interrupt`, `snapshot`, `list`, `close`, `resume` |
-| **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `move`, `delete`, `stat` |
-| **Debug** | `debug_health`, `debug_failure_bundle`, `get_console`, `get_network`, replay and visual-diff evidence |
-| **Provider** | `bc_browser_provider_list`, `use`, `health`, `catalog` (local, custom CDP, browserless, Browserbase when configured) |
-| **Service** | `bc_service_list`, `resolve` |
-| **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel` |
-| **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback` |
+| **Status** | `status`, `bc_status` |
+| **Session** | `bc_session_create`, `bc_session_list`, `bc_session_select`, `bc_session_status` |
+| **Browser** | Short aliases such as `open`, `snapshot`, `click`, `fill`, `screenshot`, plus `bc_browser_launch`, `attach`, `list`, `hover`, `type`, `press`, `scroll`, `downloads_list`, `drop`, `highlight`, `generate_locator`, `screencast_*`, `provider_*` |
+| **Terminal** | `terminal_open`, `terminal_exec`, `bc_terminal_read`, `write`, `interrupt`, `snapshot`, `list`, `resume`, `status` |
+| **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `bc_fs_move`, `delete`, `stat` |
+| **Network + Vault** | `bc_network_rules_list`, `bc_network_blocked_requests`, `bc_vault_list` |
+| **Debug** | `debug_health`, `debug_failure_bundle`, `bc_debug_get_console`, `bc_debug_get_network` |
+| **Service** | `bc_service_list`, `bc_service_resolve` |
+| **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel`, `events`, `edit_state` |
+| **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback`, `generate`, `execute` |
 | **Packages** | `bc_package_list`, `info`, `run`, `eval`, `grant` |
 
 Full tool reference: [docs/mcp.md](docs/mcp.md)
@@ -142,8 +148,10 @@ browser-control/
 │   ├── runtime/                # Daemon, broker, health, scheduler
 │   ├── observability/          # Debug bundles, console/network capture, recording, visual diff
 │   ├── operator/               # Doctor, setup, dashboard
-│   ├── providers/              # local / custom CDP / browserless / Browserbase
+│   ├── providers/              # local / custom CDP / browserless
 │   ├── services/               # bc:// registry and optional .localhost proxy
+│   ├── security/               # credential vault, network rules, redaction
+│   ├── state/                  # SQLite-backed durable state
 │   ├── workflows/              # Workflow graph runtime
 │   ├── harness/                # Self-healing helper registry
 │   ├── packages/               # Automation package system
@@ -162,7 +170,7 @@ browser-control/
 - **`a11y`** — browser accessibility snapshots with stable refs (`@e3`)
 - **`low_level`** — CDP, DOM, network, and browser fallback
 
-**Technology stack:** TypeScript, Node.js ≥22, Playwright, node-pty, SQLite (built-in), React 19, Vite 8, Electron 41, Zod, ws v8, @modelcontextprotocol/sdk.
+**Technology stack:** TypeScript, Node.js ≥22, Playwright, node-pty, SQLite, React 19, Vite, Electron 41, Zod, ws, @modelcontextprotocol/sdk.
 
 See the full architecture: [docs/architecture/source-layout.md](docs/architecture/source-layout.md) | [docs/architecture/overview.md](docs/architecture/overview.md)
 
@@ -175,13 +183,14 @@ import { createBrowserControl } from "browser-control";
 
 const bc = createBrowserControl({ policyProfile: "balanced" });
 
-const result = await bc.browser.open("https://example.com");
+const result = await bc.browser.open({ url: "https://example.com" });
 const snapshot = await bc.browser.snapshot();
-await bc.browser.click("@e3");
-await bc.browser.screenshot({ output: "./page.png" });
+await bc.browser.click({ target: "@e3" });
+await bc.browser.screenshot({ outputPath: "./page.png" });
 
-const { stdout } = await bc.terminal.exec("node --version");
+const term = await bc.terminal.exec({ command: "node --version" });
 await bc.fs.write({ path: "./output.txt", content: "hello" });
+await bc.close();
 ```
 
 Full API reference: [docs/api.md](docs/api.md)
@@ -190,15 +199,37 @@ Full API reference: [docs/api.md](docs/api.md)
 
 ## 🖥️ Dashboard & Desktop App
 
-Browser Control includes a **web dashboard** (React + Vite) served on loopback and an **Electron desktop app**.
+Browser Control includes a **token-gated local web dashboard** (React + Vite) served on loopback and an **Electron desktop app**.
 
 ```powershell
 npm run web:dev           # Dev dashboard
 npm run web:build         # Build for production
-bc web open               # Launch in browser
+bc web open               # Open dashboard with one-time local auth token
+bc web open --port=0      # Fallback when port 7790 is busy
+npm run cli -- web open   # Source checkout equivalent
 npm run desktop:dev       # Electron dev mode
 npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 ```
+
+Current dashboard areas include runtime status, tasks, browser/provider state, workflows, packages, evidence, settings, and advanced maintenance actions.
+
+<br/>
+
+## 🧰 CLI Highlights
+
+Browser Control has a broad CLI surface for both operators and agents. Common areas:
+
+- `setup`, `doctor`, `status`, `config`
+- `open`, `snapshot`, `click`, `fill`, `screenshot`
+- `browser launch|attach|list|provider|profile|auth`
+- `term open|exec|read|snapshot|interrupt|resume`
+- `fs read|write|ls|move|rm|stat`
+- `service register|list|resolve|remove`
+- `daemon start|stop|status|health|logs`
+- `run` and `schedule` for queued tasks and recurring automations
+- `debug`, `policy`, `knowledge`, `proxy`, `memory`, `skill`, `report`, `captcha`
+
+Full command reference: [docs/cli.md](docs/cli.md)
 
 <br/>
 
@@ -211,7 +242,7 @@ npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 | ✅ Native terminal (PTY) | Stable |
 | ✅ Filesystem operations | Stable |
 | ✅ Policy engine (safe/balanced/trusted) | Stable |
-| ✅ MCP server (76 tools) | Stable |
+| ✅ MCP server | Stable |
 | ✅ CLI (`bc` command) | Stable |
 | ✅ TypeScript API | Stable |
 | ✅ Service registry (`bc://`) | Stable |
@@ -221,7 +252,7 @@ npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 | 🔄 Self-healing harness | Active |
 | ✅ Workflow graph runtime, events, helpers | Active |
 | ✅ Automation packages, trust review, evals | Active |
-| 🔄 Remote providers (browserless, Browserbase when configured) | Active |
+| 🔄 Remote providers (browserless and custom CDP) | Active |
 | 🎯 Production hardening | Planned |
 | 🎯 Cross-platform package publishing | Planned |
 
@@ -247,9 +278,9 @@ Full security documentation: [SECURITY.md](SECURITY.md) | [docs/security.md](doc
 | Doc | Description |
 |-----|-------------|
 | [Getting Started](docs/getting-started.md) | Prerequisites, setup, first workflows |
-| [CLI Reference](docs/cli.md) | Full `bc` command reference (100+ subcommands) |
+| [CLI Reference](docs/cli.md) | Full `bc` command reference |
 | [TypeScript API](docs/api.md) | `createBrowserControl()` API surface |
-| [MCP Setup & Tools](docs/mcp.md) | MCP server config + all 76 tools |
+| [MCP Setup & Tools](docs/mcp.md) | MCP server config + current tool surface |
 | [Architecture Overview](docs/architecture/overview.md) | System architecture, data flow, component map |
 | [Source Layout](docs/architecture/source-layout.md) | Directory structure and conventions |
 | [Browser Behavior](docs/browser.md) | Modes, profiles, CDP, remote providers |

@@ -26,6 +26,7 @@ import type {
 } from "./policy/types";
 import { spawnDaemonProcess } from "./runtime/daemon_launch";
 import { MemoryStore } from "./runtime/memory_store";
+import { ensureStructuredSessionRuntimeDir } from "./shared/paths";
 import {
 	type ActionResult,
 	confirmationRequiredResult,
@@ -795,11 +796,18 @@ export class SessionManager {
 			policyProfile,
 			browserConnectionId: null,
 			terminalSessionId: null,
-			workingDirectory: options.workingDirectory ?? process.cwd(),
+			workingDirectory: "",
 			createdAt: new Date().toISOString(),
 			lastActivityAt: new Date().toISOString(),
 			auditIds: [],
 		};
+		state.workingDirectory =
+			options.workingDirectory ??
+			ensureStructuredSessionRuntimeDir({
+				id: state.id,
+				name: state.name,
+				createdAt: state.createdAt,
+			});
 
 		this.sessions.set(sessionId, state);
 

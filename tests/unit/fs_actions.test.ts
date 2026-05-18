@@ -113,6 +113,28 @@ describe("FsActions", () => {
       assert.equal(confirmed.success, true);
       assert.equal(fs.readFileSync(filePath, "utf-8"), "confirmed");
     });
+
+    it("writes relative paths under the active session working directory", async () => {
+      const activeSession = sessionManager.getActiveSession();
+      assert.ok(activeSession);
+
+      const writeResult = await fsActions.write({
+        path: "espocrm-business-report.md",
+        content: "# Report\n",
+      });
+
+      assert.equal(writeResult.success, true);
+      assert.equal(
+        writeResult.data?.path,
+        path.join(activeSession.workingDirectory, "espocrm-business-report.md"),
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(activeSession.workingDirectory, "espocrm-business-report.md"),
+        ),
+        true,
+      );
+    });
   });
 
   describe("ls", () => {

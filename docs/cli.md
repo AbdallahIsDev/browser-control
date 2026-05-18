@@ -16,6 +16,16 @@ JSON mode:
 - `run` and `schedule` print JSON by default; `--json` makes it compact.
 - Successful output can be JSON where supported. Failures are stderr text with command-specific prefixes and non-zero exit codes; `--json` does not guarantee JSON-formatted errors.
 
+Local dashboard shortcuts:
+
+```powershell
+bc web open
+bc web open --port=0
+npm run cli -- web open
+```
+
+`bc web open` is the installed command. Use `--port=0` when port `7790` is already occupied.
+
 ## Operator
 
 ```text

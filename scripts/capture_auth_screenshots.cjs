@@ -35,15 +35,14 @@ const SHOTS = [];
 
 // Always capture no-token screenshots
 SHOTS.push(
-	{ file: "auth-no-token.png", url: BASE_URL, label: "home" },
-	{ file: "browser-no-token.png", url: BASE_URL, label: "browser" },
-	{ file: "skills-no-token.png", url: BASE_URL, label: "skills" },
+	{ file: "locked-copy-command.png", url: BASE_URL, label: "home" },
+	{ file: "locked-no-sidebar.png", url: BASE_URL, label: "home" },
 );
 
 // Capture token screenshots only if a token was provided
 if (TOKEN_URL) {
 	SHOTS.push(
-		{ file: "auth-valid-token.png", url: TOKEN_URL, label: "home" },
+		{ file: "auth-valid-token-sidebar.png", url: TOKEN_URL, label: "home" },
 		{ file: "auth-after-forget.png", url: TOKEN_URL, label: "forget" },
 		{ file: "browser-valid-token.png", url: TOKEN_URL, label: "browser" },
 		{ file: "skills-valid-token.png", url: TOKEN_URL, label: "skills" },

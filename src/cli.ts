@@ -3751,6 +3751,53 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 
 // ── Dashboard Handler (Section 28) ──────────────────────────────────
 
+function isAddrInUseError(error: unknown): error is NodeJS.ErrnoException {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		(error as NodeJS.ErrnoException).code === "EADDRINUSE"
+	);
+}
+
+async function tryReuseWebServer(options: {
+	host: string;
+	port: number;
+}): Promise<
+	| {
+			host: string;
+			port: number;
+			token: string;
+			url: string;
+			pid: number;
+			startedAt: string;
+	  }
+	| null
+> {
+	const { readActivePersistedWebAppServerInfo } = await import("./web/server");
+	return readActivePersistedWebAppServerInfo({
+		expectedHost: options.host,
+		expectedPort: options.port,
+	});
+}
+
+async function formatBusyWebPortMessage(
+	port: number,
+	host: string,
+): Promise<string> {
+	const { describeListeningProcess } = await import("./web/server");
+	const owner = await describeListeningProcess(port);
+	const lines = [
+		`Browser Control web app port ${port} is busy on ${host}.`,
+	];
+	if (owner) {
+		lines.push(`Listener: ${owner}`);
+	}
+	lines.push("Run `bc web open --port=0` to start on a free port.");
+	lines.push("Source checkout: `npm run cli -- web open --port=0`.");
+	return lines.join("\n");
+}
+
 async function handleDashboard(args: ParsedArgs): Promise<void> {
 	const { subcommand, flags } = args;
 	const jsonOutput = flags.json === "true";
@@ -3818,37 +3865,77 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 	switch (action) {
 		case "serve":
 		case "open": {
+			const { createWebAppServer, openUrlInDefaultBrowser } = await import(
+				"./web/server"
+			);
+			const host = typeof flags.host === "string" ? flags.host : "127.0.0.1";
+			const port = typeof flags.port === "string" ? Number(flags.port) : 7790;
+			const token = typeof flags.token === "string" ? flags.token : undefined;
+			const emitInfo = (info: {
+				host: string;
+				port: number;
+				token: string;
+				url: string;
+				pid?: number;
+				startedAt?: string;
+			}) => {
+				const openUrl = `${info.url}/#token=${info.token}`;
+				if (jsonOutput) {
+					outputJson({ success: true, ...info, openUrl }, false);
+				} else {
+					console.log(`Browser Control web app: ${openUrl}`);
+				}
+				return openUrl;
+			};
+
 			try {
-				const { createWebAppServer, openUrlInDefaultBrowser } = await import(
-					"./web/server"
-				);
-				const host = typeof flags.host === "string" ? flags.host : "127.0.0.1";
-				const port = typeof flags.port === "string" ? Number(flags.port) : 7790;
-				const token = typeof flags.token === "string" ? flags.token : undefined;
+				if (action === "open" && token === undefined && port !== 0) {
+					const reusable = await tryReuseWebServer({ host, port });
+					if (reusable) {
+						const openUrl = emitInfo(reusable);
+						if (!jsonOutput) openUrlInDefaultBrowser(openUrl);
+						return;
+					}
+				}
+
 				const server = createWebAppServer({
 					host,
 					port,
 					token,
 					allowRemote: flags["allow-remote"] === "true",
 				});
-				const info = await server.listen();
-				const openUrl = `${info.url}/#token=${info.token}`;
-				if (jsonOutput) {
-					outputJson({ success: true, ...info, openUrl }, false);
-					// serve is a foreground server command — keep running even with --json.
-					// open may print JSON and return unless --wait is explicitly set.
-					if (action === "open" && flags.wait !== "true") {
-						await server.close();
-						return;
+				try {
+					const info = await server.listen();
+					const openUrl = emitInfo(info);
+					if (jsonOutput) {
+						// serve is a foreground server command — keep running even with --json.
+						// open may print JSON and return unless --wait is explicitly set.
+						if (action === "open" && flags.wait !== "true") {
+							await server.close();
+							return;
+						}
+					} else {
+						if (action === "open") openUrlInDefaultBrowser(openUrl);
+						console.log("Press Ctrl+C to stop.");
 					}
-				} else {
-					console.log(`Browser Control web app: ${openUrl}`);
-					if (action === "open") openUrlInDefaultBrowser(openUrl);
-					console.log("Press Ctrl+C to stop.");
+					// Block forever — the server stays alive until killed.
+					await new Promise<void>(() => undefined);
+					break;
+				} catch (error: unknown) {
+					await server.close().catch(() => undefined);
+					if (isAddrInUseError(error)) {
+						if (action === "open" && token === undefined && port !== 0) {
+							const reusable = await tryReuseWebServer({ host, port });
+							if (reusable) {
+								const openUrl = emitInfo(reusable);
+								if (!jsonOutput) openUrlInDefaultBrowser(openUrl);
+								return;
+							}
+						}
+						throw new Error(await formatBusyWebPortMessage(port, host));
+					}
+					throw error;
 				}
-				// Block forever — the server stays alive until killed.
-				await new Promise<void>(() => undefined);
-				break;
 			} catch (error: unknown) {
 				console.error("Error:", errorMessage(error));
 				process.exit(1);

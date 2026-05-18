@@ -78,6 +78,14 @@ async function main() {
           (await p.locator("text=bc web open").count()) > 0
             ? "PASS: CLI hint (bc web open) visible"
             : "FAIL: no bc web open CLI hint",
+        copyButton: async (p) =>
+          (await p.locator('button[aria-label="Copy bc web open command"]').count()) > 0
+            ? "PASS: copy button visible"
+            : "FAIL: no copy button",
+        fallbackCommand: async (p) =>
+          (await p.locator("text=bc web open --port=0").count()) > 0
+            ? "PASS: fallback command visible"
+            : "FAIL: no fallback command",
         lockIcon: async (p) =>
           (await p.locator("svg.lucide-lock,.lucide-lock").count()) > 0
             ? "PASS: lock icon"
@@ -99,7 +107,7 @@ async function main() {
             ? "FAIL: token exists in sessionStorage"
             : "PASS: no token in sessionStorage",
         sidebarNavHidden: async (p) =>
-          (await p.locator("nav a, nav button, [role=navigation] a").count()) > 0
+          (await p.locator("aside nav button, aside nav a, .app-sidebar").count()) > 0
             ? "FAIL: nav items visible in locked state"
             : "PASS: nav items hidden when locked",
       },

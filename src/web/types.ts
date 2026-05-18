@@ -45,6 +45,11 @@ export interface WebAppServerInfo {
 	token: string;
 }
 
+export interface PersistedWebAppServerInfo extends WebAppServerInfo {
+	pid: number;
+	startedAt: string;
+}
+
 export interface WebApiError {
 	success: false;
 	code:

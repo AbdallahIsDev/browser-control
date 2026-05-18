@@ -75,6 +75,8 @@ export interface ReadFileOptions {
   encoding?: BufferEncoding;
   /** Max bytes to read. */
   maxBytes?: number;
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
 }
 
 export interface WriteFileOptions {
@@ -84,6 +86,8 @@ export interface WriteFileOptions {
   createDirs?: boolean;
   /** If true, fail if file exists. Default: false. */
   exclusive?: boolean;
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
 }
 
 export interface ListOptions {
@@ -95,6 +99,8 @@ export interface ListOptions {
   maxDepth?: number;
   /** Filter by file extension (e.g., ".ts"). */
   extension?: string;
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
 }
 
 export interface DeleteOptions {
@@ -102,6 +108,8 @@ export interface DeleteOptions {
   recursive?: boolean;
   /** If true, don't throw if path doesn't exist. Default: false. */
   force?: boolean;
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
 }
 
 // ── Read ─────────────────────────────────────────────────────────────
@@ -113,7 +121,7 @@ export function readFile(
   filePath: string,
   options: ReadFileOptions = {},
 ): FileReadResult {
-  const resolved = resolvePath(filePath);
+  const resolved = resolvePath(filePath, options.cwd);
   const encoding = options.encoding ?? "utf-8";
 
   if (!fs.existsSync(resolved)) {
@@ -154,7 +162,7 @@ export function writeFile(
   content: string | Buffer,
   options: WriteFileOptions = {},
 ): FileWriteResult {
-  const resolved = resolvePath(filePath);
+  const resolved = resolvePath(filePath, options.cwd);
   const encoding = options.encoding ?? "utf-8";
   const createDirs = options.createDirs ?? true;
 
@@ -188,7 +196,7 @@ export function listDir(
   dirPath: string,
   options: ListOptions = {},
 ): ListResult {
-  const resolved = resolvePath(dirPath);
+  const resolved = resolvePath(dirPath, options.cwd);
 
   if (!fs.existsSync(resolved)) {
     throw new FsError(`Directory not found: ${resolved}`, "ENOENT", resolved);
@@ -280,9 +288,13 @@ function readDirEntries(
 /**
  * Move or rename a file or directory.
  */
-export function moveFile(srcPath: string, dstPath: string): MoveResult {
-  const resolvedSrc = resolvePath(srcPath);
-  const resolvedDst = resolvePath(dstPath);
+export function moveFile(
+  srcPath: string,
+  dstPath: string,
+  options: { cwd?: string } = {},
+): MoveResult {
+  const resolvedSrc = resolvePath(srcPath, options.cwd);
+  const resolvedDst = resolvePath(dstPath, options.cwd);
 
   if (!fs.existsSync(resolvedSrc)) {
     throw new FsError(`Source not found: ${resolvedSrc}`, "ENOENT", resolvedSrc);
@@ -309,7 +321,7 @@ export function deletePath(
   targetPath: string,
   options: DeleteOptions = {},
 ): DeleteResult {
-  const resolved = resolvePath(targetPath);
+  const resolved = resolvePath(targetPath, options.cwd);
 
   if (!fs.existsSync(resolved)) {
     if (options.force) {
@@ -443,12 +455,15 @@ export function killProcess(pid: number, signal: NodeJS.Signals = "SIGTERM"): bo
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function resolvePath(filePath: string): string {
+function resolvePath(filePath: string, cwd?: string): string {
   // Expand ~ to home directory
   if (filePath.startsWith("~")) {
     return path.join(os.homedir(), filePath.slice(1));
   }
-  return path.resolve(filePath);
+  if (path.isAbsolute(filePath)) {
+    return path.resolve(filePath);
+  }
+  return path.resolve(cwd ?? process.cwd(), filePath);
 }
 
 function modeToOctal(mode: number): string {
