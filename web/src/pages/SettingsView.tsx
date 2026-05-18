@@ -150,9 +150,9 @@ export function SettingsView() {
 			apiFetch<SecretGrant[]>("/api/vault/grants").catch(() => []),
 			apiFetch<NetworkRule[]>("/api/network/rules").catch(() => []),
 		]);
-		setVaultEntries(vault);
-		setSecretGrants(grants);
-		setNetworkRules(rules);
+		setVaultEntries(Array.isArray(vault) ? vault : []);
+		setSecretGrants(Array.isArray(grants) ? grants : []);
+		setNetworkRules(Array.isArray(rules) ? rules : []);
 	}, []);
 
 	const loadProviders = useCallback(async () => {
