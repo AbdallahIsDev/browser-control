@@ -454,9 +454,7 @@ test("pages avoid legacy panel and nested card anti-patterns", () => {
 			"No page should use className=panel",
 		);
 	}
-});
-
-test("command view uses shared components and PageShell", () => {
+});	test("command view uses shared components and PageShell", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/CommandView.tsx"),
 		"utf8",
@@ -466,8 +464,9 @@ test("command view uses shared components and PageShell", () => {
 		"@/components/layout/PageShell",
 		"@/components/ui/button",
 		"@/components/ui/textarea",
-		"@/components/common/StatusBadge",
-		"@/components/common/EmptyState",
+		"ArrowRight",
+		"Paperclip",
+		"What should your agent do?",
 	]) {
 		assert.match(
 			source,
@@ -479,6 +478,11 @@ test("command view uses shared components and PageShell", () => {
 	assert.doesNotMatch(source, /className="panel"/);
 	assert.doesNotMatch(source, /<button\s/);
 	assert.doesNotMatch(source, /<textarea\s/);
+	assert.doesNotMatch(
+		source,
+		/<div className="hidden">/,
+		"No hidden compliance test markup should exist",
+	);
 });
 
 test("browser view uses shared components and PageShell", () => {

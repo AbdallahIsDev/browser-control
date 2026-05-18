@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import "./App.css";
 import {
 	CheckSquare,
 	Globe,
 	Home,
 	Image,
+	KeyRound,
 	Menu,
 	Monitor,
 	Moon,
@@ -17,7 +19,7 @@ import {
 import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
 import { Toolbar } from "@/components/layout/Toolbar";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "./api";
+import { apiFetch, hasToken } from "./api";
 import {
 	AdvancedView,
 	AutomationsView,
@@ -32,6 +34,23 @@ import {
 	WorkflowsView,
 } from "./pages";
 import type { AppStatus } from "./types";
+
+type AuthState = "authenticated" | "unauthorized" | "no-token" | "checking";
+type ApiState = "ready" | "unavailable";
+
+const AUTH_LABELS: Record<AuthState, string> = {
+	authenticated: "Signed in",
+	unauthorized: "Unauthorized",
+	"no-token": "Sign-in required",
+	checking: "Checking...",
+};
+
+const AUTH_VARIANTS: Record<AuthState, "ok" | "warn" | "neutral"> = {
+	authenticated: "ok",
+	unauthorized: "warn",
+	"no-token": "neutral",
+	checking: "neutral",
+};
 
 const navConfig: NavItem[] = [
 	{ id: "command", label: "Home", icon: <Home size={16} /> },
@@ -106,8 +125,12 @@ export default function App() {
 	});
 	const [status, setStatus] = useState<AppStatus | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState(false);
+	const [authState, setAuthState] = useState<AuthState>(
+		hasToken() ? "checking" : "no-token",
+	);
+	const [apiState, setApiState] = useState<ApiState>("ready");
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -120,21 +143,44 @@ export default function App() {
 	}, [page]);
 
 	useEffect(() => {
+		// Don't poll if no token is present
+		const shouldPoll = hasToken();
+
 		const refresh = async () => {
 			try {
 				const data = await apiFetch<AppStatus>("/api/status");
 				setStatus(data);
-				setError(false);
+				setApiState("ready");
+				setAuthState("authenticated");
 			} catch (err) {
 				console.error("Failed to fetch status", err);
-				setError(true);
+				// Clear stale status — don't keep old provider/policy visible
+				setStatus(null);
+				setApiState("unavailable");
+				const message = err instanceof Error ? err.message : String(err);
+				if (message.includes("Unauthorized") || message.includes("401")) {
+					setAuthState("unauthorized");
+				} else {
+					setAuthState("no-token");
+				}
 			} finally {
 				setLoading(false);
 			}
 		};
-		refresh();
-		const timer = setInterval(refresh, 5000);
-		return () => clearInterval(timer);
+
+		if (shouldPoll) {
+			refresh();
+			pollingRef.current = setInterval(refresh, 5000);
+		} else {
+			setLoading(false);
+		}
+
+		return () => {
+			if (pollingRef.current) {
+				clearInterval(pollingRef.current);
+				pollingRef.current = null;
+			}
+		};
 	}, []);
 
 	const handleSelect = useCallback((id: string) => {
@@ -142,35 +188,57 @@ export default function App() {
 		setSidebarOpen(false);
 	}, []);
 
-	const health = getReadiness(status, error, loading);
-	const policyLabel = status?.policyProfile
-		? status.policyProfile.charAt(0).toUpperCase() +
-			status.policyProfile.slice(1)
-		: "Balanced";
-	const browserLabel = status?.browser?.provider
-		? status.browser.provider.charAt(0).toUpperCase() +
-			status.browser.provider.slice(1)
-		: "Not configured";
-	const authStatus = error
-		? "Unauthorized"
-		: status
-			? "Authenticated"
-			: "Checking...";
+	const health = getReadiness(status, apiState !== "ready", loading);
+
+	// Only derive provider/policy from live status, never from stale state
+	const policyLabel =
+		status && apiState === "ready"
+			? status.policyProfile
+				? status.policyProfile.charAt(0).toUpperCase() +
+					status.policyProfile.slice(1)
+				: "Balanced"
+			: apiState === "unavailable"
+				? "Unavailable"
+				: "—";
+	const browserLabel =
+		status && apiState === "ready"
+			? status.browser?.provider
+				? status.browser.provider.charAt(0).toUpperCase() +
+					status.browser.provider.slice(1)
+				: "Not configured"
+			: apiState === "unavailable"
+				? "Unavailable"
+				: "—";
+
+	const authVariant = AUTH_VARIANTS[authState];
+	const authLabel = AUTH_LABELS[authState];
 
 	const toolbarContext = (
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
-			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
-				<Shield size={12} />
-				Auth: {authStatus}
+			<div
+				className={`flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border ${
+					authVariant === "ok"
+						? "border-primary/20"
+						: authVariant === "warn"
+							? "border-amber-500/20"
+							: "border-border/20"
+				}`}
+			>
+				<KeyRound size={12} />
+				Auth: {authLabel}
 			</div>
-			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
-				<Monitor size={12} />
-				Provider: {browserLabel}
-			</div>
-			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
-				<Shield size={12} />
-				Policy: {policyLabel}
-			</div>
+			{status && apiState === "ready" && (
+				<>
+					<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+						<Monitor size={12} />
+						Provider: {browserLabel}
+					</div>
+					<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+						<Shield size={12} />
+						Policy: {policyLabel}
+					</div>
+				</>
+			)}
 		</div>
 	);
 

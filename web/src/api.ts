@@ -2,6 +2,10 @@ function getToken() {
 	return sessionStorage.getItem("bc-token") || "";
 }
 
+export function hasToken(): boolean {
+	return sessionStorage.getItem("bc-token") !== null;
+}
+
 const hashParams = new URLSearchParams(window.location.hash.slice(1));
 
 const hashToken = hashParams.get("token");
