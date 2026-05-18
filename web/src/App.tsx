@@ -141,6 +141,27 @@ export default function App() {
 	}, []);
 
 	const health = getReadiness(status, error, loading);
+	const policyLabel = status?.policyProfile
+		? status.policyProfile.charAt(0).toUpperCase() +
+			status.policyProfile.slice(1)
+		: "Balanced";
+	const browserLabel = status?.browser?.provider
+		? status.browser.provider.charAt(0).toUpperCase() +
+			status.browser.provider.slice(1)
+		: "Not configured";
+
+	const toolbarContext = (
+		<div className="flex items-center gap-3 text-xs text-muted-foreground">
+			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+				<Monitor size={12} />
+				Session: {browserLabel}
+			</div>
+			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+				<Shield size={12} />
+				Policy: {policyLabel}
+			</div>
+		</div>
+	);
 
 	const sidebarFooter = (
 		<div className="space-y-3">
@@ -177,7 +198,7 @@ export default function App() {
 			/>
 
 			<div className="flex-1 flex flex-col min-w-0 bg-background">
-				<Toolbar>
+				<Toolbar context={toolbarContext}>
 					<div className="flex items-center gap-3 min-w-0">
 						<Button
 							variant="ghost"
@@ -195,9 +216,7 @@ export default function App() {
 					<div className="flex items-center gap-2">
 						{/* Readiness pill */}
 						<div
-							role="status"
-							aria-label={`Browser Control status: ${health.text}`}
-							className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium ${
+							className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
 								health.variant === "ok"
 									? "bg-primary/10 text-primary"
 									: health.variant === "warn"
@@ -206,7 +225,7 @@ export default function App() {
 							}`}
 						>
 							<span
-								className={`w-1.5 h-1.5  ${
+								className={`w-1.5 h-1.5 rounded-full ${
 									health.variant === "ok"
 										? "bg-primary"
 										: health.variant === "warn"
