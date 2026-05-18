@@ -13,17 +13,23 @@ describe("SessionManager", () => {
   let store: MemoryStore;
 
   beforeEach(() => {
+    process.env.BROWSER_CONTROL_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "bc-session-home-"));
     store = new MemoryStore({ filename: ":memory:" });
     manager = new SessionManager({ memoryStore: store });
   });
 
   afterEach(async () => {
+    const home = process.env.BROWSER_CONTROL_HOME;
     store.close();
     // Stop any daemon that may have been auto-started by tests that
     // call ensureDaemonRuntime({ autoStart: true }). Without this, the
     // daemon process and its child pwsh.exe shells survive after the
     // test process exits.
     await stopDefaultDaemon();
+    if (home) {
+      fs.rmSync(home, { recursive: true, force: true });
+      delete process.env.BROWSER_CONTROL_HOME;
+    }
   });
 
   describe("create", () => {
@@ -39,6 +45,8 @@ describe("SessionManager", () => {
       assert.equal(result.data.browserConnectionId, null);
       assert.equal(result.data.terminalSessionId, null);
       assert.ok(result.data.auditIds);
+      assert.ok(result.data.workingDirectory.includes(path.join(".browser-control", "runtime")) || result.data.workingDirectory.includes(path.join("runtime")));
+      assert.equal(fs.existsSync(result.data.workingDirectory), true);
     });
 
     it("uses provided policy profile", async () => {

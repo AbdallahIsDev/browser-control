@@ -60,6 +60,18 @@ test("fs_operations: writeFile creates file and parent dirs", () => {
   }
 });
 
+test("fs_operations: writeFile resolves relative paths against provided cwd", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-cwd-"));
+
+  try {
+    const result = writeFile("report.md", "cwd content", { cwd: tmpDir });
+    assert.equal(result.path, path.join(tmpDir, "report.md"));
+    assert.equal(fs.readFileSync(path.join(tmpDir, "report.md"), "utf-8"), "cwd content");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("fs_operations: writeFile exclusive mode fails on existing file", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-exc-"));
   const filePath = path.join(tmpDir, "file.txt");

@@ -35,7 +35,11 @@ import {
 	setCorsHeaders,
 	setSecurityHeaders,
 } from "./security";
-import type { WebAppServerInfo, WebCapabilities } from "./types";
+import type {
+	PersistedWebAppServerInfo,
+	WebAppServerInfo,
+	WebCapabilities,
+} from "./types";
 
 const webLogger = logger.withComponent("web");
 
@@ -71,6 +75,7 @@ export interface WebAppServer {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7790;
+const WEB_SERVER_RECORD_FILE = "web-server.json";
 
 interface SavedAutomation {
 	id: string;
@@ -89,6 +94,176 @@ interface SavedAutomation {
 
 function automationStorePath(): string {
 	return path.join(getDataHome(), "automations", "saved-automations.json");
+}
+
+function webServerRecordPath(): string {
+	return path.join(getDataHome(), "runtime", WEB_SERVER_RECORD_FILE);
+}
+
+function isProcessAlive(pid: number): boolean {
+	if (!Number.isInteger(pid) || pid <= 0) return false;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function readPersistedWebAppServerInfo(): PersistedWebAppServerInfo | null {
+	const recordPath = webServerRecordPath();
+	if (!fs.existsSync(recordPath)) return null;
+	try {
+		const parsed = JSON.parse(
+			fs.readFileSync(recordPath, "utf8"),
+		) as PersistedWebAppServerInfo;
+		if (
+			typeof parsed?.url !== "string" ||
+			typeof parsed?.host !== "string" ||
+			typeof parsed?.port !== "number" ||
+			typeof parsed?.token !== "string" ||
+			typeof parsed?.pid !== "number" ||
+			typeof parsed?.startedAt !== "string"
+		) {
+			return null;
+		}
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+function writePersistedWebAppServerInfo(
+	info: PersistedWebAppServerInfo,
+): PersistedWebAppServerInfo {
+	const recordPath = webServerRecordPath();
+	fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+	fs.writeFileSync(recordPath, `${JSON.stringify(info, null, 2)}\n`, "utf8");
+	return info;
+}
+
+function clearPersistedWebAppServerInfo(
+	expected?: Partial<PersistedWebAppServerInfo>,
+): void {
+	const recordPath = webServerRecordPath();
+	if (!fs.existsSync(recordPath)) return;
+	if (expected) {
+		const current = readPersistedWebAppServerInfo();
+		if (!current) {
+			fs.rmSync(recordPath, { force: true });
+			return;
+		}
+		if (expected.pid !== undefined && expected.pid !== current.pid) return;
+		if (expected.port !== undefined && expected.port !== current.port) return;
+		if (expected.token !== undefined && expected.token !== current.token)
+			return;
+	}
+	fs.rmSync(recordPath, { force: true });
+}
+
+async function fetchJsonWithTimeout(
+	url: string,
+	options: RequestInit = {},
+	timeoutMs = 1_500,
+): Promise<Response> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await fetch(url, {
+			...options,
+			signal: controller.signal,
+		});
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+export async function validatePersistedWebAppServerInfo(
+	info: PersistedWebAppServerInfo,
+	options: { expectedHost?: string; expectedPort?: number } = {},
+): Promise<boolean> {
+	if (!isProcessAlive(info.pid)) return false;
+	if (options.expectedHost && info.host !== options.expectedHost) return false;
+	if (
+		options.expectedPort !== undefined &&
+		info.port !== options.expectedPort
+	) {
+		return false;
+	}
+	try {
+		const health = await fetchJsonWithTimeout(`${info.url}/healthz`);
+		if (!health.ok) return false;
+		const status = await fetchJsonWithTimeout(`${info.url}/api/status`, {
+			headers: {
+				authorization: `Bearer ${info.token}`,
+			},
+		});
+		return status.ok;
+	} catch {
+		return false;
+	}
+}
+
+export async function readActivePersistedWebAppServerInfo(
+	options: { expectedHost?: string; expectedPort?: number } = {},
+): Promise<PersistedWebAppServerInfo | null> {
+	const info = readPersistedWebAppServerInfo();
+	if (!info) return null;
+	const valid = await validatePersistedWebAppServerInfo(info, options);
+	if (valid) return info;
+	clearPersistedWebAppServerInfo({
+		pid: info.pid,
+		port: info.port,
+		token: info.token,
+	});
+	return null;
+}
+
+export async function describeListeningProcess(
+	port: number,
+): Promise<string | null> {
+	if (!Number.isInteger(port) || port <= 0) return null;
+	try {
+		if (process.platform === "win32") {
+			const script = [
+				`$conn = Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -First 1`,
+				"if (-not $conn) { exit 0 }",
+				'$proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $conn.OwningProcess)',
+				"if ($proc) {",
+				'  "$($proc.Name) pid=$($proc.ProcessId) parent=$($proc.ParentProcessId) cmd=$($proc.CommandLine)"',
+				"}",
+			].join("; ");
+			const result = spawn(
+				"powershell",
+				["-NoProfile", "-NonInteractive", "-Command", script],
+				{
+					windowsHide: true,
+					stdio: ["ignore", "pipe", "ignore"],
+				},
+			);
+			const chunks: Buffer[] = [];
+			for await (const chunk of result.stdout) {
+				chunks.push(Buffer.from(chunk));
+			}
+			const description = Buffer.concat(chunks).toString("utf8").trim();
+			return description || null;
+		}
+		const result = spawn("lsof", ["-nPiTCP", `:${port}`, "-sTCP:LISTEN"], {
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		const chunks: Buffer[] = [];
+		for await (const chunk of result.stdout) {
+			chunks.push(Buffer.from(chunk));
+		}
+		const lines = Buffer.concat(chunks)
+			.toString("utf8")
+			.trim()
+			.split(/\r?\n/u)
+			.filter(Boolean);
+		return lines[1] ?? lines[0] ?? null;
+	} catch {
+		return null;
+	}
 }
 
 function slugifyAutomationId(value: string): string {
@@ -530,6 +705,8 @@ export function createWebAppServer(
 	const server = http.createServer();
 	const localApiServers = new Set<http.Server>();
 	let currentInfo: WebAppServerInfo | null = null;
+	let persistedInfo: PersistedWebAppServerInfo | null = null;
+	const startedAt = new Date().toISOString();
 	let allowedOrigins = options.allowedOrigins ?? [`http://${host}:${port}`];
 	const staticRoot = getStaticRoot();
 
@@ -2813,6 +2990,11 @@ export function createWebAppServer(
 				token,
 				url: `http://${listenHost}:${address.port}`,
 			};
+			persistedInfo = writePersistedWebAppServerInfo({
+				...currentInfo,
+				pid: process.pid,
+				startedAt,
+			});
 			if (!options.allowedOrigins) {
 				allowedOrigins = [`http://${listenHost}:${address.port}`];
 			}
@@ -2827,6 +3009,14 @@ export function createWebAppServer(
 				});
 			}
 			localApiServers.clear();
+			if (persistedInfo) {
+				clearPersistedWebAppServerInfo({
+					pid: persistedInfo.pid,
+					port: persistedInfo.port,
+					token: persistedInfo.token,
+				});
+				persistedInfo = null;
+			}
 			api.close();
 			if (!server.listening) return;
 			if ("closeAllConnections" in server) {

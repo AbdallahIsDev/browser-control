@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -252,6 +252,149 @@ test("bc web open --json --port=0 exits cleanly", async () => {
 		assert.strictEqual(parsed.success, true);
 		assert.match(parsed.url, /^http:\/\/127\.0\.0\.1:\d+$/u);
 	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc web serve persists reusable server info and bc web open reuses it", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const recordPath = path.join(home, "runtime", "web-server.json");
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const child = spawn(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"web",
+				"serve",
+				"--json",
+				"--port",
+				"7811",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+			},
+		);
+
+		let output = "";
+		for await (const chunk of child.stdout) {
+			output += chunk;
+			if (output.includes("\n")) break;
+		}
+
+		const served = JSON.parse(output.trim().split(/\r?\n/u)[0]) as {
+			success: boolean;
+			url: string;
+			token: string;
+		};
+		assert.equal(served.success, true);
+		assert.equal(fs.existsSync(recordPath), true);
+		const record = JSON.parse(fs.readFileSync(recordPath, "utf8")) as {
+			url: string;
+			token: string;
+			port: number;
+			pid: number;
+			startedAt: string;
+		};
+		assert.equal(record.url, served.url);
+		assert.equal(record.token, served.token);
+		assert.equal(record.port, 7811);
+		assert.equal(typeof record.pid, "number");
+		assert.equal(typeof record.startedAt, "string");
+
+		const reusedResult = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"web",
+				"open",
+				"--json",
+				"--port",
+				"7811",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+				timeout: 10000,
+			},
+		);
+
+		assert.equal(reusedResult.status, 0, reusedResult.stderr);
+		const reused = JSON.parse(
+			reusedResult.stdout.trim().split(/\r?\n/u)[0],
+		) as {
+			success: boolean;
+			url: string;
+			token: string;
+			openUrl: string;
+		};
+		assert.equal(reused.success, true);
+		assert.equal(reused.url, served.url);
+		assert.equal(reused.token, served.token);
+		assert.equal(reused.openUrl, `${served.url}/#token=${served.token}`);
+
+		child.kill();
+		await new Promise((resolve) => child.once("exit", resolve));
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc web open reports readable fallback when an unknown process owns the port", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const busyServer = http.createServer((_request, response) => {
+		response.end("busy");
+	});
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		await new Promise<void>((resolve) =>
+			busyServer.listen(7812, "127.0.0.1", resolve),
+		);
+
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"web",
+				"open",
+				"--json",
+				"--port",
+				"7812",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+				timeout: 10000,
+			},
+		);
+
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /port 7812 is busy/i);
+		assert.match(result.stderr, /bc web open --port=0/i);
+		assert.match(result.stderr, /Source checkout: `npm run cli -- web open --port=0`./i);
+	} finally {
+		await new Promise((resolve) => busyServer.close(() => resolve(undefined)));
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
 		fs.rmSync(home, { recursive: true, force: true });

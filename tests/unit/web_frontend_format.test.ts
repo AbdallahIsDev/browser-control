@@ -189,12 +189,12 @@ test("toolbar hides Provider and Policy pills when no token exists", () => {
 	// No-token hint text should exist (toolbar hint)
 	assert.match(
 		appSource,
-		/to get a tokenized URL/,
+		/one-time local token/,
 		"No-token state should show a hint to the user",
 	);
 });
 
-test("no-token state shows locked dashboard with CLI guidance", () => {
+test("no-token state shows locked dashboard with copyable CLI guidance", () => {
 	const appSource = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/App.tsx"),
 		"utf8",
@@ -212,6 +212,30 @@ test("no-token state shows locked dashboard with CLI guidance", () => {
 		appSource,
 		/bc web open/,
 		"No-token state should show installed CLI command hint (bc)",
+	);
+
+	assert.match(
+		appSource,
+		/Copy bc web open command/,
+		"No-token state should expose an accessible copy control for bc web open",
+	);
+
+	assert.match(
+		appSource,
+		/Copied/,
+		"No-token copy control should provide copied feedback",
+	);
+
+	assert.match(
+		appSource,
+		/navigator\.clipboard\.writeText/,
+		"No-token state should copy the command programmatically",
+	);
+
+	assert.match(
+		appSource,
+		/bc web open --port=0/,
+		"No-token state should show port-busy fallback command",
 	);
 
 	// Dev fallback command hint
@@ -235,11 +259,11 @@ test("no-token state shows locked dashboard with CLI guidance", () => {
 		"Locked dashboard should be rendered instead of page content when no token",
 	);
 
-	// Toolbar shows visible command hint
+	// Sidebar should be fully hidden in the locked state
 	assert.match(
 		appSource,
-		/bc web open/,
-		"Toolbar no-token hint should reference installed CLI command (bc)",
+		/authState !== "no-token" && \(/,
+		"Sidebar should not render in the no-token state",
 	);
 });
 
