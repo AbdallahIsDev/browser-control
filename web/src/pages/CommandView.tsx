@@ -62,7 +62,7 @@ export function CommandView() {
 
 	return (
 		<PageShell className="flex items-center justify-center min-h-[70vh]">
-			<div className="w-full max-w-[600px] flex flex-col items-center space-y-8 p-6">
+			<div className="w-full max-w-[800px] flex flex-col items-center space-y-8 p-6">
 				{/* Headline */}
 				<div className="text-center space-y-3">
 					<h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground">

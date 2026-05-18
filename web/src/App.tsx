@@ -35,7 +35,12 @@ import {
 } from "./pages";
 import type { AppStatus } from "./types";
 
-type AuthState = "authenticated" | "unauthorized" | "no-token" | "checking";
+type AuthState =
+	| "authenticated"
+	| "unauthorized"
+	| "no-token"
+	| "checking"
+	| "api-error";
 type ApiState = "ready" | "unavailable";
 
 const AUTH_LABELS: Record<AuthState, string> = {
@@ -43,6 +48,7 @@ const AUTH_LABELS: Record<AuthState, string> = {
 	unauthorized: "Unauthorized",
 	"no-token": "Sign-in required",
 	checking: "Checking...",
+	"api-error": "API unavailable",
 };
 
 const AUTH_VARIANTS: Record<AuthState, "ok" | "warn" | "neutral"> = {
@@ -50,6 +56,7 @@ const AUTH_VARIANTS: Record<AuthState, "ok" | "warn" | "neutral"> = {
 	unauthorized: "warn",
 	"no-token": "neutral",
 	checking: "neutral",
+	"api-error": "warn",
 };
 
 const navConfig: NavItem[] = [
@@ -160,6 +167,9 @@ export default function App() {
 				const message = err instanceof Error ? err.message : String(err);
 				if (message.includes("Unauthorized") || message.includes("401")) {
 					setAuthState("unauthorized");
+				} else if (hasToken()) {
+					// Token present but API unreachable — show "API unavailable", not "Sign-in required"
+					setAuthState("api-error");
 				} else {
 					setAuthState("no-token");
 				}

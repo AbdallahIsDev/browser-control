@@ -454,7 +454,8 @@ test("pages avoid legacy panel and nested card anti-patterns", () => {
 			"No page should use className=panel",
 		);
 	}
-});	test("command view uses shared components and PageShell", () => {
+});
+test("command view uses shared components and PageShell", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/CommandView.tsx"),
 		"utf8",
