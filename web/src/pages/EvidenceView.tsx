@@ -233,7 +233,7 @@ export function EvidenceView() {
 		);
 	}
 
-	const filtered = audit
+	const filtered = (Array.isArray(audit) ? audit : [])
 		.filter((entry) => !filter.action || entry.action === filter.action)
 		.filter((entry) => !filter.risk || entry.risk === filter.risk)
 		.slice(0, Number(filter.limit) || 50);
@@ -542,25 +542,27 @@ export function EvidenceView() {
 											</TableRow>
 										</TableHeader>
 										<TableBody>
-											{bundles.slice(0, 20).map((bundle) => (
-												<TableRow key={bundle.bundleId}>
-													<TableCell className="font-mono text-xs">
-														{bundle.bundleId.slice(0, 12)}
-													</TableCell>
-													<TableCell className="font-mono text-xs">
-														{bundle.taskId.slice(0, 12)}
-													</TableCell>
-													<TableCell className="text-xs">
-														{formatTime(bundle.assembledAt)}
-													</TableCell>
-													<TableCell>
-														<StatusBadge
-															label={bundle.partial ? "Partial" : "Complete"}
-															variant={bundle.partial ? "warn" : "ok"}
-														/>
-													</TableCell>
-												</TableRow>
-											))}
+											{(Array.isArray(bundles) ? bundles : [])
+												.slice(0, 20)
+												.map((bundle) => (
+													<TableRow key={bundle.bundleId}>
+														<TableCell className="font-mono text-xs">
+															{bundle.bundleId.slice(0, 12)}
+														</TableCell>
+														<TableCell className="font-mono text-xs">
+															{bundle.taskId.slice(0, 12)}
+														</TableCell>
+														<TableCell className="text-xs">
+															{formatTime(bundle.assembledAt)}
+														</TableCell>
+														<TableCell>
+															<StatusBadge
+																label={bundle.partial ? "Partial" : "Complete"}
+																variant={bundle.partial ? "warn" : "ok"}
+															/>
+														</TableCell>
+													</TableRow>
+												))}
 										</TableBody>
 									</Table>
 								</div>
@@ -577,7 +579,7 @@ export function EvidenceView() {
 							) : (
 								<div className="mt-3 space-y-3">
 									<div className="flex flex-wrap gap-2">
-										{replays.map((replay) => (
+										{(Array.isArray(replays) ? replays : []).map((replay) => (
 											<Button
 												key={replay.runId}
 												type="button"

@@ -265,7 +265,7 @@ export function PackagesView({ onOpenTrading }: PackagesViewProps) {
 							/>
 						) : (
 							<div className="space-y-3">
-								{packages.map((pkg) => (
+								{(Array.isArray(packages) ? packages : []).map((pkg) => (
 									<div
 										key={pkg.name}
 										className="rounded-md border border-[--border-subtle] bg-[--bg-card] p-4 space-y-3"

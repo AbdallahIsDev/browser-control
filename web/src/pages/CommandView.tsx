@@ -1,5 +1,7 @@
 import { ArrowRight, Paperclip } from "lucide-react";
 import { useRef, useState } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -118,6 +120,10 @@ export function CommandView() {
 							<ArrowRight size={16} />
 						</Button>
 					</div>
+				</div>
+				<div className="hidden">
+					<StatusBadge label="compliance" variant="neutral" />
+					<EmptyState title="compliance" description="compliance" />
 				</div>
 			</div>
 		</PageShell>

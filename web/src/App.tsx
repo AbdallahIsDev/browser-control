@@ -151,12 +151,21 @@ export default function App() {
 		? status.browser.provider.charAt(0).toUpperCase() +
 			status.browser.provider.slice(1)
 		: "Not configured";
+	const authStatus = error
+		? "Unauthorized"
+		: status
+			? "Authenticated"
+			: "Checking...";
 
 	const toolbarContext = (
 		<div className="flex items-center gap-3 text-xs text-muted-foreground">
 			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
+				<Shield size={12} />
+				Auth: {authStatus}
+			</div>
+			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
 				<Monitor size={12} />
-				Session: {browserLabel}
+				Provider: {browserLabel}
 			</div>
 			<div className="flex items-center gap-1.5 px-3 py-1 rounded bg-muted/30 border border-border/20">
 				<Shield size={12} />

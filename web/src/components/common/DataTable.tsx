@@ -62,7 +62,7 @@ export function DataTable<T>({
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{data.map((item, idx) => (
+					{(Array.isArray(data) ? data : []).map((item, idx) => (
 						<TableRow
 							key={rowKey ? rowKey(item, idx) : defaultRowKey(item, idx)}
 							onClick={onRowClick ? () => onRowClick(item) : undefined}
