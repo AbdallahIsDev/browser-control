@@ -6,10 +6,12 @@ import {
 	Home,
 	Image,
 	Menu,
+	Monitor,
 	Moon,
 	Package,
 	Repeat,
 	Settings,
+	Shield,
 	Sun,
 } from "lucide-react";
 import { AppSidebar, type NavItem } from "@/components/layout/AppSidebar";
