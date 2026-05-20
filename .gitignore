@@ -38,6 +38,9 @@ reports/
 *.sqlite
 nul
 
+premium-completion-tracker.md
+INSTRUCTIONS.md
+
 selectors.json
 screenshots/
 output/
