@@ -4,6 +4,7 @@ import type {
   BrowserProvider,
   ProviderAttachOptions,
   ProviderLaunchOptions,
+  ProviderCapabilities,
 } from "./interface";
 import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
@@ -41,7 +42,7 @@ function getApiBaseUrl(config?: ProviderConfig): string {
 
 export class BrowserbaseProvider implements BrowserProvider {
   readonly name = "browserbase";
-  readonly capabilities = {
+  readonly capabilities: ProviderCapabilities = {
     supportsCDP: true,
     supportsLaunch: true,
     supportsAttach: true,
@@ -49,6 +50,7 @@ export class BrowserbaseProvider implements BrowserProvider {
     supportsStealth: true,
     maxConcurrentSessions: 1,
     regions: ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-1"],
+    nativeDialogs: "supported",
   };
 
   private profileManager = new BrowserProfileManager();

@@ -81,6 +81,12 @@ export interface FilesystemPolicy {
 
 // ── Policy Category: Browser ────────────────────────────────────────────
 
+export type DialogHandlingMode =
+  | "must_respond"
+  | "auto_accept"
+  | "auto_dismiss"
+  | "defer";
+
 export interface BrowserPolicy {
   allowedDomains?: string[];
   blockedDomains?: string[];
@@ -90,6 +96,8 @@ export interface BrowserPolicy {
   clipboardAllowed: boolean;
   credentialSubmissionAllowed: boolean;
   automationOnlyInExplicitSessions: boolean;
+  dialogHandling: DialogHandlingMode;
+  dialogTimeoutMs: number;
 }
 
 // ── Policy Category: Low-Level ───────────────────────────────────────────

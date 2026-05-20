@@ -11,6 +11,7 @@
  */
 
 import type { CDPSession, Page } from "playwright";
+import type { DialogInfo } from "./browser/dialogs";
 import { logger } from "./shared/logger";
 
 const log = logger.withComponent("a11y_snapshot");
@@ -72,6 +73,8 @@ export interface A11ySnapshot {
   elements: A11yElement[];
   /** ISO timestamp when snapshot was generated */
   generatedAt: string;
+  /** Pending native JS dialogs (alert, confirm, prompt, beforeunload) */
+  pending_dialogs?: DialogInfo[];
 }
 
 // ── Interactive / Meaningful Roles ──────────────────────────────────
@@ -159,7 +162,7 @@ const STRUCTURAL_ROLES = new Set([
  */
 export async function snapshot(
   page: Page,
-  options: { sessionId?: string; rootSelector?: string; boxes?: boolean } = {},
+  options: { sessionId?: string; rootSelector?: string; boxes?: boolean; pendingDialogs?: DialogInfo[] } = {},
 ): Promise<A11ySnapshot> {
   const startedAt = Date.now();
   let pageUrl: string;
@@ -169,6 +172,16 @@ export async function snapshot(
     pageUrl = page.url();
   } catch {
     pageUrl = "about:blank";
+  }
+
+  if (options.pendingDialogs && options.pendingDialogs.length > 0) {
+    return {
+      sessionId: options.sessionId,
+      pageUrl,
+      elements: [],
+      generatedAt: new Date().toISOString(),
+      pending_dialogs: options.pendingDialogs,
+    };
   }
 
   try {
@@ -203,6 +216,7 @@ export async function snapshot(
     pageTitle,
     elements,
     generatedAt: new Date().toISOString(),
+    pending_dialogs: options.pendingDialogs,
   };
 }
 

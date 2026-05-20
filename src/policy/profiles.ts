@@ -65,6 +65,8 @@ const SAFE_BROWSER_POLICY: BrowserPolicy = {
   clipboardAllowed: false,
   credentialSubmissionAllowed: false,
   automationOnlyInExplicitSessions: true,
+  dialogHandling: "must_respond",
+  dialogTimeoutMs: 10000,
 };
 
 const SAFE_LOW_LEVEL_POLICY: LowLevelPolicy = {
@@ -133,6 +135,8 @@ const BALANCED_BROWSER_POLICY: BrowserPolicy = {
   clipboardAllowed: true,
   credentialSubmissionAllowed: false,
   automationOnlyInExplicitSessions: true,
+  dialogHandling: "must_respond",
+  dialogTimeoutMs: 10000,
 };
 
 const BALANCED_LOW_LEVEL_POLICY: LowLevelPolicy = {
@@ -201,6 +205,8 @@ const TRUSTED_BROWSER_POLICY: BrowserPolicy = {
   clipboardAllowed: true,
   credentialSubmissionAllowed: true,
   automationOnlyInExplicitSessions: false,
+  dialogHandling: "auto_accept",
+  dialogTimeoutMs: 5000,
 };
 
 const TRUSTED_LOW_LEVEL_POLICY: LowLevelPolicy = {

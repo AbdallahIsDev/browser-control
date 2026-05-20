@@ -62,6 +62,21 @@ function runJson(command, args, options = {}) {
   }
 }
 
+function parseJsonFromMixedStdout(stdout, label) {
+  const plain = stdout.replace(/\u001b\[[0-9;]*m/g, "");
+  const lines = plain.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const candidate = lines.slice(i).join("\n").trim();
+    if (!candidate.startsWith("[") && !candidate.startsWith("{")) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Keep scanning; npm lifecycle scripts can print arbitrary text before JSON.
+    }
+  }
+  throw new Error(`Expected JSON in ${label}\nstdout:\n${stdout}`);
+}
+
 let tarballPath = "";
 let tempProject = "";
 let tempHome = "";
@@ -70,7 +85,7 @@ try {
   runNpm(["run", "build"]);
 
   const packOutput = runNpm(["pack", "--json"]).stdout;
-  const packInfo = JSON.parse(packOutput)[0];
+  const packInfo = parseJsonFromMixedStdout(packOutput, "npm pack --json")[0];
   const packedFiles = new Set((packInfo.files ?? []).map((file) => file.path));
   for (const forbidden of ["dist/test_daemon_helpers.js", "dist/test_daemon_helpers.d.ts", "dist/tests/"]) {
     if (packedFiles.has(forbidden)) throw new Error(`Packed tarball unexpectedly includes ${forbidden}`);

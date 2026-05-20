@@ -120,8 +120,11 @@ export const sessionIdSchema = {
 /**
  * Build a tool input schema from properties and required fields.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SchemaProperty = { [key: string]: any; type: string; description?: string; enum?: string[]; default?: unknown };
+
 export function buildSchema(
-  properties: Record<string, { type: string; description?: string; enum?: string[]; default?: unknown }>,
+  properties: Record<string, SchemaProperty>,
   required: string[] = [],
 ): JSONSchema {
   return {

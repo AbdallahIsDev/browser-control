@@ -4,6 +4,7 @@ import type {
   ProviderLaunchOptions,
   ProviderAttachOptions,
   ActiveConnection,
+  ProviderCapabilities,
 } from "./interface";
 import type { BrowserConnection } from "../browser/connection";
 import { getAllPages } from "../browser/core";
@@ -13,13 +14,14 @@ import { sanitizeString, stripSensitiveParams } from "./utils";
 
 export class CustomBrowserProvider implements BrowserProvider {
   readonly name = "custom";
-  readonly capabilities = {
+  readonly capabilities: ProviderCapabilities = {
     supportsCDP: true,
     supportsLaunch: false,
     supportsAttach: true,
     supportsProfiles: false,
     supportsStealth: false,
     maxConcurrentSessions: 1,
+    nativeDialogs: "unknown",
   };
 
   private profileManager = new BrowserProfileManager();

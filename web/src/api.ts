@@ -62,3 +62,34 @@ export async function apiFetch<T>(
 
 	return body as T;
 }
+
+export async function listBrowserDialogs(): Promise<{
+	success: boolean;
+	data?: { dialogs: import("./types").BrowserDialogInfo[] };
+	error?: string;
+}> {
+	return apiFetch("/api/browser/dialog", {
+		method: "POST",
+		body: JSON.stringify({ action: "list" }),
+	});
+}
+
+export async function respondToBrowserDialog(
+	dialogId: string,
+	response: "accept" | "dismiss",
+	text?: string,
+): Promise<{
+	success: boolean;
+	data?: { handled: boolean; dialog: import("./types").BrowserDialogInfo };
+	error?: string;
+}> {
+	return apiFetch("/api/browser/dialog", {
+		method: "POST",
+		body: JSON.stringify({
+			action: "respond",
+			dialog_id: dialogId,
+			response,
+			text,
+		}),
+	});
+}

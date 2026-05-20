@@ -65,6 +65,13 @@ export interface FsWriteOptions {
   confirmed?: boolean;
 }
 
+export interface FsWriteOutputOptions {
+  /** Filename relative to the active session runtime directory. */
+  filename: string;
+  /** Content to write. */
+  content: string;
+}
+
 export interface FsListOptions {
   /** Directory path to list. */
   path: string;
@@ -115,6 +122,30 @@ export class FsActions {
 
   private getWorkingDirectory(): string | undefined {
     return this.context.sessionManager.getActiveSession()?.workingDirectory;
+  }
+
+  private getRuntimeDirectory(): string {
+    const session = this.context.sessionManager.getActiveSession();
+    if (!session?.runtimeDir) {
+      throw new Error("No active session runtime directory");
+    }
+    return session.runtimeDir;
+  }
+
+  private resolveOutputPath(filename: string): string {
+    if (!filename || filename.trim().length === 0) {
+      throw new Error("Output filename is required");
+    }
+    if (path.isAbsolute(filename)) {
+      throw new Error("Absolute output paths require explicit fs.write permission");
+    }
+    const runtimeDir = path.resolve(this.getRuntimeDirectory());
+    const resolved = path.resolve(runtimeDir, filename);
+    const relative = path.relative(runtimeDir, resolved);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error("Output filename must stay under the session runtime directory");
+    }
+    return resolved;
   }
 
   private async failureWithDebug<T>(
@@ -239,6 +270,57 @@ export class FsActions {
         auditId: policyEval.auditId,
         fsPath: options.path,
         operation: "write",
+      });
+    }
+  }
+
+  /**
+   * Write task output under the active session runtime directory.
+   */
+  async writeOutput(options: FsWriteOutputOptions): Promise<ActionResult<FileWriteResult>> {
+    const sessionId = this.getSessionId();
+    let outputPath: string;
+    try {
+      outputPath = this.resolveOutputPath(options.filename);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return failureResult<FileWriteResult>(message, {
+        path: "command",
+        sessionId,
+      });
+    }
+
+    const policyEval = this.context.sessionManager.evaluateAction("fs_write_output", {
+      filename: options.filename,
+      sizeBytes: Buffer.byteLength(options.content, "utf8"),
+    });
+    if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<FileWriteResult>;
+
+    try {
+      const result = fsWriteFile(outputPath, options.content, {
+        createDirs: true,
+      });
+      log.info("Session output written", { path: result.path, sizeBytes: result.sizeBytes });
+
+      return successResult(result, {
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error(`Output write failed: ${message}`);
+      return this.failureWithDebug(`Output write failed: ${message}`, error, {
+        action: "fs_write_output",
+        path: policyEval.path,
+        sessionId,
+        policyDecision: policyEval.policyDecision,
+        risk: policyEval.risk,
+        auditId: policyEval.auditId,
+        fsPath: outputPath,
+        operation: "write_output",
       });
     }
   }

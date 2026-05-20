@@ -95,6 +95,112 @@ interface BrowserWindowTarget {
 	windowId: number;
 }
 
+	// ── High-Level Composite Action Types (Section 31) ──────────────────
+
+export interface BrowserStateResult {
+	browserConnected: boolean;
+	url?: string;
+	title?: string;
+	tabId?: string;
+	tabs?: Array<{ id: string; url: string; title: string }>;
+	dialogs?: DialogInfo[];
+	downloads?: ExtendedDownloadResult[];
+	snapshot?: A11ySnapshot;
+	screenshot?: { path: string; sizeBytes: number };
+	warnings: string[];
+	status: Record<string, "ok" | "error" | "skipped">;
+}
+
+export type BrowserActionName =
+	| "click" | "fill" | "press" | "hover" | "scroll" | "type" | "paste"
+	| "screenshot" | "tab-close" | "open" | "navigate" | "openMany"
+	| "capture" | "captureMany" | "fillMany" | "state";
+
+export interface BrowserActOptions {
+	action: BrowserActionName;
+	target?: string;
+	text?: string;
+	key?: string;
+	timeoutMs?: number;
+	force?: boolean;
+	commit?: boolean;
+	direction?: string;
+	amount?: number;
+	delayMs?: number;
+	tabId?: string;
+	outputPath?: string;
+	fullPage?: boolean;
+	captureOnSuccess?: boolean;
+	snapshot?: boolean;
+	screenshot?: boolean;
+	url?: string;
+	urls?: string[];
+	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+	fields?: Array<{ target: string; text: string }>;
+	continueOnFailure?: boolean;
+	boxes?: boolean;
+	rootSelector?: string;
+	stateOptions?: {
+		tabId?: string;
+		snapshot?: boolean;
+		screenshot?: boolean;
+		fullPage?: boolean;
+		dialog?: boolean;
+		downloads?: boolean;
+	};
+}
+
+export interface TaskStep {
+	action: string;
+	target?: string;
+	text?: string;
+	key?: string;
+	timeoutMs?: number;
+	force?: boolean;
+	commit?: boolean;
+	direction?: string;
+	amount?: number;
+	delayMs?: number;
+	tabId?: string;
+	outputPath?: string;
+	fullPage?: boolean;
+	captureOnSuccess?: boolean;
+	url?: string;
+	urls?: string[];
+	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+	fields?: Array<{ target: string; text: string }>;
+	continueOnFailure?: boolean;
+	boxes?: boolean;
+	rootSelector?: string;
+	snapshot?: boolean;
+	screenshot?: boolean;
+	content?: string;
+	filename?: string;
+}
+
+export interface TaskStepResult {
+	step: TaskStep;
+	success: boolean;
+	result?: Record<string, unknown>;
+	error?: string;
+	durationMs?: number;
+	policy?: string;
+	auditId?: string;
+	path?: string;
+	tabId?: string;
+}
+
+export interface TaskRunResult {
+	results: TaskStepResult[];
+	completedSteps: number;
+	totalSteps: number;
+	aborted: boolean;
+	executedSteps: number;
+	successfulSteps: number;
+	failedStepIndex: number | null;
+	finalState?: BrowserStateResult;
+}
+
 // ── Action Options ─────────────────────────────────────────────────────
 
 export interface BrowserActionContext {
@@ -115,7 +221,7 @@ export interface OpenOptions {
 export interface OpenManyItem {
 	url: string;
 	label?: string;
-	waitUntil?: "load" | "domcontentloaded" | "networkidle";
+	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 }
 
 export interface OpenManyTabResult {
@@ -332,6 +438,21 @@ export class BrowserActions {
 			this.dialogSupervisor.setHandlingMode(mode);
 			this.dialogSupervisor.setDefaultTimeout(timeout);
 		}
+	}
+
+	private getPendingDialogsForSnapshot(sessionId: string): DialogInfo[] | undefined {
+		const dialogs = this.dialogSupervisor.getPendingDialogs(sessionId);
+		return dialogs.length > 0 ? dialogs : undefined;
+	}
+
+	private isBlankBrowserPage(page: Page): boolean {
+		const url = page.url();
+		return (
+			url === "about:blank" ||
+			url === "chrome://newtab/" ||
+			url === "chrome://new-tab-page/" ||
+			url.startsWith("chrome://new-tab-page?")
+		);
 	}
 
 
@@ -1072,7 +1193,10 @@ export class BrowserActions {
 		const previous = this.isRefTarget(target)
 			? this.refStore.lookup(oldPageId, target)
 			: undefined;
-		const snap = await snapshot(page, { sessionId });
+		const snap = await snapshot(page, {
+			sessionId,
+			pendingDialogs: this.getPendingDialogsForSnapshot(sessionId),
+		});
 		const pageId = getPageId(page.url(), sessionId);
 		this.refStore.setSnapshot(pageId, snap);
 		if (this.isRefTarget(target)) {
@@ -1197,17 +1321,19 @@ export class BrowserActions {
 			if ("success" in pageOrErr)
 				return pageOrErr as ActionResult<{ url: string; title: string; tabId: string }>;
 
-			// Let's check if the browser has existing visible pages, and reuse if it's the only visible page and is blank.
-			// Otherwise context.newPage() to open a new tab/page.
+			// Reuse the focused blank tab when present; otherwise open a new tab.
+			// Chrome's New Tab URL differs by channel/profile, so use the shared blank predicate.
 			const bm = this.context.sessionManager.getBrowserManager();
 			const context = bm.getContext();
 			let page: Page;
 			if (context) {
 				const rawPages = context.pages();
 				const pages = await this.getVisiblePages(rawPages);
-				const isBlank = (p: Page) => p.url() === "about:blank" || p.url() === "chrome://newtab/";
-				if (pages.length === 1 && isBlank(pages[0])) {
-					page = pages[0];
+				const preferredBlank =
+					pages.find((candidate) => candidate === pageOrErr && this.isBlankBrowserPage(candidate)) ??
+					(pages.length === 1 && this.isBlankBrowserPage(pages[0]) ? pages[0] : undefined);
+				if (preferredBlank) {
+					page = preferredBlank;
 					const windowTargets = await this.getWindowTargets(rawPages);
 					const target = windowTargets.find((t) => t.page === page);
 					if (target) {
@@ -1225,6 +1351,10 @@ export class BrowserActions {
 			await page.goto(resolvedUrl, {
 				waitUntil: options.waitUntil ?? "domcontentloaded",
 			});
+			const openedTarget = await this.getWindowTarget(page);
+			if (openedTarget) {
+				await this.activateWindowTarget(openedTarget);
+			}
 			await page.bringToFront().catch(() => undefined);
 			const title = await page.title();
 			await this.persistObservability(sessionId, page);
@@ -1424,12 +1554,11 @@ export class BrowserActions {
 			}
 
 			const tabs: OpenManyTabResult[] = [];
-			const isBlank = (p: Page) => p.url() === "about:blank" || p.url() === "chrome://newtab/";
 
 			for (const item of items) {
 				let page: Page;
 				const pages = context.pages();
-				if (pages.length === 1 && isBlank(pages[0])) {
+				if (pages.length === 1 && this.isBlankBrowserPage(pages[0])) {
 					page = pages[0];
 				} else {
 					page = await context.newPage();
@@ -1504,7 +1633,11 @@ export class BrowserActions {
 			};
 
 			if (options?.snapshot !== false) {
-				const snap = await snapshot(page, { sessionId, boxes: true });
+				const snap = await snapshot(page, {
+					sessionId,
+					boxes: true,
+					pendingDialogs: this.getPendingDialogsForSnapshot(sessionId),
+				});
 				const pageId = getPageId(page.url(), sessionId);
 				this.refStore.setSnapshot(pageId, snap);
 				result.snapshot = snap;
@@ -1674,6 +1807,7 @@ export class BrowserActions {
 				sessionId,
 				rootSelector: options.rootSelector,
 				boxes: options.boxes,
+				pendingDialogs: this.getPendingDialogsForSnapshot(sessionId),
 			});
 
 			// Store snapshot in ref store
@@ -4231,6 +4365,523 @@ export class BrowserActions {
 	 * Returns structured download information from the session downloads directory.
 	 * Routes through policy as browser_downloads_list (low risk).
 	 */
+	// ── Section 31: High-Level Composite Actions ─────────────────────────
+
+	/**
+	 * Collect all current browser state in a single call.
+	 * Combines tab list, dialogs, downloads, and optional snapshot/screenshot.
+	 * Reduces the "poll all state" pattern from ~4 calls to 1.
+	 */
+	async browserState(options?: {
+		tabId?: string;
+		snapshot?: boolean;
+		screenshot?: boolean;
+		fullPage?: boolean;
+		dialog?: boolean;
+		downloads?: boolean;
+	}): Promise<ActionResult<BrowserStateResult>> {
+		const sessionId = this.getSessionId();
+		const warnings: string[] = [];
+		const status: Record<string, "ok" | "error" | "skipped"> = {};
+		const result: BrowserStateResult = {
+			browserConnected: false,
+			warnings,
+			status,
+		};
+
+		// Check browser is connected by testing getPage
+		let page: Page | undefined;
+		try {
+			page = this.getPage();
+		} catch {
+			// no browser connected
+		}
+		const connected = page != null;
+		result.browserConnected = connected;
+		status.browser = connected ? "ok" : "error";
+		if (!connected) {
+			warnings.push("No browser is connected or attached");
+			return successResult(result, { path: "a11y", sessionId });
+		}
+
+		const currentPage = page!;
+
+		// Tab list (always included, compact)
+		try {
+			const tabListRes = await this.tabList();
+			if (tabListRes.success && tabListRes.data) {
+				result.tabs = tabListRes.data;
+				// Find active tab by matching current page URL instead of assuming tabs[0]
+				const pageUrl = currentPage.url();
+				const active = tabListRes.data.find(t => t.url === pageUrl) ?? tabListRes.data[0];
+				if (active) {
+					result.url = active.url;
+					result.title = active.title;
+					result.tabId = active.id;
+				}
+				status.tabs = "ok";
+			} else {
+				status.tabs = "error";
+				warnings.push(`tabList: ${tabListRes.error ?? "Unknown error"}`);
+			}
+		} catch (error: unknown) {
+			status.tabs = "error";
+			warnings.push(`tabList threw: ${error instanceof Error ? error.message : String(error)}`);
+		}
+
+		// Dialogs (opt-out by default)
+		if (options?.dialog !== false) {
+			try {
+				const dialogRes = await this.dialog({ action: "list" });
+				if (dialogRes.success && dialogRes.data) {
+					result.dialogs = (dialogRes.data as { dialogs: DialogInfo[] }).dialogs;
+					status.dialogs = "ok";
+				} else {
+					status.dialogs = "error";
+					warnings.push(`dialog: ${dialogRes.error ?? "Failed to list dialogs"}`);
+				}
+			} catch (error: unknown) {
+				status.dialogs = "error";
+				warnings.push(`dialog threw: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		} else {
+			status.dialogs = "skipped";
+		}
+
+		// Downloads (opt-in only — high risk under balanced policy)
+		if (options?.downloads === true) {
+			try {
+				const dlRes = await this.downloadsList();
+				if (dlRes.success && dlRes.data) {
+					result.downloads = dlRes.data;
+					status.downloads = "ok";
+				} else {
+					status.downloads = "error";
+					warnings.push(`downloads: ${dlRes.error ?? "Failed to list downloads"}`);
+				}
+			} catch (error: unknown) {
+				status.downloads = "error";
+				warnings.push(`downloads threw: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		} else {
+			status.downloads = "skipped";
+		}
+
+		// Snapshot (off by default now — compact)
+		if (options?.snapshot === true) {
+			try {
+				const snapRes = await this.takeSnapshot({ tabId: options?.tabId, boxes: true });
+				if (snapRes.success && snapRes.data) {
+					result.snapshot = snapRes.data;
+					status.snapshot = "ok";
+				} else {
+					status.snapshot = "error";
+					warnings.push(`snapshot: ${snapRes.error ?? "Failed to take snapshot"}`);
+				}
+			} catch (error: unknown) {
+				status.snapshot = "error";
+				warnings.push(`snapshot threw: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		} else {
+			status.snapshot = "skipped";
+		}
+
+		// Screenshot (opt-in only)
+		if (options?.screenshot === true) {
+			try {
+				const ssRes = await this.screenshot({ fullPage: options.fullPage, tabId: options?.tabId });
+				if (ssRes.success && ssRes.data) {
+					result.screenshot = ssRes.data;
+					status.screenshot = "ok";
+				} else {
+					status.screenshot = "error";
+					warnings.push(`screenshot: ${ssRes.error ?? "Failed to take screenshot"}`);
+				}
+			} catch (error: unknown) {
+				status.screenshot = "error";
+				warnings.push(`screenshot threw: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		} else {
+			status.screenshot = "skipped";
+		}
+
+		return successResult(result, { path: "a11y", sessionId });
+	}
+
+	/**
+	 * Perform any single action with optional post-action capture.
+	 * Supports all major actions: open, navigate, openMany, capture, captureMany,
+	 * click, fill, fillMany, press, hover, scroll, type, paste, screenshot,
+	 * tab-close, state.
+	 * Strips raw snapshot/screenshot data from result metadata to keep compact.
+	 * Preserves policy decision, auditId, path, tabId from underlying actions.
+	 */
+	async browserAct(options: BrowserActOptions): Promise<ActionResult<Record<string, unknown>>> {
+		const sessionId = this.getSessionId();
+
+		// Strict validation: check required fields before dispatch
+		if (options.action === "click" && !options.target) {
+			return failureResult("'target' is required for click action", { path: "a11y", sessionId });
+		}
+		if (options.action === "fill" && !options.target) {
+			return failureResult("'target' is required for fill action", { path: "a11y", sessionId });
+		}
+		if (options.action === "fill" && !options.text && options.text !== "") {
+			return failureResult("'text' is required for fill action", { path: "a11y", sessionId });
+		}
+		if (options.action === "press" && !options.key) {
+			return failureResult("'key' is required for press action", { path: "a11y", sessionId });
+		}
+		if (options.action === "hover" && !options.target) {
+			return failureResult("'target' is required for hover action", { path: "a11y", sessionId });
+		}
+		if (options.action === "type" && !options.text && options.text !== "") {
+			return failureResult("'text' is required for type action", { path: "a11y", sessionId });
+		}
+		if (options.action === "paste" && !options.text && options.text !== "") {
+			return failureResult("'text' is required for paste action", { path: "a11y", sessionId });
+		}
+		if ((options.action === "open" || options.action === "navigate") && !options.url) {
+			return failureResult("'url' is required for open/navigate action", { path: "a11y", sessionId });
+		}
+		if (options.action === "openMany" && (!options.urls || options.urls.length === 0)) {
+			return failureResult("'urls' is required for openMany action", { path: "a11y", sessionId });
+		}
+		if (options.action === "captureMany" && (!options.urls || options.urls.length === 0)) {
+			return failureResult("'urls' (tabIds) is required for captureMany action", { path: "a11y", sessionId });
+		}
+		if (options.action === "fillMany" && (!options.fields || options.fields.length === 0)) {
+			return failureResult("'fields' is required for fillMany action", { path: "a11y", sessionId });
+		}
+
+		let actResult: ActionResult<Record<string, unknown>>;
+
+		switch (options.action) {
+			case "click": {
+				const r = await this.click({ target: options.target!, timeoutMs: options.timeoutMs, force: options.force, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "fill": {
+				const r = await this.fill({ target: options.target!, text: options.text!, timeoutMs: options.timeoutMs, commit: options.commit, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "press": {
+				const r = await this.press({ key: options.key!, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "hover": {
+				const r = await this.hover({ target: options.target!, timeoutMs: options.timeoutMs, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "scroll": {
+				const dir = (options.direction ?? "down") as "up" | "down" | "left" | "right";
+				const r = await this.scroll({ direction: dir, amount: options.amount, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "type": {
+				const r = await this.type({ text: options.text!, delayMs: options.delayMs, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "paste": {
+				const r = await this.paste({ text: options.text!, target: options.target, timeoutMs: options.timeoutMs, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "screenshot": {
+				const r = await this.screenshot({ outputPath: options.outputPath, fullPage: options.fullPage, target: options.target, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "tab-close": {
+				const r = await this.tabClose();
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "open": {
+				const r = await this.open({ url: options.url!, waitUntil: options.waitUntil });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "navigate": {
+				const r = await this.navigate({ url: options.url!, waitUntil: options.waitUntil, tabId: options.tabId });
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "openMany": {
+				const items = options.urls!.map(u => ({ url: u, waitUntil: options.waitUntil }));
+				const r = await this.openMany(items);
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+		case "capture": {
+			const r = await this.capture({
+				tabId: options.tabId,
+				snapshot: options.snapshot === true,
+				screenshot: options.screenshot === true,
+			});
+			actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+			break;
+		}
+		case "captureMany": {
+			const r = await this.captureMany(options.urls!, {
+				snapshot: options.snapshot === true,
+				screenshot: options.screenshot === true,
+			});
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "fillMany": {
+				const r = await this.fillMany(options.fields!, {
+					tabId: options.tabId,
+					continueOnFailure: options.continueOnFailure,
+					timeoutMs: options.timeoutMs,
+				});
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			case "state": {
+				const r = await this.browserState({
+					tabId: options.stateOptions?.tabId ?? options.tabId,
+					snapshot: options.stateOptions?.snapshot ?? options.snapshot,
+					screenshot: options.stateOptions?.screenshot ?? options.screenshot,
+					fullPage: options.stateOptions?.fullPage ?? options.fullPage,
+					dialog: options.stateOptions?.dialog,
+					downloads: options.stateOptions?.downloads,
+				});
+				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
+				break;
+			}
+			default:
+				return failureResult(`Unknown action: ${options.action}`, { path: "a11y", sessionId });
+		}
+
+		if (!actResult.success) return actResult;
+
+		// Extract policy metadata from underlying result
+		const policy = actResult.policyDecision;
+		const auditId = actResult.auditId;
+		const actPath = actResult.path;
+		const actTabId = actResult.data?.tabId as string | undefined ?? options.tabId;
+
+		if (options.captureOnSuccess) {
+			const state = await this.browserState({
+				tabId: options.tabId,
+				snapshot: options.snapshot === true,
+				screenshot: options.screenshot === true,
+			});
+			if (state.success && state.data) {
+				return successResult({
+					action: options.action,
+					result: actResult.data ?? {},
+					policy,
+					auditId,
+					path: actPath,
+					tabId: actTabId,
+					state: state.data,
+				}, {
+					path: actPath ?? "a11y",
+					sessionId,
+					policyDecision: policy,
+					auditId,
+				});
+			}
+		}
+
+		return successResult({
+			action: options.action,
+			result: actResult.data ?? {},
+			policy,
+			auditId,
+			path: actPath,
+			tabId: actTabId,
+		}, {
+			path: actPath ?? "a11y",
+			sessionId,
+			policyDecision: policy,
+			auditId,
+		});
+	}
+
+	/**
+	 * Execute a deterministic multi-step browser task sequence.
+	 * Each step runs browserAct with the given parameters.
+	 * Supports continueOnFailure to proceed past errors.
+	 * Returns all step results in order with duration tracking,
+	 * correct completed/successful/failed counts, per-step policy metadata,
+	 * and a final browser state after task completion.
+	 */
+	async taskRun(options: {
+		steps: TaskStep[];
+		continueOnFailure?: boolean;
+		writeOutput?: (opts: { filename: string; content: string }) => Promise<ActionResult<Record<string, unknown>>>;
+	}): Promise<ActionResult<TaskRunResult>> {
+		const sessionId = this.getSessionId();
+		const results: TaskStepResult[] = [];
+		let aborted = false;
+		let failedStepIndex: number | null = null;
+
+		const BROWSER_ACTIONS = new Set([
+			"click", "fill", "press", "hover", "scroll", "type", "paste",
+			"screenshot", "tab-close", "open", "navigate", "openMany",
+			"capture", "captureMany", "fillMany", "state",
+		]);
+
+		// Validate all steps before execution
+		for (let i = 0; i < options.steps.length; i++) {
+			const step = options.steps[i];
+			if (!step.action) {
+				return failureResult(`Step ${i}: 'action' is required`, { path: "a11y", sessionId });
+			}
+			if (!BROWSER_ACTIONS.has(step.action) && step.action !== "writeOutput") {
+				return failureResult(`Step ${i}: Unknown action '${step.action}'. Allowed: ${[...BROWSER_ACTIONS, "writeOutput"].join(", ")}`, { path: "a11y", sessionId });
+			}
+		}
+
+		for (let i = 0; i < options.steps.length; i++) {
+			const step = options.steps[i];
+			const stepStart = Date.now();
+
+			// Handle writeOutput steps through injected callback (backed by FsActions)
+			if (step.action === "writeOutput") {
+				const content = step.content ?? step.text ?? "";
+				const filename = step.filename ?? step.target ?? "";
+				if (step.content === undefined && step.text === undefined) {
+					const durationMs = Date.now() - stepStart;
+					results.push({ step, success: false, error: "'content' is required for writeOutput step", durationMs });
+					if (failedStepIndex === null) failedStepIndex = i;
+					if (!options.continueOnFailure) { aborted = true; break; }
+					continue;
+				}
+				if (!filename) {
+					const durationMs = Date.now() - stepStart;
+					results.push({ step, success: false, error: "'filename' (or 'target') is required for writeOutput step", durationMs });
+					if (failedStepIndex === null) failedStepIndex = i;
+					if (!options.continueOnFailure) { aborted = true; break; }
+					continue;
+				}
+				if (!options.writeOutput) {
+					const durationMs = Date.now() - stepStart;
+					results.push({ step, success: false, error: "writeOutput callback not available — writeOutput steps require FsActions", durationMs });
+					if (failedStepIndex === null) failedStepIndex = i;
+					if (!options.continueOnFailure) { aborted = true; break; }
+					continue;
+				}
+				const wRes = await options.writeOutput({ filename, content });
+				const durationMs = Date.now() - stepStart;
+				if (wRes.success) {
+					results.push({
+						step, success: true, result: wRes.data ?? {}, durationMs,
+						policy: wRes.policyDecision, auditId: wRes.auditId, path: wRes.path, tabId: step.tabId,
+					});
+				} else {
+					results.push({
+						step, success: false, error: wRes.error ?? "writeOutput failed", durationMs,
+						policy: wRes.policyDecision, auditId: wRes.auditId, path: wRes.path,
+					});
+					if (failedStepIndex === null) failedStepIndex = i;
+					if (!options.continueOnFailure) { aborted = true; break; }
+				}
+				continue;
+			}
+
+			const actResult = await this.browserAct({
+				action: step.action as BrowserActionName,
+				target: step.target,
+				text: step.text,
+				key: step.key,
+				timeoutMs: step.timeoutMs,
+				force: step.force,
+				commit: step.commit,
+				direction: step.direction,
+				amount: step.amount,
+				delayMs: step.delayMs,
+				tabId: step.tabId,
+				outputPath: step.outputPath,
+				fullPage: step.fullPage,
+				captureOnSuccess: step.captureOnSuccess,
+				url: step.url,
+				urls: step.urls,
+				waitUntil: step.waitUntil,
+				fields: step.fields,
+				continueOnFailure: step.continueOnFailure,
+				boxes: step.boxes,
+				rootSelector: step.rootSelector,
+				snapshot: step.snapshot,
+				screenshot: step.screenshot,
+			});
+
+			const durationMs = Date.now() - stepStart;
+
+			if (actResult.success) {
+				results.push({
+					step,
+					success: true,
+					result: actResult.data ?? {},
+					durationMs,
+					policy: actResult.policyDecision,
+					auditId: actResult.auditId,
+					path: actResult.path,
+					tabId: (actResult.data as Record<string, unknown> | undefined)?.tabId as string | undefined ?? step.tabId,
+				});
+			} else {
+				results.push({
+					step,
+					success: false,
+					error: actResult.error ?? "Unknown error",
+					durationMs,
+					policy: actResult.policyDecision,
+					auditId: actResult.auditId,
+					path: actResult.path,
+					tabId: (actResult.data as Record<string, unknown> | undefined)?.tabId as string | undefined ?? step.tabId,
+				});
+				if (failedStepIndex === null) {
+					failedStepIndex = i;
+				}
+				if (!options.continueOnFailure) {
+					aborted = true;
+					break;
+				}
+			}
+		}
+
+		const completedSteps = results.filter(r => r.success).length;
+		const executedSteps = results.length;
+
+		// Collect final browser state (compact, no snapshot/screenshot by default)
+		let finalState: BrowserStateResult | undefined;
+		if (executedSteps > 0) {
+			const stateRes = await this.browserState({
+				snapshot: false,
+				screenshot: false,
+				dialog: true,
+				downloads: false,
+			});
+			if (stateRes.success && stateRes.data) {
+				finalState = stateRes.data;
+			}
+		}
+
+		return successResult({
+			results,
+			completedSteps,
+			executedSteps,
+			successfulSteps: completedSteps,
+			totalSteps: options.steps.length,
+			aborted,
+			failedStepIndex,
+			finalState,
+		}, {
+			path: "a11y",
+			sessionId,
+		});
+	}
+
 	async downloadsList(): Promise<ActionResult<ExtendedDownloadResult[]>> {
 		const sessionId = this.getSessionId();
 

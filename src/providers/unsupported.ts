@@ -1,15 +1,16 @@
-import type { ActiveConnection, BrowserProvider, ProviderAttachOptions, ProviderLaunchOptions } from "./interface";
+import type { ActiveConnection, BrowserProvider, ProviderCapabilities, ProviderAttachOptions, ProviderLaunchOptions } from "./interface";
 import type { ProviderConfig } from "./types";
 import { ProviderConfigError } from "./errors";
 
 export class UnsupportedRemoteSandboxProvider implements BrowserProvider {
-  readonly capabilities = {
+  readonly capabilities: ProviderCapabilities = {
     supportsCDP: false,
     supportsLaunch: false,
     supportsAttach: false,
     supportsProfiles: false,
     supportsStealth: false,
     maxConcurrentSessions: 0,
+    nativeDialogs: "unsupported",
   };
 
   constructor(

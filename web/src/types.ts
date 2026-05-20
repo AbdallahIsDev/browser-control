@@ -214,3 +214,34 @@ export interface TradingStatus {
 
 	staleChart: boolean;
 }
+
+export type BrowserDialogType = "alert" | "confirm" | "prompt" | "beforeunload";
+
+export interface BrowserDialogInfo {
+	id: string;
+	type: BrowserDialogType;
+	message: string;
+	defaultValue?: string;
+	frameId?: string;
+	createdAt: string;
+}
+
+export interface BrowserDialogListResponse {
+	success?: boolean;
+	data?: {
+		dialogs: BrowserDialogInfo[];
+	};
+	dialogs?: BrowserDialogInfo[];
+	error?: string;
+}
+
+export interface BrowserDialogRespondResponse {
+	success?: boolean;
+	data?: {
+		handled: boolean;
+		dialog: BrowserDialogInfo;
+	};
+	handled?: boolean;
+	dialog?: BrowserDialogInfo;
+	error?: string;
+}

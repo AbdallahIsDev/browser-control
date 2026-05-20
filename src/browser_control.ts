@@ -30,6 +30,7 @@ import type {
 	BrowserDropResult,
 	BrowserTargetType,
 } from "./browser/connection";
+import type { BrowserActOptions, BrowserStateResult, TaskRunResult, TaskStep } from "./browser/actions";
 import type { ExtendedDownloadResult } from "./browser/file_helpers";
 import { type FsActionContext, FsActions } from "./filesystem/actions";
 import type {
@@ -254,6 +255,22 @@ export interface BrowserNamespace {
 	downloads: {
 		list(): Promise<ActionResult<ExtendedDownloadResult[]>>;
 	};
+	/** Section 31: Collect all current browser state in one call. */
+	state(options?: {
+		tabId?: string;
+		snapshot?: boolean;
+		screenshot?: boolean;
+		fullPage?: boolean;
+		dialog?: boolean;
+		downloads?: boolean;
+	}): Promise<ActionResult<BrowserStateResult>>;
+	/** Section 31: Perform any action with optional post-action capture. */
+	act(options: BrowserActOptions): Promise<ActionResult<Record<string, unknown>>>;
+	/** Section 31: Execute a deterministic multi-step browser task sequence. */
+	taskRun(options: {
+		steps: TaskStep[];
+		continueOnFailure?: boolean;
+	}): Promise<ActionResult<TaskRunResult>>;
 }
 
 // ── Terminal Namespace ───────────────────────────────────────────────
@@ -1051,6 +1068,19 @@ export function createBrowserControl(
 			drop: (options) => browserActions.drop(options),
 			downloads: {
 				list: () => browserActions.downloadsList(),
+			},
+			state: (options) => browserActions.browserState(options),
+			act: (options) => browserActions.browserAct(options),
+			taskRun: async (options) => {
+				const result = await browserActions.taskRun({
+					steps: options.steps,
+					continueOnFailure: options.continueOnFailure,
+					writeOutput: async (opts) => {
+						const r = await fsActions.writeOutput({ filename: opts.filename, content: opts.content });
+						return r as unknown as ActionResult<Record<string, unknown>>;
+					},
+				});
+				return result;
 			},
 		},
 		terminal: {
