@@ -331,6 +331,8 @@ export interface ScrollOptions {
 export interface ScreenshotOptions {
 	/** Output file path. */
 	outputPath?: string;
+	/** Screenshot timeout in ms. */
+	timeoutMs?: number;
 	/** Full page screenshot. */
 	fullPage?: boolean;
 	/** Element selector/ref to screenshot. */
@@ -3366,12 +3368,16 @@ export class BrowserActions {
 				if (options.target) {
 					const resolved = await this.resolveTarget(options.target, page);
 					if (resolved) {
-						await resolved.locator.screenshot({ path: tempPath });
+						await resolved.locator.screenshot({
+							path: tempPath,
+							timeout: options.timeoutMs ?? 30_000,
+						});
 					} else {
 						await this.capturePageScreenshot(
 							page,
 							tempPath,
 							options.fullPage ?? false,
+							options.timeoutMs,
 						);
 					}
 				} else {
@@ -3379,6 +3385,7 @@ export class BrowserActions {
 						page,
 						tempPath,
 						options.fullPage ?? false,
+						options.timeoutMs,
 					);
 				}
 			} finally {
@@ -3560,10 +3567,11 @@ export class BrowserActions {
 		page: Page,
 		outputPath: string,
 		fullPage: boolean,
+		timeoutMs = 30_000,
 	): Promise<void> {
 		await this.ensureScreenshotViewport(page);
 		try {
-			await page.screenshot({ path: outputPath, fullPage, timeout: 30_000 });
+			await page.screenshot({ path: outputPath, fullPage, timeout: timeoutMs });
 			const fs = await import("node:fs");
 			if (fs.existsSync(outputPath) && fs.statSync(outputPath).size >= 512) {
 				return;
@@ -4619,7 +4627,7 @@ export class BrowserActions {
 				break;
 			}
 			case "screenshot": {
-				const r = await this.screenshot({ outputPath: options.outputPath, fullPage: options.fullPage, target: options.target, tabId: options.tabId });
+				const r = await this.screenshot({ outputPath: options.outputPath, timeoutMs: options.timeoutMs, fullPage: options.fullPage, target: options.target, tabId: options.tabId });
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;
 			}

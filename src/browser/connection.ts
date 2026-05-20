@@ -68,6 +68,7 @@ import type { BrowserProfile, ProfileType } from "./profiles";
 import { BrowserProfileManager } from "./profiles";
 
 const log = logger.withComponent("browser_connection");
+const DEFAULT_CDP_CONNECT_TIMEOUT_MS = 5000;
 
 function isLoopbackEndpoint(endpoint: string): boolean {
 	try {
@@ -722,7 +723,9 @@ export class BrowserConnectionManager {
 				let lastError: unknown;
 				for (const candidate of attachEndpointCandidates(cdpUrl, port)) {
 					try {
-						browser = await chromium.connectOverCDP(candidate);
+						browser = await chromium.connectOverCDP(candidate, {
+							timeout: DEFAULT_CDP_CONNECT_TIMEOUT_MS,
+						});
 						cdpEndpoint = candidate;
 						lastError = undefined;
 						break;
@@ -903,7 +906,9 @@ export class BrowserConnectionManager {
 			}
 
 			if (canReconnectLocalAttached) {
-				const browser = await chromium.connectOverCDP(active.cdpEndpoint);
+				const browser = await chromium.connectOverCDP(active.cdpEndpoint, {
+					timeout: DEFAULT_CDP_CONNECT_TIMEOUT_MS,
+				});
 				this.browser = browser;
 				this.watchBrowserDisconnect(browser);
 				this.context = browser.contexts()[0] ?? null;
@@ -941,7 +946,9 @@ export class BrowserConnectionManager {
 				? (this.profileManager.getProfile(active.profileId) ??
 					this.profileManager.getDefaultProfile())
 				: this.profileManager.getDefaultProfile();
-			const browser = await chromium.connectOverCDP(active.cdpEndpoint);
+			const browser = await chromium.connectOverCDP(active.cdpEndpoint, {
+				timeout: DEFAULT_CDP_CONNECT_TIMEOUT_MS,
+			});
 			this.browser = browser;
 			this.watchBrowserDisconnect(browser);
 			this.context =

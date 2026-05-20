@@ -85,13 +85,15 @@ These commands are the preferred high-level path for agents that need fewer oper
 
 ```text
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
-browser act <action> [target] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--capture-on-success] [--snapshot] [--screenshot] [--json]
-browser task run --steps <json> [--continue-on-failure] [--json]
+browser act <action> [target] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
+browser task run --steps <json> [--timeout] [--continue-on-failure] [--json]
 ```
 
 `browser state` returns compact browser state by default: tabs, active URL/title, dialogs, warnings, and per-section status. Snapshot, screenshot, and downloads are opt-in.
 
 `browser act` supports `click`, `fill`, `press`, `hover`, `scroll`, `type`, `paste`, `screenshot`, `tab-close`, `open`, `navigate`, `openMany`, `capture`, `captureMany`, `fillMany`, and `state`.
+
+Composite `browser act` and `browser task run` commands use a 30s CLI guard by default. Pass `--timeout <ms>` or `--timeoutMs=<ms>` to lower or raise that guard for one command.
 
 `browser task run` executes multiple steps in one command and returns per-step success, duration, policy metadata, audit id, path, tab id, and final compact state. `writeOutput` steps route through `FsActions.writeOutput`; use `filename` plus `content`, with `target` kept only as a backward-compatible filename alias.
 

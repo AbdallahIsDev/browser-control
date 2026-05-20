@@ -402,6 +402,36 @@ function outputJson(data: unknown, pretty = true): void {
 	console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
 
+function cliTimeoutResult(label: string, timeoutMs: number): {
+	success: false;
+	path: "cli";
+	error: string;
+	completedAt: string;
+} {
+	return {
+		success: false,
+		path: "cli",
+		error: `${label} timed out after ${timeoutMs}ms`,
+		completedAt: new Date().toISOString(),
+	};
+}
+
+async function withCliTimeout<T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	label: string,
+): Promise<{ result: T | ReturnType<typeof cliTimeoutResult>; timedOut: boolean }> {
+	let timedOut = false;
+	const timeout = new Promise<ReturnType<typeof cliTimeoutResult>>((resolve) => {
+		setTimeout(() => {
+			timedOut = true;
+			resolve(cliTimeoutResult(label, timeoutMs));
+		}, timeoutMs);
+	});
+	const result = await Promise.race([promise, timeout]);
+	return { result, timedOut };
+}
+
 async function requireCliPolicy(
 	action: string,
 	params: Record<string, unknown>,
@@ -513,7 +543,7 @@ Browser Lifecycle:
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
   browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
-  browser act <action> [target] [--url=<url>] [--capture-on-success] [--json]
+  browser act <action> [target] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
                                                                       Run one composite browser action
   browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser provider list                                              List browser providers
@@ -2672,7 +2702,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					screenshot: flags.screenshot === "true",
 					fullPage: flags["full-page"] === "true" || flags.fullPage === "true",
 					dialog: flags.dialog !== "false",
-					downloads: flags.downloads !== "false",
+					downloads: flags.downloads === "true",
 				});
 				outputJson(result, !jsonOutput);
 			} catch (error) {
@@ -2694,12 +2724,13 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const bc = createBrowserControl();
 				const fields = flags.fields ? JSON.parse(flags.fields) : undefined;
 				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
-				const result = await bc.browser.act({
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(bc.browser.act({
 					action: action as any,
 					target: positional[1] ?? flags.target,
 					text: flags.text,
 					key: flags.key,
-					timeoutMs: flags.timeoutMs ? Number(flags.timeoutMs) : undefined,
+					timeoutMs: timeoutMs ? Number(timeoutMs) : undefined,
 					force: flags.force === "true",
 					commit: flags.commit === "true",
 					direction: flags.direction,
@@ -2718,8 +2749,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					rootSelector: flags["root-selector"],
 					snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
 					screenshot: flags.screenshot === "true",
-				});
+				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser act");
 				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				process.exit(1);
@@ -2749,11 +2781,13 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const result = await bc.browser.taskRun({
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(bc.browser.taskRun({
 					steps,
 					continueOnFailure: flags["continue-on-failure"] === "true",
-				});
+				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser task run");
 				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				process.exit(1);

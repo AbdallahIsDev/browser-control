@@ -77,6 +77,7 @@ interface ActionCaptchaOptions {
 
 const DEFAULT_DEBUG_HOST = "127.0.0.1";
 const DEFAULT_LOCALHOST = "localhost";
+const DEFAULT_CDP_CONNECT_TIMEOUT_MS = 5000;
 function logActionError(
 	action: string,
 	selector: string,
@@ -456,7 +457,9 @@ export async function connectBrowser(
 	port = 9222,
 	options: Pick<DebugEndpointCandidateOptions, "ignoreEnvOverrides"> = {},
 ): Promise<Browser> {
-	return chromium.connectOverCDP(await resolveDebugEndpointUrl(port, options));
+	return chromium.connectOverCDP(await resolveDebugEndpointUrl(port, options), {
+		timeout: DEFAULT_CDP_CONNECT_TIMEOUT_MS,
+	});
 }
 
 /** Create a new automation-owned context with optional stealth hardening. */
