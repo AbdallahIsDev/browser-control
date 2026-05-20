@@ -21,8 +21,29 @@ import { buildSecurityTools } from "./tools/security";
  *
  * Returns a flat array of all tools, ready for registration with the MCP server.
  */
-export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
-  return [
+export interface ToolRegistryOptions {
+  mode?: "full" | "lite";
+}
+
+const LITE_TOOL_NAMES = new Set([
+  "bc_browser_open_many",
+  "bc_browser_capture",
+  "bc_browser_capture_many",
+  "bc_browser_snapshot",
+  "bc_browser_click",
+  "bc_browser_fill",
+  "bc_browser_fill_many",
+  "bc_browser_tab_list",
+  "bc_fs_write_output",
+  "bc_session_status",
+  "bc_status",
+]);
+
+export function buildToolRegistry(
+  api: BrowserControlAPI,
+  options: ToolRegistryOptions = {},
+): McpTool[] {
+  const tools = [
     ...buildStatusTools(api),
     ...buildSessionTools(api),
     ...buildBrowserTools(api),
@@ -35,6 +56,8 @@ export function buildToolRegistry(api: BrowserControlAPI): McpTool[] {
     ...buildWorkflowTools(api),
     ...buildPackageTools(api),
   ];
+  const mode = options.mode ?? (process.env.BROWSER_CONTROL_MCP_MODE === "lite" ? "lite" : "full");
+  return mode === "lite" ? tools.filter((tool) => LITE_TOOL_NAMES.has(tool.name)) : tools;
 }
 
 /**

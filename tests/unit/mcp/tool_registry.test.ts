@@ -60,6 +60,10 @@ describe("MCP Tool Registry", () => {
 
       // Browser tools
       assert.ok(names.includes("bc_browser_open"));
+      assert.ok(names.includes("bc_browser_open_many"));
+      assert.ok(names.includes("bc_browser_navigate"));
+      assert.ok(names.includes("bc_browser_capture"));
+      assert.ok(names.includes("bc_browser_capture_many"));
       assert.ok(names.includes("bc_browser_snapshot"));
       assert.ok(names.includes("bc_browser_click"));
       assert.ok(names.includes("bc_browser_fill"));
@@ -73,6 +77,8 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_browser_tab_switch"));
       assert.ok(names.includes("bc_browser_tab_close"));
       assert.ok(names.includes("bc_browser_close"));
+      assert.ok(names.includes("bc_browser_dialog"));
+      assert.ok(names.includes("bc_browser_cdp"));
 
       // Terminal tools
       assert.ok(names.includes("bc_terminal_open"));
@@ -89,6 +95,7 @@ describe("MCP Tool Registry", () => {
       // Filesystem tools
       assert.ok(names.includes("bc_fs_read"));
       assert.ok(names.includes("bc_fs_write"));
+      assert.ok(names.includes("bc_fs_write_output"));
       assert.ok(names.includes("bc_fs_list"));
       assert.ok(names.includes("bc_fs_move"));
       assert.ok(names.includes("bc_fs_delete"));
@@ -112,6 +119,25 @@ describe("MCP Tool Registry", () => {
       const names = tools.map((t) => t.name);
       const unique = new Set(names);
       assert.equal(unique.size, names.length, `Duplicate tool names found: ${names.filter((n, i) => names.indexOf(n) !== i)}`);
+    });
+
+    it("lite mode exposes only the reduced high-level toolset", () => {
+      const tools = buildToolRegistry(api, { mode: "lite" });
+      const names = tools.map((t) => t.name).sort();
+
+      assert.deepEqual(names, [
+        "bc_browser_capture",
+        "bc_browser_capture_many",
+        "bc_browser_click",
+        "bc_browser_fill",
+        "bc_browser_fill_many",
+        "bc_browser_open_many",
+        "bc_browser_snapshot",
+        "bc_browser_tab_list",
+        "bc_fs_write_output",
+        "bc_session_status",
+        "bc_status",
+      ].sort());
     });
 
     it("all tools have descriptions", () => {
@@ -466,6 +492,28 @@ describe("MCP Tool Registry", () => {
       const tools = buildToolRegistry(api);
       const openTool = tools.find((t) => t.name === "bc_browser_open")!;
       assert.ok(openTool.inputSchema.required?.includes("url"));
+    });
+
+    it("bc_browser_dialog schema requires action and has dialog_id", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_browser_dialog")!;
+      assert.ok(tool.inputSchema.required?.includes("action"), "bc_browser_dialog should require action");
+      assert.ok("dialog_id" in tool.inputSchema.properties, "bc_browser_dialog should have dialog_id property");
+      assert.ok("response" in tool.inputSchema.properties, "bc_browser_dialog should have response property");
+      assert.ok("text" in tool.inputSchema.properties, "bc_browser_dialog should have text property");
+      assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_dialog should have sessionId property");
+    });
+
+    it("bc_browser_cdp schema requires method/timeoutMs and has params/targetId/frameId", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_browser_cdp")!;
+      assert.ok(tool, "bc_browser_cdp tool should exist");
+      assert.ok(tool.inputSchema.required?.includes("method"), "bc_browser_cdp should require method");
+      assert.ok(tool.inputSchema.required?.includes("timeoutMs"), "bc_browser_cdp should require timeoutMs");
+      assert.ok("params" in tool.inputSchema.properties, "bc_browser_cdp should have params property");
+      assert.ok("targetId" in tool.inputSchema.properties, "bc_browser_cdp should have targetId property");
+      assert.ok("frameId" in tool.inputSchema.properties, "bc_browser_cdp should have frameId property");
+      assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_cdp should have sessionId property");
     });
   });
 

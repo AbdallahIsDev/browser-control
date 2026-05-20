@@ -124,56 +124,108 @@ export interface BrowserNamespace {
 		url: string;
 		waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 	}): Promise<ActionResult<{ url: string; title: string }>>;
+	navigate(options: {
+		url: string;
+		waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+		tabId?: string;
+	}): Promise<ActionResult<{ url: string; title: string; tabId: string }>>;
+	openMany(items: import("./browser/actions").OpenManyItem[]): Promise<ActionResult<{ browserSessionId: string; tabs: import("./browser/actions").OpenManyTabResult[] }>>;
+	capture(options?: {
+		tabId?: string;
+		snapshot?: boolean;
+		screenshot?: boolean;
+		fullPage?: boolean;
+	}): Promise<ActionResult<import("./browser/actions").CaptureResult>>;
+	captureMany(
+		tabIds: string[],
+		options?: {
+			snapshot?: boolean;
+			screenshot?: boolean;
+			fullPage?: boolean;
+		},
+	): Promise<ActionResult<{ captures: import("./browser/actions").CaptureResult[] }>>;
 	snapshot(options?: {
 		rootSelector?: string;
 		boxes?: boolean;
+		tabId?: string;
 	}): Promise<ActionResult<A11ySnapshot>>;
 	click(options: {
 		target: string;
 		timeoutMs?: number;
 		force?: boolean;
-	}): Promise<ActionResult<{ clicked: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ clicked: string; tabId: string }>>;
 	fill(options: {
 		target: string;
 		text: string;
 		timeoutMs?: number;
 		commit?: boolean;
-	}): Promise<ActionResult<{ filled: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ filled: string; tabId: string }>>;
+	fillMany(
+		fields: import("./browser/actions").FillField[],
+		options?: import("./browser/actions").FillManyOptions,
+	): Promise<
+		ActionResult<{
+			tabId: string;
+			fields: import("./browser/actions").FillManyFieldResult[];
+		}>
+	>;
 	hover(options: {
 		target: string;
 		timeoutMs?: number;
-	}): Promise<ActionResult<{ hovered: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ hovered: string; tabId: string }>>;
 	type(options: {
 		text: string;
 		delayMs?: number;
-	}): Promise<ActionResult<{ typed: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ typed: string; tabId: string }>>;
 	paste(options: {
 		text: string;
 		target?: string;
 		timeoutMs?: number;
-	}): Promise<ActionResult<{ pasted: string }>>;
-	press(options: { key: string }): Promise<ActionResult<{ pressed: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ pasted: string; tabId: string }>>;
+	press(options: { key: string; tabId?: string }): Promise<ActionResult<{ pressed: string; tabId: string }>>;
 	scroll(options: {
 		direction: "up" | "down" | "left" | "right";
 		amount?: number;
-	}): Promise<ActionResult<{ scrolled: string }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ scrolled: string; tabId: string }>>;
 	screenshot(options?: {
 		outputPath?: string;
 		fullPage?: boolean;
 		target?: string;
 		annotate?: boolean;
 		refs?: string[];
-	}): Promise<ActionResult<{ path: string; sizeBytes: number }>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ path: string; sizeBytes: number; tabId: string }>>;
 	highlight(
 		options: HighlightOptions,
-	): Promise<ActionResult<{ highlighted: string }>>;
+	): Promise<ActionResult<{ highlighted: string; tabId: string }>>;
 	generateLocator(
 		target: string,
-	): Promise<ActionResult<{ candidates: LocatorCandidate[] }>>;
+		options?: { tabId?: string },
+	): Promise<ActionResult<{ candidates: LocatorCandidate[]; tabId: string }>>;
+	dialog(options: {
+		action: "list" | "respond";
+		dialog_id?: string;
+		response?: "accept" | "dismiss";
+		text?: string;
+	}): Promise<ActionResult<{ dialogs: import("./browser/dialogs").DialogInfo[] } | import("./browser/dialogs").DialogResponse>>;
+	cdp(options: {
+		method: string;
+		params?: Record<string, unknown>;
+		targetId?: string;
+		frameId?: string;
+		timeoutMs: number;
+		tabId?: string;
+	}): Promise<ActionResult<{ result: unknown }>>;
 	tabList(): Promise<
 		ActionResult<Array<{ id: string; url: string; title: string }>>
 	>;
-	tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>>;
+	tabSwitch(tabId: string): Promise<ActionResult<{ activeTabId: string; url: string; title?: string; readyState?: string }>>;
 	tabClose(): Promise<ActionResult<{ closed: boolean }>>;
 	close(): Promise<ActionResult<BrowserCloseResult>>;
 	provider: ProviderNamespace;
@@ -266,6 +318,10 @@ export interface FsNamespace {
 		path: string;
 		content: string;
 		createDirs?: boolean;
+	}): Promise<ActionResult<FileWriteResult>>;
+	writeOutput(options: {
+		filename: string;
+		content: string;
 	}): Promise<ActionResult<FileWriteResult>>;
 	ls(options: {
 		path: string;
@@ -901,9 +957,14 @@ export function createBrowserControl(
 	return {
 		browser: {
 			open: (o) => browserActions.open(o),
+			navigate: (o) => browserActions.navigate(o),
+			openMany: (items) => browserActions.openMany(items),
+			capture: (o) => browserActions.capture(o),
+			captureMany: (ids, o) => browserActions.captureMany(ids, o),
 			snapshot: (o) => browserActions.takeSnapshot(o),
 			click: (o) => browserActions.click(o),
 			fill: (o) => browserActions.fill(o),
+			fillMany: (fields, options) => browserActions.fillMany(fields, options),
 			hover: (o) => browserActions.hover(o),
 			type: (o) => browserActions.type(o),
 			paste: (o) => browserActions.paste(o),
@@ -911,7 +972,9 @@ export function createBrowserControl(
 			scroll: (o) => browserActions.scroll(o),
 			screenshot: (o) => browserActions.screenshot(o),
 			highlight: (o) => browserActions.highlight(o),
-			generateLocator: (target) => browserActions.generateLocator(target),
+			generateLocator: (target, options) => browserActions.generateLocator(target, options),
+			dialog: (o) => browserActions.dialog(o),
+			cdp: (o) => browserActions.cdp(o),
 			tabList: () => browserActions.tabList(),
 			tabSwitch: (id) => browserActions.tabSwitch(id),
 			tabClose: () => browserActions.tabClose(),
@@ -1006,6 +1069,7 @@ export function createBrowserControl(
 		fs: {
 			read: (o) => fsActions.read(o),
 			write: (o) => fsActions.write(o),
+			writeOutput: (o) => fsActions.writeOutput(o),
 			ls: (o) => fsActions.ls(o),
 			move: (o) => fsActions.move(o),
 			rm: (o) => fsActions.rm(o),

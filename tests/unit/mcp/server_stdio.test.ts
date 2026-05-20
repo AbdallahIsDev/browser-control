@@ -127,7 +127,7 @@ describe("MCP stdio server", () => {
     }) as ToolCallResult;
     assert.equal(unknown.isError, true);
     assert.match(unknown.content[0].text, /Unknown parameter 'expression' for tool 'bc_browser_scroll'/);
-    assert.match(unknown.content[0].text, /Allowed: direction, amount, sessionId/);
+    assert.match(unknown.content[0].text, /Allowed: direction, amount, tabId, sessionId/);
 
     const missing = await harness.client.callTool({
       name: "bc_browser_scroll",

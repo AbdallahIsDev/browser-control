@@ -54,6 +54,7 @@ const VALUE_FLAGS = new Set([
 	"failure-types",
 	"file",
 	"files",
+	"fields",
 	"format",
 	"health-check-interval",
 	"help",
@@ -100,6 +101,9 @@ const VALUE_FLAGS = new Set([
 	"status-file",
 	"style",
 	"suite",
+	"tab",
+	"tab-id",
+	"tabId",
 	"target",
 	"target-type",
 	"task-tags",
@@ -115,6 +119,8 @@ const VALUE_FLAGS = new Set([
 	"version",
 	"wait-until",
 	"annotation-position",
+	"continue-on-failure",
+	"continueOnFailure",
 ]);
 
 // Flags that can be repeated and should be collected as arrays
@@ -4718,6 +4724,10 @@ async function handleBrowserAction(
 
 	try {
 		let result: import("./shared/action_result").ActionResult | undefined;
+		const tabId = flags.tab ?? flags["tab-id"] ?? flags.tabId;
+		const continueOnFailure =
+			flags["continue-on-failure"] === "true" ||
+			flags.continueOnFailure === "true";
 
 		switch (action) {
 			case "open": {
@@ -4737,6 +4747,7 @@ async function handleBrowserAction(
 				result = await browserActions.takeSnapshot({
 					rootSelector: flags["root-selector"],
 					boxes: flags.boxes === "true",
+					tabId,
 				});
 				break;
 			}
@@ -4751,6 +4762,7 @@ async function handleBrowserAction(
 					target,
 					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
 					force: flags.force === "true",
+					tabId,
 				});
 				break;
 			}
@@ -4767,6 +4779,28 @@ async function handleBrowserAction(
 					text,
 					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
 					commit: flags.commit === "true",
+					tabId,
+				});
+				break;
+			}
+
+			case "fill-many": {
+				const fieldsStr = flags.fields ?? positional[0];
+				if (!fieldsStr) {
+					console.error("Error: Fields JSON array is required (e.g. '[{\"target\":\"@e3\", \"text\":\"hello\"}]')");
+					process.exit(1);
+				}
+				let fields: any[];
+				try {
+					fields = JSON.parse(fieldsStr);
+				} catch {
+					console.error("Error: Invalid JSON for fields");
+					process.exit(1);
+				}
+				result = await browserActions.fillMany(fields, {
+					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+					continueOnFailure,
+					tabId,
 				});
 				break;
 			}
@@ -4780,6 +4814,7 @@ async function handleBrowserAction(
 				result = await browserActions.hover({
 					target,
 					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+					tabId,
 				});
 				break;
 			}
@@ -4793,6 +4828,7 @@ async function handleBrowserAction(
 				result = await browserActions.type({
 					text,
 					delayMs: flags.delay ? Number(flags.delay) : undefined,
+					tabId,
 				});
 				break;
 			}
@@ -4807,6 +4843,7 @@ async function handleBrowserAction(
 					text,
 					target: flags.target,
 					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
+					tabId,
 				});
 				break;
 			}
@@ -4817,7 +4854,7 @@ async function handleBrowserAction(
 					console.error("Error: Key is required (e.g., Enter, Tab, ArrowDown)");
 					process.exit(1);
 				}
-				result = await browserActions.press({ key });
+				result = await browserActions.press({ key, tabId });
 				break;
 			}
 
@@ -4830,6 +4867,7 @@ async function handleBrowserAction(
 				result = await browserActions.scroll({
 					direction: direction as "up" | "down" | "left" | "right",
 					amount: flags.amount ? Number(flags.amount) : undefined,
+					tabId,
 				});
 				break;
 			}
@@ -4844,6 +4882,7 @@ async function handleBrowserAction(
 					target: flags.target,
 					annotate: flags.annotate === "true",
 					refs,
+					tabId,
 				});
 				break;
 			}

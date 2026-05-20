@@ -57,11 +57,88 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
     },
 
     {
+      name: "bc_browser_open_many",
+      description: "Open multiple URLs as tabs in the current browser session.",
+      inputSchema: buildSchema({
+        urls: { type: "array", description: "Array of URLs or { url, label, waitUntil } objects to open." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["urls"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        const urls = params.urls as Array<string | { url: string; label?: string; waitUntil?: "domcontentloaded" | "load" | "networkidle" }>;
+        return api.browser.openMany(urls.map((item) =>
+          typeof item === "string" ? { url: item } : item,
+        ));
+      },
+    },
+
+    {
+      name: "bc_browser_navigate",
+      description: "Navigate the active or specified tab to a URL, replacing that tab.",
+      inputSchema: buildSchema({
+        url: { type: "string", description: "URL to navigate to." },
+        waitUntil: { type: "string", description: "Navigation wait condition.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },
+        tabId: { type: "string", description: "Optional tab ID." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["url"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.navigate({
+          url: params.url as string,
+          waitUntil: params.waitUntil as "load" | "domcontentloaded" | "networkidle" | "commit" | undefined,
+          tabId: params.tabId as string | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_capture",
+      description: "Capture snapshot and/or screenshot evidence from the active or specified tab.",
+      inputSchema: buildSchema({
+        tabId: { type: "string", description: "Optional tab ID." },
+        snapshot: { type: "boolean", description: "Include an accessibility snapshot.", default: true },
+        screenshot: { type: "boolean", description: "Include a screenshot.", default: false },
+        fullPage: { type: "boolean", description: "Capture full-page screenshot when screenshot is true.", default: false },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.capture({
+          tabId: params.tabId as string | undefined,
+          snapshot: params.snapshot as boolean | undefined,
+          screenshot: params.screenshot as boolean | undefined,
+          fullPage: params.fullPage as boolean | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_capture_many",
+      description: "Capture snapshot and/or screenshot evidence from multiple tabs.",
+      inputSchema: buildSchema({
+        tabIds: { type: "array", description: "Tab IDs to capture." },
+        snapshot: { type: "boolean", description: "Include accessibility snapshots.", default: true },
+        screenshot: { type: "boolean", description: "Include screenshots.", default: false },
+        fullPage: { type: "boolean", description: "Capture full-page screenshots when screenshot is true.", default: false },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["tabIds"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.captureMany(params.tabIds as string[], {
+          snapshot: params.snapshot as boolean | undefined,
+          screenshot: params.screenshot as boolean | undefined,
+          fullPage: params.fullPage as boolean | undefined,
+        });
+      },
+    },
+
+    {
       name: "bc_browser_snapshot",
       description: "Take an accessibility snapshot of the current page. Returns a structured representation with stable element refs (e.g., @e1, @e2) for semantic interaction. Use this before clicking or filling elements.",
       inputSchema: buildSchema({
         rootSelector: { type: "string", description: "Optional CSS selector to scope the snapshot to a subtree." },
         boxes: { type: "boolean", description: "Include element bounds with viewport metadata in the snapshot." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }),
       handler: async (params) => {
@@ -69,6 +146,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         return api.browser.snapshot({
           rootSelector: params.rootSelector as string | undefined,
           boxes: params.boxes as boolean | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -80,6 +158,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         target: { type: "string", description: "Element to click: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
         force: { type: "boolean", description: "Force click without actionability checks.", default: false },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target"]),
       handler: async (params) => {
@@ -88,6 +167,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           target: params.target as string,
           timeoutMs: params.timeoutMs as number | undefined,
           force: params.force as boolean | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -100,6 +180,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         text: { type: "string", description: "Text to enter." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
         commit: { type: "boolean", description: "Press Tab after filling to move to the next field.", default: false },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target", "text"]),
       handler: async (params) => {
@@ -109,6 +190,27 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           text: params.text as string,
           timeoutMs: params.timeoutMs as number | undefined,
           commit: params.commit as boolean | undefined,
+          tabId: params.tabId as string | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_fill_many",
+      description: "Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'.",
+      inputSchema: buildSchema({
+        fields: { type: "array", description: "Array of fields to fill. Each must have { target, text }." },
+        timeoutMs: { type: "number", description: "Timeout per field in milliseconds. Default: 5000." },
+        continueOnFailure: { type: "boolean", description: "Continue filling subsequent fields if one fails.", default: false },
+        tabId: { type: "string", description: "Optional tab ID." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["fields"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.fillMany(params.fields as any[], {
+          timeoutMs: params.timeoutMs as number | undefined,
+          continueOnFailure: params.continueOnFailure as boolean | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -119,6 +221,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         target: { type: "string", description: "Element to hover: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target"]),
       handler: async (params) => {
@@ -126,6 +229,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         return api.browser.hover({
           target: params.target as string,
           timeoutMs: params.timeoutMs as number | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -136,6 +240,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         text: { type: "string", description: "Text to type." },
         delayMs: { type: "number", description: "Delay between keystrokes in milliseconds. Default: 0.", default: 0 },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["text"]),
       handler: async (params) => {
@@ -143,6 +248,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         return api.browser.type({
           text: params.text as string,
           delayMs: params.delayMs as number | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -154,6 +260,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         text: { type: "string", description: "Text to paste or a secret:// ref." },
         target: { type: "string", description: "Optional element to focus before pasting: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Focus/click timeout in milliseconds. Default: 5000." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["text"]),
       handler: async (params) => {
@@ -162,6 +269,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           text: params.text as string,
           target: params.target as string | undefined,
           timeoutMs: params.timeoutMs as number | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -171,12 +279,14 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape').",
       inputSchema: buildSchema({
         key: { type: "string", description: "Key to press: Enter, Tab, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Escape, Backspace, etc." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["key"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.press({
           key: params.key as string,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -187,6 +297,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         direction: { type: "string", description: "Direction to scroll: up, down, left, right.", enum: ["up", "down", "left", "right"] },
         amount: { type: "number", description: "Pixels to scroll. Default: 300.", default: 300 },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["direction"]),
       handler: async (params) => {
@@ -194,6 +305,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         return api.browser.scroll({
           direction: params.direction as "up" | "down" | "left" | "right",
           amount: params.amount as number | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -207,6 +319,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         target: { type: "string", description: "Element ref or selector to screenshot. If omitted, screenshots the viewport." },
         annotate: { type: "boolean", description: "Annotate screenshot with ref labels and boxes for interactive elements." },
         refs: { type: "string", description: "Comma-separated list of specific refs to annotate (if annotate is true). If omitted, annotates all interactive elements." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }),
       handler: async (params) => {
@@ -218,6 +331,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           target: params.target as string | undefined,
           annotate: params.annotate as boolean | undefined,
           refs,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -230,6 +344,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         style: { type: "string", description: "Custom CSS for highlight overlay." },
         persist: { type: "boolean", description: "Whether to persist the highlight (default: false)." },
         hide: { type: "boolean", description: "Whether to hide the highlight (if true, removes all highlights)." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target"]),
       handler: async (params) => {
@@ -239,6 +354,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           style: params.style as string | undefined,
           persist: params.persist as boolean | undefined,
           hide: params.hide as boolean | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -248,11 +364,14 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
       inputSchema: buildSchema({
         target: { type: "string", description: "Element ref (@e3), CSS selector, or text match to generate locators for." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
-        return api.browser.generateLocator(params.target as string);
+        return api.browser.generateLocator(params.target as string, {
+          tabId: params.tabId as string | undefined,
+        });
       },
     },
 
@@ -447,6 +566,51 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.downloads.list();
+      },
+    },
+    {
+      name: "bc_browser_dialog",
+      description: "Detect or respond to browser dialogs (alerts, prompts, confirms). Call with action=list first to see active dialogs.",
+      inputSchema: buildSchema({
+        action: { type: "string", description: "Action to perform: list or respond.", enum: ["list", "respond"] },
+        dialog_id: { type: "string", description: "Dialog ID to respond to (required if action=respond)." },
+        response: { type: "string", description: "Response type: accept or dismiss.", enum: ["accept", "dismiss"] },
+        text: { type: "string", description: "Text to enter into prompt dialogs." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["action"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.dialog({
+          action: params.action as "list" | "respond",
+          dialog_id: params.dialog_id as string | undefined,
+          response: params.response as "accept" | "dismiss" | undefined,
+          text: params.text as string | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_cdp",
+      description: "Execute a raw CDP command via passthrough. Requires explicit timeoutMs. For page interactions, use click/fill/snapshot instead.",
+      inputSchema: buildSchema({
+        method: { type: "string", description: "CDP method to call (e.g., 'Network.enable')." },
+        params: { type: "object", description: "CDP method parameters." },
+        targetId: { type: "string", description: "CDP target ID (optional)." },
+        frameId: { type: "string", description: "CDP frame ID (optional)." },
+        timeoutMs: { type: "number", description: "Timeout in milliseconds." },
+        tabId: { type: "string", description: "Optional tab ID." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["method", "timeoutMs"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.cdp({
+          method: params.method as string,
+          params: params.params as Record<string, unknown> | undefined,
+          targetId: params.targetId as string | undefined,
+          frameId: params.frameId as string | undefined,
+          timeoutMs: params.timeoutMs as number,
+          tabId: params.tabId as string | undefined,
+        });
       },
     },
   ];

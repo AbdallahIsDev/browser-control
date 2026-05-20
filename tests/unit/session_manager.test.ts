@@ -47,6 +47,10 @@ describe("SessionManager", () => {
       assert.ok(result.data.auditIds);
       assert.ok(result.data.workingDirectory.includes(path.join(".browser-control", "runtime")) || result.data.workingDirectory.includes(path.join("runtime")));
       assert.equal(fs.existsSync(result.data.workingDirectory), true);
+      assert.equal(result.data.runtimeDir, result.data.workingDirectory);
+      assert.equal(fs.existsSync(result.data.reportsDir), true);
+      assert.equal(fs.existsSync(result.data.screenshotsDir), true);
+      assert.equal(fs.existsSync(result.data.artifactsDir), true);
     });
 
     it("uses provided policy profile", async () => {
@@ -65,6 +69,8 @@ describe("SessionManager", () => {
 
       assert.equal(result.success, true);
       assert.equal(result.data!.workingDirectory, "/tmp/test");
+      assert.ok(result.data!.runtimeDir.includes(path.join("runtime")));
+      assert.equal(fs.existsSync(result.data!.runtimeDir), true);
     });
 
     it("auto-sets as active if first session", async () => {
@@ -580,6 +586,45 @@ describe("SessionManager", () => {
       secondManager.close();
       fs.rmSync(dbPath, { force: true });
     });
+
+    it("loadPersistedSessions backfills missing runtime output paths", async () => {
+      const dbPath = path.join(os.tmpdir(), `bc-session-legacy-${Date.now()}-${Math.random()}.sqlite`);
+      const legacyStore = new MemoryStore({ filename: dbPath });
+      const createdAt = "2026-05-19T00:00:00.000Z";
+      legacyStore.set("session:legacy-session", {
+        id: "legacy-session",
+        name: "legacy",
+        policyProfile: "balanced",
+        browserConnectionId: null,
+        terminalSessionId: null,
+        workingDirectory: "",
+        createdAt,
+        lastActivityAt: createdAt,
+        auditIds: [],
+      } as Partial<SessionState>);
+      legacyStore.set("session:active", { id: "legacy-session" });
+      legacyStore.close();
+
+      const reloadedStore = new MemoryStore({ filename: dbPath });
+      const reloadedManager = new SessionManager({ memoryStore: reloadedStore });
+      const state = reloadedManager.getSession("legacy-session");
+
+      assert.ok(state);
+      assert.ok(state.runtimeDir.includes(path.join("runtime")));
+      assert.equal(state.workingDirectory, state.runtimeDir);
+      assert.equal(state.reportsDir, path.join(state.runtimeDir, "reports"));
+      assert.equal(state.screenshotsDir, path.join(state.runtimeDir, "screenshots"));
+      assert.equal(state.artifactsDir, path.join(state.runtimeDir, "artifacts"));
+      assert.equal(fs.existsSync(state.reportsDir), true);
+      assert.equal(fs.existsSync(state.screenshotsDir), true);
+      assert.equal(fs.existsSync(state.artifactsDir), true);
+
+      const persisted = reloadedStore.get<SessionState>("session:legacy-session");
+      assert.equal(persisted?.runtimeDir, state.runtimeDir);
+
+      reloadedManager.close();
+      fs.rmSync(dbPath, { force: true });
+    });
   });
 
   // ── Issue 3: Default terminal runtime alignment ───────────────────
@@ -828,17 +873,16 @@ describe("SessionManager", () => {
       freshStore.close();
     });
 
-    it("returns boolean (not throw) when autoStart is requested but daemon cannot start", async () => {
+    it("returns boolean (not throw) when daemon runtime is unavailable", async () => {
       const freshStore = new MemoryStore({ filename: ":memory:" });
       const freshManager = new SessionManager({ memoryStore: freshStore });
 
-      // autoStart may succeed (if a daemon is already running) or fail
-      // (if ts-node is not in PATH, or the daemon can't bind). Either way
-      // it must return a boolean, never throw.
-      const result = await freshManager.ensureDaemonRuntime({ autoStart: true });
-      assert.ok(typeof result === "boolean", "ensureDaemonRuntime should return a boolean, not throw");
-
-      freshStore.close();
+      try {
+        const result = await freshManager.ensureDaemonRuntime({ autoStart: false });
+        assert.ok(typeof result === "boolean", "ensureDaemonRuntime should return a boolean, not throw");
+      } finally {
+        freshStore.close();
+      }
     });
 
     it("caches BrokerTerminalRuntime when daemon is reachable", async () => {

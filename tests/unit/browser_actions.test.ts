@@ -38,6 +38,11 @@ type MockPageCalls = {
 	screenshot: number;
 };
 
+type MockBrowserContextState = {
+	pages: MockPage[];
+	newPages: number;
+};
+
 type MockCdpSession = {
 	on: () => undefined;
 	off: () => undefined;
@@ -47,6 +52,7 @@ type MockCdpSession = {
 
 type MockBrowserContext = {
 	pages: () => MockPage[];
+	newPage?: () => Promise<MockPage>;
 	newCDPSession: (page: MockPage) => Promise<MockCdpSession>;
 };
 
@@ -85,7 +91,10 @@ type MockLocator = {
 };
 
 type BrowserActionsInternals = {
-	resolveTarget: () => Promise<{ locator: MockLocator; description: string }>;
+	resolveTarget: (
+		target: string,
+		page: MockPage,
+	) => Promise<{ locator: MockLocator; description: string } | null>;
 	ensureScreenshotViewport: (page: MockPage) => Promise<void>;
 };
 
@@ -284,12 +293,19 @@ function createAttachFailLaunchCaptureManager(
 	return Object.assign(manager, { calls, attempts });
 }
 
-function createConnectedBrowserManager(pages: MockPage[]): TestBrowserManager {
-	const calls = {
-		disconnect: 0,
-	};
-	const context = {
-		pages: () => pages,
+function createMockBrowserContext(
+	initialPages: MockPage[],
+	state: MockBrowserContextState = { pages: initialPages, newPages: 0 },
+): MockBrowserContext {
+	const context: MockBrowserContext = {
+		pages: () => state.pages,
+		newPage: async () => {
+			state.newPages += 1;
+			const page = createMockPage("about:blank", { hasBrowserWindow: true });
+			page.context = () => context;
+			state.pages.push(page);
+			return page;
+		},
 		newCDPSession: async (page: MockPage) => ({
 			on: () => undefined,
 			off: () => undefined,
@@ -319,9 +335,20 @@ function createConnectedBrowserManager(pages: MockPage[]): TestBrowserManager {
 			},
 		}),
 	};
-	for (const page of pages) {
+	for (const page of state.pages) {
 		page.context = () => context;
 	}
+	return context;
+}
+
+function createConnectedBrowserManager(
+	pages: MockPage[],
+	state: MockBrowserContextState = { pages, newPages: 0 },
+): TestBrowserManager & { contextState: MockBrowserContextState } {
+	const calls = {
+		disconnect: 0,
+	};
+	const context = createMockBrowserContext(pages, state);
 
 	const manager = {
 		getContext: () => context,
@@ -342,7 +369,7 @@ function createConnectedBrowserManager(pages: MockPage[]): TestBrowserManager {
 		},
 	} as unknown as TestBrowserManager;
 
-	return Object.assign(manager, { calls });
+	return Object.assign(manager, { calls, contextState: state });
 }
 
 function createMockPage(
@@ -490,14 +517,12 @@ describe("BrowserActions", () => {
 	});
 
 	describe("open", () => {
-		it("targets the front-most tab when a restored profile has multiple pages", async () => {
+		it("opens a new tab when a browser already has an active page", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const frontPage = createMockPage("chrome://newtab/");
 			const backgroundPage = createMockPage("https://background.example/");
-			const manager = createConnectedBrowserManager([
-				frontPage,
-				backgroundPage,
-			]);
+			const state = { pages: [frontPage, backgroundPage], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
 
 			try {
 				const isolatedSessionManager = new SessionManager({
@@ -516,9 +541,89 @@ describe("BrowserActions", () => {
 				});
 
 				assert.equal(result.success, true);
+				assert.deepEqual(frontPage.calls.goto, []);
 				assert.deepEqual(backgroundPage.calls.goto, []);
-				assert.deepEqual(frontPage.calls.goto, ["https://example.com"]);
-				assert.equal(frontPage.calls.bringToFront, 2);
+				assert.equal(state.newPages, 1);
+				assert.equal(state.pages.length, 3);
+				assert.deepEqual(state.pages[2]?.calls.goto, ["https://example.com"]);
+				assert.equal((result.data as { tabId?: string })?.tabId, "2");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("navigate replaces only the selected tab", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const firstPage = createMockPage("https://first.example/");
+			const secondPage = createMockPage("https://second.example/");
+			const manager = createConnectedBrowserManager([firstPage, secondPage]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.navigate({
+					url: "https://replacement.example/",
+					tabId: "1",
+				});
+
+				assert.equal(result.success, true);
+				assert.deepEqual(firstPage.calls.goto, []);
+				assert.deepEqual(secondPage.calls.goto, ["https://replacement.example/"]);
+				assert.equal((result.data as { tabId?: string })?.tabId, "1");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("openMany opens multiple tabs in the same browser context", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const blankPage = createMockPage("about:blank");
+			const state = { pages: [blankPage], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.openMany([
+					{ url: "https://one.example/", label: "one" },
+					{ url: "https://two.example/", label: "two" },
+				]);
+
+				assert.equal(result.success, true);
+				assert.equal(state.pages.length, 2);
+				assert.deepEqual(state.pages.map((page) => page.url()), [
+					"https://one.example/",
+					"https://two.example/",
+				]);
+				assert.deepEqual(
+					result.data?.tabs.map((tab: { tabId: string; label?: string; status: string }) => [
+						tab.tabId,
+						tab.label,
+						tab.status,
+					]),
+					[
+						["0", "one", "loaded"],
+						["1", "two", "loaded"],
+					],
+				);
 			} finally {
 				isolatedStore.close();
 			}
@@ -532,7 +637,8 @@ describe("BrowserActions", () => {
 			const visiblePage = createMockPage("chrome://newtab/", {
 				hasBrowserWindow: true,
 			});
-			const manager = createConnectedBrowserManager([hiddenPage, visiblePage]);
+			const state = { pages: [hiddenPage, visiblePage], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
 
 			try {
 				const isolatedSessionManager = new SessionManager({
@@ -553,6 +659,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.deepEqual(hiddenPage.calls.goto, []);
 				assert.deepEqual(visiblePage.calls.goto, ["https://example.com"]);
+				assert.equal(state.newPages, 0);
 				assert.equal(visiblePage.calls.activateTarget > 0, true);
 			} finally {
 				isolatedStore.close();
@@ -564,7 +671,8 @@ describe("BrowserActions", () => {
 			const page = createMockPage("chrome://newtab/", {
 				hasBrowserWindow: true,
 			});
-			const manager = createConnectedBrowserManager([page]);
+			const state = { pages: [page], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
 
 			try {
 				const isolatedSessionManager = new SessionManager({
@@ -584,6 +692,7 @@ describe("BrowserActions", () => {
 
 				assert.equal(result.success, true);
 				assert.deepEqual(page.calls.goto, ["https://example.com"]);
+				assert.equal(state.newPages, 0);
 				assert.equal(page.calls.activateTarget > 0, true);
 				assert.equal(page.calls.setWindowBounds, 0);
 			} finally {
@@ -1033,6 +1142,221 @@ describe("BrowserActions", () => {
 		});
 	});
 
+	describe("fillMany", () => {
+		it("fills fields and returns per-field results with the resolved tabId", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://app.example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			const fillCalls: Array<{ target: string; text: string }> = [];
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				const testActions =
+					isolatedActions as unknown as BrowserActionsInternals;
+				testActions.resolveTarget = async (target) => ({
+					description: `field ${target}`,
+					locator: {
+						scrollIntoViewIfNeeded: async () => undefined,
+						fill: async (text: string) => {
+							fillCalls.push({ target, text });
+						},
+					},
+				});
+
+				const result = await isolatedActions.fillMany([
+					{ target: "#name", text: "Alice" },
+					{ target: "#email", text: "alice@example.test" },
+				]);
+
+				assert.equal(result.success, true);
+				assert.equal(result.data?.tabId, "0");
+				assert.deepEqual(result.data?.fields, [
+					{ target: "#name", success: true },
+					{ target: "#email", success: true },
+				]);
+				assert.deepEqual(fillCalls, [
+					{ target: "#name", text: "Alice" },
+					{ target: "#email", text: "alice@example.test" },
+				]);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("stops on first failure by default", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://app.example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			const fillCalls: string[] = [];
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				const testActions =
+					isolatedActions as unknown as BrowserActionsInternals;
+				testActions.resolveTarget = async (target) => {
+					if (target === "#missing") return null;
+					return {
+						description: `field ${target}`,
+						locator: {
+							scrollIntoViewIfNeeded: async () => undefined,
+							fill: async () => {
+								fillCalls.push(target);
+							},
+						},
+					};
+				};
+
+				const result = await isolatedActions.fillMany([
+					{ target: "#first", text: "one" },
+					{ target: "#missing", text: "two" },
+					{ target: "#third", text: "three" },
+				]);
+
+				assert.equal(result.success, false);
+				assert.match(result.error ?? "", /#missing/);
+				assert.deepEqual(fillCalls, ["#first"]);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("continues after failures when continueOnFailure is true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://app.example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			const fillCalls: string[] = [];
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				const testActions =
+					isolatedActions as unknown as BrowserActionsInternals;
+				testActions.resolveTarget = async (target) => {
+					if (target === "#missing") return null;
+					return {
+						description: `field ${target}`,
+						locator: {
+							scrollIntoViewIfNeeded: async () => undefined,
+							fill: async () => {
+								fillCalls.push(target);
+							},
+						},
+					};
+				};
+
+				const result = await isolatedActions.fillMany(
+					[
+						{ target: "#first", text: "one" },
+						{ target: "#missing", text: "two" },
+						{ target: "#third", text: "three" },
+					],
+					{ continueOnFailure: true },
+				);
+
+				assert.equal(result.success, true);
+				assert.deepEqual(result.data?.fields, [
+					{ target: "#first", success: true },
+					{
+						target: "#missing",
+						success: false,
+						error: "Could not resolve fill target: #missing",
+					},
+					{ target: "#third", success: true },
+				]);
+				assert.deepEqual(fillCalls, ["#first", "#third"]);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("does not leak secret values in returned batch errors", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://app.example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const storage = getStateStorage(dataHome);
+				const vault = new CredentialVault(
+					storage,
+					createCredentialProtectionService({
+						dataHome,
+						preferWindowsDpapi: false,
+					}),
+				);
+				const secret = await vault.set(
+					"site",
+					"example.test",
+					"password",
+					"raw-secret-fill-many",
+				);
+				await vault.grant(secret.id, {
+					actions: ["use-as-form-value"],
+					domainScope: "example.test",
+				});
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				const testActions =
+					isolatedActions as unknown as BrowserActionsInternals;
+				testActions.resolveTarget = async () => ({
+					description: "password field",
+					locator: {
+						scrollIntoViewIfNeeded: async () => undefined,
+						fill: async (text: string) => {
+							throw new Error(`rejected ${text}`);
+						},
+					},
+				});
+
+				const result = await isolatedActions.fillMany(
+					[{ target: "#password", text: secret.id }],
+					{ continueOnFailure: true },
+				);
+
+				assert.equal(result.success, true);
+				assert.doesNotMatch(JSON.stringify(result), /raw-secret-fill-many/);
+				assert.match(JSON.stringify(result), /REDACTED_SECRET/);
+				const audit = await storage.listSecretAuditEvents(10);
+				assert.doesNotMatch(JSON.stringify(audit), /raw-secret-fill-many/);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+	});
+
 	describe("type", () => {
 		it("returns failure when no browser is connected", async () => {
 			const result = await browserActions.type({ text: "hello" });
@@ -1375,6 +1699,9 @@ describe("BrowserActions", () => {
 				assert.equal(hiddenPage.calls.bringToFront, 0);
 				assert.equal(visiblePage.calls.activateTarget > 0, true);
 				assert.equal(visiblePage.calls.bringToFront > 0, true);
+				assert.equal(result.data?.activeTabId, "0");
+				assert.equal(result.data?.url, "chrome://newtab/");
+				assert.equal(result.data?.title, "Mock Title");
 			} finally {
 				isolatedStore.close();
 			}
