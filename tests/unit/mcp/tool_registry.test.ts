@@ -504,6 +504,7 @@ describe("MCP Tool Registry", () => {
       assert.ok("dialog_id" in tool.inputSchema.properties, "bc_browser_dialog should have dialog_id property");
       assert.ok("response" in tool.inputSchema.properties, "bc_browser_dialog should have response property");
       assert.ok("text" in tool.inputSchema.properties, "bc_browser_dialog should have text property");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_dialog should have tabId property");
       assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_dialog should have sessionId property");
     });
 
@@ -516,7 +517,15 @@ describe("MCP Tool Registry", () => {
       assert.ok("params" in tool.inputSchema.properties, "bc_browser_cdp should have params property");
       assert.ok("targetId" in tool.inputSchema.properties, "bc_browser_cdp should have targetId property");
       assert.ok("frameId" in tool.inputSchema.properties, "bc_browser_cdp should have frameId property");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_cdp should have tabId property");
       assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_cdp should have sessionId property");
+    });
+
+    it("bc_browser_drop schema has tabId", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_browser_drop")!;
+      assert.ok(tool, "bc_browser_drop tool should exist");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_drop should have tabId property");
     });
   });
 

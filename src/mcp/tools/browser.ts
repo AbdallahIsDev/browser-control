@@ -545,6 +545,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         target: { type: "string", description: "Element to drop onto: ref (@e3), CSS selector, or text match." },
         files: { type: "array", description: "Local file paths to drop." },
         data: { type: "array", description: "MIME/value pairs for clipboard-like data drop (e.g., text/plain=hello)." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["target"]),
       handler: async (params) => {
@@ -553,6 +554,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           target: params.target as string,
           files: params.files as string[] | undefined,
           data: params.data as Array<{ mimeType: string; value: string }> | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },
@@ -576,6 +578,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         dialog_id: { type: "string", description: "Dialog ID to respond to (required if action=respond)." },
         response: { type: "string", description: "Response type: accept or dismiss.", enum: ["accept", "dismiss"] },
         text: { type: "string", description: "Text to enter into prompt dialogs." },
+        tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["action"]),
       handler: async (params) => {
@@ -585,6 +588,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           dialog_id: params.dialog_id as string | undefined,
           response: params.response as "accept" | "dismiss" | undefined,
           text: params.text as string | undefined,
+          tabId: params.tabId as string | undefined,
         });
       },
     },

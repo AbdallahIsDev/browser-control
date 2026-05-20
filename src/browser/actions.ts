@@ -1705,7 +1705,8 @@ export class BrowserActions {
 		dialog_id?: string;
 		response?: "accept" | "dismiss";
 		text?: string;
-	}): Promise<ActionResult<{ dialogs: DialogInfo[] } | DialogResponse>> {
+		tabId?: string;
+	}): Promise<ActionResult<{ dialogs: DialogInfo[]; tabId?: string } | (DialogResponse & { tabId?: string })>> {
 		const sessionId = this.getSessionId();
 
 		const policyEval = this.context.sessionManager.evaluateAction(
@@ -1717,8 +1718,14 @@ export class BrowserActions {
 
 		try {
 			if (options.action === "list") {
+				let tabId: string | undefined;
+				if (options.tabId !== undefined) {
+					const pageOrErr = await this.getConnectedPageForAction<{ dialogs: DialogInfo[]; tabId?: string }>(options.tabId);
+					if ("success" in pageOrErr) return pageOrErr;
+					tabId = await this.getTabIdForPage(pageOrErr, options.tabId);
+				}
 				const dialogs = this.dialogSupervisor.getPendingDialogs(sessionId);
-				return successResult({ dialogs }, { path: "a11y", sessionId });
+				return successResult({ dialogs, tabId }, { path: "a11y", sessionId });
 			} else {
 				if (!options.dialog_id) {
 					return failureResult("dialog_id is required for respond action", {
@@ -1727,7 +1734,16 @@ export class BrowserActions {
 					});
 				}
 				const action = options.response ?? "accept";
-				const page = this.tryGetPage() || undefined;
+				let page = this.tryGetPage() || undefined;
+				let tabId: string | undefined;
+				if (options.tabId !== undefined) {
+					const pageOrErr = await this.getConnectedPageForAction<DialogResponse & { tabId?: string }>(options.tabId);
+					if ("success" in pageOrErr) return pageOrErr;
+					page = pageOrErr;
+					tabId = await this.getTabIdForPage(page, options.tabId);
+				} else if (page) {
+					tabId = await this.getTabIdForPage(page, "0");
+				}
 				const value = this.dialogSupervisor.respond(
 					options.dialog_id,
 					action,
@@ -1735,7 +1751,7 @@ export class BrowserActions {
 					options.text,
 					sessionId,
 				);
-				return successResult(value, { path: "a11y", sessionId });
+				return successResult({ ...value, tabId }, { path: "a11y", sessionId });
 			}
 		} catch (error: unknown) {
 			return this.failureWithDebug(
@@ -1756,7 +1772,7 @@ export class BrowserActions {
 		frameId?: string;
 		timeoutMs: number;
 		tabId?: string;
-	}): Promise<ActionResult<{ result: unknown }>> {
+	}): Promise<ActionResult<{ result: unknown; tabId: string }>> {
 		const sessionId = this.getSessionId();
 
 		const policyEval = this.context.sessionManager.evaluateAction(
@@ -1764,14 +1780,23 @@ export class BrowserActions {
 			{ method: options.method },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ result: unknown }>;
+			return policyEval as ActionResult<{ result: unknown; tabId: string }>;
 
 		try {
-			const pageOrErr = await this.getConnectedPageForAction<{ result: unknown }>(options.tabId);
+			const pageOrErr = await this.getConnectedPageForAction<{ result: unknown; tabId: string }>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
+			const tabId = await this.getTabIdForPage(page, options.tabId ?? "0");
 			const { executeCdpCommand } = await import("./cdp_passthrough");
-			return await executeCdpCommand(page, options, sessionId);
+			const result = await executeCdpCommand(page, options, sessionId);
+			if (!result.success || !result.data) return result as ActionResult<{ result: unknown; tabId: string }>;
+			return successResult({ ...result.data, tabId }, {
+				path: result.path ?? "low_level",
+				sessionId,
+				policyDecision: result.policyDecision,
+				risk: result.risk,
+				auditId: result.auditId,
+			});
 		} catch (error: unknown) {
 			return this.failureWithDebug(
 				`CDP action failed: ${error instanceof Error ? error.message : String(error)}`,
