@@ -30,6 +30,7 @@ import type {
 	ScreencastSession,
 } from "../observability/types";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
+import { getProfile } from "../policy/profiles";
 import { getPageId, type RefStore, resolveRefLocator } from "../ref_store";
 import {
 	globalServiceRegistry,
@@ -68,6 +69,11 @@ import {
 	getFileSize,
 	validateFilePath,
 } from "./file_helpers";
+import {
+	BrowserDialogSupervisor,
+	type DialogInfo,
+	type DialogResponse,
+} from "./dialogs";
 
 const log = logger.withComponent("browser_actions");
 
@@ -106,11 +112,52 @@ export interface OpenOptions {
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 }
 
+export interface OpenManyItem {
+	url: string;
+	label?: string;
+	waitUntil?: "load" | "domcontentloaded" | "networkidle";
+}
+
+export interface OpenManyTabResult {
+	tabId: string;
+	label?: string;
+	url: string;
+	title?: string;
+	status: "loaded" | "failed" | "partial";
+	error?: string;
+}
+
+export interface CaptureResult {
+	tabId: string;
+	url: string;
+	title?: string;
+	snapshot?: A11ySnapshot;
+	screenshot?: { path: string; sizeBytes: number };
+}
+
+export interface FillField {
+	target: string;
+	text: string;
+}
+
+export interface FillManyFieldResult {
+	target: string;
+	success: boolean;
+	error?: string;
+}
+
+export interface FillManyOptions {
+	tabId?: string;
+	continueOnFailure?: boolean;
+	timeoutMs?: number;
+}
+
 export interface SnapshotOptions {
 	/** Root selector to scope the snapshot. */
 	rootSelector?: string;
 	/** Include element bounds with viewport metadata. */
 	boxes?: boolean;
+	tabId?: string;
 }
 
 export interface ClickOptions {
@@ -120,6 +167,7 @@ export interface ClickOptions {
 	timeoutMs?: number;
 	/** Force click without actionability checks. */
 	force?: boolean;
+	tabId?: string;
 }
 
 export interface FillOptions {
@@ -131,6 +179,7 @@ export interface FillOptions {
 	timeoutMs?: number;
 	/** Commit with Tab after fill. */
 	commit?: boolean;
+	tabId?: string;
 }
 
 export interface HoverOptions {
@@ -138,6 +187,7 @@ export interface HoverOptions {
 	target: string;
 	/** Hover timeout in ms. */
 	timeoutMs?: number;
+	tabId?: string;
 }
 
 export interface TypeOptions {
@@ -145,6 +195,7 @@ export interface TypeOptions {
 	text: string;
 	/** Delay between keystrokes in ms. */
 	delayMs?: number;
+	tabId?: string;
 }
 
 export interface PasteOptions {
@@ -154,11 +205,13 @@ export interface PasteOptions {
 	target?: string;
 	/** Focus/click timeout in ms when target is provided. */
 	timeoutMs?: number;
+	tabId?: string;
 }
 
 export interface PressOptions {
 	/** Key to press (e.g., "Enter", "Tab", "ArrowDown"). */
 	key: string;
+	tabId?: string;
 }
 
 export interface ScrollOptions {
@@ -166,6 +219,7 @@ export interface ScrollOptions {
 	direction: "up" | "down" | "left" | "right";
 	/** Scroll amount in pixels (default: 300). */
 	amount?: number;
+	tabId?: string;
 }
 
 export interface ScreenshotOptions {
@@ -179,6 +233,7 @@ export interface ScreenshotOptions {
 	annotate?: boolean;
 	/** Specific refs to annotate (if annotate is true). */
 	refs?: string[];
+	tabId?: string;
 }
 
 export interface HighlightOptions {
@@ -190,6 +245,7 @@ export interface HighlightOptions {
 	persist?: boolean;
 	/** Whether to hide the highlight (if target is omitted, hides all). */
 	hide?: boolean;
+	tabId?: string;
 }
 
 export interface LocatorCandidate {
@@ -237,13 +293,16 @@ export interface DropOptions {
 	files?: string[];
 	/** MIME/value pairs for clipboard-like data drop (e.g., text/plain=hello). */
 	data?: Array<{ mimeType: string; value: string }>;
+	tabId?: string;
 }
+
 
 // ── Browser Action Implementation ──────────────────────────────────────
 
 export class BrowserActions {
 	private readonly context: BrowserActionContext;
 	private readonly refStore: RefStore;
+	private readonly dialogSupervisor = new BrowserDialogSupervisor();
 	private readonly observabilityClients = new Map<
 		string,
 		Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>
@@ -254,6 +313,27 @@ export class BrowserActions {
 		this.context = context;
 		this.refStore = context.refStore ?? globalRefStore;
 	}
+
+	private async getTabIdForPage(page: Page, defaultTabId = "0"): Promise<string> {
+		const rawPages = page.context().pages();
+		const windowTargets = await this.getWindowTargets(rawPages);
+		const pages = windowTargets.length > 0 ? windowTargets.map(t => t.page) : rawPages;
+		const tabIndex = pages.indexOf(page);
+		return tabIndex !== -1 ? String(tabIndex) : defaultTabId;
+	}
+
+	private syncDialogHandlingMode(): void {
+		const session = this.context.sessionManager.getActiveSession();
+		const profileName = session?.policyProfile ?? "balanced";
+		const profile = getProfile(profileName);
+		if (profile?.browserPolicy) {
+			const mode = profile.browserPolicy.dialogHandling;
+			const timeout = profile.browserPolicy.dialogTimeoutMs;
+			this.dialogSupervisor.setHandlingMode(mode);
+			this.dialogSupervisor.setDefaultTimeout(timeout);
+		}
+	}
+
 
 	// ── Page Access ──────────────────────────────────────────────────────
 
@@ -508,15 +588,48 @@ export class BrowserActions {
 		}
 	}
 
-	private async getConnectedPageForAction<T>(): Promise<
+	private async getConnectedPageForAction<T>(tabId?: string): Promise<
 		Page | ActionResult<T>
 	> {
 		const pageOrErr = await this.ensureBrowserConnected();
 		if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
-		const page = await this.getBestVisiblePage(pageOrErr);
+
+		let page: Page;
+		if (tabId !== undefined) {
+			const rawPages = pageOrErr.context().pages();
+			const pages = await this.getVisiblePages(rawPages);
+			if (!/^\d+$/.test(tabId)) {
+				const sessionId = this.getSessionId();
+				return (await this.failureWithDebug(
+					`Invalid tab ID format: ${tabId}`,
+					new Error(`Invalid tab ID format: ${tabId}`),
+					{ action: "browser_action", path: "a11y", sessionId },
+				)) as ActionResult<T>;
+			}
+			const index = parseInt(tabId, 10);
+			if (index < 0 || index >= pages.length) {
+				const sessionId = this.getSessionId();
+				return (await this.failureWithDebug(
+					`Tab index ${tabId} out of range (0..${pages.length - 1})`,
+					new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
+					{
+						action: "browser_action",
+						path: "a11y",
+						sessionId,
+					},
+				)) as ActionResult<T>;
+			}
+			page = pages[index];
+			await page.bringToFront().catch(() => undefined);
+		} else {
+			page = await this.getBestVisiblePage(pageOrErr);
+		}
+
 		const sessionId = this.getSessionId();
 		await this.startObservability(page, sessionId);
 		await this.applyNetworkPrivacyRules(page, sessionId);
+		this.syncDialogHandlingMode();
+		this.dialogSupervisor.attachToPage(page, sessionId);
 		return page;
 	}
 
@@ -1031,9 +1144,16 @@ export class BrowserActions {
 	 * running browser on the configured debug port first. This is the
 	 * canonical first action — it should work as `bc open <url>`.
 	 */
+	/**
+	 * Open a URL in the browser.
+	 *
+	 * If no browser is connected, this will attempt to attach to a
+	 * running browser on the configured debug port first. This is the
+	 * canonical first action — it should work as `bc open <url>`.
+	 */
 	async open(
 		options: OpenOptions,
-	): Promise<ActionResult<{ url: string; title: string }>> {
+	): Promise<ActionResult<{ url: string; title: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1069,14 +1189,36 @@ export class BrowserActions {
 			{ url: resolvedUrl },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ url: string; title: string }>;
+			return policyEval as ActionResult<{ url: string; title: string; tabId: string }>;
 
 		try {
 			// Auto-attach if no browser is connected yet
 			const pageOrErr = await this.ensureBrowserConnected();
 			if ("success" in pageOrErr)
-				return pageOrErr as ActionResult<{ url: string; title: string }>;
-			const page = await this.getBestVisiblePage(pageOrErr as Page);
+				return pageOrErr as ActionResult<{ url: string; title: string; tabId: string }>;
+
+			// Let's check if the browser has existing visible pages, and reuse if it's the only visible page and is blank.
+			// Otherwise context.newPage() to open a new tab/page.
+			const bm = this.context.sessionManager.getBrowserManager();
+			const context = bm.getContext();
+			let page: Page;
+			if (context) {
+				const rawPages = context.pages();
+				const pages = await this.getVisiblePages(rawPages);
+				const isBlank = (p: Page) => p.url() === "about:blank" || p.url() === "chrome://newtab/";
+				if (pages.length === 1 && isBlank(pages[0])) {
+					page = pages[0];
+					const windowTargets = await this.getWindowTargets(rawPages);
+					const target = windowTargets.find((t) => t.page === page);
+					if (target) {
+						await this.activateWindowTarget(target);
+					}
+				} else {
+					page = await context.newPage();
+				}
+			} else {
+				page = await this.getBestVisiblePage(pageOrErr as Page);
+			}
 
 			await this.startObservability(page, sessionId);
 			await this.applyNetworkPrivacyRules(page, sessionId);
@@ -1087,10 +1229,16 @@ export class BrowserActions {
 			const title = await page.title();
 			await this.persistObservability(sessionId, page);
 
+			this.syncDialogHandlingMode();
+			this.dialogSupervisor.attachToPage(page, sessionId);
+
+			const finalTabId = await this.getTabIdForPage(page, "0");
+
 			log.info("Opened URL", {
 				url: resolvedUrl,
 				title,
 				originalInput: options.url,
+				tabId: finalTabId,
 			});
 
 			// Record timeline event (Section 26)
@@ -1106,7 +1254,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ url: page.url(), title },
+				{ url: page.url(), title, tabId: finalTabId },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1146,6 +1294,362 @@ export class BrowserActions {
 	}
 
 	/**
+	 * Navigate the selected tab or the front-most tab to a URL.
+	 */
+	async navigate(
+		options: OpenOptions & { tabId?: string },
+	): Promise<ActionResult<{ url: string; title: string; tabId: string }>> {
+		const sessionId = this.getSessionId();
+		const startTime = Date.now();
+
+		let resolvedUrl = options.url;
+		const registry = this.context.serviceRegistry ?? globalServiceRegistry;
+		if (mightBeServiceRef(options.url, registry)) {
+			const resolveResult = await resolveServiceUrl(options.url, registry);
+			if ("error" in resolveResult) {
+				return this.failureWithDebug(
+					resolveResult.error,
+					new Error(resolveResult.error),
+					{
+						action: "browser_navigate",
+						path: "a11y",
+						sessionId,
+					},
+				);
+			}
+			resolvedUrl = resolveResult.url;
+		}
+
+		const policyEval = this.context.sessionManager.evaluateAction(
+			"browser_navigate",
+			{ url: resolvedUrl },
+		);
+		if (!isPolicyAllowed(policyEval))
+			return policyEval as ActionResult<{ url: string; title: string; tabId: string }>;
+
+		try {
+			const pageOrErr = await this.getConnectedPageForAction<{
+				url: string;
+				title: string;
+				tabId: string;
+			}>(options.tabId);
+			if ("success" in pageOrErr) return pageOrErr;
+			const page = pageOrErr;
+
+			await page.goto(resolvedUrl, {
+				waitUntil: options.waitUntil ?? "domcontentloaded",
+			});
+			const title = await page.title();
+			await this.persistObservability(sessionId, page);
+			const finalTabId = await this.getTabIdForPage(page, options.tabId ?? "0");
+
+			this.recordTimelineEvent({
+				action: "navigate",
+				target: resolvedUrl,
+				url: page.url(),
+				title,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: true,
+			});
+
+			return successResult(
+				{ url: page.url(), title, tabId: finalTabId },
+				{
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.recordTimelineEvent({
+				action: "navigate",
+				target: resolvedUrl,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: false,
+				error: message,
+			});
+			return this.failureWithDebug(
+				`Failed to navigate ${options.url}: ${message}`,
+				error,
+				{
+					action: "browser_navigate",
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
+		}
+	}
+
+	/**
+	 * Open multiple URLs in parallel/sequence tabs.
+	 */
+	async openMany(
+		items: OpenManyItem[],
+	): Promise<ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[] }>> {
+		const sessionId = this.getSessionId();
+
+		for (const item of items) {
+			const policyEval = this.context.sessionManager.evaluateAction(
+				"browser_navigate",
+				{ url: item.url },
+			);
+			if (!isPolicyAllowed(policyEval)) {
+				return policyEval as ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[] }>;
+			}
+		}
+
+		try {
+			const pageOrErr = await this.ensureBrowserConnected();
+			if ("success" in pageOrErr)
+				return pageOrErr as ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[] }>;
+
+			const bm = this.context.sessionManager.getBrowserManager();
+			const context = bm.getContext();
+			if (!context) {
+				return this.failureWithDebug(
+					"No browser context available",
+					new Error("No browser context available"),
+					{ action: "browser_open_many", path: "a11y", sessionId },
+				);
+			}
+
+			const tabs: OpenManyTabResult[] = [];
+			const isBlank = (p: Page) => p.url() === "about:blank" || p.url() === "chrome://newtab/";
+
+			for (const item of items) {
+				let page: Page;
+				const pages = context.pages();
+				if (pages.length === 1 && isBlank(pages[0])) {
+					page = pages[0];
+				} else {
+					page = await context.newPage();
+				}
+
+				await this.startObservability(page, sessionId);
+				await this.applyNetworkPrivacyRules(page, sessionId);
+				this.syncDialogHandlingMode();
+				this.dialogSupervisor.attachToPage(page, sessionId);
+
+				try {
+					await page.goto(item.url, {
+						waitUntil: item.waitUntil ?? "domcontentloaded",
+					});
+					const tabId = await this.getTabIdForPage(page, "0");
+					const title = await page.title().catch(() => undefined);
+					tabs.push({
+						tabId,
+						label: item.label,
+						url: page.url(),
+						title,
+						status: "loaded",
+					});
+				} catch (err: unknown) {
+					const tabId = await this.getTabIdForPage(page, "0");
+					const title = await page.title().catch(() => undefined);
+					tabs.push({
+						tabId,
+						label: item.label,
+						url: page.url() || item.url,
+						title,
+						status: "failed",
+						error: err instanceof Error ? err.message : String(err),
+					});
+				}
+			}
+
+			return successResult({
+				browserSessionId: sessionId,
+				tabs,
+			}, { path: "a11y", sessionId });
+		} catch (error: unknown) {
+			return this.failureWithDebug(
+				`Failed to open many: ${error instanceof Error ? error.message : String(error)}`,
+				error,
+				{ action: "browser_open_many", path: "a11y", sessionId },
+			);
+		}
+	}
+
+	/**
+	 * Capture state (accessibility snapshot and/or screenshot) of a tab.
+	 */
+	async capture(options?: {
+		tabId?: string;
+		snapshot?: boolean;
+		screenshot?: boolean;
+		fullPage?: boolean;
+	}): Promise<ActionResult<CaptureResult>> {
+		const sessionId = this.getSessionId();
+
+		try {
+			const pageOrErr = await this.getConnectedPageForAction<CaptureResult>(options?.tabId);
+			if ("success" in pageOrErr) return pageOrErr;
+			const page = pageOrErr;
+
+			const tabId = await this.getTabIdForPage(page, options?.tabId ?? "0");
+			const result: CaptureResult = {
+				tabId,
+				url: page.url(),
+				title: await page.title().catch(() => undefined),
+			};
+
+			if (options?.snapshot !== false) {
+				const snap = await snapshot(page, { sessionId, boxes: true });
+				const pageId = getPageId(page.url(), sessionId);
+				this.refStore.setSnapshot(pageId, snap);
+				result.snapshot = snap;
+			}
+
+			if (options?.screenshot) {
+				const screenshotRes = await this.screenshot({
+					fullPage: options.fullPage,
+					tabId,
+				});
+				if (screenshotRes.success && screenshotRes.data) {
+					result.screenshot = screenshotRes.data;
+				}
+			}
+
+			return successResult(result, { path: "a11y", sessionId });
+		} catch (error: unknown) {
+			return this.failureWithDebug(
+				`Capture failed: ${error instanceof Error ? error.message : String(error)}`,
+				error,
+				{ action: "browser_capture", path: "a11y", sessionId },
+			);
+		}
+	}
+
+	/**
+	 * Capture state of multiple tabs.
+	 */
+	async captureMany(
+		tabIds: string[],
+		options?: {
+			snapshot?: boolean;
+			screenshot?: boolean;
+			fullPage?: boolean;
+		},
+	): Promise<ActionResult<{ captures: CaptureResult[] }>> {
+		const sessionId = this.getSessionId();
+		const captures: CaptureResult[] = [];
+
+		for (const tabId of tabIds) {
+			const res = await this.capture({
+				tabId,
+				snapshot: options?.snapshot,
+				screenshot: options?.screenshot,
+				fullPage: options?.fullPage,
+			});
+			if (res.success && res.data) {
+				captures.push(res.data);
+			} else {
+				return failureResult(res.error || `Failed to capture tab ${tabId}`, {
+					path: "a11y",
+					sessionId,
+				});
+			}
+		}
+
+		return successResult({ captures }, { path: "a11y", sessionId });
+	}
+
+	/**
+	 * Dialog detection and response command.
+	 */
+	async dialog(options: {
+		action: "list" | "respond";
+		dialog_id?: string;
+		response?: "accept" | "dismiss";
+		text?: string;
+	}): Promise<ActionResult<{ dialogs: DialogInfo[] } | DialogResponse>> {
+		const sessionId = this.getSessionId();
+
+		const policyEval = this.context.sessionManager.evaluateAction(
+			"browser_dialog",
+			options,
+		);
+		if (!isPolicyAllowed(policyEval))
+			return policyEval as ActionResult<{ dialogs: DialogInfo[] } | DialogResponse>;
+
+		try {
+			if (options.action === "list") {
+				const dialogs = this.dialogSupervisor.getPendingDialogs(sessionId);
+				return successResult({ dialogs }, { path: "a11y", sessionId });
+			} else {
+				if (!options.dialog_id) {
+					return failureResult("dialog_id is required for respond action", {
+						path: "a11y",
+						sessionId,
+					});
+				}
+				const action = options.response ?? "accept";
+				const page = this.tryGetPage() || undefined;
+				const value = this.dialogSupervisor.respond(
+					options.dialog_id,
+					action,
+					page,
+					options.text,
+					sessionId,
+				);
+				return successResult(value, { path: "a11y", sessionId });
+			}
+		} catch (error: unknown) {
+			return this.failureWithDebug(
+				`Dialog action failed: ${error instanceof Error ? error.message : String(error)}`,
+				error,
+				{ action: "browser_dialog", path: "a11y", sessionId },
+			);
+		}
+	}
+
+	/**
+	 * Execute a raw CDP command via passthrough.
+	 */
+	async cdp(options: {
+		method: string;
+		params?: Record<string, unknown>;
+		targetId?: string;
+		frameId?: string;
+		timeoutMs: number;
+		tabId?: string;
+	}): Promise<ActionResult<{ result: unknown }>> {
+		const sessionId = this.getSessionId();
+
+		const policyEval = this.context.sessionManager.evaluateAction(
+			"browser_cdp",
+			{ method: options.method },
+		);
+		if (!isPolicyAllowed(policyEval))
+			return policyEval as ActionResult<{ result: unknown }>;
+
+		try {
+			const pageOrErr = await this.getConnectedPageForAction<{ result: unknown }>(options.tabId);
+			if ("success" in pageOrErr) return pageOrErr;
+			const page = pageOrErr;
+			const { executeCdpCommand } = await import("./cdp_passthrough");
+			return await executeCdpCommand(page, options, sessionId);
+		} catch (error: unknown) {
+			return this.failureWithDebug(
+				`CDP action failed: ${error instanceof Error ? error.message : String(error)}`,
+				error,
+				{ action: "browser_cdp", path: "low_level", sessionId },
+			);
+		}
+	}
+
+
+	/**
 	 * Take an accessibility snapshot of the current page.
 	 */
 	async takeSnapshot(
@@ -1163,7 +1667,7 @@ export class BrowserActions {
 			return policyEval as ActionResult<A11ySnapshot>;
 
 		try {
-			const pageOrErr = await this.getConnectedPageForAction<A11ySnapshot>();
+			const pageOrErr = await this.getConnectedPageForAction<A11ySnapshot>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const snap = await snapshot(page, {
@@ -1227,7 +1731,7 @@ export class BrowserActions {
 	 */
 	async click(
 		options: ClickOptions,
-	): Promise<ActionResult<{ clicked: string }>> {
+	): Promise<ActionResult<{ clicked: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1237,12 +1741,13 @@ export class BrowserActions {
 			{ target: options.target },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ clicked: string }>;
+			return policyEval as ActionResult<{ clicked: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				clicked: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const resolved = await this.runLocatorActionWithRetry(
@@ -1302,7 +1807,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ clicked: resolved.description },
+				{ clicked: resolved.description, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1340,7 +1845,7 @@ export class BrowserActions {
 	/**
 	 * Fill a target element with text.
 	 */
-	async fill(options: FillOptions): Promise<ActionResult<{ filled: string }>> {
+	async fill(options: FillOptions): Promise<ActionResult<{ filled: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 		let secretValues: string[] = [];
@@ -1351,12 +1856,13 @@ export class BrowserActions {
 			this.secretAwarePolicyParams(options.text, { target: options.target }),
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ filled: string }>;
+			return policyEval as ActionResult<{ filled: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				filled: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 5000;
@@ -1419,7 +1925,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ filled: resolved.description },
+				{ filled: resolved.description, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1458,11 +1964,215 @@ export class BrowserActions {
 	}
 
 	/**
+	 * Fill multiple fields sequentially on the current page.
+	 */
+	async fillMany(
+		fields: FillField[],
+		options: FillManyOptions = {},
+	): Promise<ActionResult<{ tabId: string; fields: FillManyFieldResult[] }>> {
+		const sessionId = this.getSessionId();
+		const startTime = Date.now();
+		const results: FillManyFieldResult[] = [];
+		const secretValues: string[] = [];
+
+		if (!Array.isArray(fields)) {
+			return failureResult("fillMany fields must be an array", {
+				path: "a11y",
+				sessionId,
+			});
+		}
+		if (fields.length === 0) {
+			return failureResult("fillMany requires at least one field", {
+				path: "a11y",
+				sessionId,
+			});
+		}
+		if (fields.length > 100) {
+			return failureResult("fillMany supports at most 100 fields per call", {
+				path: "a11y",
+				sessionId,
+			});
+		}
+
+		const invalidField = fields.find(
+			(field) =>
+				!field ||
+				typeof field.target !== "string" ||
+				field.target.trim().length === 0 ||
+				typeof field.text !== "string",
+		);
+		if (invalidField) {
+			return failureResult(
+				"fillMany fields must include non-empty string target and string text",
+				{ path: "a11y", sessionId },
+			);
+		}
+
+		const policyEval = this.context.sessionManager.evaluateAction("browser_fill", {
+			fields: fields.map((field) =>
+				this.secretAwarePolicyParams(field.text, { target: field.target }),
+			),
+			count: fields.length,
+		});
+		if (!isPolicyAllowed(policyEval)) {
+			return policyEval as ActionResult<{
+				tabId: string;
+				fields: FillManyFieldResult[];
+			}>;
+		}
+
+		try {
+			const pageOrErr = await this.getConnectedPageForAction<{
+				tabId: string;
+				fields: FillManyFieldResult[];
+			}>(options.tabId);
+			if ("success" in pageOrErr) return pageOrErr;
+			const page = pageOrErr;
+			const tabId = await this.getTabIdForPage(page, options.tabId ?? "0");
+			const timeoutMs = options.timeoutMs ? Number(options.timeoutMs) : 5000;
+
+			for (const field of fields) {
+				try {
+					const resolvedText = await this.resolveSecretTextForBrowser(
+						field.text,
+						"use-as-form-value",
+						page,
+						sessionId,
+						policyEval.policyDecision,
+					);
+					secretValues.push(...resolvedText.secretValues);
+					const resolved = await this.runLocatorActionWithRetry(
+						"fill",
+						field.target,
+						page,
+						sessionId,
+						async (target) => {
+							await this.prepareLocatorAction(page, target.locator, timeoutMs);
+							await target.locator.fill(resolvedText.text, {
+								timeout: timeoutMs,
+							});
+						},
+					);
+
+					if (!resolved) {
+						const error = `Could not resolve fill target: ${field.target}`;
+						results.push({ target: field.target, success: false, error });
+						if (!options.continueOnFailure) {
+							this.recordTimelineEvent({
+								action: "fillMany",
+								target: `${fields.length} fields`,
+								policyDecision: policyEval.policyDecision,
+								risk: policyEval.risk,
+								durationMs: Date.now() - startTime,
+								success: false,
+								error,
+							});
+							return this.failureWithDebug(
+								`fillMany failed at target "${field.target}": ${error}`,
+								new Error(error),
+								{
+									action: "browser_fill_many",
+									path: policyEval.path,
+									sessionId,
+									policyDecision: policyEval.policyDecision,
+									risk: policyEval.risk,
+									auditId: policyEval.auditId,
+								},
+							);
+						}
+						continue;
+					}
+
+					results.push({ target: field.target, success: true });
+				} catch (error: unknown) {
+					const message = this.redactSecretMessage(
+						error instanceof Error ? error.message : String(error),
+						secretValues,
+					);
+					results.push({
+						target: field.target,
+						success: false,
+						error: message,
+					});
+					if (!options.continueOnFailure) {
+						this.recordTimelineEvent({
+							action: "fillMany",
+							target: `${fields.length} fields`,
+							policyDecision: policyEval.policyDecision,
+							risk: policyEval.risk,
+							durationMs: Date.now() - startTime,
+							success: false,
+							error: message,
+						});
+						return this.failureWithDebug(
+							`fillMany failed at target "${field.target}": ${message}`,
+							error,
+							{
+								action: "browser_fill_many",
+								path: policyEval.path,
+								sessionId,
+								policyDecision: policyEval.policyDecision,
+								risk: policyEval.risk,
+								auditId: policyEval.auditId,
+							},
+						);
+					}
+				}
+			}
+
+			await this.persistObservability(sessionId, page);
+			this.recordTimelineEvent({
+				action: "fillMany",
+				target: `${fields.length} fields`,
+				url: page.url(),
+				title: await page.title().catch(() => undefined),
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: results.every((field) => field.success),
+			});
+
+			return successResult(
+				{ tabId, fields: results },
+				{
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				},
+			);
+		} catch (error: unknown) {
+			const message = this.redactSecretMessage(
+				error instanceof Error ? error.message : String(error),
+				secretValues,
+			);
+			this.recordTimelineEvent({
+				action: "fillMany",
+				target: `${fields.length} fields`,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				durationMs: Date.now() - startTime,
+				success: false,
+				error: message,
+			});
+			return this.failureWithDebug(`fillMany failed: ${message}`, error, {
+				action: "browser_fill_many",
+				path: policyEval.path,
+				sessionId,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				auditId: policyEval.auditId,
+			});
+		}
+	}
+
+	/**
 	 * Hover over a target element.
 	 */
 	async hover(
 		options: HoverOptions,
-	): Promise<ActionResult<{ hovered: string }>> {
+	): Promise<ActionResult<{ hovered: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1471,12 +2181,13 @@ export class BrowserActions {
 			{ target: options.target },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ hovered: string }>;
+			return policyEval as ActionResult<{ hovered: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				hovered: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const resolved = await this.runLocatorActionWithRetry(
@@ -1532,7 +2243,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ hovered: resolved.description },
+				{ hovered: resolved.description, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1570,7 +2281,7 @@ export class BrowserActions {
 	/**
 	 * Type text into the currently focused element.
 	 */
-	async type(options: TypeOptions): Promise<ActionResult<{ typed: string }>> {
+	async type(options: TypeOptions): Promise<ActionResult<{ typed: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 		let secretValues: string[] = [];
@@ -1581,12 +2292,13 @@ export class BrowserActions {
 			this.secretAwarePolicyParams(options.text),
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ typed: string }>;
+			return policyEval as ActionResult<{ typed: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				typed: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const resolvedText = await this.resolveSecretTextForBrowser(
@@ -1613,7 +2325,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ typed: resolvedText.usedSecret ? resolvedText.redactedText : options.text },
+				{ typed: resolvedText.usedSecret ? resolvedText.redactedText : options.text, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1650,7 +2362,7 @@ export class BrowserActions {
 	/**
 	 * Paste/insert text into the focused element, optionally focusing a target first.
 	 */
-	async paste(options: PasteOptions): Promise<ActionResult<{ pasted: string }>> {
+	async paste(options: PasteOptions): Promise<ActionResult<{ pasted: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 		let secretValues: string[] = [];
@@ -1661,12 +2373,13 @@ export class BrowserActions {
 			this.secretAwarePolicyParams(options.text, { target: options.target }),
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ pasted: string }>;
+			return policyEval as ActionResult<{ pasted: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				pasted: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const resolvedText = await this.resolveSecretTextForBrowser(
@@ -1726,6 +2439,7 @@ export class BrowserActions {
 					pasted: resolvedText.usedSecret
 						? resolvedText.redactedText
 						: options.text,
+					tabId: await this.getTabIdForPage(page, options.tabId ?? "0")
 				},
 				{
 					path: policyEval.path,
@@ -1765,7 +2479,7 @@ export class BrowserActions {
 	 */
 	async press(
 		options: PressOptions,
-	): Promise<ActionResult<{ pressed: string }>> {
+	): Promise<ActionResult<{ pressed: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1774,12 +2488,13 @@ export class BrowserActions {
 			{ key: options.key },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ pressed: string }>;
+			return policyEval as ActionResult<{ pressed: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				pressed: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			await page.keyboard.press(options.key);
@@ -1797,7 +2512,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ pressed: options.key },
+				{ pressed: options.key, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1833,7 +2548,7 @@ export class BrowserActions {
 	 */
 	async scroll(
 		options: ScrollOptions,
-	): Promise<ActionResult<{ scrolled: string }>> {
+	): Promise<ActionResult<{ scrolled: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1842,13 +2557,14 @@ export class BrowserActions {
 			{ direction: options.direction },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ scrolled: string }>;
+			return policyEval as ActionResult<{ scrolled: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				scrolled: string;
 				amount: number;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const amount = options.amount ?? 300;
@@ -1876,7 +2592,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ scrolled: `${options.direction} ${amount}px` },
+				{ scrolled: `${options.direction} ${amount}px`, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -1912,7 +2628,7 @@ export class BrowserActions {
 	 */
 	async highlight(
 		options: HighlightOptions,
-	): Promise<ActionResult<{ highlighted: string }>> {
+	): Promise<ActionResult<{ highlighted: string; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -1922,12 +2638,13 @@ export class BrowserActions {
 			{ target: options.target },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ highlighted: string }>;
+			return policyEval as ActionResult<{ highlighted: string; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				highlighted: string;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 
@@ -1960,7 +2677,7 @@ export class BrowserActions {
 					success: true,
 				});
 				return successResult(
-					{ highlighted: options.target },
+					{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 					{
 						path: policyEval.path,
 						sessionId,
@@ -2021,7 +2738,7 @@ export class BrowserActions {
 					success: true,
 				});
 				return successResult(
-					{ highlighted: options.target },
+					{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 					{
 						path: policyEval.path,
 						sessionId,
@@ -2056,7 +2773,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ highlighted: options.target },
+				{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -2199,7 +2916,8 @@ export class BrowserActions {
 	 */
 	async generateLocator(
 		target: string,
-	): Promise<ActionResult<{ candidates: LocatorCandidate[] }>> {
+		options?: { tabId?: string },
+	): Promise<ActionResult<{ candidates: LocatorCandidate[]; tabId: string }>> {
 		const sessionId = this.getSessionId();
 
 		// Locator generation is low-risk
@@ -2208,12 +2926,13 @@ export class BrowserActions {
 			{ target },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ candidates: LocatorCandidate[] }>;
+			return policyEval as ActionResult<{ candidates: LocatorCandidate[]; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				candidates: LocatorCandidate[];
-			}>();
+				tabId: string;
+			}>(options?.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 
@@ -2265,7 +2984,7 @@ export class BrowserActions {
 			await this.persistObservability(sessionId, page);
 
 			return successResult(
-				{ candidates },
+				{ candidates, tabId: await this.getTabIdForPage(page, options?.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -2438,7 +3157,7 @@ export class BrowserActions {
 	 */
 	async screenshot(
 		options: ScreenshotOptions = {},
-	): Promise<ActionResult<{ path: string; sizeBytes: number }>> {
+	): Promise<ActionResult<{ path: string; sizeBytes: number; tabId: string }>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -2447,13 +3166,14 @@ export class BrowserActions {
 			{},
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ path: string; sizeBytes: number }>;
+			return policyEval as ActionResult<{ path: string; sizeBytes: number; tabId: string }>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				path: string;
 				sizeBytes: number;
-			}>();
+				tabId: string;
+			}>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const fs = await import("node:fs");
@@ -2528,7 +3248,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ path: outputPath, sizeBytes: stats.size },
+				{ path: outputPath, sizeBytes: stats.size, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -2777,10 +3497,12 @@ export class BrowserActions {
 		}
 	}
 
-	/**
-	 * Switch to a browser tab by index.
-	 */
-	async tabSwitch(tabId: string): Promise<ActionResult<{ activeTab: string }>> {
+	async tabSwitch(tabId: string): Promise<ActionResult<{
+		activeTabId: string;
+		url: string;
+		title?: string;
+		readyState?: string;
+	}>> {
 		const sessionId = this.getSessionId();
 
 		// Route through policy for consistency (Issue 2)
@@ -2789,11 +3511,19 @@ export class BrowserActions {
 			{ tabId },
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ activeTab: string }>;
+			return policyEval as ActionResult<{
+				activeTabId: string;
+				url: string;
+				title?: string;
+				readyState?: string;
+			}>;
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
-				activeTab: string;
+				activeTabId: string;
+				url: string;
+				title?: string;
+				readyState?: string;
 			}>();
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
@@ -2804,10 +3534,18 @@ export class BrowserActions {
 				windowTargets.length > 0
 					? windowTargets.map((target) => target.page)
 					: rawPages;
+
+			if (!/^\d+$/.test(tabId)) {
+				return (await this.failureWithDebug(
+					`Invalid tab ID format: ${tabId}`,
+					new Error(`Invalid tab ID format: ${tabId}`),
+					{ action: "browser_tab_switch", path: policyEval.path, sessionId },
+				)) as ActionResult<{ activeTabId: string; url: string; title?: string; readyState?: string }>;
+			}
 			const index = parseInt(tabId, 10);
 
 			if (index < 0 || index >= pages.length) {
-				return this.failureWithDebug(
+				return (await this.failureWithDebug(
 					`Tab index ${tabId} out of range (0..${pages.length - 1})`,
 					new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
 					{
@@ -2818,21 +3556,36 @@ export class BrowserActions {
 						risk: policyEval.risk,
 						auditId: policyEval.auditId,
 					},
-				);
+				)) as ActionResult<{
+					activeTabId: string;
+					url: string;
+					title?: string;
+					readyState?: string;
+				}>;
 			}
 
+			const targetPage = pages[index];
 			const windowTarget = windowTargets.find(
-				(target) => target.page === pages[index],
+				(target) => target.page === targetPage,
 			);
 			if (windowTarget) {
 				await this.activateWindowTarget(windowTarget);
 			} else {
-				await pages[index].bringToFront();
+				await targetPage.bringToFront();
 			}
-			await this.persistObservability(sessionId, pages[index]);
+			await this.persistObservability(sessionId, targetPage);
+
+			const url = targetPage.url();
+			const title = await targetPage.title().catch(() => undefined);
+			const readyState = await targetPage.evaluate(() => document.readyState).catch(() => undefined);
 
 			return successResult(
-				{ activeTab: tabId },
+				{
+					activeTabId: tabId,
+					url,
+					title,
+					readyState,
+				},
 				{
 					path: policyEval.path,
 					sessionId,
@@ -2843,14 +3596,19 @@ export class BrowserActions {
 			);
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
-			return this.failureWithDebug(`Tab switch failed: ${message}`, error, {
+			return (await this.failureWithDebug(`Tab switch failed: ${message}`, error, {
 				action: "browser_tab_switch",
 				path: policyEval.path,
 				sessionId,
 				policyDecision: policyEval.policyDecision,
 				risk: policyEval.risk,
 				auditId: policyEval.auditId,
-			});
+			})) as ActionResult<{
+				activeTabId: string;
+				url: string;
+				title?: string;
+				readyState?: string;
+			}>;
 		}
 	}
 
@@ -3234,10 +3992,9 @@ export class BrowserActions {
 	async drop(options: DropOptions): Promise<ActionResult<BrowserDropResult>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
-		const page = this.tryGetPage();
-		if (!page) {
-			return failureResult("No active page", { path: "a11y", sessionId });
-		}
+		const pageOrErr = await this.getConnectedPageForAction<BrowserDropResult>(options.tabId);
+		if ("success" in pageOrErr) return pageOrErr;
+		const page = pageOrErr;
 
 		// Determine policy action based on what's being dropped
 		const hasFiles = options.files && options.files.length > 0;

@@ -13,6 +13,8 @@
  */
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { WebSocket } from "ws";
 import { BrowserConnectionManager } from "./browser/connection";
 import { DefaultPolicyEngine } from "./policy/engine";
@@ -55,6 +57,14 @@ export interface SessionState {
 	terminalSessionId: string | null;
 	/** Filesystem working directory. */
 	workingDirectory: string;
+	/** Runtime output directory for this session. */
+	runtimeDir: string;
+	/** Report output directory under runtimeDir. */
+	reportsDir: string;
+	/** Screenshot output directory under runtimeDir. */
+	screenshotsDir: string;
+	/** Artifact output directory under runtimeDir. */
+	artifactsDir: string;
 	/** ISO timestamp when the session was created. */
 	createdAt: string;
 	/** ISO timestamp of last activity. */
@@ -72,6 +82,7 @@ export interface SessionListEntry {
 	hasBrowser: boolean;
 	hasTerminal: boolean;
 	workingDirectory: string;
+	runtimeDir: string;
 	createdAt: string;
 	lastActivityAt: string;
 }
@@ -797,17 +808,26 @@ export class SessionManager {
 			browserConnectionId: null,
 			terminalSessionId: null,
 			workingDirectory: "",
+			runtimeDir: "",
+			reportsDir: "",
+			screenshotsDir: "",
+			artifactsDir: "",
 			createdAt: new Date().toISOString(),
 			lastActivityAt: new Date().toISOString(),
 			auditIds: [],
 		};
-		state.workingDirectory =
-			options.workingDirectory ??
-			ensureStructuredSessionRuntimeDir({
+		state.runtimeDir = ensureStructuredSessionRuntimeDir({
 				id: state.id,
 				name: state.name,
 				createdAt: state.createdAt,
 			});
+		state.reportsDir = path.join(state.runtimeDir, "reports");
+		state.screenshotsDir = path.join(state.runtimeDir, "screenshots");
+		state.artifactsDir = path.join(state.runtimeDir, "artifacts");
+		state.workingDirectory = options.workingDirectory ?? state.runtimeDir;
+		for (const dir of [state.reportsDir, state.screenshotsDir, state.artifactsDir]) {
+			fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+		}
 
 		this.sessions.set(sessionId, state);
 
@@ -841,6 +861,7 @@ export class SessionManager {
 				hasBrowser: s.browserConnectionId !== null,
 				hasTerminal: s.terminalSessionId !== null,
 				workingDirectory: s.workingDirectory,
+				runtimeDir: s.runtimeDir,
 				createdAt: s.createdAt,
 				lastActivityAt: s.lastActivityAt,
 			}),
@@ -1453,6 +1474,37 @@ export class SessionManager {
 
 				const state = this.memoryStore.get<SessionState>(key);
 				if (state?.id) {
+					let dirty = false;
+					if (!state.runtimeDir) {
+						state.runtimeDir = ensureStructuredSessionRuntimeDir({
+							id: state.id,
+							name: state.name,
+							createdAt: state.createdAt || new Date().toISOString(),
+						});
+						dirty = true;
+					}
+					if (!state.reportsDir) {
+						state.reportsDir = path.join(state.runtimeDir, "reports");
+						dirty = true;
+					}
+					if (!state.screenshotsDir) {
+						state.screenshotsDir = path.join(state.runtimeDir, "screenshots");
+						dirty = true;
+					}
+					if (!state.artifactsDir) {
+						state.artifactsDir = path.join(state.runtimeDir, "artifacts");
+						dirty = true;
+					}
+					if (!state.workingDirectory) {
+						state.workingDirectory = state.runtimeDir;
+						dirty = true;
+					}
+					if (dirty) {
+						for (const dir of [state.reportsDir, state.screenshotsDir, state.artifactsDir]) {
+							fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+						}
+						this.persistSession(state);
+					}
 					this.sessions.set(state.id, state);
 				}
 			}
