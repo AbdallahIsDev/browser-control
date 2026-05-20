@@ -2,6 +2,8 @@
 
 Browser Control exposes its action surface as an MCP stdio server.
 
+For terminal-capable agents working in this repo, prefer the CLI first (`bc status --json`, `bc browser state --json`, `bc browser act`, `bc browser task run`). CLI-first execution usually uses fewer LLM tool calls than MCP while preserving the same policy/audit `ActionResult` model. Use MCP Lite for MCP-native clients that need a reduced high-level surface; use full MCP when the full tool set is required.
+
 Browser Control exposes short tool aliases such as `status`, `open`, `snapshot`, `click`, `fill`, and `screenshot`. Legacy `bc_*` tool names remain supported.
 
 Some clients prefix tool names with the MCP server name. In those clients, name the server `bc` if you want surfaced names like `mcp_bc_status` and `mcp_bc_open`.
@@ -32,6 +34,20 @@ npm link
 Avoid `npm run ...` wrappers for MCP stdio. npm can print lifecycle text to stdout before the protocol starts.
 
 MCP uses stdio. Protocol JSON must be the only normal stdout traffic. Browser Control sets MCP stdio mode before connecting; logs go to stderr.
+
+## Choosing CLI, MCP Lite, or Full MCP
+
+Use this priority for Codex, Hermes-like, OpenCode-like, Gemini CLI, Claude Code, and other command-capable agents:
+
+1. CLI first for repo work and browser automation:
+   - `bc status --json`
+   - `bc browser state --json`
+   - `bc browser act <action> ... --json`
+   - `bc browser task run --steps='<json>' --json`
+2. MCP Lite when the client is MCP-native or cannot run shell commands.
+3. Full MCP when the task needs tools outside Lite mode.
+
+MCP Lite exists to reduce token overhead by exposing high-level tools such as `bc_browser_state`, `bc_browser_act`, and `bc_task_run` instead of forcing many tiny tool calls.
 
 ## Output Shape
 

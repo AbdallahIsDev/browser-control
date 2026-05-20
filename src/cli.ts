@@ -72,6 +72,8 @@ const VALUE_FLAGS = new Set([
 	"mime-type",
 	"name",
 	"output",
+	"output-path",
+	"outputPath",
 	"params",
 	"path",
 	"pattern",
@@ -510,6 +512,10 @@ Browser Lifecycle:
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
+  browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
+  browser act <action> [target] [--url=<url>] [--capture-on-success] [--json]
+                                                                      Run one composite browser action
+  browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser provider list                                              List browser providers
   browser provider catalog                                           List supported browser provider types
   browser provider use <name>                                        Set active browser provider
@@ -2700,7 +2706,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					amount: flags.amount ? Number(flags.amount) : undefined,
 					delayMs: flags.delayMs ? Number(flags.delayMs) : undefined,
 					tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
-					captureOnSuccess: flags.capture === "true",
+					captureOnSuccess:
+						flags.capture === "true" || flags["capture-on-success"] === "true" || flags.captureOnSuccess === "true",
+					outputPath: flags.output ?? flags["output-path"] ?? flags.outputPath,
 					url: flags.url,
 					urls,
 					waitUntil: flags["wait-until"] as any,

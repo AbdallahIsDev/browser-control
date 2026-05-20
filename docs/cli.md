@@ -16,6 +16,22 @@ JSON mode:
 - `run` and `schedule` print JSON by default; `--json` makes it compact.
 - Successful output can be JSON where supported. Failures are stderr text with command-specific prefixes and non-zero exit codes; `--json` does not guarantee JSON-formatted errors.
 
+## CLI-First Agent Usage
+
+For terminal-capable agents such as Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, and Claude Code, CLI is the preferred Browser Control surface. It reduces tool calls and token use because one command can return compact, structured state for the whole operation.
+
+Preferred sequence:
+
+```powershell
+bc status --json
+bc browser state --json
+bc browser act open --url https://example.com --json
+bc browser act click "@e3" --capture-on-success --json
+bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
+```
+
+Use MCP Lite when the client cannot run CLI directly. Use full MCP only when the task needs a tool outside the Lite/high-level set.
+
 Local dashboard shortcuts:
 
 ```powershell
@@ -62,6 +78,32 @@ close
 ```
 
 Targets can be accessibility refs such as `@e3`, CSS selectors, or text matches.
+
+## Composite Browser Commands
+
+These commands are the preferred high-level path for agents that need fewer operations.
+
+```text
+browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
+browser act <action> [target] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--capture-on-success] [--snapshot] [--screenshot] [--json]
+browser task run --steps <json> [--continue-on-failure] [--json]
+```
+
+`browser state` returns compact browser state by default: tabs, active URL/title, dialogs, warnings, and per-section status. Snapshot, screenshot, and downloads are opt-in.
+
+`browser act` supports `click`, `fill`, `press`, `hover`, `scroll`, `type`, `paste`, `screenshot`, `tab-close`, `open`, `navigate`, `openMany`, `capture`, `captureMany`, `fillMany`, and `state`.
+
+`browser task run` executes multiple steps in one command and returns per-step success, duration, policy metadata, audit id, path, tab id, and final compact state. `writeOutput` steps route through `FsActions.writeOutput`; use `filename` plus `content`, with `target` kept only as a backward-compatible filename alias.
+
+Example:
+
+```powershell
+bc browser task run --steps='[
+  {"action":"open","url":"https://example.com"},
+  {"action":"state","snapshot":true},
+  {"action":"writeOutput","filename":"result.json","content":"{\"done\":true}"}
+]' --json
+```
 
 ## Sessions
 
