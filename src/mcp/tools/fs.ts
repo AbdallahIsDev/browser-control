@@ -4,6 +4,7 @@
  * Tools:
  *   - bc_fs_read
  *   - bc_fs_write
+ *   - bc_fs_write_output
  *   - bc_fs_list
  *   - bc_fs_move
  *   - bc_fs_delete
@@ -54,6 +55,23 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
           path: params.path as string,
           content: params.content as string,
           createDirs: params.createDirs as boolean | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_fs_write_output",
+      description: "Write task output under the active session runtime directory. Rejects absolute paths and path traversal.",
+      inputSchema: buildSchema({
+        filename: { type: "string", description: "Filename relative to the active session runtime directory." },
+        content: { type: "string", description: "Content to write." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["filename", "content"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.fs.writeOutput({
+          filename: params.filename as string,
+          content: params.content as string,
         });
       },
     },

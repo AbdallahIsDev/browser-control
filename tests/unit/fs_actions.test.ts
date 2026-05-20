@@ -135,6 +135,34 @@ describe("FsActions", () => {
         true,
       );
     });
+
+    it("writes task output under the active session runtime directory", async () => {
+      const activeSession = sessionManager.getActiveSession();
+      assert.ok(activeSession);
+
+      const result = await fsActions.writeOutput({
+        filename: "reports/espocrm.md",
+        content: "# EspoCRM\n",
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(result.data?.path, path.join(activeSession.runtimeDir, "reports", "espocrm.md"));
+      assert.equal(fs.readFileSync(result.data!.path, "utf-8"), "# EspoCRM\n");
+    });
+
+    it("rejects output path traversal", async () => {
+      const activeSession = sessionManager.getActiveSession();
+      assert.ok(activeSession);
+
+      const result = await fsActions.writeOutput({
+        filename: "../escape.md",
+        content: "escape",
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.error ?? "", /session runtime directory/i);
+      assert.equal(fs.existsSync(path.join(activeSession.runtimeDir, "..", "escape.md")), false);
+    });
   });
 
   describe("ls", () => {

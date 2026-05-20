@@ -613,5 +613,108 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         });
       },
     },
+
+    // ── Section 31: High-Level Composite Tools ─────────────────────────
+
+    {
+      name: "bc_browser_state",
+      description: "Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls.",
+      inputSchema: buildSchema({
+        tabId: { type: "string", description: "Optional tab ID to snapshot." },
+        snapshot: { type: "boolean", description: "Include accessibility snapshot. Default: false (compact mode).", default: false },
+        screenshot: { type: "boolean", description: "Include screenshot. Default: false.", default: false },
+        fullPage: { type: "boolean", description: "Capture full-page screenshot when screenshot is true.", default: false },
+        dialog: { type: "boolean", description: "Include pending dialogs. Default: true.", default: true },
+        downloads: { type: "boolean", description: "Include recent downloads. Default: false (opt-in — high risk under balanced policy).", default: false },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.state({
+          tabId: params.tabId as string | undefined,
+          snapshot: params.snapshot as boolean | undefined,
+          screenshot: params.screenshot as boolean | undefined,
+          fullPage: params.fullPage as boolean | undefined,
+          dialog: params.dialog as boolean | undefined,
+          downloads: params.downloads as boolean | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_browser_act",
+      description: "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state) with optional post-action capture. Pre-validates required fields. Returns policy metadata.",
+      inputSchema: buildSchema({
+        action: { type: "string", description: "Action to perform.", enum: ["click", "fill", "press", "hover", "scroll", "type", "paste", "screenshot", "tab-close", "open", "navigate", "openMany", "capture", "captureMany", "fillMany", "state"] },
+        target: { type: "string", description: "Element ref (@e3), CSS selector, or text match. Required for click/fill/hover/paste/screenshot." },
+        text: { type: "string", description: "Text to enter. Required for fill/type/paste." },
+        key: { type: "string", description: "Keyboard key to press. Required for press." },
+        timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
+        force: { type: "boolean", description: "Force click without actionability checks.", default: false },
+        commit: { type: "boolean", description: "Press Tab after fill to move to the next field.", default: false },
+        direction: { type: "string", description: "Scroll direction: up, down, left, right.", enum: ["up", "down", "left", "right"] },
+        amount: { type: "number", description: "Pixels to scroll. Default: 300." },
+        delayMs: { type: "number", description: "Delay between keystrokes in ms. Default: 0.", default: 0 },
+        tabId: { type: "string", description: "Optional tab ID." },
+        outputPath: { type: "string", description: "Custom screenshot output path (screenshot action only)." },
+        fullPage: { type: "boolean", description: "Full-page screenshot (screenshot action only).", default: false },
+        captureOnSuccess: { type: "boolean", description: "Automatically capture snapshot/screenshot after the action.", default: false },
+        snapshot: { type: "boolean", description: "Include snapshot in post-action capture. Default: false (compact).", default: false },
+        screenshot: { type: "boolean", description: "Include screenshot in post-action capture. Default: false.", default: false },
+        url: { type: "string", description: "URL for open/navigate actions." },
+        urls: { type: "array", description: "Array of URLs for openMany/captureMany actions.", items: { type: "string" } },
+        waitUntil: { type: "string", description: "Navigation wait condition: load, domcontentloaded, networkidle, commit.", enum: ["load", "domcontentloaded", "networkidle", "commit"] },
+        fields: { type: "array", description: "Fields for fillMany action.", items: { type: "object", properties: { target: { type: "string" }, text: { type: "string" } }, required: ["target", "text"] } },
+        continueOnFailure: { type: "boolean", description: "Continue on field failure for fillMany.", default: false },
+        boxes: { type: "boolean", description: "Include element bounds for capture/state.", default: false },
+        rootSelector: { type: "string", description: "Root CSS selector for scoped snapshot." },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["action"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.act({
+          action: params.action as any,
+          target: params.target as string | undefined,
+          text: params.text as string | undefined,
+          key: params.key as string | undefined,
+          timeoutMs: params.timeoutMs as number | undefined,
+          force: params.force as boolean | undefined,
+          commit: params.commit as boolean | undefined,
+          direction: params.direction as string | undefined,
+          amount: params.amount as number | undefined,
+          delayMs: params.delayMs as number | undefined,
+          tabId: params.tabId as string | undefined,
+          outputPath: params.outputPath as string | undefined,
+          fullPage: params.fullPage as boolean | undefined,
+          captureOnSuccess: params.captureOnSuccess as boolean | undefined,
+          snapshot: params.snapshot as boolean | undefined,
+          screenshot: params.screenshot as boolean | undefined,
+          url: params.url as string | undefined,
+          urls: params.urls as string[] | undefined,
+          waitUntil: params.waitUntil as any,
+          fields: params.fields as any,
+          continueOnFailure: params.continueOnFailure as boolean | undefined,
+          boxes: params.boxes as boolean | undefined,
+          rootSelector: params.rootSelector as string | undefined,
+        });
+      },
+    },
+
+    {
+      name: "bc_task_run",
+      description: "Execute a deterministic multi-step browser task sequence. Each step runs a browser action (click, fill, press, etc.). Returns per-step results with timing, policy metadata, completed/executed/successful counts, failedStepIndex, finalState.",
+      inputSchema: buildSchema({
+        steps: { type: "array", description: "Array of step objects. Each step must have an 'action' field.", items: { type: "object", properties: { action: { type: "string" }, target: { type: "string" }, text: { type: "string" }, key: { type: "string" }, timeoutMs: { type: "number" }, force: { type: "boolean" }, commit: { type: "boolean" }, direction: { type: "string" }, amount: { type: "number" }, delayMs: { type: "number" }, tabId: { type: "string" }, url: { type: "string" }, urls: { type: "array", items: { type: "string" } }, waitUntil: { type: "string" }, fields: { type: "array", items: { type: "object" } }, captureOnSuccess: { type: "boolean" }, snapshot: { type: "boolean" }, screenshot: { type: "boolean" }, content: { type: "string" }, filename: { type: "string" } }, required: ["action"] } },
+        continueOnFailure: { type: "boolean", description: "Continue to next step if one fails. Default: false.", default: false },
+        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+      }, ["steps"]),
+      handler: async (params) => {
+        if (params.sessionId) api.session.use(params.sessionId as string);
+        return api.browser.taskRun({
+          steps: params.steps as Array<Record<string, unknown>> as any,
+          continueOnFailure: params.continueOnFailure as boolean | undefined,
+        });
+      },
+    },
   ];
 }

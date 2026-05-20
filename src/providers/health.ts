@@ -24,6 +24,7 @@ export interface ProviderHealthReport {
   recentFailures: number;
   summary: string;
   endpoint?: string;
+  nativeDialogStatus?: "supported" | "unsupported" | "unknown";
 }
 
 export interface ProviderHealthOptions {
@@ -166,6 +167,7 @@ export async function checkProviderHealth(
     attachSupported: provider.capabilities.supportsAttach,
     recentFailures: options.recentFailures ?? 0,
     summary,
+    nativeDialogStatus: provider.capabilities.nativeDialogs,
     ...(config.endpoint ? { endpoint: stripSensitiveParams(config.endpoint) } : {}),
   };
   const score = scoreParts(base);

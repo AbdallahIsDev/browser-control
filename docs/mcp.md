@@ -79,10 +79,13 @@ Browser:
 - `bc_browser_detach`
 - `bc_browser_launch`
 - `bc_browser_open`
+- `bc_browser_open_many`
+- `bc_browser_navigate`
 - `bc_browser_list`
 - `bc_browser_snapshot`
 - `bc_browser_click`
 - `bc_browser_fill`
+- `bc_browser_fill_many`
 - `bc_browser_hover`
 - `bc_browser_type`
 - `bc_browser_press`
@@ -102,6 +105,13 @@ Browser:
 - `bc_browser_paste`
 - `bc_browser_provider_catalog`
 - `bc_browser_provider_health`
+- `bc_browser_dialog`
+- `bc_browser_cdp`
+- `bc_browser_capture`
+- `bc_browser_capture_many`
+- `bc_browser_state`
+- `bc_browser_act`
+- `bc_task_run`
 
 Provider:
 
@@ -134,6 +144,7 @@ Filesystem:
 - `bc_fs_move`
 - `bc_fs_delete`
 - `bc_fs_stat`
+- `bc_fs_write_output`
 
 Network:
 - `bc_network_rules_list`
@@ -186,6 +197,84 @@ Packages:
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
 
 `bc_browser_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_browser_tab_close` to close the current tab.
+
+## Compact Browser State
+
+Use `bc_browser_state` to get current browser state without a full a11y snapshot. Snapshot, screenshot, and downloads must be explicitly requested:
+
+```json
+{
+  "name": "bc_browser_state",
+  "arguments": {
+    "snapshot": false,
+    "screenshot": false,
+    "dialog": true,
+    "downloads": false
+  }
+}
+```
+
+Returns `browserConnected`, `url`, `title`, `tabId`, `tabs`, `dialogs`, `warnings`, `status` per section. Downloads default `false` (high risk under balanced policy — opt-in only).
+
+## Unified Action
+
+Use `bc_browser_act` to perform any action and optionally capture state in one call. Supports all actions: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state.
+
+```json
+{
+  "name": "bc_browser_act",
+  "arguments": {
+    "action": "click",
+    "target": "@e3",
+    "captureOnSuccess": true,
+    "snapshot": false
+  }
+}
+```
+
+Pre-validates required fields per action before dispatch. Post-action capture snapshot defaults `false` (compact). Set `snapshot: true` explicitly to include snapshot in post-capture state.
+
+## Multi-Step Task Runner
+
+Use `bc_task_run` to execute a sequence of actions in one call. Returns per-step results with timing, policy metadata, and compact final state.
+
+```json
+{
+  "name": "bc_task_run",
+  "arguments": {
+    "steps": [
+      { "action": "open", "url": "https://example.com" },
+      { "action": "state" },
+      { "action": "writeOutput", "filename": "report.json", "content": "{\"done\":true}" }
+    ],
+    "continueOnFailure": false
+  }
+}
+```
+
+Each step is validated before execution. Unknown actions, missing required fields, and invalid enum values are caught before any browser action runs.
+
+## Write Output
+
+Use `bc_fs_write_output` to write a file under the active session runtime directory. Rejects absolute paths and path traversal.
+
+```json
+{
+  "name": "bc_fs_write_output",
+  "arguments": {
+    "filename": "result.json",
+    "content": "{\"status\":\"ok\"}"
+  }
+}
+```
+
+## MCP Lite
+
+Set `BROWSER_CONTROL_MCP_MODE=lite` or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes 14 tools:
+
+`bc_browser_open`, `bc_browser_open_many`, `bc_browser_capture`, `bc_browser_capture_many`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_state`, `bc_browser_act`, `bc_task_run`, `bc_browser_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
+
+Full MCP mode (88 tools) preserves all existing tools.
 
 Browser Control intentionally does not expose an arbitrary JavaScript console/eval MCP tool. Use accessibility actions, snapshots, debug read tools, network/console capture, or registered helpers. Arbitrary JS can read page data and mutate logged-in sessions, so agents must not invent eval tools.
 

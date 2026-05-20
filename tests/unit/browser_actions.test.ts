@@ -519,7 +519,7 @@ describe("BrowserActions", () => {
 	describe("open", () => {
 		it("opens a new tab when a browser already has an active page", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
-			const frontPage = createMockPage("chrome://newtab/");
+			const frontPage = createMockPage("https://front.example/");
 			const backgroundPage = createMockPage("https://background.example/");
 			const state = { pages: [frontPage, backgroundPage], newPages: 0 };
 			const manager = createConnectedBrowserManager(state.pages, state);
@@ -546,7 +546,42 @@ describe("BrowserActions", () => {
 				assert.equal(state.newPages, 1);
 				assert.equal(state.pages.length, 3);
 				assert.deepEqual(state.pages[2]?.calls.goto, ["https://example.com"]);
+				assert.equal((state.pages[2]?.calls.activateTarget ?? 0) > 0, true);
 				assert.equal((result.data as { tabId?: string })?.tabId, "2");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("reuses and foregrounds the focused Chrome new-tab page when other tabs exist", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const frontPage = createMockPage("chrome://new-tab-page/");
+			const backgroundPage = createMockPage("https://background.example/");
+			const state = { pages: [frontPage, backgroundPage], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.open({
+					url: "https://example.com",
+				});
+
+				assert.equal(result.success, true);
+				assert.deepEqual(frontPage.calls.goto, ["https://example.com"]);
+				assert.deepEqual(backgroundPage.calls.goto, []);
+				assert.equal(state.newPages, 0);
+				assert.equal(frontPage.calls.activateTarget > 0, true);
+				assert.equal((result.data as { tabId?: string })?.tabId, "0");
 			} finally {
 				isolatedStore.close();
 			}
@@ -974,6 +1009,47 @@ describe("BrowserActions", () => {
 			assert.ok(result.debugBundleId);
 			assert.ok(result.recoveryGuidance);
 			assert.ok(loadDebugBundle(result.debugBundleId, store));
+		});
+
+		it("includes pending dialogs from the active browser session", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://app.example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			const pendingDialogs = [
+				{
+					id: "dlg-test-1",
+					type: "confirm" as const,
+					message: "Are you sure?",
+					createdAt: "2026-05-20T00:00:00.000Z",
+				},
+			];
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				(
+					isolatedActions as unknown as {
+						dialogSupervisor: {
+							getPendingDialogs: (sessionId: string) => typeof pendingDialogs;
+						};
+					}
+				).dialogSupervisor.getPendingDialogs = () => pendingDialogs;
+
+				const result = await isolatedActions.takeSnapshot();
+
+				assert.equal(result.success, true);
+				assert.deepEqual(result.data?.pending_dialogs, pendingDialogs);
+			} finally {
+				isolatedStore.close();
+			}
 		});
 	});
 
@@ -2152,6 +2228,1214 @@ describe("BrowserActions", () => {
 	});
 
 	// ── Screenshot Viewport Bug Tests ──────────────────────────────────
+
+	describe("browserState", () => {
+		it("returns browserConnected=false with warnings when no browser is connected", async () => {
+			const result = await browserActions.browserState();
+
+			assert.equal(result.success, true);
+			assert.ok(result.data);
+			assert.equal(result.data!.browserConnected, false);
+			assert.ok(Array.isArray(result.data!.warnings));
+			assert.ok(result.data!.warnings.length > 0);
+			assert.ok(result.data!.status.browser === "error");
+		});
+
+		it("is compact by default (no snapshot unless snapshot=true)", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				// Default: snapshot=false (compact)
+				const result = await actions.browserState();
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.browserConnected, true);
+				assert.equal(result.data!.snapshot, undefined, "snapshot should be undefined by default");
+				assert.ok(result.data!.tabs);
+				assert.ok(result.data!.url);
+				assert.ok(result.data!.status.tabs === "ok");
+				assert.ok(result.data!.status.snapshot === "skipped");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("collects tabs, dialogs, downloads from connected browser (compact)", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: true,
+					downloads: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(Array.isArray(result.data!.tabs));
+				assert.equal(result.data!.url, "https://example.test/");
+				assert.equal(result.data!.title, "Mock Title");
+				assert.equal(result.data!.tabId, "0");
+				assert.ok(Array.isArray(result.data!.dialogs));
+				assert.equal(result.data!.snapshot, undefined);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes snapshot only when snapshot=true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					snapshot: true,
+					dialog: false,
+					downloads: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.snapshot, "snapshot should be present when snapshot=true");
+				assert.ok(result.data!.status.snapshot === "ok");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes screenshot when screenshot option is true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: false,
+					downloads: false,
+					screenshot: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.screenshot);
+				assert.ok(result.data!.screenshot!.path);
+				assert.ok(result.data!.screenshot!.sizeBytes > 0);
+				assert.ok(result.data!.status.screenshot === "ok");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("excludes dialogs when dialog option is false", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: false,
+					downloads: false,
+					snapshot: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.dialogs, undefined);
+				assert.equal(result.data!.downloads, undefined);
+				assert.equal(result.data!.snapshot, undefined);
+				assert.ok(result.data!.status.dialogs === "skipped");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("is compact by default (no snapshot unless snapshot=true)", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				// Default: snapshot=false (compact)
+				const result = await actions.browserState();
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.browserConnected, true);
+				assert.equal(result.data!.snapshot, undefined, "snapshot should be undefined by default");
+				assert.ok(result.data!.tabs);
+				assert.ok(result.data!.url);
+				assert.ok(result.data!.status.tabs === "ok");
+				assert.ok(result.data!.status.snapshot === "skipped");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("collects tabs, dialogs, downloads from connected browser (compact)", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: true,
+					downloads: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(Array.isArray(result.data!.tabs));
+				assert.equal(result.data!.url, "https://example.test/");
+				assert.equal(result.data!.title, "Mock Title");
+				assert.equal(result.data!.tabId, "0");
+				assert.ok(Array.isArray(result.data!.dialogs));
+				assert.equal(result.data!.snapshot, undefined);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes snapshot only when snapshot=true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					snapshot: true,
+					dialog: false,
+					downloads: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.snapshot, "snapshot should be present when snapshot=true");
+				assert.ok(result.data!.status.snapshot === "ok");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes screenshot when screenshot option is true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: false,
+					downloads: false,
+					screenshot: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.screenshot);
+				assert.ok(result.data!.screenshot!.path);
+				assert.ok(result.data!.screenshot!.sizeBytes > 0);
+				assert.ok(result.data!.status.screenshot === "ok");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("excludes dialogs when dialog option is false", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserState({
+					dialog: false,
+					downloads: false,
+					snapshot: false,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.dialogs, undefined);
+				assert.equal(result.data!.downloads, undefined);
+				assert.equal(result.data!.snapshot, undefined);
+				assert.ok(result.data!.status.dialogs === "skipped");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+	});
+
+	describe("browserAct", () => {
+		it("returns failure when no browser is connected", async () => {
+			const result = await browserActions.browserAct({
+				action: "click",
+				target: "@e1",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+		});
+
+		it("returns failure for unknown action", async () => {
+			const result = await browserActions.browserAct({
+				action: "unknown_action" as "click",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("Unknown action"));
+		});
+
+		it("returns validation failure when target is missing for click", async () => {
+			const result = await browserActions.browserAct({
+				action: "click",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("target"));
+		});
+
+		it("returns validation failure when target is missing for fill", async () => {
+			const result = await browserActions.browserAct({
+				action: "fill",
+				text: "hello",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("target"));
+		});
+
+		it("returns validation failure when text is missing for fill", async () => {
+			const result = await browserActions.browserAct({
+				action: "fill",
+				target: "@e1",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("text"));
+		});
+
+		it("returns validation failure when key is missing for press", async () => {
+			const result = await browserActions.browserAct({
+				action: "press",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("key"));
+		});
+
+		it("returns validation failure when target is missing for hover", async () => {
+			const result = await browserActions.browserAct({
+				action: "hover",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("target"));
+		});
+
+		it("returns validation failure when text is missing for type", async () => {
+			const result = await browserActions.browserAct({
+				action: "type",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("text"));
+		});
+
+		it("returns validation failure when text is missing for paste", async () => {
+			const result = await browserActions.browserAct({
+				action: "paste",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("text"));
+		});
+
+		it("returns validation failure when url is missing for open", async () => {
+			const result = await browserActions.browserAct({
+				action: "open",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("url"));
+		});
+
+		it("returns validation failure when urls is missing for openMany", async () => {
+			const result = await browserActions.browserAct({
+				action: "openMany",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("urls"));
+		});
+
+		it("returns validation failure when fields is missing for fillMany", async () => {
+			const result = await browserActions.browserAct({
+				action: "fillMany",
+			});
+
+			assert.equal(result.success, false);
+			assert.ok(result.error);
+			assert.ok(result.error!.includes("fields"));
+		});
+
+		it("dispatches press action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "press",
+					key: "Enter",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches tab-close action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "tab-close",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes state in result when captureOnSuccess is true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "press",
+					key: "Tab",
+					captureOnSuccess: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.action);
+				assert.equal(result.data!.action, "press");
+				assert.ok(result.data!.result);
+				assert.ok(result.data!.state);
+				assert.ok(
+					typeof result.data!.state === "object" &&
+						result.data!.state !== null,
+				);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches screenshot action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "screenshot",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.result);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches open action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "open",
+					url: "https://example.com",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches navigate action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "navigate",
+					url: "https://example.com",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches openMany action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "openMany",
+					urls: ["https://example.com", "https://example.org"],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches capture action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "capture",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches captureMany action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "captureMany",
+					urls: ["0"],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches fillMany action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "fillMany",
+					fields: [{ target: "@e1", text: "hello" }],
+					continueOnFailure: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("dispatches state action successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "state",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+	});
+
+	describe("taskRun", () => {
+		it("reports aborted with failed step when no browser is connected", async () => {
+			const result = await browserActions.taskRun({
+				steps: [{ action: "press", key: "Enter" }],
+			});
+
+			assert.equal(result.success, true);
+			assert.ok(result.data);
+			assert.equal(result.data!.aborted, true);
+			assert.equal(result.data!.results.length, 1);
+			assert.equal(result.data!.results[0].success, false);
+			assert.equal(result.data!.executedSteps, 1);
+			assert.equal(result.data!.successfulSteps, 0);
+			assert.equal(result.data!.failedStepIndex, 0);
+		});
+
+		it("returns empty results for empty steps", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.completedSteps, 0);
+				assert.equal(result.data!.executedSteps, 0);
+				assert.equal(result.data!.successfulSteps, 0);
+				assert.equal(result.data!.totalSteps, 0);
+				assert.equal(result.data!.aborted, false);
+				assert.equal(result.data!.failedStepIndex, null);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("executes multiple steps successfully", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "press", key: "Tab" },
+						{ action: "press", key: "Enter" },
+					],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.completedSteps, 2);
+				assert.equal(result.data!.executedSteps, 2);
+				assert.equal(result.data!.successfulSteps, 2);
+				assert.equal(result.data!.totalSteps, 2);
+				assert.equal(result.data!.aborted, false);
+				assert.equal(result.data!.failedStepIndex, null);
+				assert.equal(result.data!.results.length, 2);
+				assert.equal(result.data!.results[0].success, true);
+				assert.equal(result.data!.results[1].success, true);
+				assert.ok(result.data!.results[0].durationMs !== undefined);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("aborts on failed step when continueOnFailure is false — completedSteps excludes failures", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "press", key: "Tab" },
+						{ action: "click", target: "@nonexistent_ref_xyz" },
+						{ action: "press", key: "Enter" },
+					],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.completedSteps, 1, "only step 0 succeeded");
+				assert.equal(result.data!.executedSteps, 2, "two steps executed before abort");
+				assert.equal(result.data!.successfulSteps, 1);
+				assert.equal(result.data!.totalSteps, 3);
+				assert.equal(result.data!.aborted, true);
+				assert.equal(result.data!.failedStepIndex, 1);
+				assert.equal(result.data!.results[1].success, false);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("continues on failure when continueOnFailure is true", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "press", key: "Tab" },
+						{ action: "click", target: "@nonexistent_ref_xyz" },
+						{ action: "press", key: "Enter" },
+					],
+					continueOnFailure: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.completedSteps, 2, "two steps passed");
+				assert.equal(result.data!.executedSteps, 3, "all steps executed");
+				assert.equal(result.data!.successfulSteps, 2);
+				assert.equal(result.data!.totalSteps, 3);
+				assert.equal(result.data!.aborted, false);
+				assert.equal(result.data!.failedStepIndex, 1, "first failed step index");
+				assert.equal(result.data!.results[1].success, false);
+				assert.equal(result.data!.results[2].success, true);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("returns step errors for failed steps", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "click", target: "@undefined_ref" },
+					],
+					continueOnFailure: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, false);
+				assert.ok(result.data!.results[0].error);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("returns finalState after execution", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "press", key: "Tab" },
+					],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.finalState, "should have finalState after execution");
+				assert.equal(result.data!.finalState!.browserConnected, true);
+				assert.ok(result.data!.finalState!.status);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("per-step result carries policy metadata", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const activeSession = sm.getActiveSession();
+				if (activeSession) sm.bindBrowser(activeSession.id, "conn-test");
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "press", key: "Tab", tabId: "0" },
+					],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.ok(result.data!.results[0].durationMs !== undefined);
+				assert.equal(result.data!.results[0].tabId, "0");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step returns failure when no callback is provided", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", filename: "test.txt", content: "hello" },
+					],
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, false);
+				assert.ok(result.data!.results[0].error!.includes("writeOutput callback not available"));
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step calls injected callback and preserves policy metadata", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", filename: "test.txt", content: "world" },
+					],
+					writeOutput: async (opts) => ({
+						success: true,
+						data: { path: "/tmp/test.txt", sizeBytes: 5 },
+						policyDecision: "allow",
+						auditId: "audit-123",
+						path: "command",
+						sessionId: "sess-1",
+						completedAt: new Date().toISOString(),
+					}),
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, true);
+				assert.equal(result.data!.results[0].policy, "allow");
+				assert.equal(result.data!.results[0].auditId, "audit-123");
+				assert.equal(result.data!.results[0].path, "command");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step returns failure when content is missing", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", filename: "test.txt" },
+					],
+					writeOutput: async () => ({ success: false, error: "should not be called", path: "a11y", sessionId: "x", completedAt: "" }) as any,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, false);
+				assert.ok(result.data!.results[0].error!.includes("content"));
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step allows empty content", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			let calledContent: string | undefined;
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", filename: "empty.txt", content: "" },
+					],
+					writeOutput: async (opts) => {
+						calledContent = opts.content;
+						return {
+							success: true,
+							data: { path: "/tmp/empty.txt", sizeBytes: 0 },
+							policyDecision: "allow",
+							path: "command",
+							sessionId: "sess-1",
+							completedAt: new Date().toISOString(),
+						};
+					},
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, true);
+				assert.equal(calledContent, "");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step returns failure when filename is missing", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", content: "hello" },
+					],
+					writeOutput: async () => ({ success: false, error: "should not be called", path: "a11y", sessionId: "x", completedAt: "" }) as any,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, false);
+				assert.ok(result.data!.results[0].error!.includes("filename"));
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step uses target as backward-compatible filename alias", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				let calledFilename = "";
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", target: "backward-compat.txt", content: "data" },
+					],
+					writeOutput: async (opts) => {
+						calledFilename = opts.filename;
+						return { success: true, data: { path: "/tmp/" + opts.filename, sizeBytes: 4 }, policyDecision: "allow", path: "command", sessionId: "s-1", completedAt: "" } as any;
+					},
+				});
+
+				assert.equal(result.success, true);
+				assert.equal(calledFilename, "backward-compat.txt");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("writeOutput step preserves policy denial from callback", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.taskRun({
+					steps: [
+						{ action: "writeOutput", filename: "secret.txt", content: "data" },
+					],
+					writeOutput: async () => ({
+						success: false,
+						error: "Policy denied: fs_write_output requires audit logging (high risk)",
+						policyDecision: "deny",
+						auditId: "audit-denied-1",
+						path: "command",
+						sessionId: "s-1",
+						completedAt: new Date().toISOString(),
+					}),
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				assert.equal(result.data!.results[0].success, false);
+				assert.equal(result.data!.results[0].policy, "deny");
+				assert.equal(result.data!.results[0].auditId, "audit-denied-1");
+				assert.equal(result.data!.results[0].path, "command");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+	});
 
 	describe("screenshot viewport behavior", () => {
 		it("should NOT call setViewportSize when page.viewportSize() returns null (visible browser)", async () => {

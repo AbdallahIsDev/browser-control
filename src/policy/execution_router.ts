@@ -335,11 +335,17 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   // ── Filesystem path (Section 12) ────────────────────────────────
   {
     matches: (action) => {
+      if (action === "fs_write_output") return false;
       const fsReadActions = ["fs_read", "file_read", "read_file", "fs_list", "fs_stat"];
       return fsReadActions.includes(action);
     },
     path: "command",
     risk: "low",
+  },
+  {
+    matches: (action) => action === "fs_write_output",
+    path: "command",
+    risk: "moderate",
   },
   {
     matches: (action) => {
@@ -359,6 +365,12 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
   },
 
   // ── Browser Action path (Section 5) ────────────────────────────
+  // Dialog response is moderate risk — must come before the broad action rule
+  {
+    matches: (action) => action === "browser_dialog",
+    path: "a11y",
+    risk: "moderate",
+  },
   // Screenshot is moderate risk (may contain sensitive data) — must come
   // before the broad browser action rule so it takes priority.
   {
@@ -373,6 +385,7 @@ const DEFAULT_PATH_RULES: PathInferenceRule[] = [
         "browser_hover", "browser_type", "browser_press",
         "browser_scroll", "browser_close", "browser_snapshot",
         "browser_tab_list", "browser_tab_switch", "browser_tab_close",
+        "browser_capture", "browser_capture_many", "browser_open_many",
       ];
       return browserActions.includes(action);
     },

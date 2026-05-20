@@ -4,6 +4,7 @@ import type {
   ProviderLaunchOptions,
   ProviderAttachOptions,
   ActiveConnection,
+  ProviderCapabilities,
 } from "./interface";
 import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
@@ -15,13 +16,14 @@ import { loadConfig } from "../shared/config";
 
 export class BrowserlessProvider implements BrowserProvider {
   readonly name = "browserless";
-  readonly capabilities = {
+  readonly capabilities: ProviderCapabilities = {
     supportsCDP: true,
     supportsLaunch: true,
     supportsAttach: true,
     supportsProfiles: false,
     supportsStealth: false,
     maxConcurrentSessions: 1,
+    nativeDialogs: "supported",
   };
 
   private profileManager = new BrowserProfileManager();

@@ -450,6 +450,13 @@ function asOptionalNumber(value: unknown): number | undefined {
 		: undefined;
 }
 
+function asNumber(value: unknown, name: string): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		throw new Error(`"${name}" must be a finite number`);
+	}
+	return value;
+}
+
 async function capabilities(api: BrowserControlAPI): Promise<WebCapabilities> {
 	const status = await api.status();
 	const brokerReachable = status.broker?.reachable === true;
@@ -1077,6 +1084,48 @@ export function createWebAppServer(
 
 		if (request.method === "GET" && pathname === "/api/events/recent") {
 			json(response, 200, events.listRecent());
+			return;
+		}
+
+		// ── Browser Dialog ────────────────────────────────────────────────
+		if (request.method === "POST" && pathname === "/api/browser/dialog") {
+			const body = await readJsonBody(request);
+			const action = asString(body.action, "action");
+			if (action !== "list" && action !== "respond") {
+				json(response, 400, {
+					success: false,
+					error: "action must be 'list' or 'respond'.",
+				});
+				return;
+			}
+			const result = await api.browser.dialog({
+				action,
+				dialog_id: asOptionalString(body.dialog_id) ?? undefined,
+				response: (asOptionalString(body.response) ?? undefined) as
+					| "accept"
+					| "dismiss"
+					| undefined,
+				text: asOptionalString(body.text) ?? undefined,
+			});
+			recordReplayAction("browser-dialog", body, result);
+			json(response, result.success ? 200 : 403, formatActionResult(result));
+			return;
+		}
+
+		// ── Browser CDP Passthrough ─────────────────────────────────────────
+		if (request.method === "POST" && pathname === "/api/browser/cdp") {
+			const body = await readJsonBody(request);
+			const method = asString(body.method, "method");
+			const timeoutMs = asNumber(body.timeoutMs, "timeoutMs");
+			const result = await api.browser.cdp({
+				method,
+				params: body.params as Record<string, unknown> | undefined,
+				targetId: asOptionalString(body.targetId) ?? undefined,
+				frameId: asOptionalString(body.frameId) ?? undefined,
+				timeoutMs,
+			});
+			recordReplayAction("browser-cdp", body, result);
+			json(response, result.success ? 200 : 403, formatActionResult(result));
 			return;
 		}
 

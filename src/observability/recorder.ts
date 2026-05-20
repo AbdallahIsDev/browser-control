@@ -10,7 +10,7 @@ const log = logger.withComponent("recorder");
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type RecordedActionKind = "browser-open" | "browser-click" | "browser-fill" | "browser-snapshot" | "browser-screenshot" | "browser-press" | "terminal-exec" | "terminal-type" | "fs-read" | "fs-write" | "approval";
+export type RecordedActionKind = "browser-open" | "browser-click" | "browser-fill" | "browser-snapshot" | "browser-screenshot" | "browser-press" | "browser-dialog" | "browser-cdp" | "terminal-exec" | "terminal-type" | "fs-read" | "fs-write" | "approval";
 
 export interface RecordedAction {
 	id: string;
@@ -160,6 +160,7 @@ function kindToNodeType(kind: RecordedActionKind): { nodeKind: string; nodeInput
 		case "browser-snapshot": return { nodeKind: "browser", nodeInput: { action: "snapshot" } };
 		case "browser-screenshot": return { nodeKind: "browser", nodeInput: { action: "screenshot" } };
 		case "browser-press": return { nodeKind: "browser", nodeInput: { action: "press", key: "" } };
+		case "browser-dialog": return { nodeKind: "browser", nodeInput: { action: "dialog", dialogAction: "" } };
 		case "terminal-exec": return { nodeKind: "terminal", nodeInput: { command: "" } };
 		case "terminal-type": return { nodeKind: "terminal", nodeInput: { command: "" } };
 		case "fs-read": return { nodeKind: "filesystem", nodeInput: { action: "read", path: "" } };

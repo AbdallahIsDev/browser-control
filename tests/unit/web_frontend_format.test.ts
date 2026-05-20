@@ -722,6 +722,67 @@ test("browser view uses shared components and PageShell", () => {
 	assert.doesNotMatch(source, /<button\s/);
 });
 
+test("browser view includes dialog status surface", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/BrowserView.tsx"),
+		"utf8",
+	);
+
+	assert.match(
+		source,
+		/Native browser dialog waiting/,
+		"BrowserView should show dialog waiting title",
+	);
+	assert.match(
+		source,
+		/Accept/,
+		"BrowserView should have Accept button for dialogs",
+	);
+	assert.match(
+		source,
+		/Dismiss/,
+		"BrowserView should have Dismiss button for dialogs",
+	);
+	assert.match(
+		source,
+		/listBrowserDialogs/,
+		"BrowserView should import listBrowserDialogs from api",
+	);
+	assert.match(
+		source,
+		/respondToBrowserDialog/,
+		"BrowserView should import respondToBrowserDialog from api",
+	);
+	assert.doesNotMatch(
+		source,
+		/JSON\.parse/,
+		"BrowserView should not parse raw JSON for dialog state",
+	);
+	assert.doesNotMatch(
+		source,
+		/JSON\.stringify/,
+		"BrowserView should not stringify raw JSON for dialog state",
+	);
+});
+
+test("browser view handles prompt dialogs with text input", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/BrowserView.tsx"),
+		"utf8",
+	);
+
+	assert.match(
+		source,
+		/@\/components\/ui\/input/,
+		"BrowserView should import input for prompt dialogs",
+	);
+	assert.match(
+		source,
+		/Enter response text/,
+		"BrowserView should have prompt text placeholder",
+	);
+});
+
 test("automations view uses shared components and DataTable", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/AutomationsView.tsx"),
@@ -952,6 +1013,29 @@ test("PageShell provides content wrapper with responsive padding", () => {
 		source,
 		/flex-1 min-w-0/,
 		"PageShell should fill available space without overflow",
+	);
+});
+
+test("api.ts exports dialog helper functions", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/api.ts"),
+		"utf8",
+	);
+
+	assert.match(
+		source,
+		/listBrowserDialogs/,
+		"api.ts should export listBrowserDialogs",
+	);
+	assert.match(
+		source,
+		/respondToBrowserDialog/,
+		"api.ts should export respondToBrowserDialog",
+	);
+	assert.match(
+		source,
+		/\/api\/browser\/dialog/,
+		"api.ts dialog helpers should reference /api/browser/dialog",
 	);
 });
 

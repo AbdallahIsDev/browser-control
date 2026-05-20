@@ -6,6 +6,7 @@ import type {
   ProviderLaunchOptions,
   ProviderAttachOptions,
   ActiveConnection,
+  ProviderCapabilities,
 } from "./interface";
 import type { BrowserConnection, BrowserTargetType, AttachableBrowser } from "../browser/connection";
 import {
@@ -40,13 +41,14 @@ async function waitForManagedPortRelease(port: number | undefined, timeoutMs = 7
 
 export class LocalBrowserProvider implements BrowserProvider {
   readonly name = "local";
-  readonly capabilities = {
+  readonly capabilities: ProviderCapabilities = {
     supportsCDP: true,
     supportsLaunch: true,
     supportsAttach: true,
     supportsProfiles: true,
     supportsStealth: true,
     maxConcurrentSessions: 1,
+    nativeDialogs: "supported",
   };
 
   private profileManager = new BrowserProfileManager();

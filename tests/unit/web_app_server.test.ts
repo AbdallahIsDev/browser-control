@@ -147,6 +147,61 @@ function mockApi(): BrowserControlAPI {
 			tabSwitch: async () => actionResult({ switched: true } as never),
 			tabClose: async () => actionResult({ closed: true } as never),
 			close: async () => actionResult({ closed: true } as never),
+			dialog: async (opts: {
+				action: string;
+				dialog_id?: string;
+				response?: string;
+				text?: string;
+			}) => {
+				if (opts.action === "list") {
+					return actionResult({ dialogs: [] });
+				}
+				if (opts.action === "respond" && opts.dialog_id) {
+					return actionResult({
+						handled: true,
+						dialog: {
+							id: opts.dialog_id,
+							type: "alert",
+							message: "Test dialog",
+							createdAt: new Date("2026-05-02T00:00:00.000Z").toISOString(),
+						},
+					});
+				}
+				return actionResult({
+					success: false,
+					error: "Invalid dialog action",
+				} as never);
+			},
+			cdp: async (opts: {
+				method: string;
+				params?: Record<string, unknown>;
+				targetId?: string;
+				frameId?: string;
+				timeoutMs: number;
+			}) => {
+				if (opts.method === "Runtime.evaluate" && opts.params?.expression) {
+					return actionResult({ result: { type: "string", value: "1+1" } });
+				}
+				if (opts.targetId) {
+					return {
+						success: false,
+						error: "targetId not supported",
+						path: "command",
+						sessionId: "system",
+						completedAt: "2026-05-02T00:00:00.000Z",
+					};
+				}
+				if (opts.frameId) {
+					return {
+						success: false,
+						error: "frameId not supported",
+						path: "command",
+						sessionId: "system",
+						completedAt: "2026-05-02T00:00:00.000Z",
+					};
+				}
+				return actionResult({ result: { targets: [{ id: "t1" }] } });
+			},
 		},
 		package: {
 			list: () =>
@@ -1808,4 +1863,183 @@ test("broker WebSocket rejects without auth when key is configured", async (t) =
 	const socket = new WebSocket(`ws://127.0.0.1:${addr.port}/ws`);
 	const [err] = await once(socket, "error");
 	assert.match(String(err), /401|Unauthorized/);
+});
+
+test("POST /api/browser/dialog with action=list returns dialog list", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/dialog`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ action: "list" }),
+	});
+	assert.equal(res.status, 200);
+	const body = await res.json();
+	assert.ok(body.success, "list action should succeed");
+});
+
+test("POST /api/browser/dialog with action=respond forwards dialog_id", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/dialog`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({
+			action: "respond",
+			dialog_id: "dlg-test-1",
+			response: "accept",
+		}),
+	});
+	assert.equal(res.status, 200);
+	const body = await res.json();
+	assert.ok(body.success, "respond action should succeed");
+	assert.ok(body.data?.handled, "dialog should be marked handled");
+});
+
+test("POST /api/browser/dialog with invalid action returns 400", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/dialog`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ action: "invalid" }),
+	});
+	assert.equal(res.status, 400);
+});
+
+test("POST /api/browser/dialog without auth returns 401", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/dialog`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ action: "list" }),
+	});
+	assert.equal(res.status, 401);
+});
+
+// ── CDP Route Tests ───────────────────────────────────────────────────────
+
+test("POST /api/browser/cdp with method+timeoutMs returns result", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ method: "Target.getTargets", timeoutMs: 5000 }),
+	});
+	assert.equal(res.status, 200);
+	const body = await res.json();
+	assert.ok(body.success);
+});
+
+test("POST /api/browser/cdp with targetId returns 403 with capability error", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({
+			method: "Target.getTargets",
+			targetId: "foo",
+			timeoutMs: 5000,
+		}),
+	});
+	assert.equal(res.status, 403);
+	const body = await res.json();
+	assert.equal(body.success, false);
+});
+
+test("POST /api/browser/cdp with frameId returns 403 with capability error", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({
+			method: "Target.getTargets",
+			frameId: "bar",
+			timeoutMs: 5000,
+		}),
+	});
+	assert.equal(res.status, 403);
+	const body = await res.json();
+	assert.equal(body.success, false);
+});
+
+test("POST /api/browser/cdp without timeoutMs returns 400", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ method: "Target.getTargets" }),
+	});
+	assert.equal(res.status, 400);
+});
+
+test("POST /api/browser/cdp without method returns 400", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ timeoutMs: 5000 }),
+	});
+	assert.equal(res.status, 400);
+});
+
+test("POST /api/browser/cdp without auth returns 401", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const res = await fetch(`${info.url}/api/browser/cdp`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ method: "Target.getTargets", timeoutMs: 5000 }),
+	});
+	assert.equal(res.status, 401);
 });

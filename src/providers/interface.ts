@@ -13,6 +13,7 @@ export interface ProviderCapabilities {
   supportsStealth: boolean;
   maxConcurrentSessions: number;
   regions?: string[];
+  nativeDialogs: "supported" | "unsupported" | "unknown";
 }
 
 export interface ProviderLaunchOptions {

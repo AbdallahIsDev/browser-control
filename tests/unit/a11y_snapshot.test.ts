@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
+import type { Dialog, Page } from "playwright";
 import type { A11ySnapshot } from "../../src/a11y_snapshot";
 import { formatSnapshotAsText, getInteractiveCount } from "../../src/a11y_snapshot";
 import { snapshot } from "../../src/a11y_snapshot";
@@ -12,6 +13,10 @@ async function launchBrowser() {
     headless: true,
     executablePath: resolveChromePath(process.platform, process.env.BROWSER_CHROME_PATH),
   });
+}
+
+function pageWaitForDialog(page: Page): Promise<Dialog> {
+  return page.waitForEvent("dialog");
 }
 
 test("formatSnapshotAsText renders elements with refs", () => {
@@ -87,6 +92,60 @@ test("snapshot includes page metadata", () => {
   assert.equal(snap.generatedAt, "2026-04-21T00:00:00.000Z");
   assert.equal(snap.elements.length, 1);
   assert.equal(snap.elements[0].ref, "e1");
+});
+
+test("snapshot includes pending_dialogs when passed in options", async () => {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<h1>Hello</h1>`);
+    const pendingDialogs = [
+      {
+        id: "dlg-1",
+        type: "confirm" as const,
+        message: "Are you sure?",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const snap = await snapshot(page, { sessionId: "s1", pendingDialogs });
+    assert.deepEqual(snap.pending_dialogs, pendingDialogs);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("snapshot returns pending_dialogs without touching a blocked dialog page", async () => {
+  const browser = await launchBrowser();
+  let dialog: Awaited<ReturnType<typeof pageWaitForDialog>> | undefined;
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<button id="open" onclick="alert('blocking')">Open</button>`);
+    const dialogPromise = pageWaitForDialog(page);
+    await page.evaluate(() => {
+      setTimeout(() => document.getElementById("open")?.click(), 0);
+    });
+    dialog = await dialogPromise;
+    const pendingDialogs = [
+      {
+        id: "dlg-blocking-1",
+        type: "alert" as const,
+        message: "blocking",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const snap = await Promise.race([
+      snapshot(page, { sessionId: "s1", pendingDialogs }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("snapshot timed out")), 1000),
+      ),
+    ]);
+
+    assert.deepEqual(snap.pending_dialogs, pendingDialogs);
+    assert.deepEqual(snap.elements, []);
+  } finally {
+    await dialog?.dismiss().catch(() => undefined);
+    await browser.close();
+  }
 });
 
 test("snapshot(page) captures interactive elements from a real page", async () => {

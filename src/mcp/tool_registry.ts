@@ -26,13 +26,16 @@ export interface ToolRegistryOptions {
 }
 
 const LITE_TOOL_NAMES = new Set([
+  "bc_browser_open",
   "bc_browser_open_many",
   "bc_browser_capture",
   "bc_browser_capture_many",
   "bc_browser_snapshot",
   "bc_browser_click",
   "bc_browser_fill",
-  "bc_browser_fill_many",
+  "bc_browser_state",
+  "bc_browser_act",
+  "bc_task_run",
   "bc_browser_tab_list",
   "bc_fs_write_output",
   "bc_session_status",

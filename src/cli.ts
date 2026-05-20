@@ -121,6 +121,17 @@ const VALUE_FLAGS = new Set([
 	"annotation-position",
 	"continue-on-failure",
 	"continueOnFailure",
+	"steps",
+	"snapshot",
+	"screenshot",
+	"downloads",
+	"dialog",
+	"boxes",
+	"root-selector",
+	"url",
+	"urls",
+	"fields",
+	"wait-until",
 ]);
 
 // Flags that can be repeated and should be collected as arrays
@@ -2644,10 +2655,108 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			break;
 		}
 
+		// Section 31: Compact browser state
+		case "state": {
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const result = await bc.browser.state({
+					tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+					snapshot: flags.snapshot === "true",
+					screenshot: flags.screenshot === "true",
+					fullPage: flags["full-page"] === "true" || flags.fullPage === "true",
+					dialog: flags.dialog !== "false",
+					downloads: flags.downloads !== "false",
+				});
+				outputJson(result, !jsonOutput);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				process.exit(1);
+			}
+			break;
+		}
+
+		// Section 31: Unified action
+		case "act": {
+			const action = positional[0];
+			if (!action) {
+				console.error("Error: Action is required (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state)");
+				process.exit(1);
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const fields = flags.fields ? JSON.parse(flags.fields) : undefined;
+				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
+				const result = await bc.browser.act({
+					action: action as any,
+					target: positional[1] ?? flags.target,
+					text: flags.text,
+					key: flags.key,
+					timeoutMs: flags.timeoutMs ? Number(flags.timeoutMs) : undefined,
+					force: flags.force === "true",
+					commit: flags.commit === "true",
+					direction: flags.direction,
+					amount: flags.amount ? Number(flags.amount) : undefined,
+					delayMs: flags.delayMs ? Number(flags.delayMs) : undefined,
+					tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+					captureOnSuccess: flags.capture === "true",
+					url: flags.url,
+					urls,
+					waitUntil: flags["wait-until"] as any,
+					fields,
+					continueOnFailure: flags["continue-on-failure"] === "true",
+					boxes: flags.boxes === "true",
+					rootSelector: flags["root-selector"],
+					snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
+					screenshot: flags.screenshot === "true",
+				});
+				outputJson(result, !jsonOutput);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				process.exit(1);
+			}
+			break;
+		}
+
+		// Section 31: Multi-step task runner
+		case "task": {
+			const taskAction = positional[0];
+			if (taskAction !== "run") {
+				console.error("Error: Use 'task run --steps=<json>'");
+				process.exit(1);
+			}
+			const stepsRaw = flags.steps;
+			if (!stepsRaw) {
+				console.error("Error: --steps is required (JSON array of step objects)");
+				process.exit(1);
+			}
+			let steps: any[];
+			try {
+				steps = JSON.parse(stepsRaw);
+			} catch {
+				console.error("Error: --steps must be valid JSON");
+				process.exit(1);
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const result = await bc.browser.taskRun({
+					steps,
+					continueOnFailure: flags["continue-on-failure"] === "true",
+				});
+				outputJson(result, !jsonOutput);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				process.exit(1);
+			}
+			break;
+		}
+
 		default:
 			console.error(`Unknown browser command: ${subcommand}`);
 			console.error(
-				"Available: attach, launch, status, profile, auth, highlight",
+				"Available: attach, launch, status, profile, auth, highlight, state, act, task",
 			);
 			process.exit(1);
 	}

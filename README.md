@@ -247,8 +247,8 @@ Full command reference: [docs/cli.md](docs/cli.md)
 | ✅ TypeScript API | Stable |
 | ✅ Service registry (`bc://`) | Stable |
 | ✅ Debug bundles + observability | Stable |
-| ✅ Web dashboard (React/Vite) | Stable |
-| ✅ Electron desktop app | Stable |
+| ✅ Web dashboard (React/Vite) | Active |
+| ✅ Electron desktop app | Active |
 | 🔄 Self-healing harness | Active |
 | ✅ Workflow graph runtime, events, helpers | Active |
 | ✅ Automation packages, trust review, evals | Active |
