@@ -201,6 +201,27 @@ test("parseArgs collects repeated drop file and data flags without comma splitti
   );
 });
 
+test("parseArgs handles composite browser act flags", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "act",
+    "screenshot",
+    "--capture-on-success",
+    "--output-path",
+    "C:\\tmp\\page.png",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "act");
+  assert.deepEqual(result.positional, ["screenshot"]);
+  assert.equal(result.flags["capture-on-success"], "true");
+  assert.equal(result.flags["output-path"], "C:\\tmp\\page.png");
+  assert.equal(result.flags.json, "true");
+});
+
 test("parseArgs handles multiple positional after subcommand", () => {
   const result = parseArgs([
     "node", "cli.ts", "memory", "get", "mykey"

@@ -1,6 +1,6 @@
 # Getting Started
 
-Browser Control runs locally. It can control Chromium through CDP, run terminal commands, read/write files, resolve registered local services, and expose the same action surface through MCP.
+Browser Control runs locally. It can control Chromium through CDP, run terminal commands, read/write files, resolve registered local services, and expose the same action surface through CLI, API, and MCP.
 
 ## Prerequisites
 
@@ -68,20 +68,33 @@ Managed browser:
 
 ```powershell
 bc browser launch --port 9222 --profile default
-bc open https://example.com
-bc snapshot
-bc screenshot --output .\example.png
+bc browser act open --url https://example.com --json
+bc browser state --snapshot=true --json
+bc browser act screenshot --output .\example.png --json
 ```
 
 Attach to an existing CDP endpoint:
 
 ```powershell
 bc browser attach --port 9222
-bc open https://example.com
-bc snapshot
+bc browser act open --url https://example.com --json
+bc browser state --json
 ```
 
 If Chrome/CDP is missing, browser commands fail or report degraded status. Terminal and filesystem commands do not require Chrome.
+
+## Agent Usage: CLI First
+
+For Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, Claude Code, and other terminal-capable agents, use Browser Control CLI first. This reduces tool calls and tokens while preserving structured JSON output.
+
+```powershell
+bc status --json
+bc browser state --json
+bc browser act click "@e3" --capture-on-success --json
+bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
+```
+
+Use MCP Lite when the agent cannot run CLI directly. Use full MCP only when the task needs the complete MCP tool surface.
 
 ## First Dashboard Workflow
 
@@ -135,4 +148,4 @@ Configure an agent with:
 }
 ```
 
-Then ask the agent to call `bc_status` first. Use browser tools after a browser is available; use terminal and filesystem tools only when you trust the agent and policy profile.
+Then ask the agent to use MCP Lite high-level tools first: `bc_status`, `bc_browser_state`, `bc_browser_act`, and `bc_task_run`. Use full MCP only when a task needs tools outside Lite mode. Use terminal and filesystem tools only when you trust the agent and policy profile.

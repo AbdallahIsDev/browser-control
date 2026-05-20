@@ -1,6 +1,6 @@
 <div align="center">
   <h1>🖥️ Browser Control</h1>
-  <p><strong>Unified browser, terminal, filesystem, and MCP automation engine for AI agents.</strong></p>
+  <p><strong>Unified browser, terminal, filesystem, CLI, and MCP automation engine for AI agents.</strong></p>
 
   <a href="https://www.npmjs.com/package/browser-control"><img src="https://img.shields.io/npm/v/browser-control?color=blue" alt="npm version"></a>
   <img width="8" alt="">
@@ -29,7 +29,7 @@ Browser Control is a **local automation engine** that gives AI agents and operat
 
 Every action is gated by a **policy engine** (`safe` / `balanced` / `trusted` profiles) and returns a structured `ActionResult` with success/failure, risk level, and optional debug evidence.
 
-It exposes this surface through **five operator surfaces**: CLI (`bc`), TypeScript API, MCP server, authenticated local web dashboard, and Electron desktop app.
+It exposes this surface through **five operator surfaces**: CLI (`bc`), TypeScript API, MCP server, authenticated local web dashboard, and Electron desktop app. Terminal-capable agents should prefer the CLI first; MCP Lite and full MCP remain available for MCP-native clients.
 
 > **Not a native desktop GUI automation product.** The browser path targets Chromium/CDP and semantic accessibility snapshots. It does not automate native OS windows or non-browser desktop apps.
 
@@ -83,10 +83,11 @@ bc fs ls . --json
 
 # Browser
 bc browser launch --port 9222 --profile default
-bc open https://example.com
-bc snapshot
-bc screenshot
-bc click "@e3"
+bc browser state --json
+bc browser act open --url https://example.com --json
+bc browser act state --snapshot=true --json
+bc browser act click "@e3" --capture-on-success --json
+bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state","snapshot":true}]' --json
 
 # Auth state + profiles
 bc browser profile create work --type named
@@ -95,6 +96,27 @@ bc browser auth import auth-state.json --stored
 ```
 
 <br/>
+
+## ⚡ Agent Execution Model
+
+For Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, Claude Code, and any agent that can run shell commands, use CLI-first automation:
+
+```powershell
+bc status --json
+bc browser state --json
+bc browser act open --url https://example.com --json
+bc browser act click "@e3" --capture-on-success --json
+bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
+```
+
+Why CLI first:
+
+- fewer tool calls and fewer LLM-visible requests
+- compact structured `ActionResult` output
+- same policy/audit path as MCP/API
+- better batching through `bc browser task run`
+
+Use MCP Lite when the client is MCP-native or cannot run CLI. Use full MCP when a task needs the complete tool surface.
 
 ## 🔌 MCP Server — AI Agent Integration
 
@@ -128,6 +150,14 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 | **Packages** | `bc_package_list`, `info`, `run`, `eval`, `grant` |
 
 Full tool reference: [docs/mcp.md](docs/mcp.md)
+
+### MCP Lite
+
+MCP Lite exposes a smaller high-level toolset for lower token overhead:
+
+`bc_status`, `bc_session_status`, `bc_browser_open`, `bc_browser_open_many`, `bc_browser_capture`, `bc_browser_capture_many`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_state`, `bc_browser_act`, `bc_task_run`, `bc_browser_tab_list`, `bc_fs_write_output`
+
+Set `BROWSER_CONTROL_MCP_MODE=lite` for Lite mode. Full MCP mode keeps the complete tool surface.
 
 ### Security with MCP
 
@@ -221,7 +251,7 @@ Browser Control has a broad CLI surface for both operators and agents. Common ar
 
 - `setup`, `doctor`, `status`, `config`
 - `open`, `snapshot`, `click`, `fill`, `screenshot`
-- `browser launch|attach|list|provider|profile|auth`
+- `browser launch|attach|list|state|act|task|provider|profile|auth`
 - `term open|exec|read|snapshot|interrupt|resume`
 - `fs read|write|ls|move|rm|stat`
 - `service register|list|resolve|remove`

@@ -1,10 +1,10 @@
 # Section 7: MCP Integration Layer
 
 ## Purpose
-Browser Control becomes infrastructure — not just a library — when it plugs natively into agent ecosystems. This section delivers a first-party MCP server that exposes browser, terminal, and file/system tools to any MCP-compatible agent (Codex, Hermes, Cursor, Claude Code, Gemini CLI, OpenCloud, custom orchestrators).
+Browser Control becomes infrastructure — not just a library — when it plugs natively into agent ecosystems. This section delivers a first-party MCP server that exposes browser, terminal, and file/system tools to any MCP-compatible agent (Codex, Hermes, Cursor, Claude Code, Gemini CLI, OpenCloud, custom orchestrators). For terminal-capable agents, the CLI remains the preferred low-overhead path; MCP Lite and full MCP exist for MCP-native clients.
 
 ## Why This Section Matters to Browser Control
-Without MCP, Browser Control requires agents to shell out to a CLI or import a TypeScript library. With MCP, any MCP client gets a clean tool surface with structured schemas, session awareness, and policy enforcement — zero integration work per agent.
+Without MCP, Browser Control requires agents to shell out to a CLI or import a TypeScript library. That is ideal for command-capable agents because CLI batch commands reduce tool calls. MCP is still required for MCP-native clients: they get a clean tool surface with structured schemas, session awareness, and policy enforcement.
 
 ## Scope
 - Browser Control MCP server implementation
@@ -13,6 +13,7 @@ Without MCP, Browser Control requires agents to shell out to a CLI or import a T
 - Policy engine integration (risky tools still honor Section 4)
 - Install docs for major agents
 - Semantic versioning for MCP surface
+- MCP Lite high-level mode for reduced tool count and lower token overhead
 
 ## Non-Goals
 - Do not implement ACP in v1
@@ -35,7 +36,7 @@ Without MCP, Browser Control requires agents to shell out to a CLI or import a T
 ## Architecture/Design
 
 ### Tool Categories
-**Browser tools:** `bc_browser_open`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_press`, `bc_browser_tab_list`, `bc_browser_tab_switch`, `bc_browser_screenshot`, `bc_browser_evaluate`, `bc_browser_wait_for`
+**Browser tools:** `bc_browser_open`, `bc_browser_open_many`, `bc_browser_state`, `bc_browser_act`, `bc_task_run`, `bc_browser_capture`, `bc_browser_capture_many`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_press`, `bc_browser_tab_list`, `bc_browser_tab_switch`, `bc_browser_screenshot`, `bc_browser_dialog`, `bc_browser_cdp`
 
 **Terminal tools:** `bc_terminal_open`, `bc_terminal_exec`, `bc_terminal_read`, `bc_terminal_write`, `bc_terminal_interrupt`, `bc_terminal_snapshot`
 
@@ -46,7 +47,8 @@ Without MCP, Browser Control requires agents to shell out to a CLI or import a T
 **Debug tools:** `bc_debug_get_console`, `bc_debug_get_network`, `bc_debug_record_trace`, `bc_debug_health`, `bc_debug_failure_bundle`
 
 ### MCP Tool Design Rules
-- Tools are narrow and composable (one action per tool)
+- Full mode keeps narrow composable tools for compatibility
+- Lite mode exposes fewer high-level tools for agent efficiency
 - Names are stable (do not rename core tools lightly)
 - Results are structured JSON
 - Risky tools honor policy engine (return policy decision in response)
@@ -108,8 +110,11 @@ interface McpToolCategory {
 - If the MCP server itself crashes, it should be restartable without losing session state (state is in the data store, not in-memory)
 
 ## CLI/API/MCP Implications
-- MCP tools map 1:1 to Section 5's API methods
-- CLI commands are isomorphic to MCP tools — same parameters, same output
+- CLI is the preferred execution surface for Codex, Hermes-like, OpenCode-like, Gemini CLI, Claude Code, and other command-capable agents.
+- MCP Lite is the preferred MCP mode for low-token browser automation.
+- Full MCP preserves the complete tool surface.
+- MCP tools map to Section 5's API methods and composite action methods.
+- CLI commands are isomorphic to MCP tools where practical — same policy path, same structured `ActionResult` output.
 - MCP tool descriptions are auto-generated from the API method JSDoc where possible
 - MCP server is started with `bc mcp serve` (or auto-configured by the agent)
 
@@ -128,7 +133,7 @@ interface McpToolCategory {
 
 ## Risks/Tradeoffs
 - **Risk:** MCP protocol evolves and breaks compatibility. Mitigation: pin to a stable MCP SDK version, version the tool surface independently.
-- **Risk:** Too many tools overwhelm the agent. Mitigation: categorize clearly, provide good descriptions, consider lazy-loading tools by session type.
+- **Risk:** Too many tools overwhelm the agent. Mitigation: default terminal-capable agents to CLI, expose MCP Lite for MCP-native clients, and keep full MCP available for advanced tasks.
 - **Risk:** MCP stdio transport limits concurrency. Acceptable for v1 — most agents use one Browser Control session at a time.
 - **Tradeoff:** MCP adds a transport layer between agent and engine. Accepted because it standardizes integration across 6+ agent ecosystems.
 
@@ -167,7 +172,7 @@ Browser Control should follow MCP patterns already proven upstream, but its own 
 **Mixed-language note:** chrome-devtools-mcp is TypeScript — direct study and adaptation is straightforward. No translation needed.
 
 ## Implementation Success Criteria
-- Codex/Hermes/OpenCloud can use Browser Control directly via MCP
+- Codex/Hermes/OpenCloud can use Browser Control directly via CLI-first execution or MCP Lite/full MCP when appropriate
 - Browser Control tools cover browser, terminal, and file/system work
 - Setup instructions are clear and tested for at least 3 agent ecosystems
 - MCP clients can use one session model across all surfaces
