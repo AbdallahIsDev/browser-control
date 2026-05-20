@@ -214,7 +214,8 @@ export interface BrowserNamespace {
 		dialog_id?: string;
 		response?: "accept" | "dismiss";
 		text?: string;
-	}): Promise<ActionResult<{ dialogs: import("./browser/dialogs").DialogInfo[] } | import("./browser/dialogs").DialogResponse>>;
+		tabId?: string;
+	}): Promise<ActionResult<{ dialogs: import("./browser/dialogs").DialogInfo[]; tabId?: string } | (import("./browser/dialogs").DialogResponse & { tabId?: string })>>;
 	cdp(options: {
 		method: string;
 		params?: Record<string, unknown>;
@@ -222,7 +223,7 @@ export interface BrowserNamespace {
 		frameId?: string;
 		timeoutMs: number;
 		tabId?: string;
-	}): Promise<ActionResult<{ result: unknown }>>;
+	}): Promise<ActionResult<{ result: unknown; tabId: string }>>;
 	tabList(): Promise<
 		ActionResult<Array<{ id: string; url: string; title: string }>>
 	>;
