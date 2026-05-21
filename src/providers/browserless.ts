@@ -39,7 +39,10 @@ export class BrowserlessProvider implements BrowserProvider {
     };
   }
 
-  private buildWsUrl(providerConfig?: ProviderConfig, overrideUrl?: string): string {
+  private buildConnectionOptions(
+    providerConfig?: ProviderConfig,
+    overrideUrl?: string,
+  ): { wsUrl: string; headers?: Record<string, string> } {
     const { endpoint, apiKey } = this.getConfig(providerConfig);
 
     if (!endpoint && !apiKey && !overrideUrl) {
@@ -73,21 +76,22 @@ export class BrowserlessProvider implements BrowserProvider {
       url = url.replace("http://", "ws://");
     }
 
-    if (apiKey && !url.includes("token=")) {
-      const sep = url.includes("?") ? "&" : "?";
-      url = `${url}${sep}token=${encodeURIComponent(apiKey)}`;
-    }
-
-    return url;
+    return {
+      wsUrl: url,
+      headers:
+        apiKey && !url.includes("token=")
+          ? { Authorization: `Bearer ${apiKey}` }
+          : undefined,
+    };
   }
 
   async launch(options: ProviderLaunchOptions): Promise<ActiveConnection> {
-    const wsUrl = this.buildWsUrl(options.config, options.cdpUrl);
+    const { wsUrl, headers } = this.buildConnectionOptions(options.config, options.cdpUrl);
     const safeEndpoint = stripSensitiveParams(wsUrl);
 
     let browser: Browser;
     try {
-      browser = await chromium.connect(wsUrl);
+      browser = await chromium.connect(wsUrl, headers ? { headers } : undefined);
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : String(err);
       const safeMessage = sanitizeString(rawMessage);
@@ -128,12 +132,12 @@ export class BrowserlessProvider implements BrowserProvider {
   }
 
   async attach(options: ProviderAttachOptions): Promise<ActiveConnection> {
-    const wsUrl = this.buildWsUrl(options.config, options.cdpUrl);
+    const { wsUrl, headers } = this.buildConnectionOptions(options.config, options.cdpUrl);
     const safeEndpoint = stripSensitiveParams(wsUrl);
 
     let browser: Browser;
     try {
-      browser = await chromium.connect(wsUrl);
+      browser = await chromium.connect(wsUrl, headers ? { headers } : undefined);
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : String(err);
       const safeMessage = sanitizeString(rawMessage);

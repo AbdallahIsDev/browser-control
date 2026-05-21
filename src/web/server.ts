@@ -680,7 +680,7 @@ function indexHtml(nonce: string): string {
         }
       });
       const wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/events";
-      const ws = new WebSocket(wsBase + "?token=" + encodeURIComponent(token), [token]);
+      const ws = new WebSocket(wsBase, [token]);
       ws.onmessage = (event) => { document.getElementById("eventOut").textContent = event.data; };
       ws.onerror = () => { document.getElementById("eventOut").textContent = "Event stream disconnected"; };
       refresh().catch((e) => { document.getElementById("summary").textContent = e.message; });

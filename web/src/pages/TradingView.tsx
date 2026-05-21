@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DataTable } from "@/components/common/DataTable";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingState } from "@/components/common/LoadingState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PageShell } from "@/components/layout/PageShell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -116,10 +117,12 @@ export function TradingView() {
 	const [jobs, setJobs] = useState<SupervisorJob[]>([]);
 	const [journal, setJournal] = useState<JournalEntry[]>([]);
 	const [error, setError] = useState("");
+	const [loading, setLoading] = useState(true);
 	const [actionMessage, setActionMessage] = useState("");
 	const [actingTicketId, setActingTicketId] = useState<string | null>(null);
 
 	const loadData = useCallback(async () => {
+		setLoading(true);
 		try {
 			const [s, p, t, j, jr] = await Promise.all([
 				apiFetch<TradingStatus>("/api/trading/status").catch(() => null),
@@ -139,6 +142,8 @@ export function TradingView() {
 			setError(
 				`Failed to load trading data: ${err instanceof Error ? err.message : String(err)}`,
 			);
+		} finally {
+			setLoading(false);
 		}
 	}, []);
 
@@ -181,6 +186,14 @@ export function TradingView() {
 		return (
 			<PageShell>
 				<ErrorState message="Failed to load trading data" details={error} />
+			</PageShell>
+		);
+	}
+
+	if (loading) {
+		return (
+			<PageShell>
+				<LoadingState message="Loading TradingView analysis..." />
 			</PageShell>
 		);
 	}

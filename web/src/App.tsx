@@ -92,6 +92,34 @@ const pageLabels: Record<string, string> = {
 	advanced: "Advanced",
 };
 
+const pathToPage: Record<string, string> = {
+	"/": "command",
+	"/home": "command",
+	"/terminal": "terminal",
+	"/tasks": "tasks",
+	"/automations": "automations",
+	"/browser": "browser",
+	"/trading": "trading",
+	"/workflows": "workflows",
+	"/skills": "packages",
+	"/packages": "packages",
+	"/evidence": "evidence",
+	"/settings": "settings",
+	"/advanced": "advanced",
+};
+
+const pageToPath = new Map(
+	Object.entries(pathToPage).map(([routePath, pageId]) => [pageId, routePath]),
+);
+
+function pageFromLocation(): string | null {
+	const routePage = pathToPage[window.location.pathname];
+	if (routePage) return routePage;
+	const stored = localStorage.getItem("bc-page");
+	if (stored && stored in pageLabels) return stored;
+	return null;
+}
+
 /** Map status to a human-readable readiness state */
 function getReadiness(
 	status: AppStatus | null,
@@ -102,7 +130,7 @@ function getReadiness(
 	variant: "ok" | "warn" | "neutral";
 } {
 	if (error) return { text: "API unavailable", variant: "warn" };
-	if (loading) return { text: "Runtime starting", variant: "neutral" };
+	if (loading) return { text: "Starting", variant: "neutral" };
 
 	// No status and not loading — show context-appropriate label
 	if (!status) {
@@ -117,33 +145,34 @@ function getReadiness(
 	const browserSessions = Number(status.browser?.activeSessions ?? 0);
 
 	if (status.health?.overall === "healthy")
-		return { text: "Runtime ready", variant: "ok" };
+		return { text: "Ready", variant: "ok" };
 	if (status.health?.overall === "degraded")
-		return { text: "Runtime degraded", variant: "warn" };
+		return { text: "Connection issue", variant: "warn" };
 	if (status.health?.overall === "unhealthy")
-		return { text: "Runtime degraded", variant: "warn" };
+		return { text: "Connection issue", variant: "warn" };
 
 	if (daemonState === "stopped" && !brokerReachable)
-		return { text: "Runtime offline", variant: "neutral" };
+		return { text: "App service offline", variant: "neutral" };
 
 	if (daemonState === "running" || brokerReachable) {
 		if (browserSessions === 0)
 			return { text: "Browser disconnected", variant: "warn" };
-		return { text: "Runtime ready", variant: "ok" };
+		return { text: "Ready", variant: "ok" };
 	}
 
-	return { text: "Runtime starting", variant: "neutral" };
+	return { text: "Starting", variant: "neutral" };
 }
 
 export default function App() {
 	const [page, setPage] = useState<string>(() => {
-		const stored = localStorage.getItem("bc-page");
-		if (stored && stored in pageLabels) return stored;
-		return "command";
+		return pageFromLocation() ?? "command";
 	});
 	const [theme, setTheme] = useState<"dark" | "light">(() => {
 		const stored = localStorage.getItem("bc-theme");
-		return stored === "light" || stored === "dark" ? stored : "dark";
+		if (stored === "light" || stored === "dark") return stored;
+		return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+			? "dark"
+			: "light";
 	});
 	const [status, setStatus] = useState<AppStatus | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -165,6 +194,12 @@ export default function App() {
 	useEffect(() => {
 		localStorage.setItem("bc-page", page);
 	}, [page]);
+
+	useEffect(() => {
+		const onPopState = () => setPage(pageFromLocation() ?? "command");
+		window.addEventListener("popstate", onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
+	}, []);
 
 	useEffect(() => {
 		localStorage.setItem("bc-sidebar-collapsed", String(sidebarCollapsed));
@@ -216,6 +251,10 @@ export default function App() {
 
 	const handleSelect = useCallback((id: string) => {
 		setPage(id);
+		const nextPath = pageToPath.get(id) ?? "/";
+		if (window.location.pathname !== nextPath) {
+			window.history.pushState(null, "", nextPath);
+		}
 		setSidebarOpen(false);
 	}, []);
 
@@ -293,7 +332,7 @@ export default function App() {
 						title="Clear stored sign-in token"
 					>
 						<LogOut size={10} />
-						Clear token
+						Sign out
 					</button>
 				)}
 			</div>
@@ -329,7 +368,7 @@ export default function App() {
 			{authState === "no-token" && (
 				<div className="flex items-center gap-2 rounded-full border border-border/40 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
 					<Terminal size={12} />
-					<span>Open from CLI for a one-time local token</span>
+					<span>Open from CLI to sign in locally</span>
 				</div>
 			)}
 		</div>
