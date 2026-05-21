@@ -129,8 +129,9 @@ describe("createBrowserControl", () => {
     const bc = createBrowserControl({ memoryStore: store, policyProfile: "trusted" });
     await bc.session.create("fs-facade-test", { policyProfile: "trusted" });
 
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-facade-"));
-    const filePath = path.join(tmpDir, "facade-test.txt");
+    const status = bc.session.status();
+    assert.ok(status.data?.runtimeDir, "session runtimeDir must be available");
+    const filePath = path.join(status.data.runtimeDir, "facade-test.txt");
 
     try {
       const writeResult = await bc.fs.write({ path: filePath, content: "Hello from facade!" });
@@ -140,7 +141,7 @@ describe("createBrowserControl", () => {
       assert.equal(readResult.success, true, `read failed: ${readResult.error}`);
       assert.ok(readResult.data!.content.includes("Hello from facade!"));
     } finally {
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      try { fs.rmSync(filePath, { force: true }); } catch { /* ignore */ }
     }
   });
 

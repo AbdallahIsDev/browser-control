@@ -13,6 +13,7 @@ import { createCredentialProtectionService } from "../../src/security/credential
 import {
   CredentialVault,
   resetCredentialVault,
+  SecretString,
 } from "../../src/security/credential_vault";
 import { getStateStorage, resetStateStorage } from "../../src/state/index";
 
@@ -320,7 +321,7 @@ describe("Workflow Runtime", () => {
         return {
           success: true,
           id: secretRef,
-          value: "raw-helper-secret",
+          value: new SecretString("raw-helper-secret"),
           grantId: "grant-1",
         };
       },
@@ -362,7 +363,7 @@ describe("Workflow Runtime", () => {
       secretResolver: async () => ({
         success: true,
         id: "secret://site/example.test/password",
-        value: "raw-terminal-secret",
+        value: new SecretString("raw-terminal-secret"),
       }),
     });
 

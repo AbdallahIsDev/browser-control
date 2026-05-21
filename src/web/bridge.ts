@@ -50,6 +50,29 @@ export interface LogEntry {
 	component?: string;
 }
 
+function readTailLines(
+	filePath: string,
+	maxLines: number,
+	maxBytes = 256 * 1024,
+): string[] {
+	const stat = fs.statSync(filePath);
+	if (stat.size === 0 || maxLines <= 0) return [];
+	const bytesToRead = Math.min(stat.size, maxBytes);
+	const fd = fs.openSync(filePath, "r");
+	try {
+		const buffer = Buffer.alloc(bytesToRead);
+		fs.readSync(fd, buffer, 0, bytesToRead, stat.size - bytesToRead);
+		let text = buffer.toString("utf8");
+		if (bytesToRead < stat.size) {
+			const firstNewline = text.search(/\r?\n/u);
+			text = firstNewline >= 0 ? text.slice(firstNewline + 1) : "";
+		}
+		return text.split(/\r?\n/u).filter(Boolean).slice(-maxLines);
+	} finally {
+		fs.closeSync(fd);
+	}
+}
+
 export function listLogFiles(): Array<{
 	name: string;
 	path: string;
@@ -83,8 +106,7 @@ export function readRecentLogs(maxLines = 300): LogEntry[] {
 	const files = listLogFiles().slice(0, 8);
 	const entries: LogEntry[] = [];
 	for (const file of files) {
-		const raw = fs.readFileSync(file.path, "utf8");
-		const lines = raw.split(/\r?\n/u).filter(Boolean).slice(-maxLines);
+		const lines = readTailLines(file.path, maxLines);
 		for (const line of lines) {
 			const redacted = redactString(line);
 			let parsed: Record<string, unknown> | null = null;

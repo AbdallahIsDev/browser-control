@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
 	CredentialVault,
+	SecretString,
 	redactKnownSecretValues,
 	resetCredentialVault,
 } from "../../src/security/credential_vault";
@@ -100,7 +101,9 @@ describe("CredentialVault", () => {
 			policyDecision: "allow",
 		});
 		assert.equal(allowed.success, true);
-		assert.equal(allowed.value, "secret-pass-123");
+		if (allowed.success) {
+			assert.equal(allowed.value.reveal(), "secret-pass-123");
+		}
 		assert.equal(allowed.grantId, grant.id);
 
 		const denied = await vault.resolveForUse(secret.id, {
@@ -189,5 +192,82 @@ describe("CredentialVault", () => {
 		assert.doesNotMatch(serialized, /secret-pass-123/);
 		assert.doesNotMatch(serialized, /secret:\/\/site/);
 		assert.match(serialized, /REDACTED_SECRET/);
+	});
+
+	describe("SecretString", () => {
+		it("toString() returns [REDACTED_SECRET]", () => {
+			const s = new SecretString("my-secret-value");
+			assert.equal(s.toString(), "[REDACTED_SECRET]");
+		});
+
+		it("toJSON() returns [REDACTED_SECRET]", () => {
+			const s = new SecretString("my-secret-value");
+			assert.equal(JSON.stringify(s), '"[REDACTED_SECRET]"');
+		});
+
+		it("reveal() returns the actual value", () => {
+			const s = new SecretString("my-secret-value");
+			assert.equal(s.reveal(), "my-secret-value");
+		});
+
+		it("valueOf() throws", () => {
+			const s = new SecretString("my-secret-value");
+			assert.throws(() => s.valueOf(), /SecretString\.valueOf/);
+		});
+
+		it("length returns 0", () => {
+			const s = new SecretString("my-secret-value");
+			assert.equal(s.length, 0);
+		});
+
+		it("template literal returns [REDACTED_SECRET]", () => {
+			const s = new SecretString("my-secret-value");
+			assert.equal(`${s}`, "[REDACTED_SECRET]");
+		});
+
+		it("resolveForUse returns SecretString whose reveal() exposes the value", async () => {
+			const storage = getStateStorage(dataHome);
+			const vault = new CredentialVault(
+				storage,
+				createCredentialProtectionService({
+					dataHome,
+					preferWindowsDpapi: false,
+				}),
+			);
+			const secret = await vault.set("site", "example.test", "pin", "my-pin-999");
+			const grant = await vault.grant(secret.id, {
+				actions: ["reveal"],
+				domainScope: "example.test",
+			});
+
+			const resolved = await vault.resolveForUse(secret.id, {
+				action: "reveal",
+				targetDomain: "example.test",
+				site: "example.test",
+				sessionId: "test-session",
+				policyDecision: "allow",
+			});
+			assert.equal(resolved.success, true);
+			if (resolved.success) {
+				assert.equal(resolved.value.reveal(), "my-pin-999");
+				assert.equal(JSON.stringify(resolved.value), '"[REDACTED_SECRET]"');
+			}
+		});
+
+		it("resolve returns SecretString wrapping the real value", async () => {
+			const storage = getStateStorage(dataHome);
+			const vault = new CredentialVault(
+				storage,
+				createCredentialProtectionService({
+					dataHome,
+					preferWindowsDpapi: false,
+				}),
+			);
+			await vault.set("site", "example.test", "token", "resolved-token-42");
+			const result = await vault.resolve("secret://site/example.test/token");
+			assert.ok(result);
+			assert.equal(result.value.toString(), "[REDACTED_SECRET]");
+			assert.equal(result.value.reveal(), "resolved-token-42");
+		});
 	});
 });

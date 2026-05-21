@@ -68,7 +68,7 @@ Managed browser:
 
 ```powershell
 bc browser launch --port 9222 --profile default
-bc browser act open --url https://example.com --json
+bc browser open https://example.com --json
 bc browser state --snapshot=true --json
 bc browser act screenshot --output .\example.png --json
 ```
@@ -77,7 +77,7 @@ Attach to an existing CDP endpoint:
 
 ```powershell
 bc browser attach --port 9222
-bc browser act open --url https://example.com --json
+bc browser open https://example.com --json
 bc browser state --json
 ```
 

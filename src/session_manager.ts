@@ -451,12 +451,17 @@ export async function probeDaemonHealth(
  */
 export async function probeTerminalReadiness(
 	brokerUrl: string,
+	config?: import("./shared/config").BrowserControlConfig,
 ): Promise<boolean> {
+	const resolvedConfig = config ?? loadConfig({ validate: false });
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), 3000);
 	try {
 		const response = await fetch(`${brokerUrl}/api/v1/term/sessions`, {
 			signal: controller.signal,
+			headers: resolvedConfig.brokerAuthKey
+				? { Authorization: `Bearer ${resolvedConfig.brokerAuthKey}` }
+				: undefined,
 		});
 		return response.ok;
 	} catch {
@@ -1136,6 +1141,7 @@ export class SessionManager {
 
 				const daemonProcess = spawnDaemonProcess({
 					detached: true,
+					stdio: "ignore",
 				});
 
 				// Wait to detect immediate crashes. On Windows with ts-node

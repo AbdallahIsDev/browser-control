@@ -10,6 +10,21 @@ import type { ProviderConfig } from "./providers/types";
 
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
+export class CliError extends Error {
+	override name = "CliError" as const;
+	exitCode: number;
+	cleanupRequired: boolean;
+
+	constructor(
+		message: string,
+		options?: { exitCode?: number; cleanupRequired?: boolean },
+	) {
+		super(message);
+		this.exitCode = options?.exitCode ?? 1;
+		this.cleanupRequired = options?.cleanupRequired ?? true;
+	}
+}
+
 interface ParsedArgs {
 	command: string;
 	subcommand?: string;
@@ -402,6 +417,26 @@ function outputJson(data: unknown, pretty = true): void {
 	console.log(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data));
 }
 
+function exitImmediately(code: number): never {
+	const reallyExit = (
+		process as NodeJS.Process & { reallyExit?: (exitCode?: number) => never }
+	).reallyExit;
+	if (typeof reallyExit === "function") {
+		reallyExit.call(process, code);
+	}
+	process.exit(code);
+}
+
+async function closeFetchDispatcher(): Promise<void> {
+	try {
+		const undici = await import("undici");
+		const dispatcher = undici.getGlobalDispatcher();
+		await dispatcher.close();
+	} catch {
+		// Best-effort: only used to let short-lived CLI processes exit cleanly.
+	}
+}
+
 function cliTimeoutResult(label: string, timeoutMs: number): {
 	success: false;
 	path: "cli";
@@ -458,7 +493,7 @@ async function requireCliPolicy(
 					console.error("Rerun with --yes to confirm this high-risk action.");
 				}
 			}
-			process.exit(1);
+			throw new CliError('Command failed');
 		}
 	} finally {
 		store.close();
@@ -542,8 +577,10 @@ Browser Lifecycle:
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
   browser status                                                     Show browser connection status
+  browser open <url> [--json]                                       Open/navigate browser tab
+  browser snapshot [--boxes] [--json]                                Take accessibility snapshot
   browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
-  browser act <action> [target] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
+  browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
                                                                       Run one composite browser action
   browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser provider list                                              List browser providers
@@ -716,7 +753,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 			const key = positional[0];
 			if (!key) {
 				console.error("Error: config get requires a key");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const entry = getConfigValue(key, { validate: false });
 			if (jsonOutput) outputJson(entry, false);
@@ -728,7 +765,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 			const value = positional[1];
 			if (!key || value === undefined) {
 				console.error("Error: config set requires <key> <value>");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			await requireCliPolicy("config_set", { key, value }, jsonOutput);
 			const result = setUserConfigValue(key, value);
@@ -739,7 +776,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown config command: ${subcommand}`);
 			console.error("Available: list, get, set");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -760,7 +797,7 @@ async function handleRun(args: ParsedArgs): Promise<void> {
 
 	if (!flags.skill || !flags.action) {
 		console.error("Error: --skill and --action are required");
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 
 	const body: Record<string, unknown> = {};
@@ -771,7 +808,7 @@ async function handleRun(args: ParsedArgs): Promise<void> {
 			body.params = JSON.parse(flags.params);
 		} catch {
 			console.error("Error: Invalid JSON in --params");
-			process.exit(1);
+			throw new CliError('Command failed');
 		}
 	}
 	if (flags.priority) body.priority = flags.priority;
@@ -782,7 +819,7 @@ async function handleRun(args: ParsedArgs): Promise<void> {
 		outputJson(result, !jsonOutput);
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -797,7 +834,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -807,7 +844,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 			const id = positional[0];
 			if (!id) {
 				console.error("Error: Task ID is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const result = await apiRequest(
@@ -817,7 +854,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -826,14 +863,14 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 			const id = positional[0];
 			if (!id) {
 				console.error("Error: Task ID is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const result = await apiRequest(`/scheduler/${id}`, "DELETE");
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -843,11 +880,11 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 			const id = subcommand;
 			if (!id) {
 				console.error("Error: Task ID is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			if (!flags.cron) {
 				console.error("Error: --cron is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const body: Record<string, unknown> = {
@@ -863,7 +900,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 					body.params = JSON.parse(flags.params);
 				} catch {
 					console.error("Error: Invalid JSON in --params");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 
@@ -872,7 +909,7 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -949,7 +986,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 				daemonProcess.stderr?.destroy();
 				daemonProcess.removeAllListeners();
 				fs.closeSync(daemonLogFd);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			// Process is still running after timeout — ensure data dir and persist PID.
@@ -1005,7 +1042,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 					console.error("Daemon exited before becoming ready.");
 					if (errorOutput) console.error(errorOutput);
 					console.error(`Log: ${daemonLogPath}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 
@@ -1026,7 +1063,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 				console.log("Daemon is not running (no PID file)");
 				// Still clean up stale status file if daemon is gone
 				await cleanupStaleDaemonStatus();
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const pid = Number(fs.readFileSync(getPidFilePath(), "utf8").trim());
@@ -1044,7 +1081,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 					// The user may need to retry `bc daemon stop` after fixing
 					// permissions, and the PID file is essential for that.
 					console.error("Error:", (error as Error).message);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 			break;
@@ -1081,7 +1118,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1117,7 +1154,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 
 		default:
 			console.error(`Unknown daemon command: ${subcommand}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -1137,7 +1174,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				outputJson(results, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1146,7 +1183,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 			const url = positional[0];
 			if (!url) {
 				console.error("Error: Proxy URL is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			try {
@@ -1166,7 +1203,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				console.log(`Proxy added: ${url}`);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1175,7 +1212,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 			const url = positional[0];
 			if (!url) {
 				console.error("Error: Proxy URL is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			try {
@@ -1198,7 +1235,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				console.log(`Proxy removed: ${url}`);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1209,14 +1246,14 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				outputJson(configs, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
 
 		default:
 			console.error(`Unknown proxy command: ${subcommand}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -1245,7 +1282,7 @@ async function handleMemory(args: ParsedArgs): Promise<void> {
 				const key = positional[0];
 				if (!key) {
 					console.error("Error: Key is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const value = store.get(key);
 				if (value === null) {
@@ -1261,7 +1298,7 @@ async function handleMemory(args: ParsedArgs): Promise<void> {
 				const value = positional[1];
 				if (!key || value === undefined) {
 					console.error("Error: Key and value are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				store.set(key, value);
 				console.log(`Key set: ${key}`);
@@ -1270,7 +1307,7 @@ async function handleMemory(args: ParsedArgs): Promise<void> {
 
 			default:
 				console.error(`Unknown memory command: ${subcommand}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		store.close();
@@ -1308,7 +1345,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1317,14 +1354,14 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const name = positional[0];
 			if (!name) {
 				console.error("Error: Skill name is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const registry = await loadCliSkillRegistry(getSkillsDataDir());
 				const skill = registry.get(name);
 				if (!skill) {
 					console.error(`Error: Skill "${name}" not found`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const env = registry.validateEnv(name);
 				const result = env.valid
@@ -1337,7 +1374,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1346,7 +1383,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const name = positional[0];
 			if (!name) {
 				console.error("Error: Skill name is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const registry = await loadCliSkillRegistry(getSkillsDataDir());
@@ -1356,7 +1393,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				const skill = skills.find((s) => s.name === name);
 				if (!skill) {
 					console.error(`Error: Skill "${name}" not found`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const actions = skill.actions as
 					| Array<Record<string, unknown>>
@@ -1383,7 +1420,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1392,7 +1429,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const skillPath = positional[0];
 			if (!skillPath) {
 				console.error("Error: Path to skill directory is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			// Validate locally before installing
 			const { SkillRegistry } = await import("./skill_registry");
@@ -1406,13 +1443,13 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				console.error(
 					`Error: "${skillPath}" is not a packaged skill directory (missing skill.yaml)`,
 				);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const meta = loadPackagedSkillDir(skillPath);
 			if (!meta) {
 				console.error(`Error: Failed to load skill.yaml from "${skillPath}"`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const validation = validateManifest(meta.manifest);
@@ -1421,14 +1458,14 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				for (const err of validation.errors) {
 					console.error(`  - ${err}`);
 				}
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const skillsDir = getSkillsDataDir();
 			const result = registry.installSkill(skillPath, skillsDir);
 			if (!result.success) {
 				console.error(`Install failed: ${result.error}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			console.log(`Skill "${result.name}" installed to ${skillsDir}`);
 			break;
@@ -1438,7 +1475,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const nameOrPath = positional[0];
 			if (!nameOrPath) {
 				console.error("Error: Skill name or path is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const { isPackagedSkillDir, loadPackagedSkillDir } = await import(
@@ -1453,7 +1490,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 					console.error(
 						`Error: Failed to load skill.yaml from "${nameOrPath}"`,
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const validation = validateManifest(meta.manifest);
 				outputJson(validation, !jsonOutput);
@@ -1471,7 +1508,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 					console.error(
 						`Error: Skill "${nameOrPath}" not found (not a path or registered name)`,
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const validation = validateManifest(
 					skill as unknown as import("./skill").SkillManifest,
@@ -1479,7 +1516,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				outputJson(validation, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1488,7 +1525,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const name = positional[0];
 			if (!name) {
 				console.error("Error: Skill name is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const { SkillRegistry } = await import("./skill_registry");
 			const registry = new SkillRegistry();
@@ -1496,7 +1533,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 			const result = registry.removeSkill(name, skillsDir);
 			if (!result.success) {
 				console.error(`Remove failed: ${result.error}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			console.log(`Skill "${name}" removed.`);
 			break;
@@ -1504,7 +1541,7 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 
 		default:
 			console.error(`Unknown skill command: ${subcommand}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -1526,7 +1563,7 @@ async function handleReport(args: ParsedArgs): Promise<void> {
 				outputJson(summary, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1559,14 +1596,14 @@ async function handleReport(args: ParsedArgs): Promise<void> {
 				outputJson(parsed, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
 
 		default:
 			console.error(`Unknown report command: ${subcommand}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -1577,7 +1614,7 @@ async function handleCaptcha(args: ParsedArgs): Promise<void> {
 
 	if (subcommand !== "test") {
 		console.error(`Unknown captcha command: ${subcommand}`);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 
 	// Captcha solving requires a browser Page which the CLI cannot provide.
@@ -1587,11 +1624,11 @@ async function handleCaptcha(args: ParsedArgs): Promise<void> {
 		console.error(
 			"Error: CAPTCHA_PROVIDER is not configured. Set it in .env to enable captcha solving.",
 		);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 	if (!config.captchaApiKey) {
 		console.error("Error: CAPTCHA_API_KEY is not configured.");
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 
 	const result = {
@@ -1633,12 +1670,12 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 			const name = positional[0];
 			if (!name) {
 				console.error("Error: Profile name is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const profile = getProfile(name);
 			if (!profile) {
 				console.error(`Error: Profile "${name}" not found`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			outputJson(profile, !jsonOutput);
 			break;
@@ -1648,12 +1685,12 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 			const name = positional[0];
 			if (!name) {
 				console.error("Error: Profile name is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const profile = getProfile(name);
 			if (!profile) {
 				console.error(`Error: Profile "${name}" not found`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const outputPath = positional[1] || `${name}-policy.json`;
@@ -1667,19 +1704,19 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 			const filePath = positional[0];
 			if (!filePath) {
 				console.error("Error: File path is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			if (!fs.existsSync(filePath)) {
 				console.error(`Error: File not found: ${filePath}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const content = fs.readFileSync(filePath, "utf-8");
 			const profile = deserializeProfile(content);
 			if (!profile) {
 				console.error("Error: Failed to parse profile or validation failed");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const validation = validateProfile(profile);
@@ -1688,7 +1725,7 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 				for (const err of validation.errors) {
 					console.error(`  - ${err}`);
 				}
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			saveCustomProfile(profile);
@@ -1703,7 +1740,7 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 
 		default:
 			console.error(`Unknown policy command: ${subcommand}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -1759,7 +1796,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				await manager.releaseCliHandles();
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1776,7 +1813,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				} else {
 					if (!result.success) {
 						console.error(`List failed: ${result.error}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const browsers = result.data ?? [];
 					if (browsers.length === 0) {
@@ -1794,7 +1831,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1810,7 +1847,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				} else {
 					if (!result.success || !result.data) {
 						console.error(`Detach failed: ${result.error ?? "not applicable"}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (result.data.detached) {
 						console.log(`Detached from browser`);
@@ -1826,7 +1863,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1851,11 +1888,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 			if (!target) {
 				console.error("Error: Target is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			if (!files && !dataArray) {
 				console.error("Error: Either --file/--files or --data is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			try {
@@ -1906,12 +1943,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						}
 					} else {
 						console.error(`Drop failed: ${result.error}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1922,7 +1959,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			if (downloadsAction !== "list") {
 				console.error(`Unknown downloads command: ${downloadsAction}`);
 				console.error("Available: list");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			try {
@@ -1951,12 +1988,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						}
 					} else {
 						console.error(`Downloads list failed: ${result.error}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -1965,6 +2002,8 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			const port = flags.port ? Number(flags.port) : undefined;
 			const profileName = flags.profile ?? "default";
 			const provider = flags.provider ?? undefined;
+			const allowSystemProfile = flags["allow-system-profile"] === "true" ||
+				process.env.BROWSER_CONTROL_ALLOW_SYSTEM_PROFILE === "1";
 
 			try {
 				const { BrowserConnectionManager } = await import(
@@ -1979,11 +2018,25 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				});
 				const manager = new BrowserConnectionManager({ policyEngine });
 
+				// Treat "shared" profile as needing explicit opt-in
+				const profileType = flags["profile-type"] ?? (allowSystemProfile ? "shared" : "isolated");
+				if (profileType !== "isolated" && !allowSystemProfile) {
+					console.warn(
+						"Warning: System/shared profile requires --allow-system-profile flag or " +
+						"BROWSER_CONTROL_ALLOW_SYSTEM_PROFILE=1 env var. Defaulting to isolated profile.",
+					);
+				}
+				if (profileType !== "isolated" && allowSystemProfile) {
+					console.warn("Warning: Using system/shared Chrome profile — data may persist across sessions.");
+				}
+
 				const connection = await manager.launchManaged({
 					port,
 					profileName,
+					profileType: profileType as "shared" | "isolated" | "named",
 					actor: "human",
 					provider,
+					allowSystemProfile,
 				});
 				if (jsonOutput) {
 					outputJson(connection);
@@ -1999,7 +2052,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				await manager.releaseCliHandles();
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2026,7 +2079,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2084,7 +2137,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Provider name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					await requireCliPolicy(
 						"browser_provider_use",
@@ -2105,7 +2158,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 							}
 						} else {
 							console.error(`Error: ${result.error}`);
-							process.exit(1);
+							throw new CliError('Command failed');
 						}
 					}
 					break;
@@ -2114,7 +2167,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Provider name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const providerType = flags.type as ProviderConfig["type"] | undefined;
 					const endpoint = flags.endpoint as string | undefined;
@@ -2133,17 +2186,17 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error(
 							"Error: --type is required (browserless, browserbase, custom, e2b, cubesandbox, camofox, cloak, obscura)",
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (!validProviderTypes.includes(providerType)) {
 						console.error(
 							`Error: Invalid provider type "${providerType}". Must be browserless, browserbase, custom, e2b, cubesandbox, camofox, cloak, or obscura.`,
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (!endpoint && providerType !== "browserbase") {
 						console.error("Error: --endpoint is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					await requireCliPolicy(
 						"browser_provider_add",
@@ -2168,7 +2221,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 							if (apiKey) console.log("  API key stored (not shown)");
 						} else {
 							console.error(`Error: ${result.error}`);
-							process.exit(1);
+							throw new CliError('Command failed');
 						}
 					}
 					break;
@@ -2212,7 +2265,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Provider name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					await requireCliPolicy(
 						"browser_provider_remove",
@@ -2230,7 +2283,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 							console.log(`Provider "${name}" removed`);
 						} else {
 							console.error(`Error: ${result.error}`);
-							process.exit(1);
+							throw new CliError('Command failed');
 						}
 					}
 					break;
@@ -2238,7 +2291,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				default:
 					console.error(`Unknown browser provider command: ${providerAction}`);
 					console.error("Available: list, use, add, remove");
-					process.exit(1);
+					throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2278,7 +2331,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Profile name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const type = (flags.type ?? "named") as
 						| "shared"
@@ -2302,14 +2355,14 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Profile name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const { BrowserProfileManager } = await import("./browser/profiles");
 					const pm = new BrowserProfileManager();
 					const profile = pm.getProfileByName(name);
 					if (!profile) {
 						console.error(`Error: Profile "${name}" not found`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					pm.touchProfile(profile.id);
 					// Store the active profile preference
@@ -2334,7 +2387,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const name = positional[1];
 					if (!name) {
 						console.error("Error: Profile name is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const { BrowserProfileManager } = await import("./browser/profiles");
 					const pm = new BrowserProfileManager();
@@ -2343,7 +2396,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error(
 							`Error: Profile "${name}" not found or cannot be deleted`,
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					console.log(`Profile "${name}" deleted.`);
 					break;
@@ -2352,7 +2405,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				default:
 					console.error(`Unknown browser profile command: ${profileAction}`);
 					console.error("Available: list, create, use, delete");
-					process.exit(1);
+					throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2375,11 +2428,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error(
 							"Error: You must specify either --live (to extract from the active browser) or --stored (to extract from offline memory snapshot).",
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (isLive && isStored) {
 						console.error("Error: Cannot specify both --live and --stored.");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 
 					await requireCliPolicy(
@@ -2425,7 +2478,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									"Error: --live was specified but no active browser is currently connected.",
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							const activeProfileId = activeSession.profileId;
 							if (!activeProfileId) {
@@ -2433,7 +2486,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									"Error: Active browser state is missing a profile id.",
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							const activeProfileName = pm.getProfile(activeProfileId)?.name;
 
@@ -2442,7 +2495,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									`Error: Active browser is running profile "${activeProfileName}", but you requested "${profileName}".`,
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 
 							let activePort = config.chromeDebugPort;
@@ -2475,7 +2528,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									`Error: Profile "${targetProfileName}" not found`,
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							snapshot = loadAuthSnapshot(store, profile.id);
 							if (!snapshot) {
@@ -2486,7 +2539,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									"Connect to a browser first and let cookies persist, then try again.",
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							console.log(
 								`Successfully loaded stored auth snapshot for profile "${targetProfileName}".`,
@@ -2502,7 +2555,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						);
 					} catch (error) {
 						console.error("Error:", (error as Error).message);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					break;
 				}
@@ -2516,21 +2569,21 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 					if (!filePath) {
 						console.error("Error: File path is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (!fs.existsSync(filePath)) {
 						console.error(`Error: File not found: ${filePath}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (!isLive && !isStored) {
 						console.error(
 							"Error: You must specify either --live (to inject into the active browser) or --stored (to update offline memory snapshot).",
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (isLive && isStored) {
 						console.error("Error: Cannot specify both --live and --stored.");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 
 					await requireCliPolicy(
@@ -2572,7 +2625,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 							const profile = pm.getProfileByName(profileName);
 							if (!profile) {
 								console.error(`Error: Profile "${profileName}" not found`);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							profileId = profile.id;
 						}
@@ -2589,14 +2642,14 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 								console.error(
 									"Error: --live was specified but no active browser is currently connected.",
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							if (activeSession.profileId !== profileId) {
 								store.close();
 								console.error(
 									`Error: Active browser is running profile "${activeSession.profileId}", but snapshot is for "${profileId}".`,
 								);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 
 							let activePort = config.chromeDebugPort;
@@ -2636,7 +2689,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.log(`  Cookies: ${targetSnapshot.cookies?.length ?? 0}`);
 					} catch (error) {
 						console.error("Error:", (error as Error).message);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					break;
 				}
@@ -2644,7 +2697,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				default:
 					console.error(`Unknown browser auth command: ${authAction}`);
 					console.error("Available: export, import");
-					process.exit(1);
+					throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2653,7 +2706,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			const target = positional[0];
 			if (!target) {
 				console.error("Error: Target (ref, selector, or text) is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			await requireCliPolicy(
 				"browser_highlight",
@@ -2681,12 +2734,179 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error(`Error: ${result.error}`);
 						if (result.policyDecision)
 							console.error(`Policy: ${result.policyDecision}`);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "open-many":
+		case "openMany": {
+			const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
+			if (!Array.isArray(urls) || urls.length === 0) {
+				console.error("Error: --urls is required (JSON array)");
+				throw new CliError('Command failed');
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.act({
+						action: "openMany",
+						urls,
+						waitUntil: parseWaitUntil(flags["wait-until"]),
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser open-many",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "open": {
+			const url = positional[0] ?? flags.url;
+			if (!url) {
+				console.error("Error: URL is required");
+				throw new CliError('Command failed');
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.act({
+						action: "open",
+						url,
+						waitUntil: parseWaitUntil(flags["wait-until"]),
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser open",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "navigate": {
+			const url = positional[0] ?? flags.url;
+			if (!url) {
+				console.error("Error: URL is required");
+				throw new CliError('Command failed');
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.act({
+						action: "navigate",
+						url,
+						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						waitUntil: parseWaitUntil(flags["wait-until"]),
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser navigate",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "capture": {
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.act({
+						action: "capture",
+						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
+						screenshot: flags.screenshot === "true",
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser capture",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "capture-many":
+		case "captureMany": {
+			const tabIds = flags["tab-ids"]
+				? flags["tab-ids"].split(",").map((item) => item.trim()).filter(Boolean)
+				: flags.urls
+					? JSON.parse(flags.urls)
+					: undefined;
+			if (!Array.isArray(tabIds) || tabIds.length === 0) {
+				console.error("Error: --tab-ids or --urls is required");
+				throw new CliError('Command failed');
+			}
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.act({
+						action: "captureMany",
+						urls: tabIds,
+						snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
+						screenshot: flags.screenshot === "true",
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser capture-many",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
+			}
+			break;
+		}
+
+		case "snapshot": {
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.snapshot({
+						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						boxes: flags.boxes === "true",
+						rootSelector: flags["root-selector"],
+					}),
+					timeoutMs ? Number(timeoutMs) : 30_000,
+					"browser snapshot",
+				);
+				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2696,18 +2916,24 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const result = await bc.browser.state({
-					tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
-					snapshot: flags.snapshot === "true",
-					screenshot: flags.screenshot === "true",
-					fullPage: flags["full-page"] === "true" || flags.fullPage === "true",
-					dialog: flags.dialog !== "false",
-					downloads: flags.downloads === "true",
-				});
+				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.state({
+						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						snapshot: flags.snapshot === "true",
+						screenshot: flags.screenshot === "true",
+						fullPage: flags["full-page"] === "true" || flags.fullPage === "true",
+						dialog: flags.dialog !== "false",
+						downloads: flags.downloads === "true",
+					}),
+					timeoutMs ? Number(timeoutMs) : 30_000,
+					"browser state",
+				);
 				outputJson(result, !jsonOutput);
+				process.exit(timedOut ? 1 : 0);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2717,7 +2943,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			const action = positional[0];
 			if (!action) {
 				console.error("Error: Action is required (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state)");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const { createBrowserControl } = await import("./browser_control");
@@ -2728,7 +2954,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const { result, timedOut } = await withCliTimeout(bc.browser.act({
 					action: action as any,
 					target: positional[1] ?? flags.target,
-					text: flags.text,
+					text: flags.text ?? positional[2],
 					key: flags.key,
 					timeoutMs: timeoutMs ? Number(timeoutMs) : undefined,
 					force: flags.force === "true",
@@ -2754,7 +2980,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				process.exit(timedOut ? 1 : 0);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2764,19 +2990,19 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			const taskAction = positional[0];
 			if (taskAction !== "run") {
 				console.error("Error: Use 'task run --steps=<json>'");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const stepsRaw = flags.steps;
 			if (!stepsRaw) {
 				console.error("Error: --steps is required (JSON array of step objects)");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			let steps: any[];
 			try {
 				steps = JSON.parse(stepsRaw);
 			} catch {
 				console.error("Error: --steps must be valid JSON");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			try {
 				const { createBrowserControl } = await import("./browser_control");
@@ -2790,7 +3016,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				process.exit(timedOut ? 1 : 0);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -2798,9 +3024,9 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown browser command: ${subcommand}`);
 			console.error(
-				"Available: attach, launch, status, profile, auth, highlight, state, act, task",
+				"Available: attach, launch, status, profile, auth, highlight, state, act, task, open-many, navigate, capture, capture-many",
 			);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -2823,7 +3049,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 		installJsonOutputGuards();
 	}
 
-	switch (args.command) {
+	process.exitCode = 0;
+
+	try {
+		switch (args.command) {
 		case "doctor":
 			await handleDoctor(args);
 			break;
@@ -3010,20 +3239,22 @@ export async function runCli(argv = process.argv): Promise<void> {
 			process.exit(1);
 	}
 
-	// ── Clean exit ──────────────────────────────────────────────────
-	// Close the shared SessionManager to release all held resources
-	// (MemoryStore's SQLite handle, terminal manager, etc.). Without
-	// this, the Node.js event loop stays alive and the CLI process
-	// never exits after commands like `bc term open --json`.
-	if (_sessionManager) {
-		await _sessionManager.releaseCliHandles();
-		_sessionManager.close();
-	}
+	} finally {
+		// ── Clean exit ──────────────────────────────────────────────────
+		// Close the shared SessionManager to release all held resources
+		// (MemoryStore's SQLite handle, terminal manager, etc.). Without
+		// this, the Node.js event loop stays alive and the CLI process
+		// never exits after commands like `bc term open --json`.
+		if (_sessionManager) {
+			await _sessionManager.releaseCliHandles();
+			_sessionManager.close();
+		}
 
-	if (previousJsonOutputMode === undefined) {
-		delete process.env.BROWSER_CONTROL_JSON_OUTPUT;
-	} else {
-		process.env.BROWSER_CONTROL_JSON_OUTPUT = previousJsonOutputMode;
+		if (previousJsonOutputMode === undefined) {
+			delete process.env.BROWSER_CONTROL_JSON_OUTPUT;
+		} else {
+			process.env.BROWSER_CONTROL_JSON_OUTPUT = previousJsonOutputMode;
+		}
 	}
 }
 
@@ -3082,7 +3313,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 			const nameOrDomain = positional[0];
 			if (!nameOrDomain) {
 				console.error("Error: Name or domain is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			let artifact = findByDomain(nameOrDomain);
@@ -3090,7 +3321,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 			if (!artifact) {
 				console.error(`Error: No knowledge found for "${nameOrDomain}"`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			if (jsonOutput) {
@@ -3177,7 +3408,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 				console.log(`\n${allValid ? "All valid." : "Some files have issues."}`);
 			}
 
-			if (!allValid) process.exit(1);
+			if (!allValid) throw new CliError('Command failed');
 			break;
 		}
 
@@ -3186,7 +3417,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 			const nameOrDomain = positional[0];
 			if (!nameOrDomain) {
 				console.error("Error: Name or domain is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			let artifact = findByDomain(nameOrDomain);
@@ -3194,7 +3425,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 			if (!artifact) {
 				console.error(`Error: No knowledge found for "${nameOrDomain}"`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const result = pruneArtifact(artifact.filePath, {
@@ -3221,7 +3452,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 			const nameOrDomain = positional[0];
 			if (!nameOrDomain) {
 				console.error("Error: Name or domain is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			let artifact = findByDomain(nameOrDomain);
@@ -3229,7 +3460,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 			if (!artifact) {
 				console.error(`Error: No knowledge found for "${nameOrDomain}"`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const deleted = deleteArtifact(artifact.filePath);
@@ -3237,7 +3468,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 			console.log(`Deleted: ${artifact.filePath}`);
 		} else {
 			console.error(`Error: Failed to delete ${artifact.filePath}`);
-			process.exit(1);
+			throw new CliError('Command failed');
 		}
 		break;
 	}
@@ -3285,7 +3516,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 							console.log(`${status} ${health.type}: ${health.summary}`);
 							console.log(`Checked: ${health.checkedAt}`);
 						}
-						if (!health.ok) process.exit(1);
+						if (!health.ok) throw new CliError('Command failed');
 					} else {
 						const catalog = getKnowledgeBackendCatalog();
 						const results = await Promise.all(
@@ -3314,7 +3545,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 					if (!query && !domain) {
 						console.error("Error: --query or --domain is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 
 					const backend = createKnowledgeBackend({
@@ -3348,7 +3579,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 					if (!query) {
 						console.error("Error: --query is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 
 					const backend = createKnowledgeBackend({
@@ -3379,7 +3610,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 				default:
 					console.error(`Unknown backends command: ${backendSubcommand}`);
 					console.error("Supported: list, health, search, rank");
-					process.exit(1);
+					throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -3387,7 +3618,7 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown knowledge command: ${subcommand}`);
 			console.error("Supported: list, show, validate, prune, delete");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -3406,7 +3637,7 @@ async function handleMcp(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown MCP command: ${subcommand}`);
 			console.error("Available: serve");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -3527,7 +3758,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 			} else {
 				console.error(`Error: ${message}`);
 			}
-			process.exit(1);
+			throw new CliError('Command failed');
 			return; // unreachable but helps type inference
 		}
 	}
@@ -3564,7 +3795,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const command = positional[0];
 				if (!command) {
 					console.error("Error: Command is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.exec({
 					command,
@@ -3579,11 +3810,11 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = flags.session;
 				if (!text) {
 					console.error("Error: Text is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				if (!sessionId) {
 					console.error("Error: --session is required for 'term type'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.type({ text, sessionId });
 				break;
@@ -3593,7 +3824,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = flags.session;
 				if (!sessionId) {
 					console.error("Error: --session is required for 'term read'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.read({
 					sessionId,
@@ -3612,7 +3843,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = flags.session;
 				if (!sessionId) {
 					console.error("Error: --session is required for 'term interrupt'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.interrupt({ sessionId });
 				break;
@@ -3622,7 +3853,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = flags.session;
 				if (!sessionId) {
 					console.error("Error: --session is required for 'term close'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.close({ sessionId });
 				break;
@@ -3637,7 +3868,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = positional[0] || flags.session;
 				if (!sessionId) {
 					console.error("Error: session ID is required for 'term resume'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.resume({ sessionId });
 				break;
@@ -3647,7 +3878,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = positional[0] || flags.session;
 				if (!sessionId) {
 					console.error("Error: session ID is required for 'term status'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.status({ sessionId });
 				break;
@@ -3657,7 +3888,7 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				const sessionId = positional[0] || flags.session;
 				if (!sessionId) {
 					console.error("Error: session ID is required for 'term view'");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await terminalActions.snapshot({ sessionId });
 				break;
@@ -3665,12 +3896,15 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 
 			default:
 				console.error(`Unknown term command: ${subcommand}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 
 		if (result) {
 			if (jsonOutput) {
-				outputJson(formatActionResult(result), false);
+				fs.writeSync(1, `${JSON.stringify(formatActionResult(result))}\n`);
+				await closeFetchDispatcher();
+				process.exitCode = 0;
+				return;
 			} else {
 				if (result.success) {
 					// Human-friendly output per action type
@@ -3753,13 +3987,13 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 					console.error(`Error: ${result.error}`);
 					if (result.policyDecision)
 						console.error(`Policy: ${result.policyDecision}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -3789,7 +4023,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const filePath = positional[0];
 				if (!filePath) {
 					console.error("Error: File path is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await fsActions.read({
 					path: filePath,
@@ -3802,7 +4036,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const filePath = positional[0];
 				if (!filePath) {
 					console.error("Error: File path is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await fsActions.write({
 					path: filePath,
@@ -3828,7 +4062,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const dst = positional[1];
 				if (!src || !dst) {
 					console.error("Error: Source and destination paths are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await fsActions.move({ src, dst, confirmed });
 				break;
@@ -3838,7 +4072,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const targetPath = positional[0];
 				if (!targetPath) {
 					console.error("Error: Path is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await fsActions.rm({
 					path: targetPath,
@@ -3853,7 +4087,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const targetPath = positional[0];
 				if (!targetPath) {
 					console.error("Error: Path is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await fsActions.stat({ path: targetPath });
 				break;
@@ -3861,7 +4095,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 
 			default:
 				console.error(`Unknown fs command: ${subcommand}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 
 		if (result) {
@@ -3896,13 +4130,13 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 					console.error(`Error: ${result.error}`);
 					if (result.policyDecision)
 						console.error(`Policy: ${result.policyDecision}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -3967,7 +4201,7 @@ async function handleDashboard(args: ParsedArgs): Promise<void> {
 				outputJson(state, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -4003,14 +4237,14 @@ async function handleDashboard(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error: unknown) {
 				console.error("Error:", errorMessage(error));
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
 		default:
 			console.error(`Unknown dashboard command: ${subcommand}`);
 			console.error("Available: status, open");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -4095,14 +4329,14 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error: unknown) {
 				console.error("Error:", errorMessage(error));
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
 		default:
 			console.error(`Unknown web command: ${action}`);
 			console.error("Available: serve, open");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -4132,7 +4366,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 				console.error(
 					"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
 				);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 
 			const result = cleanupDataHome(undefined, { dryRun, confirm });
@@ -4160,7 +4394,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown data command: ${action}`);
 			console.error("Available: doctor, cleanup, export");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -4230,7 +4464,7 @@ async function handleBenchmark(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown benchmark command: ${action}`);
 			console.error("Available: run, results, compare");
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
@@ -4330,12 +4564,12 @@ async function handleDesktop(args: ParsedArgs): Promise<void> {
 			} else {
 				console.error("Error:", message);
 			}
-			process.exit(1);
+			throw new CliError('Command failed');
 		}
 	} else {
 		console.error(`Unknown desktop command: ${action}`);
 		console.error("Available: start");
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -4360,7 +4594,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const graphPathOrName = positional[0];
 				if (!graphPathOrName) {
 					console.error("Error: graphPathOrName is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				let graphJson = "";
 				try {
@@ -4378,7 +4612,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 					console.error(
 						"Error: graphPathOrName must be a valid JSON string or path to a JSON file",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.run(graphJson);
 				outputJson(result, !jsonOutput);
@@ -4388,7 +4622,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const runId = positional[0];
 				if (!runId) {
 					console.error("Error: runId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.status(runId);
 				outputJson(result, !jsonOutput);
@@ -4398,7 +4632,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const runId = positional[0];
 				if (!runId) {
 					console.error("Error: runId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.events(runId);
 				outputJson(result, !jsonOutput);
@@ -4410,7 +4644,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const rawValue = positional[2];
 				if (!runId || !key || rawValue === undefined) {
 					console.error("Error: runId, key, and value are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.editState(
 					runId,
@@ -4424,7 +4658,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const runId = positional[0];
 				if (!runId) {
 					console.error("Error: runId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.resume(runId);
 				outputJson(result, !jsonOutput);
@@ -4435,7 +4669,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const nodeId = positional[1];
 				if (!runId || !nodeId) {
 					console.error("Error: runId and nodeId are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.approve(runId, nodeId);
 				outputJson(result, !jsonOutput);
@@ -4445,7 +4679,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				const runId = positional[0];
 				if (!runId) {
 					console.error("Error: runId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.workflow.cancel(runId);
 				outputJson(result, !jsonOutput);
@@ -4456,7 +4690,7 @@ async function handleWorkflow(args: ParsedArgs): Promise<void> {
 				console.error(
 					"Available: run, status, events, edit-state, resume, approve, cancel",
 				);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		bc.close();
@@ -4480,7 +4714,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				const helperId = positional[0];
 				if (!helperId) {
 					console.error("Error: helperId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.harness.validate(helperId);
 				outputJson(result, !jsonOutput);
@@ -4491,7 +4725,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				const version = positional[1];
 				if (!helperId || !version) {
 					console.error("Error: helperId and version are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.harness.rollback(helperId, version);
 				outputJson(result, !jsonOutput);
@@ -4502,7 +4736,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				const purpose = flags.purpose ?? positional[1];
 				if (!id || !purpose) {
 					console.error("Error: --id and --purpose are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const filesFlag = flags.files;
 				const files = filesFlag
@@ -4531,7 +4765,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				const helperId = positional[0];
 				if (!helperId) {
 					console.error("Error: helperId is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				let input: Record<string, unknown> = {};
 				if (flags.input) {
@@ -4539,7 +4773,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 						input = JSON.parse(flags.input);
 					} catch {
 						console.error("Error: Invalid JSON in --input");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 				}
 				const result = await bc.harness.execute(helperId, input);
@@ -4549,7 +4783,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 			default:
 				console.error(`Unknown harness command: ${subcommand}`);
 				console.error("Available: list, validate, rollback, generate, execute");
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		bc.close();
@@ -4568,7 +4802,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const source = positional[0];
 				if (!source) {
 					console.error("Error: package source path is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.install(source);
 				outputJson(result, !jsonOutput);
@@ -4583,7 +4817,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: package name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.info(name);
 				outputJson(result, !jsonOutput);
@@ -4593,7 +4827,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: package name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.remove(name);
 				outputJson(result, !jsonOutput);
@@ -4604,7 +4838,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const source = positional[1];
 				if (!name) {
 					console.error("Error: package name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.update(name, source);
 				outputJson(result, !jsonOutput);
@@ -4617,7 +4851,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 					console.error(
 						"Error: package name and permission kind or index are required",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const ref = /^\d+$/.test(permissionRef)
 					? Number(permissionRef)
@@ -4631,7 +4865,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const workflowNameOrId = positional[1];
 				if (!name || !workflowNameOrId) {
 					console.error("Error: package name and workflow are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.run(name, workflowNameOrId);
 				outputJson(result, !jsonOutput);
@@ -4641,7 +4875,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: package name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const result = await bc.package.eval(name);
 				outputJson(result, !jsonOutput);
@@ -4652,7 +4886,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				console.error(
 					"Available: install, list, info, remove, update, grant, run, eval",
 				);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		bc.close();
@@ -4683,19 +4917,19 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 					scope !== "workflow"
 				) {
 					console.error("Error: --scope must be site, package, or workflow");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				if (!scopeName || !secretName || !value) {
 					console.error(
 						"Error: scope name, secret name, and value are required",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				if (flags.confirm !== "STORE_SECRET") {
 					console.error(
 						"Error: storing a secret requires --confirm=STORE_SECRET",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const stored = await vault.set(scope, scopeName, secretName, value);
 				outputJson(
@@ -4716,13 +4950,13 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 				const secretId = flags["secret-id"] ?? positional[0];
 				if (!secretId) {
 					console.error("Error: secret id is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				if (flags.confirm !== "DELETE_SECRET") {
 					console.error(
 						"Error: deleting a secret requires --confirm=DELETE_SECRET",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				await vault.delete(secretId);
 				outputJson({ success: true, id: secretId }, !jsonOutput);
@@ -4742,13 +4976,13 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 						.filter(Boolean);
 					if (!secretId || actions.length === 0) {
 						console.error("Error: secret id and action(s) are required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					if (flags.confirm !== "GRANT_SECRET") {
 						console.error(
 							"Error: granting secret use requires --confirm=GRANT_SECRET",
 						);
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					const grant = await vault.grant(secretId, {
 						actions: actions as never,
@@ -4766,7 +5000,7 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 					const grantId = positional[1];
 					if (!grantId) {
 						console.error("Error: grant id is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					await vault.revokeGrant(grantId);
 					outputJson({ success: true, id: grantId }, !jsonOutput);
@@ -4774,13 +5008,13 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 				}
 				console.error(`Unknown vault grants command: ${grantAction}`);
 				console.error("Available: list, add, revoke");
-				process.exit(1);
+				throw new CliError('Command failed');
 				break;
 			}
 			default:
 				console.error(`Unknown vault command: ${action}`);
 				console.error("Available: list, set, delete, grants");
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		vault.close();
@@ -4793,7 +5027,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 	if (subcommand !== "rules") {
 		console.error(`Unknown network command: ${subcommand}`);
 		console.error("Available: rules");
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 	const rulesAction = positional[0] ?? "list";
 	const { NetworkRuleEngine } = await import("./security/network_rules");
@@ -4810,7 +5044,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 				const ruleType = flags["rule-type"] ?? flags.type ?? positional[2];
 				if (!pattern) {
 					console.error("Error: rule pattern is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				if (
 					ruleType !== "allowlist" &&
@@ -4820,7 +5054,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 					console.error(
 						"Error: rule type must be allowlist, denylist, or tracker",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const resourceTypes = flags["resource-types"]
 					? flags["resource-types"].split(",").map((item) => item.trim())
@@ -4835,7 +5069,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 				const id = positional[1];
 				if (!id) {
 					console.error("Error: rule id is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				outputJson({ removed: await engine.removeRule(id) }, !jsonOutput);
 				break;
@@ -4843,7 +5077,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 			default:
 				console.error(`Unknown network rules command: ${rulesAction}`);
 				console.error("Available: list, add, remove");
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 	} finally {
 		engine.close();
@@ -4885,7 +5119,7 @@ async function handleBrowserAction(
 				const url = positional[0];
 				if (!url) {
 					console.error("Error: URL is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.open({
 					url,
@@ -4907,7 +5141,7 @@ async function handleBrowserAction(
 				const target = positional[0];
 				if (!target) {
 					console.error("Error: Target (ref, selector, or text) is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.click({
 					target,
@@ -4923,7 +5157,7 @@ async function handleBrowserAction(
 				const text = positional[1];
 				if (!target || !text) {
 					console.error("Error: Target and text are required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.fill({
 					target,
@@ -4939,14 +5173,14 @@ async function handleBrowserAction(
 				const fieldsStr = flags.fields ?? positional[0];
 				if (!fieldsStr) {
 					console.error("Error: Fields JSON array is required (e.g. '[{\"target\":\"@e3\", \"text\":\"hello\"}]')");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				let fields: any[];
 				try {
 					fields = JSON.parse(fieldsStr);
 				} catch {
 					console.error("Error: Invalid JSON for fields");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.fillMany(fields, {
 					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
@@ -4960,7 +5194,7 @@ async function handleBrowserAction(
 				const target = positional[0];
 				if (!target) {
 					console.error("Error: Target is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.hover({
 					target,
@@ -4974,7 +5208,7 @@ async function handleBrowserAction(
 				const text = positional[0];
 				if (!text) {
 					console.error("Error: Text is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.type({
 					text,
@@ -4988,7 +5222,7 @@ async function handleBrowserAction(
 				const text = positional[0];
 				if (!text) {
 					console.error("Error: Text is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.paste({
 					text,
@@ -5003,7 +5237,7 @@ async function handleBrowserAction(
 				const key = positional[0];
 				if (!key) {
 					console.error("Error: Key is required (e.g., Enter, Tab, ArrowDown)");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.press({ key, tabId });
 				break;
@@ -5013,7 +5247,7 @@ async function handleBrowserAction(
 				const direction = positional[0] ?? "down";
 				if (!["up", "down", "left", "right"].includes(direction)) {
 					console.error("Error: Direction must be up, down, left, or right");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await browserActions.scroll({
 					direction: direction as "up" | "down" | "left" | "right",
@@ -5046,14 +5280,14 @@ async function handleBrowserAction(
 					const tabId = positional[0];
 					if (!tabId) {
 						console.error("Error: Tab ID is required");
-						process.exit(1);
+						throw new CliError('Command failed');
 					}
 					result = await browserActions.tabSwitch(tabId);
 				} else {
 					console.error(
 						"Error: Unknown tab command. Use 'tab list' or 'tab switch <id>'",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				break;
 			}
@@ -5082,14 +5316,14 @@ async function handleBrowserAction(
 					console.error(
 						"Error: Unknown screencast command. Use 'screencast start', 'screencast stop', or 'screencast status'",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				break;
 			}
 
 			default:
 				console.error(`Unknown browser action: ${action}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 
 		if (result) {
@@ -5105,13 +5339,13 @@ async function handleBrowserAction(
 					console.error(`Error: ${result.error}`);
 					if (result.policyDecision)
 						console.error(`Policy: ${result.policyDecision}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -5124,7 +5358,7 @@ async function handleLocator(args: ParsedArgs): Promise<void> {
 	const target = positional[0];
 	if (!target) {
 		console.error("Error: Target (ref, selector, or text) is required");
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 
 	const { createBrowserControl } = await import("./browser_control");
@@ -5154,12 +5388,12 @@ async function handleLocator(args: ParsedArgs): Promise<void> {
 				console.error(`Error: ${result.error}`);
 				if (result.policyDecision)
 					console.error(`Policy: ${result.policyDecision}`);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -5189,7 +5423,7 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: Session name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await _sessionManager.create(name, {
 					policyProfile: flags.policy,
@@ -5202,7 +5436,7 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 				const nameOrId = positional[0];
 				if (!nameOrId) {
 					console.error("Error: Session name or ID is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = _sessionManager.use(nameOrId);
 				break;
@@ -5216,7 +5450,7 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 			default:
 				console.error(`Unknown session command: ${subcommand}`);
 				console.error("Available: list, create, use, status");
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 
 		if (result) {
@@ -5228,13 +5462,13 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 					if (result.warning) console.warn(`Warning: ${result.warning}`);
 				} else {
 					console.error(`Error: ${result.error}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -5264,7 +5498,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: Service name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				const rawPort = flags.port ? Number(flags.port) : undefined;
 				const detect = flags.detect === "true";
@@ -5284,7 +5518,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 					console.error(
 						"Error: --port is required when detection is not used or detection fails",
 					);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 
 				result = await serviceActions.register({
@@ -5307,7 +5541,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: Service name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = await serviceActions.resolve({ name });
 				break;
@@ -5317,7 +5551,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 				const name = positional[0];
 				if (!name) {
 					console.error("Error: Service name is required");
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				result = serviceActions.remove({ name });
 				break;
@@ -5381,12 +5615,12 @@ async function handleService(args: ParsedArgs): Promise<void> {
 							const rawPort = flags.port ? Number(flags.port) : 80;
 							if (Number.isNaN(rawPort) || rawPort < 0 || rawPort > 65535) {
 								console.error("Error: --port must be a valid TCP port");
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							if (flags.background === "true") {
 								if (flags.https === "true") {
 									console.error("Error: background HTTPS .localhost proxy is not supported; start it in the foreground so certificate/key errors are visible.");
-									process.exit(1);
+									throw new CliError('Command failed');
 								}
 								const saved = readProxyStatus();
 								if (saved && isPidAlive(saved.pid)) {
@@ -5441,7 +5675,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 								}
 								if (!started) {
 									console.error("Error: background .localhost proxy did not report ready status");
-									process.exit(1);
+									throw new CliError('Command failed');
 								}
 								result = {
 									success: true,
@@ -5477,7 +5711,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 								console.log("Press Ctrl+C to stop.");
 							} else {
 								console.error(`Error: ${started.error}`);
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							if (flags.wait === "false") {
 								await bc.service.proxy.stop();
@@ -5543,7 +5777,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 							};
 							if (Number.isNaN(startupOptions.port) || startupOptions.port < 0 || startupOptions.port > 65535) {
 								console.error("Error: --port must be a valid TCP port");
-								process.exit(1);
+								throw new CliError('Command failed');
 							}
 							if (startupAction === "status") {
 								result = {
@@ -5583,7 +5817,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 							}
 							console.error(`Unknown service proxy startup command: ${startupAction}`);
 							console.error("Available: status, install, uninstall");
-							process.exit(1);
+							throw new CliError('Command failed');
 						}
 						case "ca": {
 							const caAction = positional[1] || "status";
@@ -5646,12 +5880,12 @@ async function handleService(args: ParsedArgs): Promise<void> {
 							}
 							console.error(`Unknown service proxy ca command: ${caAction}`);
 							console.error("Available: status, create, install, uninstall");
-							process.exit(1);
+							throw new CliError('Command failed');
 						}
 						default:
 							console.error(`Unknown service proxy command: ${proxyAction}`);
 							console.error("Available: status, start, stop, startup, ca");
-							process.exit(1);
+							throw new CliError('Command failed');
 					}
 				} finally {
 					if (proxyAction !== "start") bc.close();
@@ -5662,7 +5896,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 			default:
 				console.error(`Unknown service command: ${subcommand}`);
 				console.error("Available: register, list, resolve, remove, proxy");
-				process.exit(1);
+				throw new CliError('Command failed');
 		}
 
 		if (result) {
@@ -5675,13 +5909,13 @@ async function handleService(args: ParsedArgs): Promise<void> {
 					if (result.warning) console.warn(`Warning: ${result.warning}`);
 				} else {
 					console.error(`Error: ${result.error}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 			}
 		}
 	} catch (error) {
 		console.error("Error:", (error as Error).message);
-		process.exit(1);
+		throw new CliError('Command failed');
 	}
 }
 
@@ -5708,7 +5942,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 			const bundleId = positional[0];
 			if (!bundleId) {
 				console.error("Error: Bundle ID is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			const confirmed = flags.yes === "true" || flags.confirm === "true";
 			await requireCliPolicy(
@@ -5729,7 +5963,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 
 				if (!bundle) {
 					console.error(`Error: Bundle "${bundleId}" not found`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 
 				if (flags.output) {
@@ -5741,7 +5975,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -5785,7 +6019,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -5831,7 +6065,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 				}
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -5840,7 +6074,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 			const receiptId = positional[0];
 			if (!receiptId) {
 				console.error("Error: Receipt ID is required");
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			await requireCliPolicy("debug_receipt_export", { receiptId }, jsonOutput);
 			try {
@@ -5858,12 +6092,12 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 				}
 				if (!receipt) {
 					console.error(`Error: Receipt not found: ${receiptId}`);
-					process.exit(1);
+					throw new CliError('Command failed');
 				}
 				outputJson(receipt, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
-				process.exit(1);
+				throw new CliError('Command failed');
 			}
 			break;
 		}
@@ -5873,14 +6107,19 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 			console.error(
 				"Available: bundle <id>, console [--session=<id>], network [--session=<id>], receipt <id>",
 			);
-			process.exit(1);
+			throw new CliError('Command failed');
 	}
 }
 
 if (require.main === module) {
 	runCli().catch((error) => {
-		console.error("Fatal error:", error.message);
-		process.exit(1);
+		if (error instanceof CliError) {
+			console.error(error.message);
+			process.exitCode = error.exitCode;
+		} else {
+			console.error("Fatal error:", error.message);
+			process.exitCode = 1;
+		}
 	});
 }
 

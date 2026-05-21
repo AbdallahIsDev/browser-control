@@ -17,6 +17,40 @@ import {
 const log = logger.withComponent("credential-vault");
 const REDACTED_SECRET = "[REDACTED_SECRET]";
 
+export class SecretString {
+	private readonly _value: string;
+
+	constructor(value: string) {
+		this._value = value;
+	}
+
+	reveal(): string {
+		return this._value;
+	}
+
+	toString(): string {
+		return REDACTED_SECRET;
+	}
+
+	toJSON(): string {
+		return REDACTED_SECRET;
+	}
+
+	[Symbol.toPrimitive](_hint: string): string {
+		return REDACTED_SECRET;
+	}
+
+	get length(): number {
+		return 0;
+	}
+
+	valueOf(): never {
+		throw new Error(
+			"SecretString.valueOf() is forbidden to prevent accidental leaks",
+		);
+	}
+}
+
 export type SecretScope = "site" | "package" | "workflow";
 
 export type SecretAction =
@@ -81,7 +115,7 @@ export type SecretUseResolution =
 	| {
 			success: true;
 			id: string;
-			value: string;
+			value: SecretString;
 			grantId: string;
 			redactedValue: typeof REDACTED_SECRET;
 	  }
@@ -319,10 +353,10 @@ export class CredentialVault {
 		}));
 	}
 
-	async resolve(ref: string): Promise<{ id: string; value: string } | null> {
+	async resolve(ref: string): Promise<{ id: string; value: SecretString } | null> {
 		const value = await this.getValue(ref);
 		if (!value) return null;
-		return { id: ref, value };
+		return { id: ref, value: new SecretString(value) };
 	}
 
 	async grant(
@@ -442,7 +476,7 @@ export class CredentialVault {
 		return {
 			success: true,
 			id: secretRef,
-			value,
+			value: new SecretString(value),
 			grantId: grant.id,
 			redactedValue: REDACTED_SECRET,
 		};

@@ -116,6 +116,8 @@ export type BrowserActionName =
 	| "screenshot" | "tab-close" | "open" | "navigate" | "openMany"
 	| "capture" | "captureMany" | "fillMany" | "state";
 
+export type UrlEntry = string | { url: string; label?: string; waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit" };
+
 export interface BrowserActOptions {
 	action: BrowserActionName;
 	target?: string;
@@ -134,7 +136,7 @@ export interface BrowserActOptions {
 	snapshot?: boolean;
 	screenshot?: boolean;
 	url?: string;
-	urls?: string[];
+	urls?: UrlEntry[];
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 	fields?: Array<{ target: string; text: string }>;
 	continueOnFailure?: boolean;
@@ -422,7 +424,19 @@ export class BrowserActions {
 		this.refStore = context.refStore ?? globalRefStore;
 	}
 
+	// Maps targetId -> page for durable tab ID resolution
+	private readonly tabIdMap = new Map<string, Page>();
+
+	/**
+	 * Get a durable tab ID for a page. Uses CDP targetId when available,
+	 * falls back to the numeric index for backward compatibility.
+	 */
 	private async getTabIdForPage(page: Page, defaultTabId = "0"): Promise<string> {
+		const target = await this.getWindowTarget(page);
+		if (target) {
+			this.tabIdMap.set(target.targetId, page);
+			return target.targetId;
+		}
 		const rawPages = page.context().pages();
 		const windowTargets = await this.getWindowTargets(rawPages);
 		const pages = windowTargets.length > 0 ? windowTargets.map(t => t.page) : rawPages;
@@ -711,6 +725,58 @@ export class BrowserActions {
 		}
 	}
 
+	/**
+	 * Resolve a tabId to a Page. Supports:
+	 * 1. CDP targetId (durable) — checked via tabIdMap
+	 * 2. Numeric index (legacy backward compat)
+	 */
+	private async resolveTabId<T>(tabId: string, contextPage: Page): Promise<Page | ActionResult<T>> {
+		const rawPages = contextPage.context().pages();
+		const pages = await this.getVisiblePages(rawPages);
+
+		// Try durable targetId first
+		const existingPage = this.tabIdMap.get(tabId);
+		if (existingPage && pages.includes(existingPage)) {
+			await existingPage.bringToFront().catch(() => undefined);
+			return existingPage;
+		}
+
+		// Rebuild the map from current pages (handles reconnects and tab changes)
+		this.tabIdMap.clear();
+		const refreshTargets = await this.getWindowTargets(pages);
+		for (const t of refreshTargets) {
+			this.tabIdMap.set(t.targetId, t.page);
+		}
+		const refreshedPage = this.tabIdMap.get(tabId);
+		if (refreshedPage) {
+			await refreshedPage.bringToFront().catch(() => undefined);
+			return refreshedPage;
+		}
+
+		// Fall back to numeric index (legacy)
+		if (/^\d+$/.test(tabId)) {
+			const index = parseInt(tabId, 10);
+			if (index >= 0 && index < pages.length) {
+				const numericPage = pages[index];
+				await numericPage.bringToFront().catch(() => undefined);
+				return numericPage;
+			}
+			const sessionId = this.getSessionId();
+			return (await this.failureWithDebug(
+				`Tab index ${tabId} out of range (0..${pages.length - 1})`,
+				new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
+				{ action: "browser_action", path: "a11y", sessionId },
+			)) as ActionResult<T>;
+		}
+
+		const sessionId = this.getSessionId();
+		return (await this.failureWithDebug(
+			`Tab "${tabId}" not found. Known tabs: [${[...this.tabIdMap.keys()].join(", ")}]`,
+			new Error(`Tab "${tabId}" not found`),
+			{ action: "browser_action", path: "a11y", sessionId },
+		)) as ActionResult<T>;
+	}
+
 	private async getConnectedPageForAction<T>(tabId?: string): Promise<
 		Page | ActionResult<T>
 	> {
@@ -719,31 +785,9 @@ export class BrowserActions {
 
 		let page: Page;
 		if (tabId !== undefined) {
-			const rawPages = pageOrErr.context().pages();
-			const pages = await this.getVisiblePages(rawPages);
-			if (!/^\d+$/.test(tabId)) {
-				const sessionId = this.getSessionId();
-				return (await this.failureWithDebug(
-					`Invalid tab ID format: ${tabId}`,
-					new Error(`Invalid tab ID format: ${tabId}`),
-					{ action: "browser_action", path: "a11y", sessionId },
-				)) as ActionResult<T>;
-			}
-			const index = parseInt(tabId, 10);
-			if (index < 0 || index >= pages.length) {
-				const sessionId = this.getSessionId();
-				return (await this.failureWithDebug(
-					`Tab index ${tabId} out of range (0..${pages.length - 1})`,
-					new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
-					{
-						action: "browser_action",
-						path: "a11y",
-						sessionId,
-					},
-				)) as ActionResult<T>;
-			}
-			page = pages[index];
-			await page.bringToFront().catch(() => undefined);
+			const resolved = await this.resolveTabId<T>(tabId, pageOrErr);
+			if ("success" in resolved) return resolved;
+			page = resolved;
 		} else {
 			page = await this.getBestVisiblePage(pageOrErr);
 		}
@@ -927,9 +971,9 @@ export class BrowserActions {
 			throw new Error(`Secret resolution denied: ${resolved.error}`);
 		}
 		return {
-			text: resolved.value,
+			text: resolved.value.reveal(),
 			redactedText: resolved.redactedValue,
-			secretValues: [resolved.value],
+			secretValues: [resolved.value.reveal()],
 			usedSecret: true,
 		};
 	}
@@ -1555,7 +1599,7 @@ export class BrowserActions {
 				);
 			}
 
-			const tabs: OpenManyTabResult[] = [];
+		const tabs: OpenManyTabResult[] = [];
 
 			for (const item of items) {
 				let page: Page;
@@ -1598,9 +1642,21 @@ export class BrowserActions {
 				}
 			}
 
+			const allFailed = tabs.length > 0 && tabs.every(t => t.status === "failed");
+
+			if (allFailed) {
+				return this.failureWithDebug(
+					"All tabs failed to load",
+					new Error("All tabs failed to load"),
+					{ action: "browser_open_many", path: "a11y", sessionId },
+				);
+			}
+
+			const someFailed = tabs.some(t => t.status === "failed");
 			return successResult({
 				browserSessionId: sessionId,
 				tabs,
+				...(someFailed ? { warning: `${tabs.filter(t => t.status === "failed").length} of ${tabs.length} tabs failed to load` } : {}),
 			}, { path: "a11y", sessionId });
 		} catch (error: unknown) {
 			return this.failureWithDebug(
@@ -1778,7 +1834,7 @@ export class BrowserActions {
 		const sessionId = this.getSessionId();
 
 		const policyEval = this.context.sessionManager.evaluateAction(
-			"browser_cdp",
+			"cdp_execute",
 			{ method: options.method },
 		);
 		if (!isPolicyAllowed(policyEval))
@@ -1803,7 +1859,7 @@ export class BrowserActions {
 			return this.failureWithDebug(
 				`CDP action failed: ${error instanceof Error ? error.message : String(error)}`,
 				error,
-				{ action: "browser_cdp", path: "low_level", sessionId },
+				{ action: "cdp_execute", path: "low_level", sessionId },
 			);
 		}
 	}
@@ -3633,14 +3689,26 @@ export class BrowserActions {
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const context = page.context();
-			const pages = await this.getVisiblePages(context.pages());
+			const rawPages = context.pages();
+			const windowTargets = await this.getWindowTargets(rawPages);
+			const pages = windowTargets.length > 0 ? windowTargets.map(t => t.page) : rawPages;
+
+			// Rebuild tabIdMap with durable targetIds
+			this.tabIdMap.clear();
+			for (const t of windowTargets) {
+				this.tabIdMap.set(t.targetId, t.page);
+			}
 
 			const tabs = await Promise.all(
-				pages.map(async (p, i) => ({
-					id: String(i),
-					url: p.url(),
-					title: await p.title().catch(() => ""),
-				})),
+				pages.map(async (p, i) => {
+					const target = windowTargets.find(t => t.page === p);
+					const id = target ? target.targetId : String(i);
+					return {
+						id,
+						url: p.url(),
+						title: await p.title().catch(() => ""),
+					};
+				}),
 			);
 			await this.persistObservability(sessionId, page);
 
@@ -3686,69 +3754,33 @@ export class BrowserActions {
 			}>;
 
 		try {
-			const pageOrErr = await this.getConnectedPageForAction<{
+			const pageOrErr = await this.ensureBrowserConnected();
+			if ("success" in pageOrErr) return pageOrErr as ActionResult<{
 				activeTabId: string;
 				url: string;
 				title?: string;
 				readyState?: string;
-			}>();
-			if ("success" in pageOrErr) return pageOrErr;
-			const page = pageOrErr;
-			const context = page.context();
-			const rawPages = context.pages();
-			const windowTargets = await this.getWindowTargets(rawPages);
-			const pages =
-				windowTargets.length > 0
-					? windowTargets.map((target) => target.page)
-					: rawPages;
+			}>;
 
-			if (!/^\d+$/.test(tabId)) {
-				return (await this.failureWithDebug(
-					`Invalid tab ID format: ${tabId}`,
-					new Error(`Invalid tab ID format: ${tabId}`),
-					{ action: "browser_tab_switch", path: policyEval.path, sessionId },
-				)) as ActionResult<{ activeTabId: string; url: string; title?: string; readyState?: string }>;
-			}
-			const index = parseInt(tabId, 10);
+			const resolved = await this.resolveTabId<{
+				activeTabId: string;
+				url: string;
+				title?: string;
+				readyState?: string;
+			}>(tabId, pageOrErr);
+			if ("success" in resolved) return resolved;
+			const targetPage = resolved;
 
-			if (index < 0 || index >= pages.length) {
-				return (await this.failureWithDebug(
-					`Tab index ${tabId} out of range (0..${pages.length - 1})`,
-					new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
-					{
-						action: "browser_tab_switch",
-						path: policyEval.path,
-						sessionId,
-						policyDecision: policyEval.policyDecision,
-						risk: policyEval.risk,
-						auditId: policyEval.auditId,
-					},
-				)) as ActionResult<{
-					activeTabId: string;
-					url: string;
-					title?: string;
-					readyState?: string;
-				}>;
-			}
-
-			const targetPage = pages[index];
-			const windowTarget = windowTargets.find(
-				(target) => target.page === targetPage,
-			);
-			if (windowTarget) {
-				await this.activateWindowTarget(windowTarget);
-			} else {
-				await targetPage.bringToFront();
-			}
 			await this.persistObservability(sessionId, targetPage);
 
 			const url = targetPage.url();
 			const title = await targetPage.title().catch(() => undefined);
 			const readyState = await targetPage.evaluate(() => document.readyState).catch(() => undefined);
+			const resolvedTabId = await this.getTabIdForPage(targetPage, tabId);
 
 			return successResult(
 				{
-					activeTabId: tabId,
+					activeTabId: resolvedTabId,
 					url,
 					title,
 					readyState,
@@ -4422,12 +4454,20 @@ export class BrowserActions {
 			status,
 		};
 
-		// Check browser is connected by testing getPage
+		// Check browser is connected — try in-memory first, then attempt reconnect
 		let page: Page | undefined;
 		try {
 			page = this.getPage();
 		} catch {
-			// no browser connected
+			// No in-memory connection — try reconnecting to persisted browser
+			try {
+				const reconnected = await this.ensureBrowserConnected();
+				if (reconnected && !("success" in reconnected)) {
+					page = reconnected;
+				}
+			} catch {
+				// Reconnect failed too — report disconnected
+			}
 		}
 		const connected = page != null;
 		result.browserConnected = connected;
@@ -4647,7 +4687,10 @@ export class BrowserActions {
 				break;
 			}
 			case "openMany": {
-				const items = options.urls!.map(u => ({ url: u, waitUntil: options.waitUntil }));
+				const items = (options.urls ?? []).map((u: UrlEntry) => {
+					if (typeof u === "string") return { url: u, waitUntil: options.waitUntil };
+					return { url: u.url, label: u.label, waitUntil: u.waitUntil ?? options.waitUntil ?? "domcontentloaded" as const };
+				});
 				const r = await this.openMany(items);
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;
@@ -4662,7 +4705,8 @@ export class BrowserActions {
 			break;
 		}
 		case "captureMany": {
-			const r = await this.captureMany(options.urls!, {
+			const captureManyIds = (options.urls ?? []).map((u: UrlEntry) => typeof u === "string" ? u : u.url);
+			const r = await this.captureMany(captureManyIds, {
 				snapshot: options.snapshot === true,
 				screenshot: options.screenshot === true,
 			});
@@ -4943,7 +4987,7 @@ export class BrowserActions {
 
 			// Read files in downloads directory
 			const entries = helpers.fs.readdirSync(downloadsDir);
-			const downloads: ExtendedDownloadResult[] = [];
+			const downloads: Array<ExtendedDownloadResult & { mtimeMs: number }> = [];
 
 			for (const entry of entries) {
 				const fullPath = helpers.path.join(downloadsDir, entry);
@@ -4956,19 +5000,17 @@ export class BrowserActions {
 							path: fullPath,
 							sizeBytes: stats.size,
 							status: "completed",
+							mtimeMs: stats.mtimeMs,
 						});
 					}
 				} catch {}
 			}
 
 			// Sort by modification time (most recent first)
-			downloads.sort((a, b) => {
-				const aTime = a.path ? helpers.fs.statSync(a.path).mtimeMs : 0;
-				const bTime = b.path ? helpers.fs.statSync(b.path).mtimeMs : 0;
-				return bTime - aTime;
-			});
+			downloads.sort((a, b) => b.mtimeMs - a.mtimeMs);
+			const result = downloads.map(({ mtimeMs: _mtimeMs, ...download }) => download);
 
-			return successResult(downloads, {
+			return successResult(result, {
 				path: policyEval.path,
 				sessionId,
 				policyDecision: policyEval.policyDecision,

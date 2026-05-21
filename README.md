@@ -84,8 +84,8 @@ bc fs ls . --json
 # Browser
 bc browser launch --port 9222 --profile default
 bc browser state --json
-bc browser act open --url https://example.com --json
-bc browser act state --snapshot=true --json
+bc browser open https://example.com --json
+bc browser snapshot --json
 bc browser act click "@e3" --capture-on-success --json
 bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state","snapshot":true}]' --json
 
@@ -104,7 +104,9 @@ For Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, Claude Code, an
 ```powershell
 bc status --json
 bc browser state --json
-bc browser act open --url https://example.com --json
+bc browser open https://example.com --json
+bc browser snapshot --json
+bc browser act fill searchInput "Amazon" --json
 bc browser act click "@e3" --capture-on-success --json
 bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
 ```
