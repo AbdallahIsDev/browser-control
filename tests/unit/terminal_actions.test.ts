@@ -153,6 +153,66 @@ describe("TerminalActions", () => {
 			);
 			assert.deepEqual(calls, []);
 		});
+
+		it("rejects punctuation-heavy terminal session ids before calling the terminal runtime", async () => {
+			const calls: string[] = [];
+			const mockRuntime: TerminalRuntime = {
+				open: async () => ({
+					id: "mock-session",
+					shell: "pwsh",
+					cwd: dataHome,
+					status: "idle",
+				}),
+				exec: async (command) => {
+					calls.push(`exec:${command}`);
+					return {
+						exitCode: 0,
+						stdout: "",
+						stderr: "",
+						durationMs: 1,
+						cwd: dataHome,
+						timedOut: false,
+					};
+				},
+				type: async () => {},
+				read: async () => "",
+				snapshot: async () => ({
+					lines: [],
+					cursorY: 0,
+					cursorX: 0,
+					width: 80,
+					height: 24,
+				}),
+				interrupt: async () => {},
+				close: async () => {},
+				list: async () => [],
+				resume: async (sessionId) => ({ sessionId, status: "fresh" }),
+				status: async (sessionId) => ({ sessionId, status: "fresh" }),
+				resize: async () => {},
+				onData: () => ({ dispose: () => {} }),
+			};
+			const actions = new TerminalActions({
+				sessionManager,
+				terminalRuntime: mockRuntime,
+			});
+
+			for (const sessionId of ["bad.session", "bad:session"]) {
+				const result = await actions.exec({
+					command: "echo test",
+					sessionId,
+				});
+
+				assert.equal(result.success, false);
+				assert.match(result.error ?? "", /Invalid terminal session id/);
+			}
+
+			const allowed = await actions.exec({
+				command: "echo test",
+				sessionId: "term-raw_01",
+			});
+			assert.equal(allowed.success, true);
+			assert.deepEqual(calls, ["exec:echo test"]);
+		});
 	});
 
 	describe("type", () => {

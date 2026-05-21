@@ -56,12 +56,23 @@ describe("BrowserlessProvider", () => {
     );
   });
 
-  it("should build correct WS URL with token when apiKey present", async () => {
+  it("should use auth header instead of appending token query when apiKey present", async () => {
     // Use reflection to test the private helper, binding this correctly.
-    const buildWsUrl = (provider as unknown as { buildWsUrl: (c: unknown, override?: string) => string }).buildWsUrl.bind(provider);
-    const url = buildWsUrl({ endpoint: "https://browserless.example.com", apiKey: "tk_abc123" });
-    assert.ok(url.startsWith("wss://"));
-    assert.ok(url.includes("token=tk_abc123"));
+    const buildConnectionOptions = (
+      provider as unknown as {
+        buildConnectionOptions: (
+          c: unknown,
+          override?: string,
+        ) => { wsUrl: string; headers?: Record<string, string> };
+      }
+    ).buildConnectionOptions.bind(provider);
+    const connection = buildConnectionOptions({
+      endpoint: "https://browserless.example.com",
+      apiKey: "tk_abc123",
+    });
+    assert.ok(connection.wsUrl.startsWith("wss://"));
+    assert.ok(!connection.wsUrl.includes("tk_abc123"));
+    assert.equal(connection.headers?.Authorization, "Bearer tk_abc123");
   });
 
   it("should redact token in connection error messages", async () => {

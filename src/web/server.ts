@@ -191,14 +191,18 @@ export async function validatePersistedWebAppServerInfo(
 		return false;
 	}
 	try {
-		const health = await fetchJsonWithTimeout(`${info.url}/healthz`);
+		const health = await fetchJsonWithTimeout(`${info.url}/healthz`, {}, 5_000);
 		if (!health.ok) return false;
-		const status = await fetchJsonWithTimeout(`${info.url}/api/status`, {
-			headers: {
-				authorization: `Bearer ${info.token}`,
+		const capabilitiesResponse = await fetchJsonWithTimeout(
+			`${info.url}/api/capabilities`,
+			{
+				headers: {
+					authorization: `Bearer ${info.token}`,
+				},
 			},
-		});
-		return status.ok;
+			5_000,
+		);
+		return capabilitiesResponse.ok;
 	} catch {
 		return false;
 	}
@@ -680,7 +684,7 @@ function indexHtml(nonce: string): string {
         }
       });
       const wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/events";
-      const ws = new WebSocket(wsBase + "?token=" + encodeURIComponent(token), [token]);
+      const ws = new WebSocket(wsBase, [token]);
       ws.onmessage = (event) => { document.getElementById("eventOut").textContent = event.data; };
       ws.onerror = () => { document.getElementById("eventOut").textContent = "Event stream disconnected"; };
       refresh().catch((e) => { document.getElementById("summary").textContent = e.message; });

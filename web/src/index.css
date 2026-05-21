@@ -317,7 +317,7 @@ body {
 
 	-moz-osx-font-smoothing: grayscale;
 
-	overflow: hidden;
+	overflow: auto;
 }
 
 /* Scrollbar */

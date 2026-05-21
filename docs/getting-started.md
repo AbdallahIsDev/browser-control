@@ -104,6 +104,12 @@ Run the local dashboard from a source checkout:
 bc web open
 ```
 
+This starts a loopback-only dashboard server in the background, opens a token-authenticated local URL, and exits. For a foreground server that stays attached to the terminal, run:
+
+```powershell
+bc web open --wait=true
+```
+
 If port `7790` is already in use, fall back to:
 
 ```powershell
@@ -117,7 +123,7 @@ npm run cli -- web open
 npm run cli -- web open --port=0
 ```
 
-The command starts a loopback-only app server, prints machine-readable connection data, and opens a token-authenticated local URL. The dashboard stores the URL fragment token in session storage, then removes the fragment from the address bar. API responses keep ISO UTC timestamps for scripts, while the dashboard formats primary timestamp fields as local human-readable time with timezone.
+For scripts, use `bc web open --json`. It prints machine-readable connection data, including a reachable `url`, tokenized `openUrl`, and background server `pid`. Stop that PID when the script is done. The dashboard stores the URL fragment token in session storage, then removes the fragment from the address bar. API responses keep ISO UTC timestamps for scripts, while the dashboard formats primary timestamp fields as local human-readable time with timezone.
 
 ## First Terminal and Filesystem Workflow
 

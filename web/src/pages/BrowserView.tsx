@@ -5,7 +5,13 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { apiFetch, listBrowserDialogs, respondToBrowserDialog } from "../api";
+import {
+	apiFetch,
+	listBrowserDialogs,
+	openBrowserUrl,
+	respondToBrowserDialog,
+	takeBrowserScreenshot,
+} from "../api";
 import type { AppStatus, BrowserDialogInfo, BrowserDialogType } from "../types";
 
 function dialogTypeLabel(t: BrowserDialogType): string {
@@ -99,6 +105,12 @@ export function BrowserView() {
 	const [dialogError, setDialogError] = useState("");
 	const [dialogLoading, setDialogLoading] = useState(false);
 	const [responding, setResponding] = useState<string | null>(null);
+	const [urlInput, setUrlInput] = useState("");
+	const [actionLoading, setActionLoading] = useState<
+		"open" | "screenshot" | null
+	>(null);
+	const [actionMessage, setActionMessage] = useState("");
+	const [actionError, setActionError] = useState("");
 
 	const fetchDialogs = useCallback(() => {
 		setDialogLoading(true);
@@ -137,6 +149,37 @@ export function BrowserView() {
 				.finally(() => setResponding(null));
 		},
 		[fetchDialogs],
+	);
+
+	const refreshStatus = useCallback(() => {
+		return apiFetch<AppStatus>("/api/status").then(setStatus);
+	}, []);
+
+	const runBrowserAction = useCallback(
+		async (kind: "open" | "screenshot") => {
+			setActionLoading(kind);
+			setActionError("");
+			setActionMessage("");
+			try {
+				if (kind === "open") {
+					const url = urlInput.trim();
+					if (!url) {
+						throw new Error("Enter a URL first.");
+					}
+					await openBrowserUrl(url);
+					setActionMessage("URL opened.");
+				} else {
+					await takeBrowserScreenshot();
+					setActionMessage("Screenshot captured.");
+				}
+				await refreshStatus();
+			} catch (err: unknown) {
+				setActionError(err instanceof Error ? err.message : String(err));
+			} finally {
+				setActionLoading(null);
+			}
+		},
+		[refreshStatus, urlInput],
 	);
 
 	if (error) {
@@ -207,12 +250,36 @@ export function BrowserView() {
 								</CardContent>
 							</Card>
 						</div>
-						<div className="flex flex-col sm:flex-row gap-3">
-							<Button className="sm:w-auto w-full">Open URL</Button>
-							<Button variant="outline" className="sm:w-auto w-full">
+						<div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+							<Input
+								value={urlInput}
+								onChange={(e) => setUrlInput(e.target.value)}
+								placeholder="https://example.com"
+								aria-label="URL to open"
+								disabled={actionLoading !== null}
+							/>
+							<Button
+								className="sm:w-auto w-full"
+								onClick={() => runBrowserAction("open")}
+								disabled={actionLoading !== null}
+							>
+								{actionLoading === "open" ? "Opening..." : "Open URL"}
+							</Button>
+							<Button
+								variant="outline"
+								className="sm:w-auto w-full"
+								onClick={() => runBrowserAction("screenshot")}
+								disabled={actionLoading !== null}
+							>
 								Take Screenshot
 							</Button>
 						</div>
+						{actionMessage ? (
+							<p className="text-sm text-muted-foreground">{actionMessage}</p>
+						) : null}
+						{actionError ? (
+							<p className="text-sm text-destructive">{actionError}</p>
+						) : null}
 					</>
 				) : (
 					<Card>

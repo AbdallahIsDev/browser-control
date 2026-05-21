@@ -1,6 +1,7 @@
-import { Check, Copy, Lock } from "lucide-react";
+import { Check, Copy, KeyRound, Lock } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const commands = [
 	{
@@ -82,6 +83,19 @@ function CommandCopyCard({
 }
 
 function AuthHelpPanel() {
+	const [manualToken, setManualToken] = useState("");
+	const [tokenError, setTokenError] = useState("");
+
+	const handleManualToken = useCallback(() => {
+		const trimmed = manualToken.trim();
+		if (!trimmed) {
+			setTokenError("Enter the local token first.");
+			return;
+		}
+		sessionStorage.setItem("bc-token", trimmed);
+		window.location.reload();
+	}, [manualToken]);
+
 	return (
 		<div className="rounded-3xl border border-border/50 bg-background/70 p-5">
 			<h3 className="text-sm font-semibold tracking-tight text-foreground">
@@ -113,6 +127,33 @@ function AuthHelpPanel() {
 					{window.location.origin}/#token=&lt;one-time-token&gt;
 				</code>
 				.
+			</div>
+			<div className="mt-4 space-y-2">
+				<label
+					htmlFor="manual-dashboard-token"
+					className="text-xs font-medium text-muted-foreground"
+				>
+					Manual local token
+				</label>
+				<div className="flex gap-2">
+					<Input
+						id="manual-dashboard-token"
+						value={manualToken}
+						onChange={(event) => {
+							setManualToken(event.target.value);
+							setTokenError("");
+						}}
+						type="password"
+						placeholder="Paste local token"
+					/>
+					<Button type="button" onClick={handleManualToken}>
+						<KeyRound size={14} />
+						Sign in
+					</Button>
+				</div>
+				{tokenError ? (
+					<p className="text-xs text-destructive">{tokenError}</p>
+				) : null}
 			</div>
 		</div>
 	);

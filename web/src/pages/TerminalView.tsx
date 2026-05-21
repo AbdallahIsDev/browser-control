@@ -288,8 +288,8 @@ export function TerminalView() {
 	}, [loadSessions]);
 
 	useEffect(() => {
-		const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/events?token=${encodeURIComponent(getToken())}`;
-		const ws = new WebSocket(wsUrl);
+		const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/events`;
+		const ws = new WebSocket(wsUrl, [getToken()]);
 		ws.onmessage = (event) => {
 			try {
 				const msg = JSON.parse(event.data);

@@ -138,12 +138,8 @@ test("toolbar does not show Health unknown", () => {
 		/"Unknown"/,
 		"App should not display raw 'Unknown' health text",
 	);
-	assert.match(appSource, /Runtime ready/, "Healthy state should show ready");
-	assert.match(
-		appSource,
-		/Runtime starting/,
-		"Loading state should show starting",
-	);
+	assert.match(appSource, /Ready/, "Healthy state should show ready");
+	assert.match(appSource, /Starting/, "Loading state should show starting");
 });
 
 test("toolbar exposes concrete runtime status labels", () => {
@@ -153,10 +149,10 @@ test("toolbar exposes concrete runtime status labels", () => {
 	);
 
 	for (const expected of [
-		"Runtime ready",
-		"Runtime starting",
-		"Runtime offline",
-		"Runtime degraded",
+		"Ready",
+		"Starting",
+		"App service offline",
+		"Connection issue",
 		"Browser disconnected",
 		"API unavailable",
 		'role="status"',
@@ -189,7 +185,7 @@ test("toolbar hides Provider and Policy pills when no token exists", () => {
 	// No-token hint text should exist (toolbar hint)
 	assert.match(
 		appSource,
-		/one-time local token/,
+		/sign in locally/,
 		"No-token state should show a hint to the user",
 	);
 });
@@ -912,8 +908,8 @@ test("tasks view has a broker-unavailable recovery state", () => {
 
 	for (const expected of [
 		"TaskListResponse",
-		"Task runtime offline",
-		"Start Browser Control daemon",
+		"Task service offline",
+		"Start Browser Control app service",
 		"Task history will load automatically",
 	]) {
 		assert.match(source, new RegExp(expected));
@@ -1037,6 +1033,23 @@ test("api.ts exports dialog helper functions", () => {
 		/\/api\/browser\/dialog/,
 		"api.ts dialog helpers should reference /api/browser/dialog",
 	);
+});
+
+test("frontend API and event stream avoid leaking auth in GET/query surfaces", () => {
+	const apiSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/api.ts"),
+		"utf8",
+	);
+	const terminalSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/pages/TerminalView.tsx"),
+		"utf8",
+	);
+
+	assert.match(apiSource, /new Headers\(options\.headers\)/);
+	assert.match(apiSource, /hasBody/);
+	assert.doesNotMatch(apiSource, /"content-type": "application\/json"/);
+	assert.doesNotMatch(terminalSource, /\/events\?token=/);
+	assert.match(terminalSource, /new WebSocket\(wsUrl, \[getToken\(\)\]\)/);
 });
 
 test("react doctor quality gate is available as a non-blocking dashboard audit", () => {
