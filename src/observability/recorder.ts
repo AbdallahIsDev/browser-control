@@ -357,5 +357,6 @@ export function getRecorder(): ActionRecorder {
 }
 
 export function resetRecorder(): void {
+	_recorder?.stop();
 	_recorder = null;
 }

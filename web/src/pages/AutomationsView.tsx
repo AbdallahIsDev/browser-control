@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DataTable } from "@/components/common/DataTable";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingState } from "@/components/common/LoadingState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,21 +18,35 @@ function summarizePrompt(prompt: string) {
 export function AutomationsView() {
 	const [automations, setAutomations] = useState<Automation[]>([]);
 	const [error, setError] = useState("");
+	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
+		setLoading(true);
 		apiFetch<Automation[]>("/api/saved-automations")
-			.then(setAutomations)
+			.then((items) => {
+				setAutomations(items);
+				setError("");
+			})
 			.catch((err: unknown) =>
 				setError(err instanceof Error ? err.message : String(err)),
-			);
+			)
+			.finally(() => setLoading(false));
 	}, []);
+
+	if (loading) {
+		return (
+			<PageShell>
+				<LoadingState message="Loading automations..." />
+			</PageShell>
+		);
+	}
 
 	if (error) {
 		return (
 			<PageShell>
 				<ErrorState
 					message="Automations are unavailable."
-					details={`Start the Browser Control daemon, then reload this page. Technical details: ${error}`}
+					details={`Start the Browser Control app service, then reload this page. Technical details: ${error}`}
 				/>
 			</PageShell>
 		);

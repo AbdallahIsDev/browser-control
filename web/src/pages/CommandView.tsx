@@ -33,18 +33,27 @@ const SUGGESTIONS = [
 
 export function CommandView() {
 	const [prompt, setPrompt] = useState("");
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [submitError, setSubmitError] = useState("");
+	const [submitMessage, setSubmitMessage] = useState("");
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
 	const handleRun = async () => {
-		if (!prompt) return;
+		if (!prompt.trim() || isSubmitting) return;
+		setIsSubmitting(true);
+		setSubmitError("");
+		setSubmitMessage("");
 		try {
 			await apiFetch("/api/tasks", {
 				method: "POST",
 				body: JSON.stringify({ prompt, action: prompt.slice(0, 48) }),
 			});
 			setPrompt("");
+			setSubmitMessage("Task submitted.");
 		} catch (err: unknown) {
-			console.error("Task failed", err);
+			setSubmitError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setIsSubmitting(false);
 		}
 	};
 
@@ -104,13 +113,15 @@ export function CommandView() {
 							size="icon"
 							className="h-8 w-8 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
 							aria-label="Attach file"
+							title="File attachments are not available in this dashboard yet"
+							disabled
 						>
 							<Paperclip size={16} />
 						</Button>
 
 						<Button
 							onClick={handleRun}
-							disabled={!prompt}
+							disabled={!prompt.trim() || isSubmitting}
 							size="icon"
 							className="h-8 w-8"
 							aria-label="Run task"
@@ -119,6 +130,14 @@ export function CommandView() {
 						</Button>
 					</div>
 				</div>
+				{submitError ? (
+					<p className="w-full text-sm text-destructive">{submitError}</p>
+				) : null}
+				{submitMessage ? (
+					<p className="w-full text-sm text-muted-foreground">
+						{submitMessage}
+					</p>
+				) : null}
 			</div>
 		</PageShell>
 	);

@@ -15,17 +15,25 @@ import { apiFetch } from "../api";
 export function AdvancedView() {
 	const [cleanupConfirm, setCleanupConfirm] = useState("");
 	const [cleanupStatus, setCleanupStatus] = useState("");
+	const [doctorStatus, setDoctorStatus] = useState("");
+	const [doctorDetails, setDoctorDetails] = useState("");
+	const [doctorLoading, setDoctorLoading] = useState(false);
 	const [isCleaning, setIsCleaning] = useState(false);
 	const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
 	const runDoctor = async () => {
+		setDoctorLoading(true);
+		setDoctorStatus("");
+		setDoctorDetails("");
 		try {
 			const res = await apiFetch("/api/doctor/run", { method: "POST" });
-			alert(JSON.stringify(res, null, 2));
+			setDoctorStatus("Diagnostics finished.");
+			setDoctorDetails(JSON.stringify(res, null, 2));
 		} catch (err: unknown) {
-			alert(
-				`Doctor failed: ${err instanceof Error ? err.message : String(err)}`,
-			);
+			setDoctorStatus("Diagnostics failed.");
+			setDoctorDetails(err instanceof Error ? err.message : String(err));
+		} finally {
+			setDoctorLoading(false);
 		}
 	};
 
@@ -66,8 +74,25 @@ export function AdvancedView() {
 							misconfigurations.
 						</CardDescription>
 					</CardHeader>
-					<CardContent>
-						<Button onClick={runDoctor}>Run Doctor Diagnostics</Button>
+					<CardContent className="space-y-3">
+						<Button onClick={runDoctor} disabled={doctorLoading}>
+							{doctorLoading ? "Running..." : "Run Doctor Diagnostics"}
+						</Button>
+						{doctorStatus ? (
+							<div className="rounded border border-border/60 bg-muted/20 p-3 text-sm">
+								<p>{doctorStatus}</p>
+								{doctorDetails ? (
+									<details className="mt-2 text-xs text-muted-foreground">
+										<summary className="cursor-pointer">
+											Technical details
+										</summary>
+										<pre className="mt-2 max-h-72 overflow-auto rounded bg-background p-2">
+											{doctorDetails}
+										</pre>
+									</details>
+								) : null}
+							</div>
+						) : null}
 					</CardContent>
 				</Card>
 

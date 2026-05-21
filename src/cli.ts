@@ -467,6 +467,38 @@ async function withCliTimeout<T>(
 	return { result, timedOut };
 }
 
+async function finishTimedCliResult(
+	timedOut: boolean,
+	message = "Command timed out",
+): Promise<void> {
+	await closeFetchDispatcher();
+	if (timedOut) {
+		throw new CliError(message, { exitCode: 1 });
+	}
+}
+
+function sanitizeProxyUrlForStorage(rawUrl: string): {
+	url: string;
+	hadCredentials: boolean;
+} {
+	const normalized = /^[a-z]+:\/\//i.test(rawUrl.trim())
+		? rawUrl.trim()
+		: `http://${rawUrl.trim()}`;
+	const parsed = new URL(normalized);
+	const hadCredentials = Boolean(parsed.username || parsed.password);
+	parsed.username = "";
+	parsed.password = "";
+	return { url: parsed.toString(), hadCredentials };
+}
+
+function redactProxyUrl(rawUrl: string): string {
+	try {
+		return sanitizeProxyUrlForStorage(rawUrl).url;
+	} catch {
+		return rawUrl.replace(/\/\/[^:@/\s]+:[^@/\s]+@/u, "//[REDACTED]@");
+	}
+}
+
 async function requireCliPolicy(
 	action: string,
 	params: Record<string, unknown>,
@@ -1169,7 +1201,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				const configs = loadProxyConfigs();
 				const results = [];
 				for (const config of configs) {
-					results.push({ url: config.url, status: config.status });
+					results.push({ url: redactProxyUrl(config.url), status: config.status });
 				}
 				outputJson(results, !jsonOutput);
 			} catch (error) {
@@ -1187,20 +1219,26 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 			}
 
 			try {
+				const sanitized = sanitizeProxyUrlForStorage(url);
+				if (sanitized.hadCredentials) {
+					console.error(
+						"Warning: proxy credentials were not written to proxies.json. Store credentials outside project files and configure them through a supported secret/env path.",
+					);
+				}
 				const proxyPath = path.join(process.cwd(), "proxies.json");
 				let configs = [];
 				if (fs.existsSync(proxyPath)) {
 					configs = JSON.parse(fs.readFileSync(proxyPath, "utf8"));
 				}
 
-				if (configs.some((c: { url: string }) => c.url === url)) {
+				if (configs.some((c: { url: string }) => c.url === sanitized.url)) {
 					console.log("Proxy already exists");
 					break;
 				}
 
-				configs.push({ url, status: "active" });
+				configs.push({ url: sanitized.url, status: "active" });
 				fs.writeFileSync(proxyPath, JSON.stringify(configs, null, 2));
-				console.log(`Proxy added: ${url}`);
+				console.log(`Proxy added: ${sanitized.url}`);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -1216,6 +1254,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 			}
 
 			try {
+				const sanitized = sanitizeProxyUrlForStorage(url).url;
 				const proxyPath = path.join(process.cwd(), "proxies.json");
 				if (!fs.existsSync(proxyPath)) {
 					console.log("No proxies configured");
@@ -1224,7 +1263,9 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 
 				let configs = JSON.parse(fs.readFileSync(proxyPath, "utf8"));
 				const initialLength = configs.length;
-				configs = configs.filter((c: { url: string }) => c.url !== url);
+				configs = configs.filter(
+					(c: { url: string }) => redactProxyUrl(c.url) !== sanitized,
+				);
 
 				if (configs.length === initialLength) {
 					console.log("Proxy not found");
@@ -1232,7 +1273,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 				}
 
 				fs.writeFileSync(proxyPath, JSON.stringify(configs, null, 2));
-				console.log(`Proxy removed: ${url}`);
+				console.log(`Proxy removed: ${sanitized}`);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -1243,7 +1284,15 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 		case "list": {
 			try {
 				const configs = loadProxyConfigs();
-				outputJson(configs, !jsonOutput);
+				outputJson(
+					configs.map((config) => ({
+						...config,
+						url: redactProxyUrl(config.url),
+						username: config.username ? "[REDACTED]" : undefined,
+						password: config.password ? "[REDACTED]" : undefined,
+					})),
+					!jsonOutput,
+				);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2765,7 +2814,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser open-many",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2793,7 +2842,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser open",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2822,7 +2871,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser navigate",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2846,7 +2895,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser capture",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2880,7 +2929,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser capture-many",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2903,7 +2952,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser snapshot",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2930,7 +2979,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser state",
 				);
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -2977,7 +3026,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					screenshot: flags.screenshot === "true",
 				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser act");
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -3013,7 +3062,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					continueOnFailure: flags["continue-on-failure"] === "true",
 				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser task run");
 				outputJson(result, !jsonOutput);
-				process.exit(timedOut ? 1 : 0);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw new CliError('Command failed');
@@ -3236,7 +3285,7 @@ export async function runCli(argv = process.argv): Promise<void> {
 		default:
 			console.error(`Unknown command: ${args.command}`);
 			printHelp();
-			process.exit(1);
+			throw new CliError("Unknown command");
 	}
 
 	} finally {
@@ -5723,7 +5772,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 									fs.rmSync(String(flags["status-file"]), { force: true });
 								}
 								bc.close();
-								process.exit(0);
+								exitImmediately(0);
 							};
 							process.once("SIGINT", () => {
 								void stopAndExit();

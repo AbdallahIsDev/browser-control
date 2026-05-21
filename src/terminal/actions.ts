@@ -30,7 +30,7 @@ import type { TerminalSessionManager } from "./session";
 import type { ExecResult, TerminalSnapshot } from "./types";
 
 const log = logger.withComponent("terminal_actions");
-const TERMINAL_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const TERMINAL_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 const MIN_COLS = 20;
 const MAX_COLS = 500;
