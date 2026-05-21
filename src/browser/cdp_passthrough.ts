@@ -11,28 +11,17 @@ const MAX_OUTPUT_CHARS = 100_000;
 
 const METHOD_REGEX = /^[A-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u;
 
-const DANGEROUS_METHODS = new Set([
-	"Browser.close",
-	"Browser.crash",
-	"Browser.setWindowBounds",
-	"Target.closeTarget",
-	"Target.createTarget",
-	"Page.navigate",
-	"Page.captureScreenshot",
-	"Page.printToPDF",
-	"Page.setDeviceMetricsOverride",
-	"Page.setDownloadBehavior",
-	"Security.disable",
-	"Security.setIgnoreCertificateErrors",
-	"Fetch.enable",
-	"Fetch.continueResponse",
-	"Fetch.continueRequest",
-	"Fetch.fulfillRequest",
-	"Fetch.failRequest",
-	"Storage.clearDataForOrigin",
-	"Network.setCookie",
-	"Network.deleteCookies",
-	"Runtime.evaluate",
+const ALLOWED_SAFE_METHODS = new Set([
+	"DOM.getDocument",
+	"DOM.querySelector",
+	"DOM.querySelectorAll",
+	"DOM.getOuterHTML",
+	"Runtime.getProperties",
+	"Target.getTargets",
+	"Accessibility.getFullAXTree",
+	"CSS.getComputedStyleForNode",
+	"CSS.getPlatformFontsForNode",
+	"Overlay.inspectNodeMode",
 ]);
 
 function isJsonSerializable(value: unknown): boolean {
@@ -80,9 +69,9 @@ export async function executeCdpCommand(
 		);
 	}
 
-	if (DANGEROUS_METHODS.has(method)) {
+	if (!ALLOWED_SAFE_METHODS.has(method)) {
 		return failureResult(
-			`CDP method "${method}" is blocked for security reasons.`,
+			`CDP method "${method}" is not in the approved allowlist for raw CDP passthrough. Only read-only DOM/CSS/Accessibility introspection methods are allowed. Use safe actions for higher-risk CDP methods.`,
 			{ path: "low_level", sessionId: sid },
 		);
 	}

@@ -2,8 +2,8 @@
  * Browser Profiles — Profile management for Browser Control.
  *
  * Supports three profile types:
- *  - shared: persistent automation profile shared across runs (default)
- *  - isolated: temporary profile discarded on close
+ *  - shared: persistent automation profile shared across runs
+ *  - isolated: temporary profile discarded on close (default)
  *  - named: user-created persistent profiles for different identities
  *
  * Profile data directories live under <data-home>/browser/profiles/<profile-id>/.
@@ -107,21 +107,21 @@ export class BrowserProfileManager {
     this.ensureDefaultProfile();
   }
 
-  /** Ensure the default shared profile exists. */
-  private ensureDefaultProfile(): void {
-    fs.mkdirSync(getProfileDataDir(DEFAULT_SHARED_PROFILE_ID), { recursive: true });
-    if (!this.registry.profiles.find((p) => p.id === DEFAULT_SHARED_PROFILE_ID)) {
-      const now = new Date().toISOString();
-      this.registry.profiles.push({
-        id: DEFAULT_SHARED_PROFILE_ID,
-        name: DEFAULT_SHARED_PROFILE_NAME,
-        type: "shared",
-        createdAt: now,
-        lastUsedAt: now,
-      });
-      this.save();
-    }
-  }
+	/** Ensure the default profile exists. */
+	private ensureDefaultProfile(): void {
+		fs.mkdirSync(getProfileDataDir(DEFAULT_SHARED_PROFILE_ID), { recursive: true });
+		if (!this.registry.profiles.find((p) => p.id === DEFAULT_SHARED_PROFILE_ID)) {
+			const now = new Date().toISOString();
+			this.registry.profiles.push({
+				id: DEFAULT_SHARED_PROFILE_ID,
+				name: DEFAULT_SHARED_PROFILE_NAME,
+				type: "isolated",
+				createdAt: now,
+				lastUsedAt: now,
+			});
+			this.save();
+		}
+	}
 
   /** Create a new browser profile. */
   createProfile(name: string, type: ProfileType = "named"): BrowserProfile {

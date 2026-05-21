@@ -272,6 +272,8 @@ export interface ConnectOptions {
 	profileName?: string;
 	/** Profile type when creating new */
 	profileType?: ProfileType;
+	/** Allow using the system Chrome profile (requires explicit opt-in) */
+	allowSystemProfile?: boolean;
 	/** Whether to restore auth state into a managed context */
 	restoreAuth?: boolean;
 	/** Auth snapshot to restore */
@@ -1560,7 +1562,20 @@ export class BrowserConnectionManager {
 		// Fall back to default
 		profileName = profileName ?? "default";
 
-		const profileType = options.profileType ?? "shared";
+		const profileType = options.profileType ?? "isolated";
+
+		// Warn when using shared/persistent profile (system Chrome profile)
+		if (profileType === "shared") {
+			if (options.allowSystemProfile) {
+				log.warn("Using persistent shared/system Chrome profile — data may persist across sessions.");
+			} else {
+				log.warn(
+					"Shared/system profile requested without --allow-system-profile flag. " +
+					"Defaulting to isolated profile. Use allowSystemProfile:true to opt in.",
+				);
+				return this.profileManager.createIsolatedProfile();
+			}
+		}
 
 		// Try to load existing profile by name
 		const existing = this.profileManager.getProfileByName(profileName);

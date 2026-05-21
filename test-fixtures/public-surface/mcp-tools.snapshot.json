@@ -3,6 +3,231 @@
   "tools": [
     {
       "category": "browser",
+      "description": "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state) with optional post-action capture. Pre-validates required fields. Returns policy metadata.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "Action to perform.",
+            "enum": [
+              "click",
+              "fill",
+              "press",
+              "hover",
+              "scroll",
+              "type",
+              "paste",
+              "screenshot",
+              "tab-close",
+              "open",
+              "navigate",
+              "openMany",
+              "capture",
+              "captureMany",
+              "fillMany",
+              "state"
+            ],
+            "type": "string"
+          },
+          "amount": {
+            "description": "Pixels to scroll. Default: 300.",
+            "type": "number"
+          },
+          "boxes": {
+            "default": false,
+            "description": "Include element bounds for capture/state.",
+            "type": "boolean"
+          },
+          "captureOnSuccess": {
+            "default": false,
+            "description": "Automatically capture snapshot/screenshot after the action.",
+            "type": "boolean"
+          },
+          "commit": {
+            "default": false,
+            "description": "Press Tab after fill to move to the next field.",
+            "type": "boolean"
+          },
+          "continueOnFailure": {
+            "default": false,
+            "description": "Continue on field failure for fillMany.",
+            "type": "boolean"
+          },
+          "delayMs": {
+            "default": 0,
+            "description": "Delay between keystrokes in ms. Default: 0.",
+            "type": "number"
+          },
+          "direction": {
+            "description": "Scroll direction: up, down, left, right.",
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right"
+            ],
+            "type": "string"
+          },
+          "fields": {
+            "description": "Fields for fillMany action.",
+            "items": {
+              "properties": {
+                "target": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "target",
+                "text"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "force": {
+            "default": false,
+            "description": "Force click without actionability checks.",
+            "type": "boolean"
+          },
+          "fullPage": {
+            "default": false,
+            "description": "Full-page screenshot (screenshot action only).",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "Keyboard key to press. Required for press.",
+            "type": "string"
+          },
+          "outputPath": {
+            "description": "Custom screenshot output path (screenshot action only).",
+            "type": "string"
+          },
+          "rootSelector": {
+            "description": "Root CSS selector for scoped snapshot.",
+            "type": "string"
+          },
+          "screenshot": {
+            "default": false,
+            "description": "Include screenshot in post-action capture. Default: false.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "snapshot": {
+            "default": false,
+            "description": "Include snapshot in post-action capture. Default: false (compact).",
+            "type": "boolean"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
+          "target": {
+            "description": "Element ref (@e3), CSS selector, or text match. Required for click/fill/hover/paste/screenshot.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to enter. Required for fill/type/paste.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds. Default: 5000.",
+            "type": "number"
+          },
+          "url": {
+            "description": "URL for open/navigate actions.",
+            "type": "string"
+          },
+          "urls": {
+            "description": "Array of URLs or {url, label, waitUntil} objects for openMany/captureMany actions.",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "waitUntil": {
+                      "enum": [
+                        "load",
+                        "domcontentloaded",
+                        "networkidle",
+                        "commit"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "waitUntil": {
+            "description": "Navigation wait condition: load, domcontentloaded, networkidle, commit.",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle",
+              "commit"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_act",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (--cdp, --endpoint, or --port) and never falls back to launch.",
       "inputSchema": {
         "additionalProperties": false,
@@ -66,6 +291,214 @@
     },
     {
       "category": "browser",
+      "description": "Capture snapshot and/or screenshot evidence from the active or specified tab.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "fullPage": {
+            "default": false,
+            "description": "Capture full-page screenshot when screenshot is true.",
+            "type": "boolean"
+          },
+          "screenshot": {
+            "default": false,
+            "description": "Include a screenshot.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "snapshot": {
+            "default": true,
+            "description": "Include an accessibility snapshot.",
+            "type": "boolean"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_capture",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Capture snapshot and/or screenshot evidence from multiple tabs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "fullPage": {
+            "default": false,
+            "description": "Capture full-page screenshots when screenshot is true.",
+            "type": "boolean"
+          },
+          "screenshot": {
+            "default": false,
+            "description": "Include screenshots.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "snapshot": {
+            "default": true,
+            "description": "Include accessibility snapshots.",
+            "type": "boolean"
+          },
+          "tabIds": {
+            "description": "Tab IDs to capture.",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tabIds"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_capture_many",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Execute a raw CDP command via passthrough. Requires explicit timeoutMs. For page interactions, use click/fill/snapshot instead.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "frameId": {
+            "description": "CDP frame ID (optional).",
+            "type": "string"
+          },
+          "method": {
+            "description": "CDP method to call (e.g., 'Network.enable').",
+            "type": "string"
+          },
+          "params": {
+            "description": "CDP method parameters.",
+            "type": "object"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "CDP target ID (optional).",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout in milliseconds.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method",
+          "timeoutMs"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_cdp",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.",
       "inputSchema": {
         "additionalProperties": false,
@@ -77,6 +510,10 @@
           },
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           },
           "target": {
@@ -222,6 +659,83 @@
     },
     {
       "category": "browser",
+      "description": "Detect or respond to browser dialogs (alerts, prompts, confirms). Call with action=list first to see active dialogs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "Action to perform: list or respond.",
+            "enum": [
+              "list",
+              "respond"
+            ],
+            "type": "string"
+          },
+          "dialog_id": {
+            "description": "Dialog ID to respond to (required if action=respond).",
+            "type": "string"
+          },
+          "response": {
+            "description": "Response type: accept or dismiss.",
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text to enter into prompt dialogs.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_dialog",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "List recent downloads for the current session. Returns structured download information including filename, path, size, and status.",
       "inputSchema": {
         "additionalProperties": false,
@@ -285,6 +799,10 @@
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
           "target": {
             "description": "Element to drop onto: ref (@e3), CSS selector, or text match.",
             "type": "string"
@@ -343,6 +861,10 @@
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
           "target": {
             "description": "Element to fill: ref (@e3), CSS selector, or text match.",
             "type": "string"
@@ -397,12 +919,82 @@
     },
     {
       "category": "browser",
+      "description": "Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "continueOnFailure": {
+            "default": false,
+            "description": "Continue filling subsequent fields if one fails.",
+            "type": "boolean"
+          },
+          "fields": {
+            "description": "Array of fields to fill. Each must have { target, text }.",
+            "type": "array"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "Timeout per field in milliseconds. Default: 5000.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_fill_many",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           },
           "target": {
@@ -470,6 +1062,10 @@
             "description": "Custom CSS for highlight overlay.",
             "type": "string"
           },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
           "target": {
             "description": "Element to highlight: ref (@e3), CSS selector, or text match.",
             "type": "string"
@@ -521,6 +1117,10 @@
         "properties": {
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           },
           "target": {
@@ -686,6 +1286,74 @@
     },
     {
       "category": "browser",
+      "description": "Navigate the active or specified tab to a URL, replacing that tab.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL to navigate to.",
+            "type": "string"
+          },
+          "waitUntil": {
+            "default": "domcontentloaded",
+            "description": "Navigation wait condition.",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle",
+              "commit"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_navigate",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
       "inputSchema": {
         "additionalProperties": false,
@@ -750,12 +1418,69 @@
     },
     {
       "category": "browser",
+      "description": "Open multiple URLs as tabs in the current browser session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "urls": {
+            "description": "Array of URLs or { url, label, waitUntil } objects to open.",
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      },
+      "name": "bc_browser_open_many",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
       "description": "Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           },
           "target": {
@@ -821,6 +1546,10 @@
           },
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           }
         },
@@ -1257,6 +1986,10 @@
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
+          },
           "target": {
             "description": "Element ref or selector to screenshot. If omitted, screenshots the viewport.",
             "type": "string"
@@ -1322,6 +2055,10 @@
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
           }
         },
         "required": [
@@ -1379,12 +2116,92 @@
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
+            "type": "string"
           }
         },
         "required": [],
         "type": "object"
       },
       "name": "bc_browser_snapshot",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "dialog": {
+            "default": true,
+            "description": "Include pending dialogs. Default: true.",
+            "type": "boolean"
+          },
+          "downloads": {
+            "default": false,
+            "description": "Include recent downloads. Default: false (opt-in — high risk under balanced policy).",
+            "type": "boolean"
+          },
+          "fullPage": {
+            "default": false,
+            "description": "Capture full-page screenshot when screenshot is true.",
+            "type": "boolean"
+          },
+          "screenshot": {
+            "default": false,
+            "description": "Include screenshot. Default: false.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "snapshot": {
+            "default": false,
+            "description": "Include accessibility snapshot. Default: false (compact mode).",
+            "type": "boolean"
+          },
+          "tabId": {
+            "description": "Optional tab ID to snapshot.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "bc_browser_state",
       "outputShape": {
         "actionResultFields": [
           "success",
@@ -1577,6 +2394,10 @@
           },
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID.",
             "type": "string"
           },
           "text": {
@@ -2136,6 +2957,64 @@
         "type": "object"
       },
       "name": "bc_fs_write",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "fs",
+      "description": "Write task output under the active session runtime directory. Rejects absolute paths and path traversal.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "description": "Content to write.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "Filename relative to the active session runtime directory.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "content"
+        ],
+        "type": "object"
+      },
+      "name": "bc_fs_write_output",
       "outputShape": {
         "actionResultFields": [
           "success",
@@ -3189,6 +4068,165 @@
           "completedAt"
         ],
         "handlerReturn": "ActionResult-compatible object",
+        "wrapper": {
+          "content": [
+            {
+              "jsonFields": [
+                "completedAt",
+                "data",
+                "path",
+                "sessionId",
+                "success"
+              ],
+              "textEncoding": "json",
+              "type": "text"
+            }
+          ],
+          "isError": "boolean"
+        }
+      }
+    },
+    {
+      "category": "browser",
+      "description": "Execute a deterministic multi-step browser task sequence. Each step runs a browser action (click, fill, press, etc.). Returns per-step results with timing, policy metadata, completed/executed/successful counts, failedStepIndex, finalState.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "continueOnFailure": {
+            "default": false,
+            "description": "Continue to next step if one fails. Default: false.",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "steps": {
+            "description": "Array of step objects. Each step must have an 'action' field.",
+            "items": {
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "captureOnSuccess": {
+                  "type": "boolean"
+                },
+                "commit": {
+                  "type": "boolean"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "delayMs": {
+                  "type": "number"
+                },
+                "direction": {
+                  "type": "string"
+                },
+                "fields": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "filename": {
+                  "type": "string"
+                },
+                "force": {
+                  "type": "boolean"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "screenshot": {
+                  "type": "boolean"
+                },
+                "snapshot": {
+                  "type": "boolean"
+                },
+                "tabId": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "timeoutMs": {
+                  "type": "number"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "urls": {
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "waitUntil": {
+                            "enum": [
+                              "load",
+                              "domcontentloaded",
+                              "networkidle",
+                              "commit"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                },
+                "waitUntil": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "type": "object"
+      },
+      "name": "bc_task_run",
+      "outputShape": {
+        "actionResultFields": [
+          "success",
+          "path",
+          "sessionId",
+          "data",
+          "warning",
+          "error",
+          "auditId",
+          "policyDecision",
+          "risk",
+          "completedAt"
+        ],
+        "handlerReturn": "ActionResult",
         "wrapper": {
           "content": [
             {

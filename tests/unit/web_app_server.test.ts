@@ -1450,6 +1450,12 @@ test("web app exposes workflow v2 run, events, state edit, and helper APIs", asy
 });
 
 test("web app server bridges task and automation endpoints through broker", async (t) => {
+	const previousKey = process.env.BROKER_API_KEY;
+	process.env.BROKER_API_KEY = "web-broker-test-key";
+	t.after(() => {
+		if (previousKey === undefined) delete process.env.BROKER_API_KEY;
+		else process.env.BROKER_API_KEY = previousKey;
+	});
 	const broker = createBrokerServer({
 		callbacks: {
 			submitTask: async () => ({ taskId: "task-1" }),
@@ -1520,10 +1526,14 @@ test("web app server bridges task and automation endpoints through broker", asyn
 test("web app server persists saved automations and queues run when broker is available", async (t) => {
 	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-autos-"));
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const previousKey = process.env.BROKER_API_KEY;
 	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	process.env.BROKER_API_KEY = "web-automation-broker-key";
 	t.after(() => {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		if (previousKey === undefined) delete process.env.BROKER_API_KEY;
+		else process.env.BROKER_API_KEY = previousKey;
 		fs.rmSync(tmpHome, { recursive: true, force: true });
 	});
 
@@ -2042,4 +2052,143 @@ test("POST /api/browser/cdp without auth returns 401", async (t) => {
 		body: JSON.stringify({ method: "Target.getTargets", timeoutMs: 5000 }),
 	});
 	assert.equal(res.status, 401);
+});
+
+// ── Fix #3: Stdout token leak ─────────────────────────────────────────
+
+test("printServerInfo does NOT write token to stdout by default", async (t) => {
+	const { printServerInfo } = await import("../../src/web/server");
+	const stdoutChunks: string[] = [];
+	const stderrChunks: string[] = [];
+	const origStdout = process.stdout.write;
+	const origStderr = process.stderr.write;
+	process.stdout.write = ((chunk: string | Uint8Array) => {
+		stdoutChunks.push(String(chunk));
+		return true;
+	}) as typeof process.stdout.write;
+	process.stderr.write = ((chunk: string | Uint8Array) => {
+		stderrChunks.push(String(chunk));
+		return true;
+	}) as typeof process.stderr.write;
+	t.after(() => {
+		process.stdout.write = origStdout;
+		process.stderr.write = origStderr;
+	});
+
+	const previousEnv = process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN;
+	delete process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN;
+	t.after(() => {
+		if (previousEnv === undefined)
+			delete process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN;
+		else process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN = previousEnv;
+	});
+
+	printServerInfo({
+		host: "127.0.0.1",
+		port: 7790,
+		token: "my-secret-token-12345",
+		url: "http://127.0.0.1:7790",
+	});
+
+	const stdout = stdoutChunks.join("");
+	const stderr = stderrChunks.join("");
+
+	assert.match(stdout, /http:\/\/127\.0\.0\.1:7790/);
+	assert.doesNotMatch(stdout, /my-secret-token/);
+	assert.match(stderr, /my-secret-token/);
+	assert.match(stderr, /WARNING/);
+});
+
+test("printServerInfo writes token to stdout when BROWSER_CONTROL_WEB_SHOW_TOKEN=1", async (t) => {
+	const { printServerInfo } = await import("../../src/web/server");
+	const stdoutChunks: string[] = [];
+	const stderrChunks: string[] = [];
+	const origStdout = process.stdout.write;
+	const origStderr = process.stderr.write;
+	process.stdout.write = ((chunk: string | Uint8Array) => {
+		stdoutChunks.push(String(chunk));
+		return true;
+	}) as typeof process.stdout.write;
+	process.stderr.write = ((chunk: string | Uint8Array) => {
+		stderrChunks.push(String(chunk));
+		return true;
+	}) as typeof process.stderr.write;
+	t.after(() => {
+		process.stdout.write = origStdout;
+		process.stderr.write = origStderr;
+	});
+
+	const previousEnv = process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN;
+	process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN = "1";
+	t.after(() => {
+		if (previousEnv === undefined)
+			delete process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN;
+		else process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN = previousEnv;
+	});
+
+	printServerInfo({
+		host: "127.0.0.1",
+		port: 7790,
+		token: "my-secret-token-12345",
+		url: "http://127.0.0.1:7790",
+	});
+
+	const stdout = stdoutChunks.join("");
+	assert.match(stdout, /my-secret-token/);
+});
+
+// ── Fix #9: WebSocket token in query string ───────────────────────────
+
+test("WebSocket connects via Sec-WebSocket-Protocol header instead of query string", async (t) => {
+	const server = createWebAppServer({
+		api: mockApi(),
+		token: "ws-protocol-token",
+	});
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+
+	const socket = new WebSocket(
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"ws-protocol-token",
+	);
+	t.after(() => socket.close());
+
+	const [msg] = await once(socket, "message");
+	const event = JSON.parse(msg.toString());
+	assert.equal(event.type, "runtime.status");
+	assert.ok(Array.isArray(event.events));
+});
+
+test("WebSocket auth via query string still works for backward compatibility", async (t) => {
+	const server = createWebAppServer({
+		api: mockApi(),
+		token: "query-token-works",
+	});
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+
+	const socket = new WebSocket(
+		`${baseUrl(address).replace("http", "ws")}/events?token=query-token-works`,
+	);
+	t.after(() => socket.close());
+
+	const [msg] = await once(socket, "message");
+	const event = JSON.parse(msg.toString());
+	assert.equal(event.type, "runtime.status");
+	assert.ok(Array.isArray(event.events));
+});
+
+test("WebSocket without token (no query, no protocol) gets 401", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+
+	const socket = new WebSocket(
+		`${baseUrl(address).replace("http", "ws")}/events`,
+	);
+	const [err] = await once(socket, "error");
+	assert.match(String(err), /401/);
 });

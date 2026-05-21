@@ -541,6 +541,14 @@ async function snapshotFromDOM(
         rect: { x: number; y: number; width: number; height: number };
         selector: string;
       }> = [];
+      const labelsByFor = new Map<string, string>();
+      for (const label of Array.from(root.querySelectorAll("label[for]"))) {
+        const targetId = label.getAttribute("for");
+        if (targetId && !labelsByFor.has(targetId)) {
+          labelsByFor.set(targetId, label.textContent?.trim() ?? "");
+        }
+      }
+      const capturedElements = new WeakSet<Element>();
 
       function getAccessibleName(el: Element): string {
         // aria-label
@@ -562,9 +570,9 @@ async function snapshotFromDOM(
         if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
           const id = el.id;
           if (id) {
-            const label = document.querySelector(`label[for="${id}"]`);
+            const label = labelsByFor.get(id);
             if (label) {
-              return label.textContent?.trim() ?? "";
+              return label;
             }
           }
           // Parent <label>
@@ -731,10 +739,14 @@ async function snapshotFromDOM(
           rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
           selector: generateSelector(el),
         });
+        capturedElements.add(el);
       }
 
       // Also grab headings
       for (const heading of Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6"))) {
+        if (capturedElements.has(heading)) {
+          continue;
+        }
         const style = window.getComputedStyle(heading);
         if (style.display === "none" || style.visibility === "hidden") {
           continue;

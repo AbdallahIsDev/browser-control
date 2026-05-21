@@ -36,20 +36,20 @@ describe("BrowserProfileManager", () => {
   });
 
   describe("default profile", () => {
-    it("should create a default shared profile on construction", () => {
+    it("should create a default isolated profile on construction", () => {
       const profiles = manager.listProfiles();
       assert.ok(profiles.length >= 1);
       const defaultProfile = profiles.find((p) => p.id === "default");
       assert.ok(defaultProfile);
       assert.equal(defaultProfile.name, "default");
-      assert.equal(defaultProfile.type, "shared");
+      assert.equal(defaultProfile.type, "isolated");
     });
 
     it("should return default profile via getDefaultProfile()", () => {
       const profile = manager.getDefaultProfile();
       assert.ok(profile);
       assert.equal(profile.id, "default");
-      assert.equal(profile.type, "shared");
+      assert.equal(profile.type, "isolated");
     });
 
     it("should not allow deleting the default profile", () => {

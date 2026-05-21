@@ -8,6 +8,7 @@ import {
 	redactKnownSecretValues,
 	redactSecretRefs,
 	type SecretAction,
+	type SecretString,
 	type SecretUseContext,
 	parseSecretRef,
 } from "../security/credential_vault";
@@ -29,6 +30,11 @@ import { successResult, failureResult } from "../shared/action_result";
 
 const MAX_WORKFLOW_EXECUTION_STEPS = 5000;
 
+interface WorkflowExecutionIndex {
+	nodeById: Map<string, WorkflowNode>;
+	edgesByFrom: Map<string, WorkflowGraph["edges"]>;
+}
+
 export interface WorkflowEventSink {
 	emit(event: WorkflowEvent): void;
 }
@@ -38,7 +44,7 @@ export type WorkflowSecretResolver = (
 	action: SecretAction,
 	context: Omit<SecretUseContext, "action">,
 ) => Promise<
-	| { success: true; id: string; value: string; grantId?: string }
+	| { success: true; id: string; value: SecretString; grantId?: string }
 	| { success: false; id?: string; error: string }
 >;
 
@@ -163,7 +169,7 @@ export class WorkflowRuntime {
 		nodeResult.status = "completed";
 		nodeResult.completedAt = this.now();
 		run.approvals.push({ nodeId, approvedBy, approvedAt: this.now() });
-		const nextNode = this.resolveNextNode(graph, nodeId, run.state);
+		const nextNode = this.resolveNextNode(this.buildExecutionIndex(graph), nodeId, run.state);
 		run.currentNodeId = nextNode;
 		run.updatedAt = this.now();
 
@@ -213,6 +219,20 @@ export class WorkflowRuntime {
 
 	// ── Internal ────────────────────────────────────────────────────
 
+	private buildExecutionIndex(graph: WorkflowGraph): WorkflowExecutionIndex {
+		const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+		const edgesByFrom = new Map<string, WorkflowGraph["edges"]>();
+		for (const edge of graph.edges) {
+			const existing = edgesByFrom.get(edge.from);
+			if (existing) {
+				existing.push(edge);
+			} else {
+				edgesByFrom.set(edge.from, [edge]);
+			}
+		}
+		return { nodeById, edgesByFrom };
+	}
+
 	private isStateValueAllowed(
 		expected: "string" | "number" | "boolean" | undefined,
 		value: string | number | boolean,
@@ -222,12 +242,12 @@ export class WorkflowRuntime {
 	}
 
 	private resolveNextNode(
-		graph: WorkflowGraph,
+		index: WorkflowExecutionIndex,
 		currentNodeId: string,
 		state: Record<string, string | number | boolean>,
 	): string | undefined {
-		const node = graph.nodes.find((candidate) => candidate.id === currentNodeId);
-		const outgoing = graph.edges.filter(e => e.from === currentNodeId);
+		const node = index.nodeById.get(currentNodeId);
+		const outgoing = index.edgesByFrom.get(currentNodeId) ?? [];
 		if (outgoing.length === 0) return undefined;
 		if (node?.kind === "loop") {
 			const exitEdge = outgoing.find((edge) => edge.role === "exit" || edge.label === "exit");
@@ -252,7 +272,7 @@ export class WorkflowRuntime {
 		graph: WorkflowGraph,
 		startNodeId?: string,
 	): Promise<ActionResult<WorkflowRun>> {
-		const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
+		const index = this.buildExecutionIndex(graph);
 		let currentNodeId = startNodeId;
 		let stepCount = 0;
 
@@ -267,7 +287,7 @@ export class WorkflowRuntime {
 				break;
 			}
 
-			const node = nodeMap.get(currentNodeId);
+			const node = index.nodeById.get(currentNodeId);
 			if (!node) {
 				run.status = "failed";
 				run.failures.push({ nodeId: currentNodeId, error: `Unknown node: ${currentNodeId}`, timestamp: this.now() });
@@ -281,7 +301,7 @@ export class WorkflowRuntime {
 
 			// Handle loop nodes
 			if (node.kind === "loop") {
-				const loopResult = await this.executeLoop(node, run, graph);
+				const loopResult = await this.executeLoop(node, run, graph, index);
 				if (loopResult.status === "failed") {
 					run.status = "failed";
 					run.completedAt = this.now();
@@ -291,7 +311,7 @@ export class WorkflowRuntime {
 				}
 				if (loopResult.status === "completed") {
 					run.nodeResults[node.id] = loopResult;
-					currentNodeId = this.resolveNextNode(graph, currentNodeId, run.state);
+					currentNodeId = this.resolveNextNode(index, currentNodeId, run.state);
 					run.updatedAt = this.now();
 					this.store.saveRun(run);
 					continue;
@@ -321,7 +341,7 @@ export class WorkflowRuntime {
 
 			this.recordEvent(run, { type: "node-completed", runId: run.id, nodeId: node.id, timestamp: this.now(), data: result.output });
 
-			currentNodeId = this.resolveNextNode(graph, currentNodeId, run.state);
+			currentNodeId = this.resolveNextNode(index, currentNodeId, run.state);
 			this.store.saveRun(run);
 		}
 
@@ -339,13 +359,14 @@ export class WorkflowRuntime {
 		loopNode: WorkflowNode,
 		run: WorkflowRun,
 		graph: WorkflowGraph,
+		index: WorkflowExecutionIndex,
 	): Promise<WorkflowNodeResult> {
 		const config = loopNode.loopConfig;
 		if (!config) {
 			return { nodeId: loopNode.id, status: "failed", error: "Loop node missing loopConfig", retryCount: 0, startedAt: this.now() };
 		}
 
-		const childEdges = graph.edges.filter(e => e.from === loopNode.id);
+		const childEdges = index.edgesByFrom.get(loopNode.id) ?? [];
 		if (childEdges.length === 0) {
 			return { nodeId: loopNode.id, status: "failed", error: "Loop node has no outgoing edges", retryCount: 0, startedAt: this.now() };
 		}
@@ -368,7 +389,7 @@ export class WorkflowRuntime {
 			this.recordEvent(run, { type: "loop-iteration", runId: run.id, nodeId: loopNode.id, timestamp: this.now(), data: { iteration } });
 
 			// Execute body as linear path from bodyStart
-			const bodyResult = await this.executeLinearPath(run, graph, bodyStart, loopNode.id);
+			const bodyResult = await this.executeLinearPath(run, index, bodyStart, loopNode.id);
 			if (!bodyResult.success) {
 				return { nodeId: loopNode.id, status: "failed", error: `Loop iteration ${iteration} failed`, retryCount: 0, startedAt, completedAt: this.now(), loopIteration: iteration };
 			}
@@ -404,17 +425,16 @@ export class WorkflowRuntime {
 
 	private async executeLinearPath(
 		run: WorkflowRun,
-		graph: WorkflowGraph,
+		index: WorkflowExecutionIndex,
 		startNodeId: string,
 		stopAfterNodeId: string,
 	): Promise<ActionResult<unknown>> {
-		const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
 		let current = startNodeId;
 		let steps = 0;
 
 		while (current && current !== stopAfterNodeId && steps < MAX_LOOP_ITERATIONS) {
 			steps++;
-			const node = nodeMap.get(current);
+			const node = index.nodeById.get(current);
 			if (!node) break;
 
 			const result = await this.executeNode(node, run);
@@ -431,7 +451,7 @@ export class WorkflowRuntime {
 			}
 			if (result.artifacts) run.artifacts.push(...result.artifacts);
 
-			const edges = graph.edges.filter(e => e.from === current);
+			const edges = index.edgesByFrom.get(current) ?? [];
 			const nextEdge = edges.find(e => e.to === stopAfterNodeId);
 			if (nextEdge) {
 				current = stopAfterNodeId;
@@ -662,7 +682,7 @@ export class WorkflowRuntime {
 			if (!resolved.success) {
 				throw new Error(`Secret resolution denied: ${resolved.error}`);
 			}
-			return { value: resolved.value, secretValues: [resolved.value] };
+			return { value: resolved.value.reveal(), secretValues: [resolved.value.reveal()] };
 		}
 		if (Array.isArray(value)) {
 			const values: unknown[] = [];

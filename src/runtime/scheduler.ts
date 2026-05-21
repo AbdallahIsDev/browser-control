@@ -170,8 +170,7 @@ export function parseCron(expression: string): ParsedCronExpression {
   };
 }
 
-function getNextRunDate(expression: string, now: Date, timezone?: string): Date | null {
-  const parsed = parseCron(expression);
+function getNextRunDate(parsed: ParsedCronExpression, now: Date, timezone?: string): Date | null {
   const candidate = new Date(now.getTime());
   candidate.setUTCSeconds(0, 0);
   candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);
@@ -203,6 +202,8 @@ export class Scheduler {
 
   private readonly taskFactories = new Map<string, () => Task | Promise<Task>>();
 
+  private readonly cronCache = new Map<string, ParsedCronExpression>();
+
   private readonly dueHandlers: TaskDueHandler[] = [];
 
   private readonly inFlight = new Set<Promise<void>>();
@@ -223,8 +224,16 @@ export class Scheduler {
     }
   }
 
+  private getParsedCron(expression: string): ParsedCronExpression {
+    const cached = this.cronCache.get(expression);
+    if (cached) return cached;
+    const parsed = parseCron(expression);
+    this.cronCache.set(expression, parsed);
+    return parsed;
+  }
+
   schedule(task: ScheduledTask): void {
-    const nextRun = getNextRunDate(task.cronExpression, this.now(), task.timezone);
+    const nextRun = getNextRunDate(this.getParsedCron(task.cronExpression), this.now(), task.timezone);
     const scheduledTask: ScheduledTask = {
       ...task,
       nextRun: task.enabled ? nextRun ?? undefined : undefined,
@@ -262,7 +271,7 @@ export class Scheduler {
     }
 
     task.enabled = true;
-    task.nextRun = getNextRunDate(task.cronExpression, this.now(), task.timezone) ?? undefined;
+    task.nextRun = getNextRunDate(this.getParsedCron(task.cronExpression), this.now(), task.timezone) ?? undefined;
     this.persistTask(task);
   }
 
@@ -351,7 +360,7 @@ export class Scheduler {
       }
 
       task.lastRun = new Date(now);
-      task.nextRun = getNextRunDate(task.cronExpression, now, task.timezone) ?? undefined;
+      task.nextRun = getNextRunDate(this.getParsedCron(task.cronExpression), now, task.timezone) ?? undefined;
       task.taskFactory = task.taskFactory ?? this.taskFactories.get(task.id);
       this.persistTask(task);
 

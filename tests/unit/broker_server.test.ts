@@ -38,7 +38,7 @@ test("normalizeClientIp collapses IPv6 loopback and IPv4-mapped loopback address
 
 test("createBrokerServer rejects oversized JSON request bodies", async (t) => {
   const broker = createBrokerServer({
-    env: { BROKER_MAX_BODY_BYTES: "32" },
+    env: { BROKER_API_KEY: "body-test-key", BROKER_MAX_BODY_BYTES: "32" },
     callbacks: {
       submitTask: async () => ({ taskId: "should-not-run" }),
     },
@@ -50,7 +50,10 @@ test("createBrokerServer rejects oversized JSON request bodies", async (t) => {
   await broker.listen(0, "127.0.0.1");
   const response = await fetch(`${getBaseUrl(broker)}/api/v1/tasks/run`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "body-test-key",
+    },
     body: JSON.stringify({ action: "visit", params: { text: "x".repeat(64) } }),
   });
   const body = await response.json() as { error?: string };
@@ -406,10 +409,15 @@ test("createBrokerServer enforces auth with BROKER_API_KEY and falls back to BRO
   await apiKeyBroker.listen(0, "127.0.0.1");
   const apiKeyBaseUrl = getBaseUrl(apiKeyBroker);
 
-  const unauthorizedResponse = await fetch(`${apiKeyBaseUrl}/api/v1/health`);
+  // Health endpoint is exempt from auth
+  const healthResponse = await fetch(`${apiKeyBaseUrl}/api/v1/health`);
+  assert.equal(healthResponse.status, 200);
+
+  // Other endpoints still require auth
+  const unauthorizedResponse = await fetch(`${apiKeyBaseUrl}/api/v1/stats`);
   assert.equal(unauthorizedResponse.status, 401);
 
-  const authorizedResponse = await fetch(`${apiKeyBaseUrl}/api/v1/health`, {
+  const authorizedResponse = await fetch(`${apiKeyBaseUrl}/api/v1/stats`, {
     headers: {
       "x-api-key": "api-key",
     },
@@ -437,6 +445,65 @@ test("createBrokerServer enforces auth with BROKER_API_KEY and falls back to BRO
   assert.equal(fallbackResponse.status, 200);
 });
 
+test("createBrokerServer /health works without auth even with auto-generated key", async (t) => {
+  const broker = createBrokerServer();
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  // Health should always be accessible without auth
+  const healthRes = await fetch(`${baseUrl}/api/v1/health`);
+  assert.equal(healthRes.status, 200);
+
+  // Other endpoints should fail without auth
+  const tasksRes = await fetch(`${baseUrl}/api/v1/tasks`);
+  assert.equal(tasksRes.status, 401);
+
+  const statusRes = await fetch(`${baseUrl}/api/v1/status`);
+  assert.equal(statusRes.status, 401);
+
+  const configRes = await fetch(`${baseUrl}/api/v1/config`);
+  assert.equal(configRes.status, 401);
+});
+
+test("createBrokerServer state endpoints work with X-Broker-Api-Key header", async (t) => {
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "header-key" },
+    callbacks: {
+      listTasks: async () => [],
+      getStatus: async () => ({ daemon: { state: "running" } }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  // X-Broker-Api-Key header should work
+  const tasksRes = await fetch(`${baseUrl}/api/v1/tasks`, {
+    headers: { "X-Broker-Api-Key": "header-key" },
+  });
+  assert.equal(tasksRes.status, 200);
+
+  const statusRes = await fetch(`${baseUrl}/api/v1/status`, {
+    headers: { "X-Broker-Api-Key": "header-key" },
+  });
+  assert.equal(statusRes.status, 200);
+
+  // Wrong key should return 401
+  const wrongKeyRes = await fetch(`${baseUrl}/api/v1/tasks`, {
+    headers: { "X-Broker-Api-Key": "wrong-key" },
+  });
+  assert.equal(wrongKeyRes.status, 401);
+});
+
 test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts, and validates allowed domains", async (t) => {
   const broker = createBrokerServer({
     env: {
@@ -461,8 +528,9 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   await broker.listen(0, "127.0.0.1");
   const baseUrl = getBaseUrl(broker);
 
-  const unauthorized = await fetch(`${baseUrl}/api/v1/health`);
-  assert.equal(unauthorized.status, 401);
+  // Health is exempt from auth — always accessible
+  const healthOk = await fetch(`${baseUrl}/api/v1/health`);
+  assert.equal(healthOk.status, 200);
 
   const authorized = await fetch(`${baseUrl}/api/v1/health`, {
     headers: {
@@ -471,6 +539,7 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   });
   assert.equal(authorized.status, 200);
 
+  // Third request should be rate-limited (maxRequests=2)
   const rateLimited = await fetch(`${baseUrl}/api/v1/health`, {
     headers: {
       "x-api-key": "limit-key",
@@ -704,7 +773,8 @@ test("createBrokerServer exposes operator status and config endpoints", async (t
   });
 });
 
-test("createBrokerServer rejects config mutation when broker auth is not configured", async (t) => {
+test("createBrokerServer rejects config mutation when auth key is not provided", async (t) => {
+  // Server auto-generates a key; a request without it should be 401
   const broker = createBrokerServer();
 
   t.after(async () => {
@@ -722,9 +792,9 @@ test("createBrokerServer rejects config mutation when broker auth is not configu
     body: JSON.stringify({ value: "debug" }),
   });
 
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 401);
   const body = await response.json() as { error?: string };
-  assert.match(body.error ?? "", /requires BROKER_API_KEY/i);
+  assert.match(body.error ?? "", /unauthorized/i);
 });
 
 test("createBrokerServer rejects config mutation when policy requires confirmation", async (t) => {
@@ -766,7 +836,7 @@ test("createBrokerServer rejects config mutation when policy requires confirmati
   assert.equal(setConfigCalls, 0);
 });
 
-test("createBrokerServer rejects browser-origin requests when broker auth is absent", async (t) => {
+test("createBrokerServer rejects unauthorized requests with auto-generated key", async (t) => {
   const broker = createBrokerServer({
     callbacks: {
       submitTask: async () => ({ taskId: "should-not-run" }),
@@ -780,6 +850,7 @@ test("createBrokerServer rejects browser-origin requests when broker auth is abs
   await broker.listen(0, "127.0.0.1");
   const baseUrl = getBaseUrl(broker);
 
+  // Without any auth header — 401 (auth always configured)
   const response = await fetch(`${baseUrl}/api/v1/tasks/run`, {
     method: "POST",
     headers: {
@@ -789,8 +860,8 @@ test("createBrokerServer rejects browser-origin requests when broker auth is abs
     body: JSON.stringify({ action: "terminal_exec", params: { command: "echo unsafe" } }),
   });
 
-  assert.equal(response.status, 403);
-  assert.match(JSON.stringify(await response.json()), /BROKER_API_KEY/);
+  assert.equal(response.status, 401);
+  assert.match(JSON.stringify(await response.json()), /Unauthorized/);
 });
 
 test("createBrokerServer redacts secrets from callback error responses", async (t) => {
