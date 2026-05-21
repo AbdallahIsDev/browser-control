@@ -30,13 +30,16 @@ export async function apiFetch<T>(
 	path: string,
 	options: RequestInit = {},
 ): Promise<T> {
+	const headers = new Headers(options.headers);
+	const hasBody = options.body !== undefined && options.body !== null;
+	if (hasBody && !headers.has("content-type")) {
+		headers.set("content-type", "application/json");
+	}
+	headers.set("authorization", `Bearer ${getToken()}`);
+
 	const response = await fetch(path, {
 		...options,
-		headers: {
-			"content-type": "application/json",
-			authorization: `Bearer ${getToken()}`,
-			...(options.headers || {}),
-		},
+		headers,
 	});
 
 	const text = await response.text();
@@ -91,5 +94,19 @@ export async function respondToBrowserDialog(
 			response,
 			text,
 		}),
+	});
+}
+
+export async function openBrowserUrl(url: string): Promise<unknown> {
+	return apiFetch("/api/browser/open", {
+		method: "POST",
+		body: JSON.stringify({ url }),
+	});
+}
+
+export async function takeBrowserScreenshot(): Promise<unknown> {
+	return apiFetch("/api/browser/screenshot", {
+		method: "POST",
+		body: JSON.stringify({}),
 	});
 }

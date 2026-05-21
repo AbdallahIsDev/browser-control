@@ -16,6 +16,8 @@ import {
 import { apiFetch } from "../api";
 import type { Task, TaskListResponse } from "../types";
 
+const TASKS_POLL_MS = 5000;
+
 const STATUS_MAP: Record<string, "ok" | "warn" | "neutral" | "info"> = {
 	running: "info",
 	pending: "neutral",
@@ -32,20 +34,41 @@ export function TasksView() {
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
-		setLoading(true);
-		apiFetch<Task[] | TaskListResponse>("/api/tasks")
-			.then((data) => {
-				const response = Array.isArray(data)
-					? { tasks: data, available: true }
-					: data;
-				setTasks(response.tasks ?? []);
-				setAvailability(response);
-				setError("");
-			})
-			.catch((err: unknown) =>
-				setError(err instanceof Error ? err.message : String(err)),
-			)
-			.finally(() => setLoading(false));
+		let cancelled = false;
+		let firstLoad = true;
+
+		const loadTasks = () => {
+			if (document.hidden) return;
+			if (firstLoad) setLoading(true);
+			apiFetch<Task[] | TaskListResponse>("/api/tasks")
+				.then((data) => {
+					if (cancelled) return;
+					const response = Array.isArray(data)
+						? { tasks: data, available: true }
+						: data;
+					setTasks(response.tasks ?? []);
+					setAvailability(response);
+					setError("");
+				})
+				.catch((err: unknown) => {
+					if (cancelled) return;
+					setError(err instanceof Error ? err.message : String(err));
+				})
+				.finally(() => {
+					if (cancelled) return;
+					firstLoad = false;
+					setLoading(false);
+				});
+		};
+
+		loadTasks();
+		const interval = window.setInterval(loadTasks, TASKS_POLL_MS);
+		document.addEventListener("visibilitychange", loadTasks);
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+			document.removeEventListener("visibilitychange", loadTasks);
+		};
 	}, []);
 
 	if (loading) {
@@ -60,7 +83,7 @@ export function TasksView() {
 		return (
 			<PageShell className="flex items-center justify-center min-h-[50vh]">
 				<ErrorState
-					message="Task runtime offline"
+					message="Task service offline"
 					details="Task progress, approvals, screenshots, and results will appear here."
 				/>
 			</PageShell>
@@ -69,11 +92,12 @@ export function TasksView() {
 
 	if (availability?.available === false) {
 		const recovery =
-			availability.recovery || "Start Browser Control daemon to monitor tasks.";
+			availability.recovery ||
+			"Start Browser Control app service to monitor tasks.";
 		return (
 			<PageShell className="flex items-center justify-center min-h-[50vh]">
 				<EmptyState
-					title="Task runtime offline"
+					title="Task service offline"
 					description={`${recovery} Task history will load automatically.`}
 				/>
 			</PageShell>

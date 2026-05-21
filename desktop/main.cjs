@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, shell } = require("electron");
 
 const { spawn } = require("node:child_process");
 
@@ -165,6 +165,15 @@ function lockWindowNavigation(window, origin) {
 	});
 }
 
+function showStartupFailure(error) {
+	const message = error instanceof Error ? error.message : String(error);
+	console.error(message);
+	dialog.showErrorBox(
+		"Browser Control failed to start",
+		`The local app service could not start.\n\n${message}`,
+	);
+}
+
 async function createWindow() {
 	app.setName("Browser Control");
 
@@ -200,7 +209,7 @@ app
 	.then(createWindow)
 
 	.catch((error) => {
-		console.error(error instanceof Error ? error.message : String(error));
+		showStartupFailure(error);
 
 		app.quit();
 	});

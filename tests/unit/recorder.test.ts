@@ -5,6 +5,9 @@ import {
 	ActionRecorder,
 	convertRecordingToPackage,
 	convertRecordingToWorkflow,
+	getRecorder,
+	recordIfActive,
+	resetRecorder,
 } from "../../src/observability/recorder";
 
 test("ActionRecorder redacts nested secret refs from recorded params and errors", () => {
@@ -91,4 +94,13 @@ test("convertRecordingToPackage omits unused permission groups and infers browse
 	assert.deepEqual(draft.manifest.permissions, [
 		{ kind: "browser", domains: ["example.test"] },
 	]);
+});
+
+test("resetRecorder stops an active singleton recording before replacing it", () => {
+	const recorder = getRecorder();
+	recorder.start("Reset capture", "example.test");
+
+	resetRecorder();
+
+	assert.equal(recordIfActive("browser-snapshot", {}), null);
 });
