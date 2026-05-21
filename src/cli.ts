@@ -477,6 +477,19 @@ async function finishTimedCliResult(
 	}
 }
 
+async function cleanupBrowserSession(
+	bc: { close: () => void; sessionManager?: { releaseCliHandles: () => Promise<void> } },
+	timedOut: boolean,
+): Promise<void> {
+	try { await bc.sessionManager?.releaseCliHandles(); } catch { /* best-effort */ }
+	try { bc.close(); } catch { /* best-effort */ }
+	await closeFetchDispatcher();
+	if (timedOut) {
+		const exitTimer = setTimeout(() => exitImmediately(1), 1500);
+		exitTimer.unref();
+	}
+}
+
 function sanitizeProxyUrlForStorage(rawUrl: string): {
 	url: string;
 	hadCredentials: boolean;
@@ -2814,6 +2827,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser open-many",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2842,6 +2856,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser open",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2871,6 +2886,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser navigate",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2895,6 +2911,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser capture",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2929,6 +2946,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser capture-many",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2952,6 +2970,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser snapshot",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2979,6 +2998,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					"browser state",
 				);
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -3026,6 +3046,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					screenshot: flags.screenshot === "true",
 				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser act");
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -3062,6 +3083,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					continueOnFailure: flags["continue-on-failure"] === "true",
 				}), timeoutMs ? Number(timeoutMs) : 30_000, "browser task run");
 				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -4238,6 +4260,170 @@ async function formatBusyWebPortMessage(
 	return lines.join("\n");
 }
 
+async function canBindWebPort(host: string, port: number): Promise<boolean> {
+	if (port === 0) return true;
+	const net = await import("node:net");
+	return await new Promise<boolean>((resolve) => {
+		const server = net.createServer();
+		let settled = false;
+		const finish = (available: boolean) => {
+			if (settled) return;
+			settled = true;
+			server.removeAllListeners();
+			if (server.listening) {
+				server.close(() => resolve(available));
+				return;
+			}
+			resolve(available);
+		};
+		server.once("error", () => finish(false));
+		server.listen(port, host, () => finish(true));
+	});
+}
+
+function currentCliSpawnArgs(): string[] {
+	const sourceCli = path.resolve(process.cwd(), "src", "cli.ts");
+	const distCli = path.resolve(process.cwd(), "dist", "cli.js");
+	const argvEntry = process.argv
+		.map((arg) => path.resolve(process.cwd(), arg))
+		.find((arg) => path.normalize(arg) === path.normalize(sourceCli));
+	if (argvEntry || process.argv.some((arg) => /ts-node[\\/](?:dist[\\/])?bin/u.test(arg))) {
+		return [
+			"--require",
+			"ts-node/register",
+			"--require",
+			"tsconfig-paths/register",
+			sourceCli,
+		];
+	}
+	if (fs.existsSync(distCli)) return [distCli];
+	return [
+		"--require",
+		"ts-node/register",
+		"--require",
+		"tsconfig-paths/register",
+		sourceCli,
+	];
+}
+
+async function waitForReachableWebUrl(
+	url: string,
+	token: string,
+	timeoutMs = 10_000,
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	let lastError: unknown;
+	while (Date.now() < deadline) {
+		try {
+			const health = await fetch(`${url}/healthz`);
+			const capabilities = await fetch(`${url}/api/capabilities`, {
+				headers: { authorization: `Bearer ${token}` },
+			});
+			if (health.ok && capabilities.ok) return;
+		} catch (error) {
+			lastError = error;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	throw new Error(
+		`Web server started but did not become reachable: ${errorMessage(lastError)}`,
+	);
+}
+
+async function startBackgroundWebServer(options: {
+	host: string;
+	port: number;
+	token: string;
+	allowRemote: boolean;
+}): Promise<{
+	host: string;
+	port: number;
+	token: string;
+	url: string;
+	pid: number;
+	startedAt: string;
+}> {
+	const { spawn } = await import("node:child_process");
+	const { getDataHome } = await import("./shared/paths");
+	if (!(await canBindWebPort(options.host, options.port))) {
+		throw new Error(await formatBusyWebPortMessage(options.port, options.host));
+	}
+	const bgArgs = [
+		...currentCliSpawnArgs(),
+		"web",
+		"serve",
+		"--json",
+		"--host",
+		options.host,
+		"--port",
+		String(options.port),
+		"--token",
+		options.token,
+	];
+	if (options.allowRemote) bgArgs.push("--allow-remote");
+	const bgChild = spawn(process.execPath, bgArgs, {
+		stdio: "ignore",
+		detached: true,
+	});
+	bgChild.unref();
+	const recordPath = path.join(getDataHome(), "runtime", "web-server.json");
+	const serverInfo = await new Promise<Record<string, unknown>>(
+		(resolve, reject) => {
+			let childExited = false;
+			const cleanup = () => {
+				clearTimeout(timeout);
+				bgChild.off("exit", onExit);
+			};
+			const onExit = (code: number | null) => {
+				childExited = true;
+				cleanup();
+				reject(
+					new Error(
+						`Background web server exited before readiness (code ${code ?? "unknown"}).`,
+					),
+				);
+			};
+			const timeout = setTimeout(() => {
+				cleanup();
+				if (!childExited) bgChild.kill();
+				reject(new Error("Web server did not start within 10s"));
+			}, 10_000);
+			bgChild.once("exit", onExit);
+			const poll = () => {
+				try {
+					if (fs.existsSync(recordPath)) {
+						const parsed = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+						if (
+							parsed?.token === options.token &&
+							parsed?.pid === bgChild.pid &&
+							parsed?.port &&
+							(options.port === 0 || parsed.port === options.port)
+						) {
+							cleanup();
+							resolve(parsed);
+							return;
+						}
+					}
+				} catch {
+					/* not ready yet */
+				}
+				setTimeout(poll, 100);
+			};
+			poll();
+		},
+	);
+	const result = {
+		host: serverInfo.host as string,
+		port: serverInfo.port as number,
+		token: serverInfo.token as string,
+		url: serverInfo.url as string,
+		pid: bgChild.pid!,
+		startedAt: serverInfo.startedAt as string,
+	};
+	await waitForReachableWebUrl(result.url, result.token);
+	return result;
+}
+
 async function handleDashboard(args: ParsedArgs): Promise<void> {
 	const { subcommand, flags } = args;
 	const jsonOutput = flags.json === "true";
@@ -4308,6 +4494,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 			const { createWebAppServer, openUrlInDefaultBrowser } = await import(
 				"./web/server"
 			);
+			const { createLocalToken } = await import("./web/security");
 			const host = typeof flags.host === "string" ? flags.host : "127.0.0.1";
 			const port = typeof flags.port === "string" ? Number(flags.port) : 7790;
 			const token = typeof flags.token === "string" ? flags.token : undefined;
@@ -4338,6 +4525,40 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 					}
 				}
 
+				if (action === "open" && flags.wait !== "true") {
+					const bgToken = token || createLocalToken();
+					let info: {
+						host: string;
+						port: number;
+						token: string;
+						url: string;
+						pid?: number;
+						startedAt?: string;
+					};
+					try {
+						info = await startBackgroundWebServer({
+							host,
+							port,
+							token: bgToken,
+							allowRemote: flags["allow-remote"] === "true",
+						});
+					} catch (error) {
+						if (token === undefined && port !== 0) {
+							const reusable = await tryReuseWebServer({ host, port });
+							if (reusable) {
+								info = reusable;
+							} else {
+								throw error;
+							}
+						} else {
+							throw error;
+						}
+					}
+					const openUrl = emitInfo(info);
+					if (!jsonOutput) openUrlInDefaultBrowser(openUrl);
+					return;
+				}
+
 				const server = createWebAppServer({
 					host,
 					port,
@@ -4347,14 +4568,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 				try {
 					const info = await server.listen();
 					const openUrl = emitInfo(info);
-					if (jsonOutput) {
-						// serve is a foreground server command — keep running even with --json.
-						// open may print JSON and return unless --wait is explicitly set.
-						if (action === "open" && flags.wait !== "true") {
-							await server.close();
-							return;
-						}
-					} else {
+					if (!jsonOutput) {
 						if (action === "open") openUrlInDefaultBrowser(openUrl);
 						console.log("Press Ctrl+C to stop.");
 					}

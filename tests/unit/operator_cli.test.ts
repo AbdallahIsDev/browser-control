@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer, type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,43 @@ import { getBrowserActionPositionals, parseArgs, runCli } from "../../src/cli";
 
 function makeHome(): string {
 	return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-cli-"));
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getFreePort(): Promise<number> {
+	const server = createServer();
+	return new Promise((resolve, reject) => {
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			const port = (server.address() as AddressInfo).port;
+			server.close(() => resolve(port));
+		});
+	});
+}
+
+async function killPid(pid: number | undefined): Promise<void> {
+	if (!pid) return;
+	try {
+		process.kill(pid);
+	} catch {
+		return;
+	}
+	for (let attempt = 0; attempt < 20; attempt += 1) {
+		await sleep(100);
+		try {
+			process.kill(pid, 0);
+		} catch {
+			return;
+		}
+	}
+	try {
+		process.kill(pid, "SIGKILL");
+	} catch {
+		/* already dead */
+	}
 }
 
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
@@ -68,6 +105,26 @@ function requestProxy(url: string, host: string): Promise<{
 						body: text ? JSON.parse(text) : {},
 					});
 				});
+			},
+		);
+		request.on("error", reject);
+		request.end();
+	});
+}
+
+function requestStatus(url: string, token: string): Promise<number> {
+	const parsed = new URL(`${url}/api/capabilities`);
+	return new Promise((resolve, reject) => {
+		const request = http.request(
+			{
+				hostname: parsed.hostname,
+				port: parsed.port,
+				path: parsed.pathname,
+				headers: { authorization: `Bearer ${token}` },
+			},
+			(response) => {
+				response.resume();
+				response.on("end", () => resolve(response.statusCode ?? 0));
 			},
 		);
 		request.on("error", reject);
@@ -206,11 +263,10 @@ test("bc web serve --json --port=0 stays alive until killed", async () => {
 		assert.match(parsed.url, /^http:\/\/127\.0\.0\.1:\d+$/u);
 
 		// Process should still be alive after output
-		await new Promise((r) => setTimeout(r, 500));
+		await sleep(500);
 		assert.equal(child.killed, false, "serve process should still be alive");
 
-		child.kill();
-		await new Promise((resolve) => child.once("exit", resolve));
+		await killPid(child.pid);
 	} finally {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
@@ -247,11 +303,64 @@ test("bc web open --json --port=0 exits cleanly", async () => {
 		);
 
 		assert.equal(result.status, 0, result.stderr);
-		const firstLine = result.stdout.trim().split(/\r?\n/)[0];
+		const lines = result.stdout.trim().split(/\r?\n/).filter(Boolean);
+		const firstLine = lines[0];
 		const parsed = JSON.parse(firstLine);
 		assert.strictEqual(parsed.success, true);
 		assert.match(parsed.url, /^http:\/\/127\.0\.0\.1:\d+$/u);
+		assert.equal(await requestStatus(parsed.url, parsed.token), 200);
+		// Kill the background web server (PID included in JSON output).
+		if (parsed.pid) {
+			await killPid(parsed.pid);
+		}
+		await sleep(500);
 	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc web open --json --port=N exits with a reachable URL", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	let parsed:
+		| { success: boolean; pid?: number; url: string; token: string }
+		| undefined;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const explicitPort = await getFreePort();
+		const explicit = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"web",
+				"open",
+				"--json",
+				"--port",
+				String(explicitPort),
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+				timeout: 10000,
+			},
+		);
+
+		assert.equal(explicit.status, 0, explicit.stderr);
+		parsed = JSON.parse(explicit.stdout.trim().split(/\r?\n/).filter(Boolean)[0]);
+		assert.strictEqual(parsed?.success, true);
+		assert.match(parsed.url, new RegExp(`^http://127\\.0\\.0\\.1:${explicitPort}$`, "u"));
+		assert.equal(await requestStatus(parsed.url, parsed.token), 200);
+	} finally {
+		if (parsed?.pid) {
+			await killPid(parsed.pid);
+		}
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
 		fs.rmSync(home, { recursive: true, force: true });
@@ -262,6 +371,8 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	const recordPath = path.join(home, "runtime", "web-server.json");
+	const port = await getFreePort();
+	let childPid: number | undefined;
 	try {
 		process.env.BROWSER_CONTROL_HOME = home;
 		const child = spawn(
@@ -276,13 +387,14 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 				"serve",
 				"--json",
 				"--port",
-				"7811",
+				String(port),
 			],
 			{
 				cwd: process.cwd(),
 				env: { ...process.env, BROWSER_CONTROL_HOME: home },
 			},
 		);
+		childPid = child.pid;
 
 		let output = "";
 		for await (const chunk of child.stdout) {
@@ -306,7 +418,7 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 		};
 		assert.equal(record.url, served.url);
 		assert.equal(record.token, served.token);
-		assert.equal(record.port, 7811);
+		assert.equal(record.port, port);
 		assert.equal(typeof record.pid, "number");
 		assert.equal(typeof record.startedAt, "string");
 
@@ -322,7 +434,7 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 				"open",
 				"--json",
 				"--port",
-				"7811",
+				String(port),
 			],
 			{
 				cwd: process.cwd(),
@@ -346,9 +458,8 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 		assert.equal(reused.token, served.token);
 		assert.equal(reused.openUrl, `${served.url}/#token=${served.token}`);
 
-		child.kill();
-		await new Promise((resolve) => child.once("exit", resolve));
 	} finally {
+		await killPid(childPid);
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
 		fs.rmSync(home, { recursive: true, force: true });
@@ -361,10 +472,11 @@ test("bc web open reports readable fallback when an unknown process owns the por
 	const busyServer = http.createServer((_request, response) => {
 		response.end("busy");
 	});
+	const port = await getFreePort();
 	try {
 		process.env.BROWSER_CONTROL_HOME = home;
 		await new Promise<void>((resolve) =>
-			busyServer.listen(7812, "127.0.0.1", resolve),
+			busyServer.listen(port, "127.0.0.1", resolve),
 		);
 
 		const result = spawnSync(
@@ -379,7 +491,7 @@ test("bc web open reports readable fallback when an unknown process owns the por
 				"open",
 				"--json",
 				"--port",
-				"7812",
+				String(port),
 			],
 			{
 				cwd: process.cwd(),
@@ -390,7 +502,7 @@ test("bc web open reports readable fallback when an unknown process owns the por
 		);
 
 		assert.notEqual(result.status, 0);
-		assert.match(result.stderr, /port 7812 is busy/i);
+		assert.match(result.stderr, new RegExp(`port ${port} is busy`, "i"));
 		assert.match(result.stderr, /bc web open --port=0/i);
 		assert.match(result.stderr, /Source checkout: `npm run cli -- web open --port=0`./i);
 	} finally {

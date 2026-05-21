@@ -191,14 +191,18 @@ export async function validatePersistedWebAppServerInfo(
 		return false;
 	}
 	try {
-		const health = await fetchJsonWithTimeout(`${info.url}/healthz`);
+		const health = await fetchJsonWithTimeout(`${info.url}/healthz`, {}, 5_000);
 		if (!health.ok) return false;
-		const status = await fetchJsonWithTimeout(`${info.url}/api/status`, {
-			headers: {
-				authorization: `Bearer ${info.token}`,
+		const capabilitiesResponse = await fetchJsonWithTimeout(
+			`${info.url}/api/capabilities`,
+			{
+				headers: {
+					authorization: `Bearer ${info.token}`,
+				},
 			},
-		});
-		return status.ok;
+			5_000,
+		);
+		return capabilitiesResponse.ok;
 	} catch {
 		return false;
 	}
