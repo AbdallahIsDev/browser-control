@@ -37,11 +37,13 @@ Local dashboard shortcuts:
 
 ```powershell
 bc web open
+bc web open --json
+bc web open --wait=true
 bc web open --port=0
 npm run cli -- web open
 ```
 
-`bc web open` is the installed command. Use `--port=0` when port `7790` is already occupied.
+`bc web open` is the installed command. By default it starts a loopback web server in the background, opens the token-authenticated dashboard URL, and exits. `--json` prints the reachable `url`, `openUrl`, `token`, and background `pid`; scripts should stop that PID when finished. Use `--wait=true` for a foreground server process, and use `--port=0` when port `7790` is already occupied.
 
 ## Operator
 

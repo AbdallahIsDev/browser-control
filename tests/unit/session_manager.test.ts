@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { SessionManager, isPolicyAllowed, LocalTerminalRuntime, DaemonTerminalRuntime, BrokerTerminalRuntime, probeDaemonHealth, type SessionState, type SessionListEntry, type TerminalRuntime } from "../../src/session_manager";
+import { SessionManager, isPolicyAllowed, LocalTerminalRuntime, DaemonTerminalRuntime, BrokerTerminalRuntime, probeDaemonHealth, probeTerminalReadiness, type SessionState, type SessionListEntry, type TerminalRuntime } from "../../src/session_manager";
 import { MemoryStore } from "../../src/memory_store";
 import { loadConfig } from "../../src/config";
 import { stopDefaultDaemon } from "../helpers/daemon_helpers";
@@ -774,7 +774,8 @@ describe("SessionManager", () => {
       const freshStore = new MemoryStore({ filename: ":memory:" });
       const freshManager = new SessionManager({ memoryStore: freshStore });
 
-      // If daemon is not running, there's nothing to invalidate
+      // If daemon is not running or terminal endpoint is not ready, there's
+      // nothing to invalidate — ensureDaemonRuntime would return false anyway.
       const probe = await probeDaemonHealth();
       if (!probe.running) {
         // Verify invalidateBrokerRuntime is a no-op when nothing is cached
@@ -786,7 +787,15 @@ describe("SessionManager", () => {
         return;
       }
 
-      // Daemon is running — establish a broker runtime
+      // Daemon is running — check terminal readiness before proceeding
+      const termReady = await probeTerminalReadiness(probe.brokerUrl);
+      if (!termReady) {
+        console.log("SKIP: daemon is running but terminal endpoint is not ready");
+        freshStore.close();
+        return;
+      }
+
+      // Daemon is running and terminal is ready — establish a broker runtime
       const established = await freshManager.ensureDaemonRuntime({ autoStart: false });
       assert.equal(established, true, "should establish broker runtime");
 
@@ -896,7 +905,14 @@ describe("SessionManager", () => {
       const probeResult = await probeDaemonHealth();
 
       if (probeResult.running) {
-        // If daemon is running (unlikely in test env), ensureDaemonRuntime should work
+        // Daemon is running — but ensureDaemonRuntime also requires terminal readiness
+        const termReady = await probeTerminalReadiness(probeResult.brokerUrl);
+        if (!termReady) {
+          console.log("SKIP: daemon is running but terminal endpoint is not ready");
+          freshStore.close();
+          return;
+        }
+        // If daemon is running and terminal is ready, ensureDaemonRuntime should work
         const result = await freshManager.ensureDaemonRuntime({ autoStart: false });
         assert.equal(result, true, "should return true when daemon is reachable");
 
@@ -925,6 +941,13 @@ describe("SessionManager", () => {
 
       if (!probe.running) {
         // Skip: no daemon running to test against
+        return;
+      }
+
+      // Daemon is running — but ensureDaemonRuntime also requires terminal readiness
+      const termReady = await probeTerminalReadiness(probe.brokerUrl);
+      if (!termReady) {
+        console.log("SKIP: daemon is running but terminal endpoint is not ready");
         return;
       }
 

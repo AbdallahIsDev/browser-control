@@ -236,12 +236,16 @@ Browser Control includes a **token-gated local web dashboard** (React + Vite) se
 ```powershell
 npm run web:dev           # Dev dashboard
 npm run web:build         # Build for production
-bc web open               # Open dashboard with one-time local auth token
-bc web open --port=0      # Fallback when port 7790 is busy
+bc web open               # Start dashboard in background and open a token URL
+bc web open --json        # Print reachable URL/token/PID JSON, then exit
+bc web open --wait=true   # Keep the web server in the foreground
+bc web open --port=0      # Use an auto-assigned free port
 npm run cli -- web open   # Source checkout equivalent
 npm run desktop:dev       # Electron dev mode
 npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
 ```
+
+`bc web open` leaves a background loopback server running so the returned dashboard URL stays reachable after the command exits. Stop the returned PID when using `--json` in scripts.
 
 Current dashboard areas include runtime status, tasks, browser/provider state, workflows, packages, evidence, settings, and advanced maintenance actions.
 
