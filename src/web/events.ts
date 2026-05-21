@@ -34,6 +34,7 @@ export class WebEventHub {
 		head: Buffer,
 		authorized: boolean,
 		allowedOrigins: string[] = [],
+		token?: string,
 	): void {
 		const origin = request.headers.origin;
 		if (
@@ -44,6 +45,18 @@ export class WebEventHub {
 		) {
 			writeUpgradeError(socket, 403, "Forbidden Origin.");
 			return;
+		}
+
+		// Check Sec-WebSocket-Protocol header for token auth
+		// (keeps token out of query strings, logs, and proxies)
+		if (!authorized && token) {
+			const protocol = request.headers["sec-websocket-protocol"];
+			if (typeof protocol === "string") {
+				const protocols = protocol.split(",").map((s) => s.trim());
+				if (protocols.includes(token)) {
+					authorized = true;
+				}
+			}
 		}
 
 		if (!authorized) {

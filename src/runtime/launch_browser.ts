@@ -89,7 +89,7 @@ function resolveLaunchProfileMode(env: NodeJS.ProcessEnv = process.env): LaunchP
   const raw = env.BROWSER_LAUNCH_PROFILE?.trim().toLowerCase();
   if (raw === "isolated" || raw === "browser-control") return "isolated";
   if (raw === "system" || raw === "default" || raw === "chrome") return "system";
-  return "system";
+  return "isolated";
 }
 
 function resolveSystemChromeUserDataDir(platform: NodeJS.Platform, env: NodeJS.ProcessEnv = process.env): string {

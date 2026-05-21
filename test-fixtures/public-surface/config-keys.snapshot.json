@@ -80,7 +80,7 @@
     },
     {
       "category": "browser",
-      "defaultValue": "system",
+      "defaultValue": "isolated",
       "description": "Visible launcher profile mode.",
       "envVars": [
         "BROWSER_LAUNCH_PROFILE"

@@ -11,12 +11,15 @@ import {
   CredentialVault,
   resetCredentialVault,
 } from "../../../src/security/credential_vault";
+import type { ActionResult } from "../../../src/shared/action_result";
+import { successResult } from "../../../src/shared/action_result";
 import { getStateStorage, resetStateStorage } from "../../../src/state/index";
 
 describe("MCP Tool Registry", () => {
   let api: BrowserControlAPI;
   let store: MemoryStore;
   let tempDir: string;
+  let sessionRuntimeDir: string;
   let originalHome: string | undefined;
   let originalBackend: string | undefined;
 
@@ -31,7 +34,8 @@ describe("MCP Tool Registry", () => {
     resetCredentialVault();
     api = createBrowserControl({ memoryStore: store });
     // Create a session so tools have an active session to work with
-    await api.session.create("test-session", { policyProfile: "trusted" });
+    const session = await api.session.create("test-session", { policyProfile: "trusted" });
+    sessionRuntimeDir = session.data?.runtimeDir ?? tempDir;
   });
 
   afterEach(() => {
@@ -158,6 +162,71 @@ describe("MCP Tool Registry", () => {
         assert.equal(tool.inputSchema.additionalProperties, false, `Tool ${tool.name} must reject unknown params`);
       }
     });
+
+    it("bc_browser_act.urls schema accepts string and object URL entries", () => {
+      const tools = buildToolRegistry(api);
+      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+      const urlsProp: any = actTool.inputSchema.properties.urls;
+      if (!urlsProp || urlsProp.type !== "array") {
+        assert.fail("bc_browser_act should have urls property of type array");
+      }
+      const oneOf: any[] = urlsProp.items?.oneOf;
+      assert.ok(oneOf, "urls items should have oneOf for string and object entries");
+      assert.ok(oneOf.find((s) => s.type === "string"), "oneOf should include type string");
+      const objectItem = oneOf.find((s) => s.type === "object");
+      assert.ok(objectItem, "oneOf should include type object");
+      assert.ok(objectItem.properties, "object item should have properties");
+      assert.equal(objectItem.properties.url.type, "string", "object item url property should be string");
+      assert.ok((objectItem.required ?? []).includes("url"), "object item should require url");
+    });
+
+    it("bc_task_run.steps[].urls schema accepts string and object URL entries", () => {
+      const tools = buildToolRegistry(api);
+      const taskTool = tools.find((t) => t.name === "bc_task_run")!;
+      const stepsProp: any = taskTool.inputSchema.properties.steps;
+      if (!stepsProp || stepsProp.type !== "array") assert.fail("bc_task_run should have steps array");
+      const stepItems: any = stepsProp.items;
+      const urlProp: any = stepItems.properties?.urls;
+      if (!urlProp || urlProp.type !== "array") assert.fail("step items should have urls array");
+      const oneOf: any[] = urlProp.items?.oneOf;
+      assert.ok(oneOf, "step urls items should have oneOf");
+      assert.ok(oneOf.find((s) => s.type === "string"), "oneOf should include string");
+      const objectItem = oneOf.find((s) => s.type === "object");
+      assert.ok(objectItem, "oneOf should include object");
+      assert.equal(objectItem.properties.url.type, "string");
+    });
+
+    it("bc_browser_act handler preserves object URL entries", async () => {
+      const browser = api.browser as unknown as {
+        act: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
+      };
+      const originalAct = browser.act;
+      let capturedOptions: Record<string, unknown> | undefined;
+      browser.act = async (options) => {
+        capturedOptions = options;
+        return successResult(
+          { received: options },
+          { path: "command", sessionId: "test-session" },
+        );
+      };
+
+      const tools = buildToolRegistry(api);
+      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+      try {
+        const result = await actTool.handler({
+          action: "openMany",
+          urls: [{ url: "https://example.com", label: "test", waitUntil: "domcontentloaded" }],
+          captureOnSuccess: false,
+        });
+
+        assert.equal(result.success, true);
+        assert.deepEqual(capturedOptions?.urls, [
+          { url: "https://example.com", label: "test", waitUntil: "domcontentloaded" },
+        ]);
+      } finally {
+        browser.act = originalAct;
+      }
+    });
   });
 
   describe("getToolCategories", () => {
@@ -217,7 +286,7 @@ describe("MCP Tool Registry", () => {
 
     it("bc_fs_read reads a file", async () => {
       const tools = buildToolRegistry(api);
-      const testPath = path.join(tempDir, "mcp-test.txt");
+      const testPath = path.join(sessionRuntimeDir, "mcp-test.txt");
 
       const writeTool = tools.find((t) => t.name === "bc_fs_write")!;
       const writeResult = await writeTool.handler({ path: testPath, content: "hello mcp" });

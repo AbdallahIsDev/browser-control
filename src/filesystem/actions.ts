@@ -17,6 +17,7 @@ import {
   moveFile as fsMoveFile,
   deletePath as fsDeletePath,
   statPath as fsStatPath,
+  resolvePath,
   type FileReadResult,
   type FileWriteResult,
   type ListResult,
@@ -25,6 +26,8 @@ import {
   type FileStatResult,
   type ListOptions,
   type DeleteOptions,
+  type ReadFileOptions,
+  type WriteFileOptions,
 } from "./operations";
 import path from "node:path";
 import type { PolicyEvalResult, SessionManager } from "../session_manager";
@@ -39,6 +42,8 @@ import { collectFailureDebugMetadata } from "../observability/action_debug";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
 
 const log = logger.withComponent("fs_actions");
+
+export const DEFAULT_ALLOWED_ROOTS: readonly string[] = [];
 
 // ── Action Options ─────────────────────────────────────────────────────
 
@@ -132,6 +137,18 @@ export class FsActions {
     return session.runtimeDir;
   }
 
+  private getDefaultAllowedRoots(operation: "read" | "write" | "delete"): string[] | undefined {
+    const session = this.context.sessionManager.getActiveSession();
+    const roots: string[] = [];
+    if (session?.runtimeDir) {
+      roots.push(session.runtimeDir);
+    }
+    if (operation === "read" && session?.workingDirectory) {
+      roots.push(session.workingDirectory);
+    }
+    return roots.length > 0 ? roots : undefined;
+  }
+
   private resolveOutputPath(filename: string): string {
     if (!filename || filename.trim().length === 0) {
       throw new Error("Output filename is required");
@@ -205,10 +222,12 @@ export class FsActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<FileReadResult>;
 
     try {
-      const result = fsReadFile(options.path, {
+      const readOpts: ReadFileOptions = {
         maxBytes: options.maxBytes,
         cwd: this.getWorkingDirectory(),
-      });
+        allowedRoots: this.getDefaultAllowedRoots("read"),
+      };
+      const result = fsReadFile(options.path, readOpts);
       log.info("File read", { path: result.path, sizeBytes: result.sizeBytes });
 
       return successResult(result, {
@@ -244,10 +263,12 @@ export class FsActions {
     if (!this.isAllowedOrConfirmed(policyEval, options.confirmed)) return policyEval as ActionResult<FileWriteResult>;
 
     try {
-      const result = fsWriteFile(options.path, options.content, {
+      const writeOpts: WriteFileOptions = {
         createDirs: options.createDirs,
         cwd: this.getWorkingDirectory(),
-      });
+        allowedRoots: this.getDefaultAllowedRoots("write"),
+      };
+      const result = fsWriteFile(options.path, options.content, writeOpts);
 
       log.info("File written", { path: result.path, sizeBytes: result.sizeBytes, created: result.created });
 
@@ -420,6 +441,7 @@ export class FsActions {
         recursive: options.recursive,
         force: options.force,
         cwd: this.getWorkingDirectory(),
+        allowedRoots: this.getDefaultAllowedRoots("delete"),
       };
       const result = fsDeletePath(options.path, deleteOpts);
 

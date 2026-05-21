@@ -222,6 +222,24 @@ test("parseArgs handles composite browser act flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("parseArgs keeps browser act fill target and text positionals", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "act",
+    "fill",
+    "searchInput",
+    "Amazon",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "act");
+  assert.deepEqual(result.positional, ["fill", "searchInput", "Amazon"]);
+  assert.equal(result.flags.json, "true");
+});
+
 test("parseArgs handles multiple positional after subcommand", () => {
   const result = parseArgs([
     "node", "cli.ts", "memory", "get", "mykey"
@@ -387,15 +405,16 @@ test("formatActionResult produces correct JSON shape for fs read", async () => {
   const { MemoryStore } = await import("../../src/memory_store");
   const fs = await import("node:fs");
   const path = await import("node:path");
-  const os = await import("node:os");
 
   const store = new MemoryStore({ filename: ":memory:" });
   const sm = new SessionManager({ memoryStore: store });
   await sm.create("fmt-fs-test", { policyProfile: "trusted" });
   const actions = new FsActions({ sessionManager: sm });
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fmt-fs-test-"));
-  const filePath = path.join(tmpDir, "test.txt");
+  const session = sm.getActiveSession();
+  assert.ok(session, "test session must exist");
+  const filePath = path.join(session.runtimeDir, "test.txt");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, "format test");
 
   const result = await actions.read({ path: filePath });
@@ -411,7 +430,6 @@ test("formatActionResult produces correct JSON shape for fs read", async () => {
   assert.ok(parsed.completedAt, "ActionResult must have completedAt");
 
   store.close();
-  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test("formatActionResult produces correct JSON shape for term list", async () => {

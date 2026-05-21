@@ -77,6 +77,8 @@ export interface ReadFileOptions {
   maxBytes?: number;
   /** Base directory for resolving relative paths. */
   cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
 }
 
 export interface WriteFileOptions {
@@ -88,6 +90,8 @@ export interface WriteFileOptions {
   exclusive?: boolean;
   /** Base directory for resolving relative paths. */
   cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
 }
 
 export interface ListOptions {
@@ -110,6 +114,8 @@ export interface DeleteOptions {
   force?: boolean;
   /** Base directory for resolving relative paths. */
   cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
 }
 
 // ── Read ─────────────────────────────────────────────────────────────
@@ -121,17 +127,23 @@ export function readFile(
   filePath: string,
   options: ReadFileOptions = {},
 ): FileReadResult {
-  const resolved = resolvePath(filePath, options.cwd);
+  const resolved = resolvePathSafe(filePath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
   const encoding = options.encoding ?? "utf-8";
 
   if (!fs.existsSync(resolved)) {
     throw new FsError(`File not found: ${resolved}`, "ENOENT", resolved);
   }
 
-  const stats = fs.statSync(resolved);
-  if (stats.isDirectory()) {
+  const lstats = fs.lstatSync(resolved);
+  if (lstats.isSymbolicLink()) {
+    validateRealPath(resolved, options.allowedRoots);
+  }
+
+  if (lstats.isDirectory()) {
     throw new FsError(`Path is a directory: ${resolved}`, "EISDIR", resolved);
   }
+
+  const stats = lstats.isSymbolicLink() ? fs.statSync(resolved) : lstats;
 
   if (options.maxBytes && stats.size > options.maxBytes) {
     throw new FsError(
@@ -162,7 +174,7 @@ export function writeFile(
   content: string | Buffer,
   options: WriteFileOptions = {},
 ): FileWriteResult {
-  const resolved = resolvePath(filePath, options.cwd);
+  const resolved = resolvePathSafe(filePath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
   const encoding = options.encoding ?? "utf-8";
   const createDirs = options.createDirs ?? true;
 
@@ -170,8 +182,18 @@ export function writeFile(
     throw new FsError(`File already exists: ${resolved}`, "EEXIST", resolved);
   }
 
+  // Check parent directory isn't an unexpected symlink
+  const parentDir = path.dirname(resolved);
+  const parentExists = fs.existsSync(parentDir);
+  if (parentExists) {
+    const parentLstats = fs.lstatSync(parentDir);
+    if (parentLstats.isSymbolicLink()) {
+      validateRealPath(fs.realpathSync(parentDir), options.allowedRoots);
+    }
+  }
+
   if (createDirs) {
-    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.mkdirSync(parentDir, { recursive: true });
   }
 
   const existed = fs.existsSync(resolved);
@@ -321,7 +343,7 @@ export function deletePath(
   targetPath: string,
   options: DeleteOptions = {},
 ): DeleteResult {
-  const resolved = resolvePath(targetPath, options.cwd);
+  const resolved = resolvePathSafe(targetPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolved)) {
     if (options.force) {
@@ -330,15 +352,35 @@ export function deletePath(
     throw new FsError(`Path not found: ${resolved}`, "ENOENT", resolved);
   }
 
-  const stats = fs.statSync(resolved);
+  const lstats = fs.lstatSync(resolved);
 
-  if (stats.isDirectory()) {
+  if (lstats.isSymbolicLink()) {
+    fs.unlinkSync(resolved);
+    return { path: resolved, success: true, type: "file" };
+  }
+
+  if (lstats.isDirectory()) {
     if (!options.recursive) {
       throw new FsError(
         `Cannot delete directory without recursive option: ${resolved}`,
         "EISDIR",
         resolved,
       );
+    }
+    // Validate real path for recursive directory delete
+    const realPath = fs.realpathSync(resolved);
+    if (options.allowedRoots && options.allowedRoots.length > 0) {
+      const allowed = options.allowedRoots.some(root => {
+        const realRoot = fs.realpathSync(root);
+        return realPath.startsWith(realRoot + path.sep) || realPath === realRoot;
+      });
+      if (!allowed) {
+        throw new FsError(
+          `Path ${realPath} is not within allowed roots for recursive delete`,
+          "EACCES",
+          resolved,
+        );
+      }
     }
     fs.rmSync(resolved, { recursive: true, force: true });
     return { path: resolved, success: true, type: "directory" };
@@ -455,7 +497,7 @@ export function killProcess(pid: number, signal: NodeJS.Signals = "SIGTERM"): bo
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function resolvePath(filePath: string, cwd?: string): string {
+export function resolvePath(filePath: string, cwd?: string): string {
   // Expand ~ to home directory
   if (filePath.startsWith("~")) {
     return path.join(os.homedir(), filePath.slice(1));
@@ -464,6 +506,75 @@ function resolvePath(filePath: string, cwd?: string): string {
     return path.resolve(filePath);
   }
   return path.resolve(cwd ?? process.cwd(), filePath);
+}
+
+export function resolvePathSafe(
+  filePath: string,
+  options: { cwd?: string; allowedRoots?: string[] } = {},
+): string {
+  const resolved = resolvePath(filePath, options.cwd);
+  validateRealPath(resolved, options.allowedRoots);
+  return resolved;
+}
+
+function validateRealPath(targetPath: string, allowedRoots?: string[]): void {
+  if (!allowedRoots || allowedRoots.length === 0) return;
+
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(targetPath);
+  } catch {
+    const parent = path.dirname(targetPath);
+    if (parent === targetPath) {
+      throw new FsError(
+        `Path ${targetPath} does not exist and has no parent to validate against allowed roots`,
+        "EACCES",
+        targetPath,
+      );
+    }
+    let realParent: string;
+    try {
+      realParent = fs.realpathSync(parent);
+    } catch {
+      throw new FsError(
+        `Path ${targetPath} and its parent ${parent} do not exist; cannot validate against allowed roots`,
+        "EACCES",
+        targetPath,
+      );
+    }
+    const parentAllowed = allowedRoots.some(root => {
+      const realRoot = resolveRealRoot(root);
+      return realParent.startsWith(realRoot + path.sep) || realParent === realRoot;
+    });
+    if (!parentAllowed) {
+      throw new FsError(
+        `Path ${targetPath} (parent ${parent}) is not within allowed roots: ${allowedRoots.join(", ")}`,
+        "EACCES",
+        targetPath,
+      );
+    }
+    return;
+  }
+
+  const allowed = allowedRoots.some(root => {
+    const realRoot = resolveRealRoot(root);
+    return realPath.startsWith(realRoot + path.sep) || realPath === realRoot;
+  });
+  if (!allowed) {
+    throw new FsError(
+      `Path ${targetPath} (resolved to ${realPath}) is not within allowed roots: ${allowedRoots.join(", ")}`,
+      "EACCES",
+      targetPath,
+    );
+  }
+}
+
+function resolveRealRoot(root: string): string {
+  try {
+    return fs.realpathSync(root);
+  } catch {
+    return path.resolve(root);
+  }
 }
 
 function modeToOctal(mode: number): string {

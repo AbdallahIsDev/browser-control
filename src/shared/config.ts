@@ -14,6 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { getDataHome as _getDataHome, ensureDataHomeAtPath, getUserConfigPath } from "./paths";
 import { redactString } from "../observability/redaction";
 
@@ -156,6 +157,33 @@ function splitCsv(value: string | undefined): string[] {
 function normalizeOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function getBrokerAuthKeyPath(env: NodeJS.ProcessEnv): string {
+  return path.join(getDataHome(env), ".interop", "broker-api-key");
+}
+
+function readBrokerAuthKeyFile(env: NodeJS.ProcessEnv): string | undefined {
+  const filePath = getBrokerAuthKeyPath(env);
+  if (!fs.existsSync(filePath)) return undefined;
+  return normalizeOptionalString(fs.readFileSync(filePath, "utf8"));
+}
+
+export function ensureBrokerAuthKey(env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = normalizeOptionalString(env.BROKER_API_KEY) ?? normalizeOptionalString(env.BROKER_SECRET);
+  if (fromEnv) return fromEnv;
+  const existing = readBrokerAuthKeyFile(env);
+  if (existing) return existing;
+
+  const key = `brk_${randomUUID().replace(/-/g, "")}`;
+  const filePath = getBrokerAuthKeyPath(env);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(filePath, `${key}\n`, { mode: 0o600 });
+  if (process.platform !== "win32") {
+    fs.chmodSync(path.dirname(filePath), 0o700);
+    fs.chmodSync(filePath, 0o600);
+  }
+  return key;
 }
 
 function parseFloat(value: string | undefined, fallback: number): number {
@@ -320,7 +348,7 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "browserDebugUrl", category: "browser", envVars: ["BROWSER_DEBUG_URL"], description: "Explicit CDP endpoint URL override.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
   { key: "browserMode", category: "browser", envVars: ["BROWSER_MODE"], description: "Browser ownership mode.", defaultValue: () => "attach", parse: requiredString, validate: ensureAllowed(["managed", "attach"]) },
   { key: "browserAutoLaunch", category: "browser", envVars: ["BROWSER_AUTO_LAUNCH"], description: "Auto-launch managed browser when attach fails.", defaultValue: () => true, parse: booleanValue },
-  { key: "browserLaunchProfile", category: "browser", envVars: ["BROWSER_LAUNCH_PROFILE"], description: "Visible launcher profile mode.", defaultValue: () => "system", parse: requiredString, validate: ensureAllowed(["system", "isolated"]) },
+  { key: "browserLaunchProfile", category: "browser", envVars: ["BROWSER_LAUNCH_PROFILE"], description: "Visible launcher profile mode.", defaultValue: () => "isolated", parse: requiredString, validate: ensureAllowed(["system", "isolated"]) },
   { key: "browserUserDataDir", category: "browser", envVars: ["BROWSER_USER_DATA_DIR"], description: "Explicit Chrome user-data-dir for visible launcher.", defaultValue: () => undefined, parse: optionalString },
   { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserViewportHeight", category: "browser", envVars: ["BROWSER_VIEWPORT_HEIGHT"], description: "Default viewport height for automation-owned browser contexts.", defaultValue: () => 768, parse: integerValue, validate: ensurePositiveInt },
@@ -556,7 +584,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   if (validate && (!Number.isFinite(brokerPort) || brokerPort < 1 || brokerPort > 65535)) {
     throw new Error(`BROKER_PORT must be between 1 and 65535, got: ${brokerPortRaw}`);
   }
-  const brokerAuthKey = normalizeOptionalString(env.BROKER_API_KEY) ?? normalizeOptionalString(env.BROKER_SECRET);
+  const brokerAuthKey =
+    normalizeOptionalString(env.BROKER_API_KEY) ??
+    normalizeOptionalString(env.BROKER_SECRET) ??
+    readBrokerAuthKeyFile(env);
   const brokerAllowedOrigins = splitCsv(env.BROKER_ALLOWED_ORIGINS);
   const brokerAllowedDomains = splitCsv(env.BROKER_ALLOWED_DOMAINS);
 

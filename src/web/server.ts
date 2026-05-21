@@ -679,7 +679,8 @@ function indexHtml(nonce: string): string {
           document.getElementById("terminalOut").textContent = e.message;
         }
       });
-      const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/events?token=" + encodeURIComponent(token));
+      const wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/events";
+      const ws = new WebSocket(wsBase + "?token=" + encodeURIComponent(token), [token]);
       ws.onmessage = (event) => { document.getElementById("eventOut").textContent = event.data; };
       ws.onerror = () => { document.getElementById("eventOut").textContent = "Event stream disconnected"; };
       refresh().catch((e) => { document.getElementById("summary").textContent = e.message; });
@@ -3009,6 +3010,7 @@ export function createWebAppServer(
 			head,
 			isAuthorizedRequest(request, token, requestUrl, true),
 			allowedOrigins,
+			token,
 		);
 	});
 
@@ -3096,6 +3098,18 @@ export function createWebAppServer(
 	};
 }
 
+export function printServerInfo(info: WebAppServerInfo): void {
+	process.stdout.write(`${JSON.stringify({ url: info.url })}\n`);
+	process.stderr.write(
+		`Token: ${info.token}\nWARNING: The web authentication token is shown above. Keep it secret.\n`,
+	);
+	if (process.env.BROWSER_CONTROL_WEB_SHOW_TOKEN === "1") {
+		process.stdout.write(
+			`${JSON.stringify({ url: info.url, token: info.token })}\n`,
+		);
+	}
+}
+
 export async function startWebAppServer(
 	options: WebAppServerOptions = {},
 ): Promise<WebAppServerInfo> {
@@ -3135,9 +3149,7 @@ if (require.main === module) {
 		allowRemote: process.env.BROWSER_CONTROL_WEB_ALLOW_REMOTE === "1",
 	})
 		.then((info) => {
-			process.stdout.write(
-				`${JSON.stringify({ url: info.url, token: info.token })}\n`,
-			);
+			printServerInfo(info);
 		})
 		.catch((error: unknown) => {
 			webLogger.critical("Fatal startup error", { error: errorMessage(error) });
