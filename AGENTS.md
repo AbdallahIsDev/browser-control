@@ -9,7 +9,10 @@ Default execution order:
 1. Use CLI first for repo work, verification, and browser automation:
    - `bc status --json`
    - `bc browser state --json`
+   - `bc browser open <url> --json`
+   - `bc browser snapshot --json`
    - `bc browser act <action> ... --json`
+   - `bc browser act fill <target> <text> --json`
    - `bc browser task run --steps='<json>' --json`
 2. Prefer one high-level CLI command over many tiny actions:
    - Use `bc browser state` instead of separate tab/dialog/download/snapshot calls.

@@ -25,7 +25,8 @@ Preferred sequence:
 ```powershell
 bc status --json
 bc browser state --json
-bc browser act open --url https://example.com --json
+bc browser open https://example.com --json
+bc browser snapshot --json
 bc browser act click "@e3" --capture-on-success --json
 bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
 ```
@@ -84,14 +85,25 @@ Targets can be accessibility refs such as `@e3`, CSS selectors, or text matches.
 These commands are the preferred high-level path for agents that need fewer operations.
 
 ```text
+browser open <url> [--wait-until] [--json]
+browser snapshot [--root-selector] [--boxes] [--json]
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
-browser act <action> [target] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
+browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
 browser task run --steps <json> [--timeout] [--continue-on-failure] [--json]
 ```
+
+`browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
 
 `browser state` returns compact browser state by default: tabs, active URL/title, dialogs, warnings, and per-section status. Snapshot, screenshot, and downloads are opt-in.
 
 `browser act` supports `click`, `fill`, `press`, `hover`, `scroll`, `type`, `paste`, `screenshot`, `tab-close`, `open`, `navigate`, `openMany`, `capture`, `captureMany`, `fillMany`, and `state`.
+
+For fill, both forms are valid:
+
+```powershell
+bc browser act fill searchInput "Amazon" --json
+bc browser act fill searchInput --text "Amazon" --json
+```
 
 Composite `browser act` and `browser task run` commands use a 30s CLI guard by default. Pass `--timeout <ms>` or `--timeoutMs=<ms>` to lower or raise that guard for one command.
 

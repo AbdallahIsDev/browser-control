@@ -98,15 +98,17 @@ function appendLiveOutput(
 ): TerminalOutputRow[] {
 	const clean = stripAnsi(chunk).replace(/\r/g, "\n");
 	const next = [...rows];
+	let nextIndex = rows.length > 0 ? rows[rows.length - 1].index + 1 : 0;
 	for (const line of clean.split(/\n/u)) {
 		if (!line) continue;
 		next.push({
-			index: next.length,
+			index: nextIndex,
 			text: line,
 			segments: [{ text: line }],
 		});
+		nextIndex += 1;
 	}
-	return next.slice(-MAX_ROWS).map((row, index) => ({ ...row, index }));
+	return next.length > MAX_ROWS ? next.slice(-MAX_ROWS) : next;
 }
 
 function statusVariant(status: string): "ok" | "warn" | "info" | "neutral" {

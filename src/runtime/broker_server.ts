@@ -14,6 +14,7 @@ import {
 	type ConfigSetResult,
 	getConfigEntries,
 	getConfigValue,
+	ensureBrokerAuthKey,
 	loadConfig,
 	setUserConfigValue,
 } from "../shared/config";
@@ -203,6 +204,14 @@ interface RateLimitBucket {
 	requests: number[];
 }
 
+function isHealthPath(pathname: string): boolean {
+	return (
+		pathname === "/health" ||
+		pathname === "/readyz" ||
+		pathname === "/api/v1/health"
+	);
+}
+
 function splitCsv(value: string | undefined): string[] {
 	if (!value) {
 		return [];
@@ -267,7 +276,8 @@ function resolveBrokerConfig(
 		port: parsePort(env.BROKER_PORT),
 		authKey:
 			normalizeOptionalString(env.BROKER_API_KEY) ??
-			normalizeOptionalString(env.BROKER_SECRET),
+			normalizeOptionalString(env.BROKER_SECRET) ??
+			ensureBrokerAuthKey(env),
 		allowedOrigins: (() => {
 			const origins = splitCsv(env.BROKER_ALLOWED_ORIGINS);
 			return origins.length > 0 ? origins : null;
@@ -546,11 +556,16 @@ function setCorsHeaders(
 	response.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
 	response.setHeader(
 		"Access-Control-Allow-Headers",
-		"Content-Type, Authorization, X-API-Key",
+		"Content-Type, Authorization, X-API-Key, X-Broker-Api-Key",
 	);
 }
 
 function extractApiKey(request: IncomingMessage): string | null {
+	const brokerKey = request.headers["x-broker-api-key"];
+	if (typeof brokerKey === "string" && brokerKey.trim()) {
+		return brokerKey.trim();
+	}
+
 	const headerKey = request.headers["x-api-key"];
 	if (typeof headerKey === "string" && headerKey.trim()) {
 		return headerKey.trim();
@@ -974,28 +989,21 @@ export function createBrokerServer(
 			return;
 		}
 
-		if (!config.authKey && isBrowserOriginRequest(request)) {
-			writeJson(response, 403, {
-				error:
-					"Browser-origin broker requests require BROKER_API_KEY or BROKER_SECRET to be configured.",
-			});
-			return;
-		}
-
-		if (config.authKey) {
-			const apiKey = extractApiKey(request);
-			if (apiKey !== config.authKey) {
-				writeJson(response, 401, { error: "Unauthorized." });
-				return;
-			}
-		}
-
 		try {
 			const requestUrl = new URL(
 				request.url ?? "/",
 				`http://${request.headers.host ?? DEFAULT_HOST}`,
 			);
 			const { pathname } = requestUrl;
+
+			// Require auth for all endpoints except health
+			if (!isHealthPath(pathname)) {
+				const apiKey = extractApiKey(request);
+				if (apiKey !== config.authKey) {
+					writeJson(response, 401, { error: "Unauthorized." });
+					return;
+				}
+			}
 
 			if (request.method === "POST" && pathname === "/api/v1/tasks/run") {
 				if (!callbacks.submitTask) {
@@ -1223,14 +1231,6 @@ export function createBrokerServer(
 							? await callbacks.getConfig(key)
 							: getConfigValue(key, { validate: false }),
 					);
-					return;
-				}
-
-				if (request.method === "POST" && !config.authKey) {
-					writeJson(response, 403, {
-						error:
-							"Broker config mutation requires BROKER_API_KEY or BROKER_SECRET to be configured.",
-					});
 					return;
 				}
 

@@ -62,7 +62,8 @@ describe("FsActions", () => {
 
   describe("write + read", () => {
     it("writes and reads a file", async () => {
-      const filePath = path.join(tempDir, "test.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const filePath = path.join(activeSession.runtimeDir, "test.txt");
 
       const writeResult = await fsActions.write({
         path: filePath,
@@ -81,8 +82,9 @@ describe("FsActions", () => {
     });
 
     it("returns failure for reading nonexistent file", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
       const readResult = await fsActions.read({
-        path: path.join(tempDir, "nonexistent.txt"),
+        path: path.join(activeSession.runtimeDir, "nonexistent.txt"),
       });
 
       assert.equal(readResult.success, false);
@@ -95,7 +97,8 @@ describe("FsActions", () => {
     it("honors explicit confirmation for balanced-policy file writes", async () => {
       const session = await sessionManager.create("fs-balanced-write", { policyProfile: "balanced" });
       sessionManager.use(session.data!.id);
-      const filePath = path.join(tempDir, "confirmed-write.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const filePath = path.join(activeSession.runtimeDir, "confirmed-write.txt");
 
       const blocked = await fsActions.write({
         path: filePath,
@@ -114,24 +117,19 @@ describe("FsActions", () => {
       assert.equal(fs.readFileSync(filePath, "utf-8"), "confirmed");
     });
 
-    it("writes relative paths under the active session working directory", async () => {
+    it("writes relative path resolves within session runtime directory", async () => {
       const activeSession = sessionManager.getActiveSession();
       assert.ok(activeSession);
 
       const writeResult = await fsActions.write({
-        path: "espocrm-business-report.md",
+        path: "runtime-file.md",
         content: "# Report\n",
       });
 
       assert.equal(writeResult.success, true);
+      assert.ok(writeResult.data?.path.startsWith(activeSession.runtimeDir));
       assert.equal(
-        writeResult.data?.path,
-        path.join(activeSession.workingDirectory, "espocrm-business-report.md"),
-      );
-      assert.equal(
-        fs.existsSync(
-          path.join(activeSession.workingDirectory, "espocrm-business-report.md"),
-        ),
+        fs.existsSync(path.join(activeSession.runtimeDir, "runtime-file.md")),
         true,
       );
     });
@@ -167,12 +165,14 @@ describe("FsActions", () => {
 
   describe("ls", () => {
     it("lists directory contents", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
       // Create some test files
-      fs.writeFileSync(path.join(tempDir, "a.txt"), "a");
-      fs.writeFileSync(path.join(tempDir, "b.txt"), "b");
-      fs.mkdirSync(path.join(tempDir, "subdir"));
+      fs.writeFileSync(path.join(runtimeDir, "a.txt"), "a");
+      fs.writeFileSync(path.join(runtimeDir, "b.txt"), "b");
+      fs.mkdirSync(path.join(runtimeDir, "subdir"));
 
-      const result = await fsActions.ls({ path: tempDir });
+      const result = await fsActions.ls({ path: runtimeDir });
 
       assert.equal(result.success, true);
       assert.ok(result.data);
@@ -180,8 +180,9 @@ describe("FsActions", () => {
     });
 
     it("returns failure for nonexistent directory", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
       const result = await fsActions.ls({
-        path: path.join(tempDir, "no-such-dir"),
+        path: path.join(activeSession.runtimeDir, "no-such-dir"),
       });
 
       assert.equal(result.success, false);
@@ -191,7 +192,9 @@ describe("FsActions", () => {
 
   describe("stat", () => {
     it("returns file metadata", async () => {
-      const filePath = path.join(tempDir, "stat-test.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "stat-test.txt");
       fs.writeFileSync(filePath, "stat content");
 
       const result = await fsActions.stat({ path: filePath });
@@ -203,8 +206,9 @@ describe("FsActions", () => {
     });
 
     it("returns result with exists=false for nonexistent path", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
       const result = await fsActions.stat({
-        path: path.join(tempDir, "nonexistent"),
+        path: path.join(activeSession.runtimeDir, "nonexistent"),
       });
 
       // statPath returns exists:false rather than throwing
@@ -214,7 +218,9 @@ describe("FsActions", () => {
 
     // ── Issue 5: fs stat routes through policy pipeline ────────────
     it("stat routes through policy and returns policy metadata", async () => {
-      const filePath = path.join(tempDir, "stat-policy.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "stat-policy.txt");
       fs.writeFileSync(filePath, "policy check");
 
       const result = await fsActions.stat({ path: filePath });
@@ -229,8 +235,10 @@ describe("FsActions", () => {
 
   describe("move", () => {
     it("moves a file", async () => {
-      const srcPath = path.join(tempDir, "move-src.txt");
-      const dstPath = path.join(tempDir, "move-dst.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const srcPath = path.join(runtimeDir, "move-src.txt");
+      const dstPath = path.join(runtimeDir, "move-dst.txt");
       fs.writeFileSync(srcPath, "move me");
 
       const result = await fsActions.move({ src: srcPath, dst: dstPath });
@@ -241,9 +249,11 @@ describe("FsActions", () => {
     });
 
     it("returns failure for nonexistent source", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
       const result = await fsActions.move({
-        src: path.join(tempDir, "no-such-file"),
-        dst: path.join(tempDir, "destination"),
+        src: path.join(runtimeDir, "no-such-file"),
+        dst: path.join(runtimeDir, "destination"),
       });
 
       assert.equal(result.success, false);
@@ -253,8 +263,10 @@ describe("FsActions", () => {
     it("honors explicit confirmation for balanced-policy moves", async () => {
       const session = await sessionManager.create("fs-balanced-move", { policyProfile: "balanced" });
       sessionManager.use(session.data!.id);
-      const srcPath = path.join(tempDir, "confirmed-move-src.txt");
-      const dstPath = path.join(tempDir, "confirmed-move-dst.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const srcPath = path.join(runtimeDir, "confirmed-move-src.txt");
+      const dstPath = path.join(runtimeDir, "confirmed-move-dst.txt");
       fs.writeFileSync(srcPath, "move me");
 
       const blocked = await fsActions.move({ src: srcPath, dst: dstPath });
@@ -272,7 +284,9 @@ describe("FsActions", () => {
 
   describe("rm", () => {
     it("deletes a file", async () => {
-      const filePath = path.join(tempDir, "rm-test.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "rm-test.txt");
       fs.writeFileSync(filePath, "delete me");
 
       const result = await fsActions.rm({ path: filePath });
@@ -282,7 +296,9 @@ describe("FsActions", () => {
     });
 
     it("policy blocks recursive delete (requires confirmation)", async () => {
-      const dirPath = path.join(tempDir, "rm-dir");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const dirPath = path.join(runtimeDir, "rm-dir");
       fs.mkdirSync(dirPath);
       fs.writeFileSync(path.join(dirPath, "file.txt"), "inside");
 
@@ -300,7 +316,9 @@ describe("FsActions", () => {
     });
 
     it("deletes a single file (non-recursive)", async () => {
-      const filePath = path.join(tempDir, "rm-file.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "rm-file.txt");
       fs.writeFileSync(filePath, "delete me");
 
       const result = await fsActions.rm({ path: filePath });
@@ -312,7 +330,9 @@ describe("FsActions", () => {
     it("honors explicit confirmation for balanced-policy deletes", async () => {
       const session = await sessionManager.create("fs-balanced-delete", { policyProfile: "balanced" });
       sessionManager.use(session.data!.id);
-      const filePath = path.join(tempDir, "confirmed-delete.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "confirmed-delete.txt");
       fs.writeFileSync(filePath, "delete me");
 
       const blocked = await fsActions.rm({ path: filePath });
@@ -326,7 +346,9 @@ describe("FsActions", () => {
     });
 
     it("honors explicit confirmation for recursive deletes", async () => {
-      const dirPath = path.join(tempDir, "confirmed-rm-dir");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const dirPath = path.join(runtimeDir, "confirmed-rm-dir");
       fs.mkdirSync(dirPath);
       fs.writeFileSync(path.join(dirPath, "file.txt"), "inside");
 
@@ -341,8 +363,9 @@ describe("FsActions", () => {
     });
 
     it("returns failure for nonexistent path without force", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
       const result = await fsActions.rm({
-        path: path.join(tempDir, "nonexistent"),
+        path: path.join(activeSession.runtimeDir, "nonexistent"),
       });
 
       assert.equal(result.success, false);
@@ -350,8 +373,9 @@ describe("FsActions", () => {
     });
 
     it("succeeds for nonexistent path with force", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
       const result = await fsActions.rm({
-        path: path.join(tempDir, "nonexistent"),
+        path: path.join(activeSession.runtimeDir, "nonexistent"),
         force: true,
       });
 
@@ -363,7 +387,9 @@ describe("FsActions", () => {
 
   describe("CLI fs commands return ActionResult shape", () => {
     it("fs read returns ActionResult with success, path, sessionId, policyDecision", async () => {
-      const filePath = path.join(tempDir, "action-result-read.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "action-result-read.txt");
       fs.writeFileSync(filePath, "action result test");
 
       const result = await fsActions.read({ path: filePath });
@@ -377,7 +403,9 @@ describe("FsActions", () => {
     });
 
     it("fs write returns ActionResult with policy metadata", async () => {
-      const filePath = path.join(tempDir, "action-result-write.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "action-result-write.txt");
 
       const result = await fsActions.write({ path: filePath, content: "test" });
 
@@ -389,7 +417,10 @@ describe("FsActions", () => {
     });
 
     it("fs ls returns ActionResult with policy metadata", async () => {
-      const result = await fsActions.ls({ path: tempDir });
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+
+      const result = await fsActions.ls({ path: runtimeDir });
 
       assert.equal(result.success, true, `ls should succeed: ${result.error}`);
       assert.ok(result.path, "ActionResult must have path");
@@ -420,7 +451,9 @@ describe("FsActions", () => {
     });
 
     it("fs stat returns ActionResult with policy metadata", async () => {
-      const filePath = path.join(tempDir, "stat-action-result.txt");
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      const filePath = path.join(runtimeDir, "stat-action-result.txt");
       fs.writeFileSync(filePath, "stat");
 
       const result = await fsActions.stat({ path: filePath });

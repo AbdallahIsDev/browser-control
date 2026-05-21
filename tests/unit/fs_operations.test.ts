@@ -4,6 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+// Check if symlink creation is supported on this platform (requires
+// Developer Mode or elevation on Windows).
+let hasSymlinkSupport = false;
+try {
+  const checkDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-symcheck-"));
+  fs.writeFileSync(path.join(checkDir, "target"), "x");
+  fs.symlinkSync(path.join(checkDir, "target"), path.join(checkDir, "link"));
+  hasSymlinkSupport = true;
+  fs.rmSync(checkDir, { recursive: true, force: true });
+} catch {
+  hasSymlinkSupport = false;
+}
+
 import {
   readFile,
   writeFile,
@@ -11,6 +24,8 @@ import {
   moveFile,
   deletePath,
   statPath,
+  resolvePath,
+  resolvePathSafe,
   FsError,
 } from "../../src/fs_operations";
 
@@ -233,5 +248,193 @@ test("fs_operations: readFile expands tilde paths", () => {
     assert.equal(result.content, "tilde content");
   } finally {
     fs.rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+// ── Issue 4: Symlink-Following Delete ─────────────────────────────────
+
+test("fs_operations: deletePath deletes symlink to file, not target", { skip: !hasSymlinkSupport }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-symfile-"));
+
+  try {
+    const targetFile = path.join(tmpDir, "target.txt");
+    const symlink = path.join(tmpDir, "link.txt");
+    fs.writeFileSync(targetFile, "sensitive data");
+    fs.symlinkSync(targetFile, symlink);
+
+    assert.ok(fs.existsSync(targetFile));
+    assert.ok(fs.existsSync(symlink));
+
+    const result = deletePath(symlink);
+
+    assert.equal(result.success, true);
+    assert.equal(result.type, "file");
+    assert.ok(!fs.existsSync(symlink), "symlink should be deleted");
+    assert.ok(fs.existsSync(targetFile), "target file should remain");
+    assert.equal(fs.readFileSync(targetFile, "utf-8"), "sensitive data");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: deletePath deletes symlink to directory, not directory", { skip: !hasSymlinkSupport }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-symdir-"));
+
+  try {
+    const targetDir = path.join(tmpDir, "target");
+    const symlink = path.join(tmpDir, "link");
+    fs.mkdirSync(targetDir);
+    fs.writeFileSync(path.join(targetDir, "secret.txt"), "secret");
+    fs.symlinkSync(targetDir, symlink, "dir");
+
+    assert.ok(fs.existsSync(targetDir));
+    assert.ok(fs.existsSync(symlink));
+
+    const result = deletePath(symlink);
+
+    assert.equal(result.success, true);
+    assert.equal(result.type, "file");
+    assert.ok(!fs.existsSync(symlink), "symlink should be deleted");
+    assert.ok(fs.existsSync(targetDir), "target directory should remain");
+    assert.ok(fs.existsSync(path.join(targetDir, "secret.txt")), "target file should remain");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: deletePath deletes regular file normally", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-regdel-"));
+
+  try {
+    const filePath = path.join(tmpDir, "regular.txt");
+    fs.writeFileSync(filePath, "data");
+
+    const result = deletePath(filePath);
+
+    assert.equal(result.success, true);
+    assert.equal(result.type, "file");
+    assert.ok(!fs.existsSync(filePath));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: deletePath deletes directory recursively with realpath validation", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-realdel-"));
+
+  try {
+    const subDir = path.join(tmpDir, "subdir");
+    fs.mkdirSync(subDir);
+    fs.writeFileSync(path.join(subDir, "file.txt"), "data");
+
+    const result = deletePath(subDir, { recursive: true });
+
+    assert.equal(result.success, true);
+    assert.equal(result.type, "directory");
+    assert.ok(!fs.existsSync(subDir));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ── Issue 5: resolvePathSafe sandbox ──────────────────────────────────
+
+test("fs_operations: resolvePathSafe allows paths within allowed roots", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-allow-"));
+  const filePath = path.join(tmpDir, "inner", "file.txt");
+
+  try {
+    fs.mkdirSync(path.join(tmpDir, "inner"), { recursive: true });
+    fs.writeFileSync(filePath, "data");
+
+    const result = resolvePathSafe(filePath, { allowedRoots: [tmpDir] });
+    assert.equal(result, filePath);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePathSafe rejects paths outside allowed roots", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-deny-"));
+  const outsidePath = path.join(tmpDir, "outside.txt");
+
+  try {
+    const allowedRoot = path.join(tmpDir, "allowed");
+    fs.mkdirSync(allowedRoot, { recursive: true });
+    fs.writeFileSync(outsidePath, "outside");
+
+    assert.throws(
+      () => resolvePathSafe(outsidePath, { allowedRoots: [allowedRoot] }),
+      FsError,
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePathSafe allows non-existent path whose parent is within allowed roots", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-newfile-"));
+  const newFilePath = path.join(tmpDir, "new", "future.txt");
+
+  try {
+    fs.mkdirSync(path.join(tmpDir, "new"), { recursive: true });
+
+    const result = resolvePathSafe(newFilePath, { allowedRoots: [tmpDir] });
+    assert.equal(result, newFilePath);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePathSafe rejects non-existent path whose parent is outside allowed roots", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-noparent-"));
+  const allowedRoot = path.join(tmpDir, "allowed");
+  const outsidePath = path.join(tmpDir, "outside", "future.txt");
+
+  try {
+    fs.mkdirSync(allowedRoot, { recursive: true });
+
+    assert.throws(
+      () => resolvePathSafe(outsidePath, { allowedRoots: [allowedRoot] }),
+      FsError,
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePathSafe rejects symlink to outside allowed roots", { skip: !hasSymlinkSupport }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-symescape-"));
+
+  try {
+    const insideDir = path.join(tmpDir, "inside");
+    const outsideDir = path.join(tmpDir, "outside");
+    const symlink = path.join(insideDir, "escape");
+
+    fs.mkdirSync(insideDir, { recursive: true });
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, "secret.txt"), "secret");
+    fs.symlinkSync(outsideDir, symlink, "dir");
+
+    assert.throws(
+      () => resolvePathSafe(symlink, { allowedRoots: [insideDir] }),
+      FsError,
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePath is exported and resolves paths", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-resolve-"));
+
+  try {
+    const result = resolvePath(tmpDir);
+    assert.equal(result, path.resolve(tmpDir));
+
+    const relative = resolvePath("subdir", tmpDir);
+    assert.equal(relative, path.resolve(tmpDir, "subdir"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

@@ -547,7 +547,7 @@ describe("BrowserActions", () => {
 				assert.equal(state.pages.length, 3);
 				assert.deepEqual(state.pages[2]?.calls.goto, ["https://example.com"]);
 				assert.equal((state.pages[2]?.calls.activateTarget ?? 0) > 0, true);
-				assert.equal((result.data as { tabId?: string })?.tabId, "2");
+				assert.equal((result.data as { tabId?: string })?.tabId, state.pages[2].targetId);
 			} finally {
 				isolatedStore.close();
 			}
@@ -581,7 +581,7 @@ describe("BrowserActions", () => {
 				assert.deepEqual(backgroundPage.calls.goto, []);
 				assert.equal(state.newPages, 0);
 				assert.equal(frontPage.calls.activateTarget > 0, true);
-				assert.equal((result.data as { tabId?: string })?.tabId, "0");
+				assert.equal((result.data as { tabId?: string })?.tabId, frontPage.targetId);
 			} finally {
 				isolatedStore.close();
 			}
@@ -613,7 +613,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.deepEqual(firstPage.calls.goto, []);
 				assert.deepEqual(secondPage.calls.goto, ["https://replacement.example/"]);
-				assert.equal((result.data as { tabId?: string })?.tabId, "1");
+				assert.equal((result.data as { tabId?: string })?.tabId, secondPage.targetId);
 			} finally {
 				isolatedStore.close();
 			}
@@ -655,8 +655,8 @@ describe("BrowserActions", () => {
 						tab.status,
 					]),
 					[
-						["0", "one", "loaded"],
-						["1", "two", "loaded"],
+						[state.pages[0]!.targetId, "one", "loaded"],
+						[state.pages[1]!.targetId, "two", "loaded"],
 					],
 				);
 			} finally {
@@ -1254,7 +1254,7 @@ describe("BrowserActions", () => {
 				]);
 
 				assert.equal(result.success, true);
-				assert.equal(result.data?.tabId, "0");
+				assert.equal(result.data?.tabId, page.targetId);
 				assert.deepEqual(result.data?.fields, [
 					{ target: "#name", success: true },
 					{ target: "#email", success: true },
@@ -1773,9 +1773,9 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.equal(hiddenPage.calls.activateTarget, 0);
 				assert.equal(hiddenPage.calls.bringToFront, 0);
-				assert.equal(visiblePage.calls.activateTarget > 0, true);
-				assert.equal(visiblePage.calls.bringToFront > 0, true);
-				assert.equal(result.data?.activeTabId, "0");
+			assert.equal(visiblePage.calls.activateTarget, 0);
+				assert.equal(visiblePage.calls.bringToFront, 1);
+				assert.equal(result.data?.activeTabId, visiblePage.targetId);
 				assert.equal(result.data?.url, "chrome://newtab/");
 				assert.equal(result.data?.title, "Mock Title");
 			} finally {
@@ -2297,7 +2297,7 @@ describe("BrowserActions", () => {
 				assert.ok(Array.isArray(result.data!.tabs));
 				assert.equal(result.data!.url, "https://example.test/");
 				assert.equal(result.data!.title, "Mock Title");
-				assert.equal(result.data!.tabId, "0");
+				assert.equal(result.data!.tabId, page.targetId);
 				assert.ok(Array.isArray(result.data!.dialogs));
 				assert.equal(result.data!.snapshot, undefined);
 			} finally {
@@ -2451,7 +2451,7 @@ describe("BrowserActions", () => {
 				assert.ok(Array.isArray(result.data!.tabs));
 				assert.equal(result.data!.url, "https://example.test/");
 				assert.equal(result.data!.title, "Mock Title");
-				assert.equal(result.data!.tabId, "0");
+				assert.equal(result.data!.tabId, page.targetId);
 				assert.ok(Array.isArray(result.data!.dialogs));
 				assert.equal(result.data!.snapshot, undefined);
 			} finally {
@@ -3195,7 +3195,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.ok(result.data);
 				assert.ok(result.data!.results[0].durationMs !== undefined);
-				assert.equal(result.data!.results[0].tabId, "0");
+				assert.equal(result.data!.results[0].tabId, page.targetId);
 			} finally {
 				isolatedStore.close();
 			}

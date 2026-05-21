@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
-import { loadConfig } from "../shared/config";
+import { ensureBrokerAuthKey, loadConfig } from "../shared/config";
 
 export interface SpawnDaemonOptions {
   visible?: boolean;
@@ -64,6 +64,7 @@ export function buildDaemonSpawnOptions(
   platform: NodeJS.Platform = process.platform,
 ): SpawnOptions {
   const env = { ...process.env, ...(options.env ?? {}) };
+  env.BROKER_API_KEY = ensureBrokerAuthKey(env);
   const config = loadConfig({ validate: false, env });
   const visible = options.visible ?? config.daemonVisible;
   return {

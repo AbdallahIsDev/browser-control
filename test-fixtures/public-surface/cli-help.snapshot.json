@@ -701,6 +701,88 @@
         {
           "commandPath": [
             "browser",
+            "open"
+          ],
+          "description": "Open/navigate browser tab",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser open <url> [--json]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "snapshot"
+          ],
+          "description": "Take accessibility snapshot",
+          "flags": [
+            "boxes",
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser snapshot [--boxes] [--json]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "state"
+          ],
+          "description": "Return compact browser state",
+          "flags": [
+            "downloads",
+            "json",
+            "screenshot",
+            "snapshot"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser state [--snapshot] [--screenshot] [--downloads] [--json]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "act"
+          ],
+          "description": "",
+          "flags": [
+            "capture-on-success",
+            "json",
+            "text",
+            "timeout",
+            "url"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]"
+        },
+        {
+          "commandPath": [
+            "Run",
+            "one",
+            "composite"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Run one composite browser action"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "task",
+            "run"
+          ],
+          "description": "",
+          "flags": [
+            "continue-on-failure",
+            "json",
+            "steps"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps"
+        },
+        {
+          "commandPath": [
+            "browser",
             "provider",
             "list"
           ],

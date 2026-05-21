@@ -14,7 +14,7 @@ test("loadConfig returns sensible defaults with empty env", () => {
   assert.equal(config.chromeDebugPort, 9222);
   assert.equal(config.chromeBindAddress, "127.0.0.1");
   assert.equal(config.browserMode, "attach");
-  assert.equal(config.browserLaunchProfile, "system");
+  assert.equal(config.browserLaunchProfile, "isolated");
   assert.equal(config.browserUserDataDir, undefined);
   assert.equal(config.browserViewportWidth, 1365);
   assert.equal(config.browserViewportHeight, 768);
