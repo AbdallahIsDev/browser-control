@@ -39,6 +39,48 @@ describe("ScreencastRecorder", () => {
     assert.ok(result.receipt);
   });
 
+  it("uses Playwright tracing when a page context exposes tracing", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-trace-recorder-"));
+    const calls: string[] = [];
+    const page = {
+      context: () => ({
+        tracing: {
+          start: async (options: unknown) => {
+            calls.push(`start:${JSON.stringify(options)}`);
+          },
+          stop: async (options?: { path?: string }) => {
+            calls.push(`stop:${options?.path}`);
+            fs.writeFileSync(options!.path!, "trace");
+          },
+        },
+      }),
+      title: async () => "Trace page",
+      url: () => "https://example.com",
+      screenshot: async () => Buffer.from(""),
+      evaluate: async <T>(fn: () => T) => fn(),
+    };
+    try {
+      const recorder = new ScreencastRecorder();
+      const session = await recorder.start({
+        browserSessionId,
+        pageId,
+        options: { retention: "keep" },
+        page,
+      });
+      assert.strictEqual(session.mode, "trace");
+
+      const stopped = await recorder.stop();
+      assert.deepEqual(calls, [
+        "start:{\"screenshots\":true,\"snapshots\":true,\"sources\":true}",
+        `stop:${session.path}`,
+      ]);
+      assert.equal(stopped.session.status, "stopped");
+      assert.ok(stopped.receipt?.artifacts.some((artifact) => artifact.kind === "trace"));
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("returns status for active session", async () => {
     const recorder = new ScreencastRecorder();
     await recorder.start({

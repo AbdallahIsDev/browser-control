@@ -33,7 +33,7 @@ bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"ac
 
 Use MCP Lite when the client cannot run CLI directly. Use full MCP only when the task needs a tool outside the Lite/high-level set.
 
-Local dashboard shortcuts:
+Experimental local dashboard shortcuts:
 
 ```powershell
 bc web open
@@ -43,7 +43,7 @@ bc web open --port=0
 npm run cli -- web open
 ```
 
-`bc web open` is the installed command. By default it starts a loopback web server in the background, opens the token-authenticated dashboard URL, and exits. `--json` prints the reachable `url`, `openUrl`, `token`, and background `pid`; scripts should stop that PID when finished. Use `--wait=true` for a foreground server process, and use `--port=0` when port `7790` is already occupied.
+`bc web open` starts the experimental loopback operator UI. It is not the main production surface; prefer CLI/MCP package commands for normal agent integration. `--json` prints the reachable `url`, `openUrl`, `token`, and background `pid`; scripts should stop that PID when finished.
 
 ## Operator
 
@@ -155,8 +155,9 @@ Built-in providers are `local`, `custom`, and `browserless`. `local` is the defa
 ## Tasks, Schedules, Daemon
 
 ```text
-run --skill <name> --action <action> [--params JSON] [--priority] [--timeoutMs]
-schedule <id> --cron "*/5 * * * *" [--name] [--skill] [--action] [--params JSON]
+package run <name> <workflow> [--json]
+run --package <name> --workflow <workflow> [--params JSON] [--priority] [--timeoutMs]
+schedule <id> --cron "*/5 * * * *" [--name] [--package] [--workflow] [--params JSON]
 schedule list
 schedule pause <id>
 schedule resume <id>
@@ -230,12 +231,9 @@ knowledge show <name-or-domain>
 knowledge validate [--all]
 knowledge prune <name-or-domain>
 knowledge delete <name-or-domain>
-proxy test|add <url>|remove <url>|list
 memory stats|clear|get <key>|set <key> <value>
-skill list|health <name>|actions <name>|install <path>|validate <name-or-path>|remove <name>
 report generate|view
-captcha test
 mcp serve
 ```
 
-`mcp serve` exists for MCP clients but is hidden from the main help output.
+Legacy skill, proxy manager, and CAPTCHA commands remain internal/compatibility-only and are not part of the public default CLI surface.

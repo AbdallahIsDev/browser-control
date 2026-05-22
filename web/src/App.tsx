@@ -29,6 +29,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { apiFetch, hasToken } from "./api";
+import { isProductionFeatureEnabled } from "./featureFlags";
 import {
 	AdvancedView,
 	AutomationsView,
@@ -69,24 +70,24 @@ const AUTH_VARIANTS: Record<AuthState, "ok" | "warn" | "neutral"> = {
 };
 
 const navConfig: NavItem[] = [
-	{ id: "command", label: "Home", icon: <Home size={16} /> },
-	{ id: "tasks", label: "Tasks", icon: <CheckSquare size={16} /> },
-	{ id: "browser", label: "Browser", icon: <Globe size={16} /> },
+	{ id: "command", label: "Run Package", icon: <Home size={16} /> },
+	{ id: "packages", label: "Package Library", icon: <Package size={16} /> },
 	{ id: "workflows", label: "Workflows", icon: <Repeat size={16} /> },
-	{ id: "packages", label: "Skills", icon: <Package size={16} /> },
+	{ id: "browser", label: "Browser", icon: <Globe size={16} /> },
+	{ id: "tasks", label: "Run History", icon: <CheckSquare size={16} /> },
 	{ id: "evidence", label: "Evidence", icon: <Image size={16} /> },
 	{ id: "settings", label: "Settings", icon: <Settings size={16} /> },
 ];
 
 const pageLabels: Record<string, string> = {
-	command: "Home",
+	command: "Run Package",
 	terminal: "Terminal",
-	tasks: "Tasks",
+	tasks: "Run History",
 	automations: "Automations",
 	browser: "Browser",
 	trading: "Trading",
 	workflows: "Workflows",
-	packages: "Skills",
+	packages: "Package Library",
 	evidence: "Evidence",
 	settings: "Settings",
 	advanced: "Advanced",
@@ -95,18 +96,24 @@ const pageLabels: Record<string, string> = {
 const pathToPage: Record<string, string> = {
 	"/": "command",
 	"/home": "command",
-	"/terminal": "terminal",
 	"/tasks": "tasks",
-	"/automations": "automations",
 	"/browser": "browser",
-	"/trading": "trading",
 	"/workflows": "workflows",
-	"/skills": "packages",
 	"/packages": "packages",
 	"/evidence": "evidence",
 	"/settings": "settings",
-	"/advanced": "advanced",
 };
+
+if (isProductionFeatureEnabled("trading")) {
+	pathToPage["/trading"] = "trading";
+}
+if (isProductionFeatureEnabled("fullTerminalDashboard")) {
+	pathToPage["/terminal"] = "terminal";
+}
+if (isProductionFeatureEnabled("advancedSurfaces")) {
+	pathToPage["/advanced"] = "advanced";
+	pathToPage["/automations"] = "automations";
+}
 
 const pageToPath = new Map(
 	Object.entries(pathToPage).map(([routePath, pageId]) => [pageId, routePath]),
@@ -250,6 +257,17 @@ export default function App() {
 	}, []);
 
 	const handleSelect = useCallback((id: string) => {
+		if (id === "trading" && !isProductionFeatureEnabled("trading")) return;
+		if (
+			id === "terminal" &&
+			!isProductionFeatureEnabled("fullTerminalDashboard")
+		)
+			return;
+		if (
+			(id === "advanced" || id === "automations") &&
+			!isProductionFeatureEnabled("advancedSurfaces")
+		)
+			return;
 		setPage(id);
 		const nextPath = pageToPath.get(id) ?? "/";
 		if (window.location.pathname !== nextPath) {
@@ -452,18 +470,26 @@ export default function App() {
 						) : (
 							<>
 								{page === "command" && <CommandView />}
-								{page === "terminal" && <TerminalView />}
+								{page === "terminal" &&
+									isProductionFeatureEnabled("fullTerminalDashboard") && (
+										<TerminalView />
+									)}
 								{page === "tasks" && <TasksView />}
-								{page === "automations" && <AutomationsView />}
+								{page === "automations" &&
+									isProductionFeatureEnabled("advancedSurfaces") && (
+										<AutomationsView />
+									)}
 								{page === "browser" && <BrowserView />}
-								{page === "trading" && <TradingView />}
+								{page === "trading" &&
+									isProductionFeatureEnabled("trading") && <TradingView />}
 								{page === "workflows" && <WorkflowsView />}
-								{page === "packages" && (
-									<PackagesView onOpenTrading={() => handleSelect("trading")} />
-								)}
+								{page === "packages" && <PackagesView />}
 								{page === "evidence" && <EvidenceView />}
 								{page === "settings" && <SettingsView />}
-								{page === "advanced" && <AdvancedView />}
+								{page === "advanced" &&
+									isProductionFeatureEnabled("advancedSurfaces") && (
+										<AdvancedView />
+									)}
 							</>
 						)}
 					</main>

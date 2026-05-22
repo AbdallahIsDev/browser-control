@@ -44,10 +44,10 @@ const manifest = {
 	captures: [],
 };
 
-const EXTRA_PAGES = ["command", "browser", "automations", "trading", "advanced", "tasks", "workflows", "packages", "evidence", "settings", "terminal"];
+const EXTRA_PAGES = ["command", "packages", "workflows", "browser", "tasks", "evidence", "settings"];
 const PAGE_LABELS = {
 	command: "home",
-	packages: "skills",
+	packages: "Package Library",
 };
 
 async function waitForApp(page) {

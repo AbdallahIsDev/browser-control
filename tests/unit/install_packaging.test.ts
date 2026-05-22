@@ -127,12 +127,30 @@ test("cli shim can be required without running the CLI", () => {
 test(".env.example covers config registry env vars", () => {
   const content = readEnvExample();
   const entries = getConfigEntries({ validate: false });
+  const hiddenNonCore = new Set([
+    "AI_AGENT_MODEL",
+    "BROWSERLESS_API_KEY",
+    "BROWSERLESS_ENDPOINT",
+    "BROWSERBASE_API_KEY",
+    "BROWSERBASE_PROJECT_ID",
+    "BROWSER_CONTROL_MODEL_API_KEY",
+    "BROWSER_CONTROL_MODEL_ENDPOINT",
+    "BROWSER_CONTROL_MODEL_NAME",
+    "BROWSER_CONTROL_MODEL_PROVIDER",
+    "BROWSER_USER_AGENT",
+    "CAPTCHA_API_KEY",
+    "CAPTCHA_PROVIDER",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_BASE_URL",
+    "OPENROUTER_MODEL",
+  ]);
   const required = new Set<string>();
   for (const entry of entries) {
     for (const envVar of entry.envVars) required.add(envVar);
   }
 
   for (const envVar of [...required].sort()) {
+    if (hiddenNonCore.has(envVar)) continue;
     assert.match(content, new RegExp(`^${envVar}=`, "m"), `.env.example should document ${envVar}`);
   }
 });
@@ -144,11 +162,6 @@ test(".env.example covers first-run runtime env vars read outside config registr
     "BROKER_SECRET",
     "BROKER_ALLOWED_DOMAINS",
     "BROKER_ALLOWED_ORIGINS",
-    "ENABLE_STEALTH",
-    "PROXY_LIST",
-    "CAPTCHA_TIMEOUT_MS",
-    "STAGEHAND_MODEL",
-    "AI_AGENT_COST_PER_TOKEN",
     "RESUME_POLICY",
     "MEMORY_ALERT_MB",
     "CHROME_TAB_LIMIT",

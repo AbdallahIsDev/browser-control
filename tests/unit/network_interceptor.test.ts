@@ -46,6 +46,24 @@ function createMockPage(options: {
   } as unknown as Page & { _emitResponse: (url: string, status: number, body?: unknown) => void };
 }
 
+function createMockContext(options: {
+  routes?: Map<string, (route: Route) => Promise<void>>;
+} = {}) {
+  const routes = options.routes ?? new Map<string, (route: Route) => Promise<void>>();
+  return {
+    route: async (urlPattern: string | RegExp, handler: (route: Route) => Promise<void>) => {
+      const key = typeof urlPattern === "string" ? urlPattern : urlPattern.source;
+      routes.set(key, handler);
+    },
+    unroute: async (urlPattern: string | RegExp, handler?: (route: Route) => Promise<void>) => {
+      const key = typeof urlPattern === "string" ? urlPattern : urlPattern.source;
+      if (!handler || routes.get(key) === handler) {
+        routes.delete(key);
+      }
+    },
+  };
+}
+
 describe.describe("NetworkInterceptor", () => {
   describe.describe("constructor", () => {
     describe.it("creates an interceptor with default options", () => {
@@ -201,6 +219,34 @@ describe.describe("NetworkInterceptor", () => {
       assert.equal(routes.size, 1);
 
       await interceptor.removeIntercept(page, "/api/temp");
+      assert.equal(routes.size, 0);
+    });
+
+    describe.it("unrouteAll removes tracked page routes", async () => {
+      const routes = new Map<string, (route: Route) => Promise<void>>();
+      const page = createMockPage({ routes });
+      const interceptor = new NetworkInterceptor();
+
+      await interceptor.blockResource(page, "*.png");
+      await interceptor.mockResponse(page, "/api/test", { body: { ok: true } });
+      assert.equal(routes.size, 2);
+
+      await interceptor.unrouteAll();
+      assert.equal(routes.size, 0);
+    });
+
+    describe.it("supports context-wide routes for new tabs", async () => {
+      const routes = new Map<string, (route: Route) => Promise<void>>();
+      const context = createMockContext({ routes });
+      const interceptor = new NetworkInterceptor();
+
+      await interceptor.interceptContext(context as never, {
+        urlPattern: "/api/all-tabs",
+        action: "abort",
+      });
+      assert.equal(routes.size, 1);
+
+      await interceptor.removeContextIntercept(context as never, "/api/all-tabs");
       assert.equal(routes.size, 0);
     });
   });

@@ -90,6 +90,9 @@ try {
   for (const forbidden of ["dist/test_daemon_helpers.js", "dist/test_daemon_helpers.d.ts", "dist/tests/"]) {
     if (packedFiles.has(forbidden)) throw new Error(`Packed tarball unexpectedly includes ${forbidden}`);
   }
+  for (const hidden of ["desktop/main.cjs", "automation-packages/tradingview-ict-analysis/automation-package.json"]) {
+    if (packedFiles.has(hidden)) throw new Error(`Packed tarball unexpectedly includes hidden non-core file ${hidden}`);
+  }
   tarballPath = path.join(root, packInfo.filename);
 
   tempProject = fs.mkdtempSync(path.join(os.tmpdir(), "bc-package-smoke-project-"));
@@ -106,8 +109,9 @@ try {
     LOG_FILE: "false",
   };
 
-  const cliPath = path.join(tempProject, "node_modules", "browser-control", "cli.js");
-  run(nodeCmd, ["-e", "const bc=require('browser-control'); if (typeof bc.createBrowserControl !== 'function') throw new Error('missing createBrowserControl');"], { cwd: tempProject, env });
+  const packageName = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name;
+  const cliPath = path.join(tempProject, "node_modules", packageName, "cli.js");
+  run(nodeCmd, ["-e", `const bc=require(${JSON.stringify(packageName)}); if (typeof bc.createBrowserControl !== 'function') throw new Error('missing createBrowserControl');`], { cwd: tempProject, env });
 
   const help = run(nodeCmd, [cliPath, "--help"], { cwd: tempProject, env });
   if (!help.stdout.includes("Browser Control CLI")) {

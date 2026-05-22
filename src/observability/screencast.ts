@@ -6,7 +6,7 @@
  *   - action timeline recording
  *   - debug receipt generation
  *   - retention-based cleanup
- *   - adapter for native Playwright screencast or fallback modes
+ *   - Playwright trace recording with screenshot polling fallback
  *
  * Recording is opt-in and best-effort. Failures do not break browser automation.
  */
@@ -42,7 +42,7 @@ export class ScreencastRecorder {
   private timeline: ActionReceiptEvent[] = [];
   private store: MemoryStore | null = null;
   private frameCaptureInterval: NodeJS.Timeout | null = null;
-  private nativeRecorder: any = null; // Playwright screencast context if available
+  private tracingContext: { tracing: { start(options?: Record<string, unknown>): Promise<void>; stop(options?: { path?: string }): Promise<void> } } | null = null;
   private page: any = null; // Store page reference for annotations
 
   constructor(options?: { store?: MemoryStore }) {
@@ -61,6 +61,12 @@ export class ScreencastRecorder {
       title(): Promise<string>;
       screenshot(options?: { fullPage?: boolean }): Promise<Buffer>;
       evaluate<T>(fn: () => T): Promise<T>;
+      context?: () => {
+        tracing?: {
+          start(options?: Record<string, unknown>): Promise<void>;
+          stop(options?: { path?: string }): Promise<void>;
+        };
+      };
     };
   }): Promise<ScreencastSession> {
     if (this.status()) {
@@ -80,7 +86,7 @@ export class ScreencastRecorder {
     } else {
       const dir = ensureSessionScreencastDir(sessionId);
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-      outputPath = path.join(dir, `screencast-${timestamp}.webm`);
+      outputPath = path.join(dir, `trace-${timestamp}.zip`);
     }
 
     // Ensure output directory exists
@@ -88,18 +94,42 @@ export class ScreencastRecorder {
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Determine recording mode
-    let mode: "native" | "frames" | "metadata-only" = "metadata-only";
-    
-    // Try native Playwright screencast if page is available and supports it
-    if (page && typeof (page as any).screencast === "function") {
+    let mode: "trace" | "native" | "frames" | "metadata-only" = "metadata-only";
+
+    const tracingContext = typeof page?.context === "function" ? page.context() : undefined;
+    if (
+      tracingContext?.tracing &&
+      typeof tracingContext.tracing.start === "function" &&
+      typeof tracingContext.tracing.stop === "function"
+    ) {
+      await tracingContext.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
+      });
+      this.tracingContext = tracingContext as {
+        tracing: {
+          start(options?: Record<string, unknown>): Promise<void>;
+          stop(options?: { path?: string }): Promise<void>;
+        };
+      };
+      mode = "trace";
+      log.info(`Started Playwright trace recording: ${outputPath}`);
+    } else if (page && typeof (page as any).screencast === "function") {
       try {
-        this.nativeRecorder = (page as any).screencast({
+        const nativeRecorder = (page as any).screencast({
           path: outputPath,
-          ...screencastOptions.showActions ? {
+          ...(screencastOptions.showActions ? {
             showActionLabels: true,
             showMouse: true,
-          } : {},
+          } : {}),
         });
+        this.tracingContext = {
+          tracing: {
+            start: async () => undefined,
+            stop: async () => nativeRecorder.stop(),
+          },
+        };
         mode = "native";
         log.info(`Started native Playwright screencast: ${outputPath}`);
       } catch (error) {
@@ -167,13 +197,13 @@ export class ScreencastRecorder {
     session.stoppedAt = new Date().toISOString();
     session.status = success ? "stopped" : "failed";
 
-    // Stop native recorder if active
-    if (this.nativeRecorder) {
+    // Stop Playwright trace/native recorder if active
+    if (this.tracingContext) {
       try {
-        await this.nativeRecorder.stop();
-        this.nativeRecorder = null;
+        await this.tracingContext.tracing.stop({ path: session.path });
+        this.tracingContext = null;
       } catch (error) {
-        log.warn(`Error stopping native recorder: ${error}`);
+        log.warn(`Error stopping Playwright recording: ${error}`);
         session.status = "failed";
       }
     }
@@ -411,7 +441,7 @@ export class ScreencastRecorder {
     
     if (fs.existsSync(session.path)) {
       const stats = fs.statSync(session.path);
-      artifacts.push({ kind: "screencast", path: session.path, sizeBytes: stats.size });
+      artifacts.push({ kind: session.mode === "trace" ? "trace" : "screencast", path: session.path, sizeBytes: stats.size });
     }
     
     if (timelinePath && fs.existsSync(timelinePath)) {

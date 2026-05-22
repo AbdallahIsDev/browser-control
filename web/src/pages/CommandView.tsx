@@ -1,4 +1,10 @@
-import { ArrowRight, Paperclip } from "lucide-react";
+import {
+	ArrowRight,
+	FilePlus2,
+	History,
+	RotateCcw,
+	ShieldCheck,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -7,28 +13,30 @@ import { apiFetch } from "../api";
 
 const SUGGESTIONS = [
 	{
-		label: "Research a website",
+		label: "Run Automation Package",
 		prompt:
-			"Research the website at [URL] and summarize key information including products, pricing, and contact details.",
+			"Run the Automation Package named [package-name] with these inputs: ",
 	},
 	{
-		label: "Fill a form",
-		prompt: "Fill out the form at [URL] with the following information: ",
-	},
-	{
-		label: "Extract data",
-		prompt: "Extract data from [URL] regarding [topic].",
-	},
-	{
-		label: "Upload content",
+		label: "Create Package from Successful Run",
 		prompt:
-			"Upload the file [file path] to [destination URL] and verify the upload was successful.",
+			"Capture the successful browser workflow at [URL] as an Automation Package draft.",
 	},
 	{
-		label: "Monitor a page",
-		prompt: "Monitor the page at [URL] and notify me when [condition] changes.",
+		label: "Repair Failed Package",
+		prompt:
+			"Repair the failed Automation Package run [run-id] using latest evidence.",
 	},
-	{ label: "Run workflow", prompt: "Run the workflow to " },
+	{
+		label: "Open Evidence Report",
+		prompt:
+			"Open the evidence and report output for Automation Package run [run-id].",
+	},
+	{
+		label: "Review Permissions",
+		prompt:
+			"Review permissions and risk for Automation Package [package-name].",
+	},
 ];
 
 export function CommandView() {
@@ -70,13 +78,47 @@ export function CommandView() {
 	};
 
 	return (
-		<PageShell className="flex items-center justify-center min-h-[70vh]">
-			<div className="w-full max-w-[800px] flex flex-col items-center space-y-8 p-6">
-				{/* Headline */}
-				<div className="text-center space-y-3">
-					<h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground">
-						What should your agent do?
+		<PageShell className="min-h-[70vh]">
+			<div className="mx-auto w-full max-w-[980px] space-y-6 p-4 md:p-6">
+				<div className="space-y-2">
+					<h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
+						Run or create an Automation Package
 					</h2>
+					<p className="text-sm text-muted-foreground">
+						Package replay, draft creation, evidence, repair, permissions, and
+						savings metrics are the primary workflow.
+					</p>
+				</div>
+
+				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					<div className="rounded-md border border-border/70 bg-card p-4">
+						<FilePlus2 size={18} className="text-primary" />
+						<p className="mt-3 text-sm font-medium">Create package draft</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							Capture steps, selectors, screenshots, waits, and outputs.
+						</p>
+					</div>
+					<div className="rounded-md border border-border/70 bg-card p-4">
+						<History size={18} className="text-primary" />
+						<p className="mt-3 text-sm font-medium">Run history</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							Review replay results, failures, and saved reports.
+						</p>
+					</div>
+					<div className="rounded-md border border-border/70 bg-card p-4">
+						<RotateCcw size={18} className="text-primary" />
+						<p className="mt-3 text-sm font-medium">Repair failures</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							Mark broken selectors and retry with evidence.
+						</p>
+					</div>
+					<div className="rounded-md border border-border/70 bg-card p-4">
+						<ShieldCheck size={18} className="text-primary" />
+						<p className="mt-3 text-sm font-medium">Permissions review</p>
+						<p className="mt-1 text-xs text-muted-foreground">
+							Check domains, filesystem access, and high-risk actions.
+						</p>
+					</div>
 				</div>
 
 				{/* Suggestion chips */}
@@ -95,11 +137,11 @@ export function CommandView() {
 					))}
 				</div>
 
-				{/* Prompt composer */}
+				{/* Package command composer */}
 				<div className="w-full relative border border-border/50 rounded shadow-sm bg-card">
 					<Textarea
 						ref={textareaRef}
-						placeholder="Ask Browser Control to research a website, fill a form, upload content, monitor a page, or run a workflow..."
+						placeholder="Run a package, create a package draft from a successful browser workflow, repair a failed package, or open evidence..."
 						value={prompt}
 						onChange={(e) => setPrompt(e.target.value)}
 						onKeyDown={handleKeyDown}
@@ -112,11 +154,11 @@ export function CommandView() {
 							variant="ghost"
 							size="icon"
 							className="h-8 w-8 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-							aria-label="Attach file"
-							title="File attachments are not available in this dashboard yet"
+							aria-label="Attach evidence file"
+							title="Evidence attachments are not available in this dashboard yet"
 							disabled
 						>
-							<Paperclip size={16} />
+							<FilePlus2 size={16} />
 						</Button>
 
 						<Button

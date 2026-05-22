@@ -15,7 +15,7 @@ docs/*
 !docs/getting-started.md
 !docs/browser.md
 !docs/terminal.md
-!docs/skills.md
+!docs/packages.md
 !docs/mcp.md
 !docs/policy.md
 !docs/security.md
@@ -41,6 +41,7 @@ nul
 premium-completion-tracker.md
 INSTRUCTIONS.md
 PROBLEMS.md
+HIDDEN_NON_CORE_FEATURES.md
 
 selectors.json
 screenshots/

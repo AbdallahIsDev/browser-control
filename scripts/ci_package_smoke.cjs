@@ -113,14 +113,6 @@ try {
 		"dist/wsl_cdp_bridge.cjs",
 		"dist/telegram_notifier.ps1",
 		"web/dist/index.html",
-		"desktop/main.cjs",
-		"desktop/preload.cjs",
-		"desktop/security.cjs",
-		"automation-packages/tradingview-ict-analysis/automation-package.json",
-		"automation-packages/tradingview-ict-analysis/workflows/tradingview-ict-analysis.json",
-		"automation-packages/tradingview-ict-analysis/docs/ict-methodology.md",
-		"automation-packages/tradingview-ict-analysis/docs/permissions.md",
-		"automation-packages/tradingview-ict-analysis/docs/trade-journal.md",
 		"examples/browser/basic-navigation.md",
 		"examples/terminal/basic-exec.md",
 		"examples/combined/dev-server-workflow.md",
@@ -140,6 +132,22 @@ try {
 	}
 	if (!hasViteAsset(files, "css")) {
 		fail("Package missing Vite web CSS asset");
+	}
+
+	const hiddenProductionFiles = [
+		"desktop/main.cjs",
+		"desktop/preload.cjs",
+		"desktop/security.cjs",
+		"automation-packages/tradingview-ict-analysis/automation-package.json",
+		"automation-packages/tradingview-ict-analysis/workflows/tradingview-ict-analysis.json",
+		"automation-packages/tradingview-ict-analysis/docs/ict-methodology.md",
+		"automation-packages/tradingview-ict-analysis/docs/permissions.md",
+		"automation-packages/tradingview-ict-analysis/docs/trade-journal.md",
+	];
+	for (const file of hiddenProductionFiles) {
+		if (files.has(file)) {
+			fail(`Package includes hidden non-core file: ${file}`);
+		}
 	}
 
 	const forbiddenPatterns = [
@@ -175,8 +183,8 @@ try {
 			cwd: tempProject,
 		});
 
-		const requireCheck =
-			"const bc = require('browser-control'); if (typeof bc.createBrowserControl !== 'function') throw new Error('createBrowserControl export missing');";
+		const packageName = packInfo.name;
+		const requireCheck = `const bc = require(${JSON.stringify(packageName)}); if (typeof bc.createBrowserControl !== 'function') throw new Error('createBrowserControl export missing');`;
 		execFileSync(process.execPath, ["-e", requireCheck], {
 			cwd: tempProject,
 			encoding: "utf8",
@@ -195,7 +203,7 @@ try {
 		const cliPath = path.join(
 			tempProject,
 			"node_modules",
-			"browser-control",
+			packageName,
 			"cli.js",
 		);
 		if (errors.length === 0) {

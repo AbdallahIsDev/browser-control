@@ -19,6 +19,13 @@ npm run cli -- --help
 
 Use `npm run cli --` in the checkout, or use `bc` after installing/linking the package.
 
+Experimental npm package:
+
+```powershell
+npm install -g @abdallahisdev/browser-control
+bc --help
+```
+
 ## First Setup
 
 PowerShell:
@@ -96,9 +103,11 @@ bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"ac
 
 Use MCP Lite when the agent cannot run CLI directly. Use full MCP only when the task needs the complete MCP tool surface.
 
-## First Dashboard Workflow
+## Experimental Operator UI
 
-Run the local dashboard from a source checkout:
+Normal Browser Control usage is CLI/MCP-first. The local dashboard is an experimental internal operator UI, not the production product surface.
+
+For local operator testing only:
 
 ```powershell
 bc web open
@@ -123,7 +132,7 @@ npm run cli -- web open
 npm run cli -- web open --port=0
 ```
 
-For scripts, use `bc web open --json`. It prints machine-readable connection data, including a reachable `url`, tokenized `openUrl`, and background server `pid`. Stop that PID when the script is done. The dashboard stores the URL fragment token in session storage, then removes the fragment from the address bar. API responses keep ISO UTC timestamps for scripts, while the dashboard formats primary timestamp fields as local human-readable time with timezone.
+For scripts, prefer CLI/MCP package commands. If testing the experimental dashboard, `bc web open --json` prints machine-readable connection data, including a reachable `url`, tokenized `openUrl`, and background server `pid`. Stop that PID when done.
 
 ## First Terminal and Filesystem Workflow
 

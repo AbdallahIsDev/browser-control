@@ -57,11 +57,11 @@ test("frontend exposes primary product views in simplified sidebar", () => {
 
 	// Primary sidebar nav labels
 	for (const label of [
-		"Home",
-		"Tasks",
+		"Run Package",
+		"Package Library",
+		"Run History",
 		"Browser",
 		"Workflows",
-		"Skills",
 		"Evidence",
 		"Settings",
 	]) {
@@ -72,14 +72,11 @@ test("frontend exposes primary product views in simplified sidebar", () => {
 		);
 	}
 
-	// All page routes still exist (even if not in primary nav)
+	// Core page IDs still exist.
 	for (const pageId of [
 		"command",
-		"terminal",
 		"tasks",
-		"automations",
 		"browser",
-		"trading",
 		"workflows",
 		"packages",
 		"evidence",
@@ -97,31 +94,45 @@ test("frontend exposes primary product views in simplified sidebar", () => {
 	assert.doesNotMatch(
 		appSource,
 		/label: "Command"/,
-		"Command should be renamed to Home in nav",
+		"Command should not be public nav language",
 	);
 	assert.doesNotMatch(
 		appSource,
-		/label: "Packages"/,
-		"Packages should be renamed to Skills in nav",
+		/label: "Skills"/,
+		"Skills must not be public nav language",
 	);
 	assert.doesNotMatch(
 		appSource,
 		/label: "Trading"/,
 		"Trading should not be a primary sidebar item",
 	);
+	assert.doesNotMatch(
+		appSource,
+		/label: "Terminal"/,
+		"Full terminal dashboard should not be a primary sidebar item",
+	);
+	assert.doesNotMatch(
+		appSource,
+		/label: "Advanced"/,
+		"Advanced surfaces should not be a primary sidebar item",
+	);
 });
 
-test("home view has product-focused prompt composer UI", () => {
+test("home view is package-first, not generic prompt-first UI", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/CommandView.tsx"),
 		"utf8",
 	);
 
 	// New product elements must exist
-	assert.match(source, /What should your agent do\?/);
-	assert.match(source, /Run/);
+	assert.match(source, /Run or create an Automation Package/);
+	assert.match(source, /Run Automation Package/);
+	assert.match(source, /Create Package from Successful Run/);
+	assert.match(source, /Repair Failed Package/);
+	assert.match(source, /Permissions review/);
 
 	// Old developer elements must not exist
+	assert.doesNotMatch(source, /What should your agent do\?/);
 	assert.doesNotMatch(source, /Submit Intent/);
 	assert.doesNotMatch(source, /System Load/);
 	assert.doesNotMatch(source, /CDP Bridge/);
@@ -391,45 +402,60 @@ test("settings view exposes credential vault and network rule controls", () => {
 	}
 });
 
-test("skills view relocates TradingView as an optional automation skill", () => {
+test("package library does not expose trading package by default", () => {
 	const source = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/PackagesView.tsx"),
 		"utf8",
 	);
 
-	assert.match(source, /Optional automation skills/);
-	assert.match(source, /TradingView ICT Analysis/);
-	assert.match(source, /Optional skill/);
-	assert.match(source, /Analysis only/);
-	assert.match(source, /Live orders still require exact explicit approval/);
-	assert.match(source, /Open tools/);
+	assert.match(source, /Package Library/);
+	assert.doesNotMatch(source, /TradingView ICT Analysis/);
+	assert.doesNotMatch(source, /Optional automation skills/);
+	assert.doesNotMatch(source, /Optional skill/);
 });
 
-test("settings view exposes browser provider health dashboard", () => {
+test("production feature flags hide risky dashboard surfaces by default", () => {
+	const flagsSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/featureFlags.ts"),
+		"utf8",
+	);
+	const appSource = fs.readFileSync(
+		path.resolve(__dirname, "../../web/src/App.tsx"),
+		"utf8",
+	);
 	const settingsSource = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/SettingsView.tsx"),
 		"utf8",
 	);
 
-	for (const expected of [
-		"Provider Health",
-		"/api/browser/providers",
-		"/api/browser/providers/catalog",
-		"/api/browser/providers/health",
-		"Provider Catalog",
-		"Refresh Health",
-		"Remote providers are opt-in",
-		"explicit configuration and policy approval",
-		"diagnostics do not switch",
-		"launchSupported",
-		"attachSupported",
+	for (const flag of [
+		"advancedProviders",
+		"advancedSurfaces",
+		"captchaSolving",
+		"fullTerminalDashboard",
+		"generalAgentUi",
+		"proxyManager",
+		"stealthControls",
+		"trading",
 	]) {
-		assert.match(
-			settingsSource,
-			new RegExp(expected.replaceAll("/", "\\/")),
-			`${expected} missing from SettingsView`,
-		);
+		assert.match(flagsSource, new RegExp(`${flag}: false`));
 	}
+
+	assert.match(appSource, /isProductionFeatureEnabled\("trading"\)/);
+	assert.match(
+		appSource,
+		/isProductionFeatureEnabled\("fullTerminalDashboard"\)/,
+	);
+	assert.match(appSource, /isProductionFeatureEnabled\("advancedSurfaces"\)/);
+	assert.match(
+		settingsSource,
+		/isProductionFeatureEnabled\("advancedProviders"\)/,
+	);
+	assert.match(
+		settingsSource,
+		/isProductionFeatureEnabled\("generalAgentUi"\)/,
+	);
+	assert.doesNotMatch(appSource, /\/skills/);
 });
 
 test("terminal view uses shared components and real terminal control APIs", () => {
@@ -672,8 +698,8 @@ test("command view uses shared components and PageShell", () => {
 		"@/components/ui/button",
 		"@/components/ui/textarea",
 		"ArrowRight",
-		"Paperclip",
-		"What should your agent do?",
+		"FilePlus2",
+		"Run or create an Automation Package",
 	]) {
 		assert.match(
 			source,
@@ -833,7 +859,7 @@ test("trading view uses shared components and PageShell", () => {
 	}
 
 	for (const expected of [
-		"TradingView analysis skill",
+		"TradingView analysis package",
 		"without making trading a primary Browser Control workflow",
 		"TechnicalIdDetails",
 		"Technical job ID",
@@ -948,11 +974,12 @@ test("screenshot script handles auth token and rejects Unauthorized", () => {
 		"BROWSER_CONTROL_WEB_TOKEN",
 		"tokenProvided",
 		"command",
+		"packages",
+		"workflows",
 		"browser",
-		"automations",
-		"trading",
-		"advanced",
 		"tasks",
+		"evidence",
+		"settings",
 	]) {
 		assert.match(
 			source,
@@ -961,9 +988,10 @@ test("screenshot script handles auth token and rejects Unauthorized", () => {
 		);
 	}
 	assert.ok(
-		source.includes('packages: "skills"'),
-		"Screenshot script should map Packages page id to Skills sidebar label",
+		source.includes('packages: "Package Library"'),
+		"Screenshot script should map Packages page id to Package Library sidebar label",
 	);
+	assert.doesNotMatch(source, /automations|trading|advanced|terminal/);
 	assert.ok(
 		source.includes('localStorage.setItem("bc-page", pageId)'),
 		"Screenshot script should preserve page id when fallback navigation reloads",
