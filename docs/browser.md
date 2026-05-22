@@ -30,7 +30,7 @@ bc snapshot
 
 ## Browser Readiness
 
-`bc_browser_open` automatically ensures a browser is connected before navigating. The connection sequence is:
+`bc_open` automatically ensures a browser is connected before navigating. The connection sequence is:
 
 1. **Already connected** — uses the existing browser page.
 2. **Reconnect** — attempts to reconnect to a previously managed browser.

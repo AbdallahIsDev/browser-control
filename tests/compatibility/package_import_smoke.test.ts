@@ -51,5 +51,5 @@ test("published CLI shim can show help after build", () => {
 test("package exposes bc binary", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
 
-  assert.equal(manifest.bin.bc, "./cli.js");
+  assert.equal(manifest.bin.bc, "cli.js");
 });

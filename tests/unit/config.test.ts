@@ -305,7 +305,7 @@ test("package.json has required package fields", () => {
   assert.ok(!("private" in pkg), "package.json should not have 'private: true'");
   assert.equal(pkg.main, "./dist/index.js");
   assert.equal(pkg.types, "./dist/index.d.ts");
-  assert.equal(pkg.bin.bc, "./cli.js");
+  assert.equal(pkg.bin.bc, "cli.js");
   assert.ok(pkg.scripts.build, "should have build script");
   assert.ok(pkg.scripts.prepublishOnly, "should have prepublishOnly script");
   assert.ok(Array.isArray(pkg.files), "should have files allowlist");

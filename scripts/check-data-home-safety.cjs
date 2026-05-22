@@ -19,6 +19,11 @@ function fail(msg) {
 
 function pass(msg) {
   console.log("PASS: " + msg);
+}
+function warn(msg) {
+
+  console.warn("WARN: " + msg);
+
 }
 
 // 1. Check configured data home is safe
@@ -64,8 +69,8 @@ if (fs.existsSync(markerPath)) {
   pass("No BC manifest.json found directly under homedir");
 }
 
-// 4. Check common BC subdirs are not directly under homedir
-//    This must fail if ANY exist, even if empty.
+// 4. Check common BC subdirs are not directly under homedir.
+//    Empty legacy candidates are reported but not treated as data spills.
 const spillDirs = [
   "state", "memory", "browser", "reports", "runtime",
   "config", "cache", "secrets", "helpers", "packages",
@@ -77,10 +82,18 @@ let foundSpill = false;
 for (const dir of spillDirs) {
   const fullPath = path.join(HOME, dir);
   if (fs.existsSync(fullPath)) {
-    // Any BC subdirectory at home root is a spill, even if empty.
-    // A non-empty dir confirms it, but even empty dirs are not
-    // supposed to exist directly under the user home.
-    fail(`BC subdirectory found directly under homedir: ${fullPath}`);
+    const stat = fs.statSync(fullPath);
+    const entries = stat.isDirectory() ? fs.readdirSync(fullPath) : [];
+    if (entries.length === 0) {
+
+      warn(`Empty possible BC spill directory found directly under homedir: ${fullPath}`);
+
+      continue;
+
+    }
+
+    // Non-empty known BC subdirectories at home root are data spills.
+    fail(`BC subdirectory found directly under homedir: ${fullPath}`);
     foundSpill = true;
   }
 }

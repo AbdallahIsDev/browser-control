@@ -17,7 +17,7 @@ function readEnvExample(): string {
 
 test("package bin points to an existing CLI shim", () => {
   const pkg = readPackageJson();
-  assert.equal(pkg.bin?.bc, "./cli.js");
+  assert.equal(pkg.bin?.bc, "cli.js");
   assert.ok(fs.existsSync(path.join(root, pkg.bin.bc)), "bin target should exist");
 });
 

@@ -599,7 +599,7 @@ async function snapshotFromDOM(
         return [];
       }
 
-      const results: Array<{
+      type RawElement = {
         tag: string;
         role: string;
         name: string;
@@ -610,7 +610,9 @@ async function snapshotFromDOM(
         href: string;
         rect: { x: number; y: number; width: number; height: number };
         selector: string;
-      }> = [];
+      };
+      const interactiveResults: RawElement[] = [];
+      const headingResults: RawElement[] = [];
       const labelsByFor = new Map<string, string>();
       for (const label of Array.from(root.querySelectorAll("label[for]"))) {
         const targetId = label.getAttribute("for");
@@ -618,7 +620,14 @@ async function snapshotFromDOM(
           labelsByFor.set(targetId, label.textContent?.trim() ?? "");
         }
       }
-      const capturedElements = new WeakSet<Element>();
+      const textById = new Map<string, string>();
+      for (const labelledElement of Array.from(root.querySelectorAll("[id]"))) {
+        const id = labelledElement.id;
+        if (id && !textById.has(id)) {
+          textById.set(id, labelledElement.textContent?.trim() ?? "");
+        }
+      }
+      const capturedElements = new Set<Element>();
 
       function getAccessibleName(el: Element): string {
         // aria-label
@@ -630,10 +639,13 @@ async function snapshotFromDOM(
         // aria-labelledby
         const labelledBy = el.getAttribute("aria-labelledby");
         if (labelledBy) {
-          const labelEl = document.getElementById(labelledBy);
-          if (labelEl) {
-            return labelEl.textContent?.trim() ?? "";
-          }
+          const labelledText = labelledBy
+            .split(/\s+/)
+            .map((id) => textById.get(id))
+            .filter((text): text is string => Boolean(text))
+            .join(" ")
+            .trim();
+          if (labelledText) return labelledText;
         }
 
         // <label for="...">
@@ -753,8 +765,7 @@ async function snapshotFromDOM(
         return `${tag}${classes ? `.${classes}` : ""}`;
       }
 
-      // Interactive selectors
-      const selectors = [
+      const interactiveSelectors = [
         "button",
         "a[href]",
         "input",
@@ -774,6 +785,9 @@ async function snapshotFromDOM(
         "[tabindex]",
         "[contenteditable]",
       ];
+      const headingSelector = "h1, h2, h3, h4, h5, h6";
+      const selectors = [...interactiveSelectors, headingSelector];
+      const interactiveMatcher = interactiveSelectors.join(", ");
 
       const allEls = Array.from(root.querySelectorAll(selectors.join(", ")));
 
@@ -791,13 +805,18 @@ async function snapshotFromDOM(
 
         const tag = el.tagName.toLowerCase();
         const role = inferRole(el);
+        const isHeading = /^h[1-6]$/.test(tag);
+        const isInteractive = el.matches(interactiveMatcher);
+        if (!isInteractive && !isHeading) {
+          continue;
+        }
         const name = getAccessibleName(el);
         const text = el.textContent?.trim().slice(0, 200) ?? "";
 
         const isCheckbox = tag === "input" && (el as HTMLInputElement).type === "checkbox";
         const isRadio = tag === "input" && (el as HTMLInputElement).type === "radio";
 
-        results.push({
+        const rawElement = {
           tag,
           role: role || "generic",
           name,
@@ -808,40 +827,28 @@ async function snapshotFromDOM(
           href: (el as HTMLAnchorElement).href ?? "",
           rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
           selector: generateSelector(el),
-        });
-        capturedElements.add(el);
+        };
+        if (isInteractive) {
+          interactiveResults.push(rawElement);
+          capturedElements.add(el);
+          continue;
+        }
+        if (isHeading && !capturedElements.has(el)) {
+          headingResults.push({
+            ...rawElement,
+            role: "heading",
+            name: text,
+            text: "",
+            level: parseInt(tag[1]),
+            disabled: false,
+            checked: null,
+            href: "",
+            selector: tag,
+          });
+        }
       }
 
-      // Also grab headings
-      for (const heading of Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6"))) {
-        if (capturedElements.has(heading)) {
-          continue;
-        }
-        const style = window.getComputedStyle(heading);
-        if (style.display === "none" || style.visibility === "hidden") {
-          continue;
-        }
-        const rect = heading.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) {
-          continue;
-        }
-        const tag = heading.tagName.toLowerCase();
-        const name = heading.textContent?.trim() ?? "";
-        results.push({
-          tag,
-          role: "heading",
-          name,
-          text: "",
-          level: parseInt(tag[1]),
-          disabled: false,
-          checked: null,
-          href: "",
-          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-          selector: tag,
-        });
-      }
-
-      return results;
+      return [...interactiveResults, ...headingResults];
     }, rootScope);
 
     // Convert raw elements to A11yElement with refs

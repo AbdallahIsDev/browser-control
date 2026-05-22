@@ -34,11 +34,71 @@ import type { LocatorCandidate } from "../../browser/actions";
 import type { ScreencastOptions } from "../../observability/types";
 import type { JSONSchema } from "../../mcp/types";
 
+const BROWSER_TOOL_ALIASES: Record<string, string> = {
+  bc_browser_open: "bc_open",
+  bc_browser_open_many: "bc_open_many",
+  bc_browser_navigate: "bc_navigate",
+  bc_browser_capture: "bc_capture",
+  bc_browser_capture_many: "bc_capture_many",
+  bc_browser_snapshot: "bc_snapshot",
+  bc_browser_click: "bc_click",
+  bc_browser_fill: "bc_fill",
+  bc_browser_fill_many: "bc_fill_many",
+  bc_browser_hover: "bc_hover",
+  bc_browser_type: "bc_type",
+  bc_browser_paste: "bc_paste",
+  bc_browser_press: "bc_press",
+  bc_browser_scroll: "bc_scroll",
+  bc_browser_screenshot: "bc_screenshot",
+  bc_browser_highlight: "bc_highlight",
+  bc_browser_generate_locator: "bc_generate_locator",
+  bc_browser_tab_list: "bc_tab_list",
+  bc_browser_tab_switch: "bc_tab_switch",
+  bc_browser_tab_close: "bc_tab_close",
+  bc_browser_close: "bc_close",
+  bc_browser_screencast_start: "bc_screencast_start",
+  bc_browser_screencast_stop: "bc_screencast_stop",
+  bc_browser_screencast_status: "bc_screencast_status",
+  bc_browser_list: "bc_list",
+  bc_browser_attach: "bc_attach",
+  bc_browser_detach: "bc_detach",
+  bc_browser_launch: "bc_launch",
+  bc_browser_drop: "bc_drop",
+  bc_browser_downloads_list: "bc_downloads_list",
+  bc_browser_dialog: "bc_dialog",
+  bc_browser_cdp: "bc_cdp",
+  bc_browser_state: "bc_state",
+  bc_browser_act: "bc_act",
+};
+
+function withShortAliases(tools: McpTool[]): McpTool[] {
+  const aliases = tools.flatMap((tool) => {
+    const alias = BROWSER_TOOL_ALIASES[tool.name];
+    if (!alias) return [];
+    return [{
+      ...tool,
+      name: alias,
+      description: tool.description,
+    }];
+  });
+
+  const legacyTools = tools.map((tool) => {
+    const alias = BROWSER_TOOL_ALIASES[tool.name];
+    if (!alias) return tool;
+    return {
+      ...tool,
+      description: `Compatibility alias for ${alias}. ${tool.description}`,
+    };
+  });
+
+  return [...aliases, ...legacyTools];
+}
+
 /**
  * Build browser MCP tools for a Browser Control instance.
  */
 export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
-  return [
+  const tools: McpTool[] = [
     {
       name: "bc_browser_open",
       description: "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
@@ -721,4 +781,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       },
     },
   ];
+
+  return withShortAliases(tools);
 }

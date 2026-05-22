@@ -163,4 +163,4 @@ Configure an agent with:
 }
 ```
 
-Then ask the agent to use MCP Lite high-level tools first: `bc_status`, `bc_browser_state`, `bc_browser_act`, and `bc_task_run`. Use full MCP only when a task needs tools outside Lite mode. Use terminal and filesystem tools only when you trust the agent and policy profile.
+Then ask the agent to use MCP Lite high-level tools first: `bc_status`, `bc_state`, `bc_act`, and `bc_task_run`. Legacy `bc_browser_*` MCP names remain compatibility aliases, but new integrations should use the shorter `bc_*` names. Use full MCP only when a task needs tools outside Lite mode. Use terminal and filesystem tools only when you trust the agent and policy profile.

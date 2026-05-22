@@ -151,7 +151,7 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 |----------|----------|
 | **Status** | `status`, `bc_status` |
 | **Session** | `bc_session_create`, `bc_session_list`, `bc_session_select`, `bc_session_status` |
-| **Browser** | Short aliases such as `open`, `snapshot`, `click`, `fill`, `screenshot`, plus `bc_browser_launch`, `attach`, `list`, `hover`, `type`, `press`, `scroll`, `downloads_list`, `drop`, `highlight`, `generate_locator`, `screencast_*`, `provider_*` |
+| **Browser** | Short primary tools such as `bc_open`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_screenshot`, `bc_tab_list`; legacy `bc_browser_*` names remain compatibility aliases |
 | **Terminal** | `terminal_open`, `terminal_exec`, `bc_terminal_read`, `write`, `interrupt`, `snapshot`, `list`, `resume`, `status` |
 | **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `bc_fs_move`, `delete`, `stat` |
 | **Network + Vault** | `bc_network_rules_list`, `bc_network_blocked_requests`, `bc_vault_list` |
@@ -167,7 +167,9 @@ Full tool reference: [docs/mcp.md](docs/mcp.md)
 
 MCP Lite exposes a smaller high-level toolset for lower token overhead:
 
-`bc_status`, `bc_session_status`, `bc_browser_open`, `bc_browser_open_many`, `bc_browser_capture`, `bc_browser_capture_many`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_state`, `bc_browser_act`, `bc_task_run`, `bc_browser_tab_list`, `bc_fs_write_output`
+`bc_status`, `bc_session_status`, `bc_open`, `bc_open_many`, `bc_capture`, `bc_capture_many`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`
+
+Legacy `bc_browser_*` MCP names are still registered for compatibility, but new agents should prefer the shorter `bc_*` tools.
 
 Set `BROWSER_CONTROL_MCP_MODE=lite` for Lite mode. Full MCP mode keeps the complete tool surface.
 

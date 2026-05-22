@@ -63,6 +63,13 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_session_status"));
 
       // Browser tools
+      assert.ok(names.includes("bc_open"));
+      assert.ok(names.includes("bc_snapshot"));
+      assert.ok(names.includes("bc_click"));
+      assert.ok(names.includes("bc_fill"));
+      assert.ok(names.includes("bc_state"));
+      assert.ok(names.includes("bc_act"));
+      assert.ok(names.includes("bc_tab_list"));
       assert.ok(names.includes("bc_browser_open"));
       assert.ok(names.includes("bc_browser_open_many"));
       assert.ok(names.includes("bc_browser_navigate"));
@@ -147,6 +154,16 @@ describe("MCP Tool Registry", () => {
       const names = tools.map((t) => t.name).sort();
 
       assert.deepEqual(names, [
+        "bc_act",
+        "bc_capture",
+        "bc_capture_many",
+        "bc_click",
+        "bc_fill",
+        "bc_open",
+        "bc_open_many",
+        "bc_snapshot",
+        "bc_state",
+        "bc_tab_list",
         "bc_browser_act",
         "bc_browser_capture",
         "bc_browser_capture_many",
@@ -195,6 +212,28 @@ describe("MCP Tool Registry", () => {
       assert.ok(objectItem.properties, "object item should have properties");
       assert.equal(objectItem.properties.url.type, "string", "object item url property should be string");
       assert.ok((objectItem.required ?? []).includes("url"), "object item should require url");
+    });
+
+    it("short browser aliases use the same handler and schema as compatibility names", () => {
+      const tools = buildToolRegistry(api);
+      const byName = new Map(tools.map((tool) => [tool.name, tool]));
+      for (const [legacyName, shortName] of [
+        ["bc_browser_open", "bc_open"],
+        ["bc_browser_snapshot", "bc_snapshot"],
+        ["bc_browser_click", "bc_click"],
+        ["bc_browser_fill", "bc_fill"],
+        ["bc_browser_state", "bc_state"],
+        ["bc_browser_act", "bc_act"],
+        ["bc_browser_tab_list", "bc_tab_list"],
+      ] as const) {
+        const legacy = byName.get(legacyName);
+        const short = byName.get(shortName);
+        assert.ok(legacy, `${legacyName} missing`);
+        assert.ok(short, `${shortName} missing`);
+        assert.deepEqual(short.inputSchema, legacy.inputSchema);
+        assert.equal(short.handler, legacy.handler);
+        assert.match(legacy.description, new RegExp(`Compatibility alias for ${shortName}`));
+      }
     });
 
     it("bc_task_run.steps[].urls schema accepts string and object URL entries", () => {
