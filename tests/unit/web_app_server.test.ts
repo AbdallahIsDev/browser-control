@@ -204,6 +204,11 @@ function mockApi(): BrowserControlAPI {
 			},
 		},
 		package: {
+			install: async () => actionResult({
+				name: "basic-test-package",
+				version: "1.0.0",
+				installedAt: "2026-05-08T00:00:00.000Z",
+			} as never),
 			list: () =>
 				actionResult([
 					{
@@ -212,6 +217,21 @@ function mockApi(): BrowserControlAPI {
 						installedAt: "2026-05-08T00:00:00.000Z",
 					},
 				] as never),
+			info: () => actionResult({
+				name: "basic-test-package",
+				version: "1.0.0",
+			} as never),
+			remove: () => actionResult({ removed: true }),
+			update: async () => actionResult({
+				name: "basic-test-package",
+				version: "1.0.0",
+			} as never),
+			grantPermission: () => actionResult({ granted: true }),
+			run: async () => actionResult({ status: "completed" } as never),
+			eval: async () => actionResult([]),
+			review: () => actionResult({ success: true } as never),
+			reviewHistory: () => actionResult([]),
+			evalHistory: () => actionResult([]),
 		},
 		service: {
 			register: async () => actionResult({ name: "app", port: 3000 }),
@@ -654,8 +674,16 @@ test("web app server saves model config redacted and starts authenticated local 
 
 test("web app server exposes record to workflow and package draft flow", async (t) => {
 	resetRecorder();
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-materialize-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
-	t.after(() => server.close());
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+		return server.close();
+	});
 	const info = await server.listen(0, "127.0.0.1");
 	const headers = {
 		"content-type": "application/json",
@@ -728,6 +756,27 @@ test("web app server exposes record to workflow and package draft flow", async (
 				permission.kind === "terminal" &&
 				Array.isArray(permission.commands) &&
 				permission.commands.includes("npm test"),
+		),
+	);
+
+	const materialized = await fetch(
+		`${info.url}/api/recordings/${encodeURIComponent(recordingId)}/materialize`,
+		{
+			method: "POST",
+			headers,
+			body: JSON.stringify({ install: true, overwrite: true }),
+		},
+	);
+	assert.equal(materialized.status, 200);
+	const materializedBody = (await materialized.json()) as {
+		success: boolean;
+		data: { materialized: { packageDir: string; manifestPath: string } };
+	};
+	assert.equal(materializedBody.success, true);
+	assert.ok(fs.existsSync(materializedBody.data.materialized.manifestPath));
+	assert.ok(
+		materializedBody.data.materialized.packageDir.includes(
+			path.join("packages", "drafts"),
 		),
 	);
 });

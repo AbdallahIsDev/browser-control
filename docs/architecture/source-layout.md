@@ -4,7 +4,7 @@ Browser Control keeps product implementation under `src/`, tests under `tests/`,
 
 ## Folder Map
 
-- `src/` owns production TypeScript implementation and public API barrels.
+- `src/` owns production TypeScript implementation and public API barrels. Some one-line files directly under `src/` intentionally re-export moved implementations from subfolders; they preserve package import compatibility and should not receive new logic.
 - `src/browser/` owns browser automation: CDP/Playwright connection, browser actions, profiles, auth snapshots, Stagehand integration, network interception, and browser file transfer helpers.
 - `src/terminal/` owns native terminal automation: pty sessions, one-shot exec, prompt detection, snapshots, resume decisions, serialization, buffer persistence, shell/platform detection, and the Windows `node-pty` patch.
 - `src/filesystem/` owns native filesystem/system operations and the policy-aware filesystem action facade.

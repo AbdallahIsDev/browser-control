@@ -204,11 +204,17 @@ Harness:
 
 Packages:
 
+- `bc_package_install`
 - `bc_package_list`
 - `bc_package_info`
+- `bc_package_update`
+- `bc_package_remove`
 - `bc_package_run`
 - `bc_package_eval`
 - `bc_package_grant`
+- `bc_package_review`
+- `bc_package_review_history`
+- `bc_package_eval_history`
 
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
 

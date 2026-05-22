@@ -141,6 +141,48 @@ const STRUCTURAL_ROLES = new Set([
   "treegrid",
 ]);
 
+interface SnapshotAdapter {
+  capture(page: Page): Promise<A11yElement[]>;
+}
+
+class PlaywrightSnapshotAdapter implements SnapshotAdapter {
+  async capture(page: Page): Promise<A11yElement[]> {
+    const pageWithLocator = page as unknown as {
+      locator?: (selector: string) => unknown;
+    };
+    if (typeof pageWithLocator.locator !== "function") return [];
+
+    let bodyLocator: unknown;
+    try {
+      bodyLocator = pageWithLocator.locator("body");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      log.debug?.(`Playwright locator unavailable: ${msg}`);
+      return [];
+    }
+
+    const ariaSnapshot = (bodyLocator as unknown as {
+      ariaSnapshot?: (options?: { timeout?: number }) => Promise<string>;
+    }).ariaSnapshot;
+    if (typeof ariaSnapshot !== "function") return [];
+
+    try {
+      const output = await ariaSnapshot.call(bodyLocator, { timeout: 1000 });
+      return parsePlaywrightAriaSnapshot(output);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      log.debug?.(`Playwright ariaSnapshot unavailable: ${msg}`);
+      return [];
+    }
+  }
+}
+
+class ChromiumCdpSnapshotFallback implements SnapshotAdapter {
+  async capture(page: Page): Promise<A11yElement[]> {
+    return snapshotFromCdpA11yTree(page);
+  }
+}
+
 // ── Snapshot Generation ────────────────────────────────────────────
 
 /**
@@ -190,16 +232,24 @@ export async function snapshot(
     pageTitle = "";
   }
 
-  // Primary: Playwright accessibility tree (full page, rootSelector is ignored here)
-  let elements = await snapshotFromA11yTree(page);
+  let elements: A11yElement[] = [];
+  if (options.rootSelector) {
+    elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
+  } else {
+    const playwrightAdapter = new PlaywrightSnapshotAdapter();
+    const cdpFallback = new ChromiumCdpSnapshotFallback();
+
+    // Primary: Playwright-native ariaSnapshot when available. Fallback is explicit.
+    elements = await playwrightAdapter.capture(page);
+    if (elements.length === 0) {
+      elements = await cdpFallback.capture(page);
+    }
+  }
 
   // Fallback: DOM-based synthetic extraction (rootSelector is honored here)
   if (elements.length === 0) {
     log.info("A11y tree empty, falling back to DOM-based synthetic snapshot");
     elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
-  } else if (options.rootSelector) {
-    // Note: rootSelector was requested but not applied to the CDP path
-    log.info("rootSelector is only applied in DOM fallback mode; CDP path captured full page");
   } else if (options.boxes) {
     // Boxes requested but CDP path doesn't support bounds extraction yet
     // Re-run with DOM fallback to get bounds
@@ -224,7 +274,7 @@ export async function snapshot(
  * Generate snapshot from CDP Accessibility.getFullAXTree.
  * Falls back to DOM if CDP is unavailable.
  */
-async function snapshotFromA11yTree(page: Page): Promise<A11yElement[]> {
+async function snapshotFromCdpA11yTree(page: Page): Promise<A11yElement[]> {
   let cdp: CDPSession | null = null;
   try {
     cdp = await page.context().newCDPSession(page);
@@ -281,6 +331,26 @@ async function snapshotFromA11yTree(page: Page): Promise<A11yElement[]> {
       // Session already closed
     }
   }
+}
+
+function parsePlaywrightAriaSnapshot(value: string): A11yElement[] {
+  const elements: A11yElement[] = [];
+  let refCounter = 0;
+  for (const line of value.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) continue;
+    const match = /^-\s+([a-zA-Z][\w-]*)(?:\s+"([^"]*)")?/u.exec(trimmed);
+    if (!match) continue;
+    const role = match[1]?.toLowerCase();
+    if (!role || (!INTERACTIVE_ROLES.has(role) && !STRUCTURAL_ROLES.has(role))) {
+      continue;
+    }
+    refCounter += 1;
+    const element: A11yElement = { ref: `e${refCounter}`, role };
+    if (match[2]) element.name = match[2];
+    elements.push(element);
+  }
+  return elements;
 }
 
 // ── CDP Accessibility Node Types ───────────────────────────────────

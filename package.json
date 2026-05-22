@@ -1,6 +1,6 @@
 {
 	"name": "@abdallahisdev/browser-control",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "Reusable browser workflow runtime for AI agents.",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -16,6 +16,8 @@
 	},
 	"files": [
 		"dist/",
+		"!dist/trading/**",
+		"!dist/skills/**",
 		"web/dist/**/*",
 		"cli.js",
 		"launch_browser.bat",

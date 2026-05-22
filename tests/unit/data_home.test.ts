@@ -245,6 +245,33 @@ test("data cleanup dry run only targets retention-safe temp files", () => {
 	}
 });
 
+test("data home report classifies trading as legacy non-core when present", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-legacy-"));
+	try {
+		ensureDataHomeAtPath(home);
+		fs.mkdirSync(path.join(home, "trading", "journals"), { recursive: true });
+		fs.writeFileSync(path.join(home, "trading", "journals", "keep.md"), "keep");
+
+		const report = inspectDataHome(home);
+
+		assert.ok(
+			report.legacyAliases.some((entry) =>
+				entry.legacy.endsWith(`${path.sep}trading`) &&
+				entry.present === true &&
+				entry.current.endsWith(path.join("legacy", "trading")),
+			),
+			"trading directory should be reported as legacy/non-core, not product surface",
+		);
+		assert.equal(
+			report.userEditable.some((entry) => entry.includes(`${path.sep}trading${path.sep}`)),
+			false,
+			"trading should not be listed as a normal user-editable product folder",
+		);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("data export writes a portable manifest under reports exports", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-export-"));
 	try {

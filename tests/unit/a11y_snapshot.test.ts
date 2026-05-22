@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { chromium } from "playwright";
 import type { Dialog, Page } from "playwright";
@@ -112,6 +114,18 @@ test("snapshot includes pending_dialogs when passed in options", async () => {
   } finally {
     await browser.close();
   }
+});
+
+test("snapshot implementation exposes Playwright adapter with explicit CDP fallback boundary", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../../src/a11y_snapshot.ts"),
+    "utf8",
+  );
+
+  assert.match(source, /class PlaywrightSnapshotAdapter/);
+  assert.match(source, /class ChromiumCdpSnapshotFallback/);
+  assert.match(source, /ariaSnapshot/);
+  assert.match(source, /Accessibility\.getFullAXTree/);
 });
 
 test("snapshot returns pending_dialogs without touching a blocked dialog page", async () => {

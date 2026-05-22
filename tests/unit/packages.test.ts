@@ -66,6 +66,35 @@ describe("Automation Packages - Hardened", () => {
       assert.ok(result.errors.some(e => e.includes("unknownKey")));
     });
 
+    it("accepts package trust metadata while still rejecting unknown keys", () => {
+      const packageDir = path.join(tmpDataHome, "trusted-package");
+      fs.mkdirSync(packageDir, { recursive: true });
+      const manifestPath = path.join(packageDir, "automation-package.json");
+      fs.writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          schemaVersion: "1",
+          name: "trusted-package",
+          version: "1.0.0",
+          description: "Signed package fixture",
+          browserControlVersion: "1.0.0",
+          permissions: [],
+          trust: {
+            signer: "local-reviewer",
+            digest: "sha256:abc123",
+            signature: "MEUCIQD",
+            reviewedAt: "2026-05-22T00:00:00.000Z",
+            reviewedBy: "security-reviewer",
+          },
+        }),
+      );
+
+      const result = validatePackageManifest(manifestPath, packageDir);
+
+      assert.strictEqual(result.valid, true, result.errors.join("; "));
+      assert.equal(result.manifest?.trust?.signer, "local-reviewer");
+    });
+
     it("enforces safeResolveRelativePath constraints", () => {
       const root = "/package/root";
       

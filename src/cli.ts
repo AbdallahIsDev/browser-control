@@ -595,6 +595,10 @@ Automation Packages (Section 30):
   package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
   package run <name> <workflow> [--json]                             Run a package workflow
   package eval <name> [--json]                                       Evaluate a package
+  package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
+  package review-history <name> [--json]                             Show package trust review history
+  package eval-history [name] [--json]                               Show package evaluation history
+  package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature
 
 Browser Actions:
   open <url>                                                         Open a URL in the browser
@@ -3081,10 +3085,21 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			break;
 		}
 
+		case "tab": {
+			const tabArgs: ParsedArgs = {
+				...args,
+				command: "tab",
+				subcommand: positional[0],
+				positional: positional.slice(1),
+			};
+			await handleBrowserAction("tab", tabArgs);
+			break;
+		}
+
 		default:
 			console.error(`Unknown browser command: ${subcommand}`);
 			console.error(
-				"Available: attach, launch, status, profile, auth, highlight, state, act, task, open-many, navigate, capture, capture-many",
+				"Available: attach, launch, status, profile, auth, highlight, state, act, task, tab, open-many, navigate, capture, capture-many",
 			);
 			throw new CliError('Command failed');
 	}
@@ -5133,10 +5148,85 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 				break;
 			}
+			case "review": {
+				const name = positional[0];
+				const status = positional[1] as
+					| "unreviewed"
+					| "pending"
+					| "approved"
+					| "rejected"
+					| undefined;
+				if (
+					!name ||
+					!status ||
+					!["unreviewed", "pending", "approved", "rejected"].includes(status)
+				) {
+					console.error(
+						"Error: package name and review status are required",
+					);
+					throw new CliError('Command failed');
+				}
+				const result = bc.package.review(
+					name,
+					status,
+					flags.by ?? "cli-user",
+					flags.reason,
+				);
+				outputJson(result, !jsonOutput);
+				break;
+			}
+			case "review-history": {
+				const name = positional[0];
+				if (!name) {
+					console.error("Error: package name is required");
+					throw new CliError('Command failed');
+				}
+				const result = bc.package.reviewHistory(name);
+				outputJson(result, !jsonOutput);
+				break;
+			}
+			case "eval-history": {
+				const result = bc.package.evalHistory(positional[0]);
+				outputJson(result, !jsonOutput);
+				break;
+			}
+			case "sign": {
+				const source = positional[0];
+				if (!source) {
+					console.error("Error: package source path is required");
+					throw new CliError('Command failed');
+				}
+				const { computePackageDigest } = await import("./packages/manifest");
+				const digestResult = computePackageDigest(source);
+				let signature: string | undefined;
+				if (flags["private-key"]) {
+					const crypto = await import("node:crypto");
+					const privateKeyPem = fs.readFileSync(flags["private-key"], "utf8");
+					const signer = crypto.createSign("SHA256");
+					signer.update(digestResult.digest);
+					signer.end();
+					signature = signer.sign(privateKeyPem, "base64");
+				}
+				outputJson(
+					{
+						success: true,
+						data: {
+							signer: flags.signer,
+							digest: digestResult.digest,
+							signature,
+							files: digestResult.files,
+							fileCount: digestResult.fileCount,
+							totalBytes: digestResult.totalBytes,
+						},
+					},
+					!jsonOutput,
+				);
+				break;
+			}
 			default:
 				console.error(`Unknown package command: ${subcommand}`);
 				console.error(
-					"Available: install, list, info, remove, update, grant, run, eval",
+					"Available: install, list, info, remove, update, grant, run, eval, review, review-history, eval-history, sign",
 				);
 				throw new CliError('Command failed');
 		}

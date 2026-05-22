@@ -81,6 +81,7 @@ const TARGET_DIRS = [
 	"packages",
 	"packages/installed",
 	"packages/evals",
+	"packages/drafts",
 	"policy",
 	"policy/approvals",
 	"policy/profiles",
@@ -93,13 +94,7 @@ const TARGET_DIRS = [
 	"runtime/locks",
 	"secrets",
 	"state",
-	"trading/journals",
-	"trading/trade-plans",
-	"trading/orders",
-	"trading/positions",
-	"trading/supervisor-jobs",
-	"trading/risk-snapshots",
-	"trading/evidence",
+	"legacy",
 	"workflows/definitions",
 	"workflows/runs",
 	"workflows/approvals",
@@ -110,7 +105,6 @@ const USER_EDITABLE = [
 	"workflows/definitions",
 	"helpers",
 	"packages/installed",
-	"trading/journals",
 	"reports/exports",
 	"config/preferences.json",
 ];
@@ -205,6 +199,12 @@ export function inspectDataHome(home = getDataHome()): DataHomeReport {
 			current: getHelpersDir(home),
 			present: fs.existsSync(path.join(home, "automation-helpers")),
 			aliased: fs.existsSync(getAutomationHelpersRegistryPath(home)),
+		},
+		{
+			legacy: path.join(home, "trading"),
+			current: path.join(home, "legacy", "trading"),
+			present: fs.existsSync(path.join(home, "trading")),
+			aliased: fs.existsSync(path.join(home, "legacy", "trading")),
 		},
 	];
 
@@ -308,7 +308,7 @@ export function exportDataHome(
 		"workflows/definitions",
 		"helpers/registry.json",
 		"packages/registry.json",
-		"trading/journals",
+		"legacy/trading/journals",
 	]) {
 		filesCopied += safeCopyIfExists(home, exportDir, rel);
 	}

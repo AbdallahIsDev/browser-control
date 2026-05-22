@@ -464,6 +464,60 @@
           ],
           "jsonSupport": true,
           "syntax": "package eval <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "review",
+            "Record"
+          ],
+          "description": "",
+          "flags": [
+            "by",
+            "json",
+            "reason"
+          ],
+          "jsonSupport": true,
+          "syntax": "package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review"
+        },
+        {
+          "commandPath": [
+            "package",
+            "review-history"
+          ],
+          "description": "Show package trust review history",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package review-history <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "eval-history"
+          ],
+          "description": "Show package evaluation history",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package eval-history [name] [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "sign",
+            "Compute"
+          ],
+          "description": "",
+          "flags": [
+            "json",
+            "private-key",
+            "signer"
+          ],
+          "jsonSupport": true,
+          "syntax": "package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature"
         }
       ],
       "section": "Automation Packages (Section 30)"

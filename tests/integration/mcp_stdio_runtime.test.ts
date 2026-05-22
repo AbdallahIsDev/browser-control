@@ -8,6 +8,7 @@
 
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
+import net from "node:net";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 
@@ -165,6 +166,22 @@ async function killChildAndWait(
 	// Close stdio pipes to release event loop handles
 	proc.stdout?.destroy();
 	proc.stderr?.destroy();
+}
+
+function getFreePort(): Promise<number> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => {
+			const address = server.address();
+			if (!address || typeof address === "string") {
+				server.close(() => reject(new Error("Could not allocate test port")));
+				return;
+			}
+			const port = address.port;
+			server.close(() => resolve(port));
+		});
+	});
 }
 
 beforeEach(async () => {
@@ -349,6 +366,7 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 	const os = await import("node:os");
 	const fs = await import("node:fs");
 	const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-mcp-flow-"));
+	const brokerPort = await getFreePort();
 
 	// Kill the beforeEach-spawned child before spawning our own
 	if (child && !child.killed) {
@@ -368,6 +386,7 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 				BROWSER_CONTROL_HOME: isolatedHome,
 				BROWSER_CONTROL_STDIO_MODE: "mcp",
 				BROWSER_AUTO_LAUNCH: "true",
+				BROKER_PORT: String(brokerPort),
 			},
 			stdio: ["pipe", "pipe", "pipe"],
 		});
@@ -426,11 +445,12 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 		const openParsed = JSON.parse(openText.text);
 		assert.ok(openParsed.success, "open ActionResult should succeed");
 		assert.ok(openParsed.data?.title, "open should return page title");
+		assert.ok(openParsed.data?.tabId, "open should return tab id");
 
 		// Step 3: Snapshot
 		const snapId = sendRequest("tools/call", {
 			name: "bc_browser_snapshot",
-			arguments: {},
+			arguments: { tabId: openParsed.data.tabId },
 		});
 		const snapResp = await waitForResponse(snapId, 30000);
 		assert.equal(snapResp.error, undefined, "snapshot should not error");

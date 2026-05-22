@@ -159,7 +159,7 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 | **Service** | `bc_service_list`, `bc_service_resolve` |
 | **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel`, `events`, `edit_state` |
 | **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback`, `generate`, `execute` |
-| **Packages** | `bc_package_list`, `info`, `run`, `eval`, `grant` |
+| **Packages** | `bc_package_install`, `list`, `info`, `update`, `remove`, `run`, `eval`, `grant`, `review`, `review_history`, `eval_history` |
 
 Full tool reference: [docs/mcp.md](docs/mcp.md)
 
@@ -252,7 +252,7 @@ bc web open               # Internal loopback operator UI
 npm run desktop:dev       # Experimental Electron wrapper
 ```
 
-Future dashboard direction is package-first: Package Library, Run Automation Package, Create Package from Successful Run, Run History, Evidence Viewer, Repair Failed Package, Permissions/Risk Review, and tool-call/time/token savings.
+Dashboard direction is package-first: Package Library, Run Automation Package, Create Package from Successful Run, Run History, Evidence Viewer, Repair Failed Package, Permissions/Risk Review, and tool-call/time/token savings. Dashboard/Desktop remain experimental operator surfaces.
 
 <br/>
 

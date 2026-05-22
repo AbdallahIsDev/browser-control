@@ -47,6 +47,14 @@ const PermissionSchema = z.discriminatedUnion("kind", [
   }).strict(),
 ]);
 
+const TrustSchema = z.object({
+  signer: z.string().optional(),
+  digest: z.string().optional(),
+  signature: z.string().optional(),
+  reviewedAt: z.string().optional(),
+  reviewedBy: z.string().optional(),
+}).strict();
+
 const ManifestSchema = z.object({
   schemaVersion: z.literal("1"),
   name: PackageNameSchema,
@@ -65,6 +73,7 @@ const ManifestSchema = z.object({
     license: z.string().optional(),
     homepage: z.string().optional(),
   }).optional(),
+  trust: TrustSchema.optional(),
 }).strict();
 
 const EvalDefinitionSchema = z.object({

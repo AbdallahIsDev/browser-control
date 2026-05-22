@@ -29,24 +29,27 @@ Sensitive values are redacted in config output.
 
 ```text
 ~/.browser-control/
+  automations/
+  browser/downloads/
+  browser/profiles/
   config/config.json
-  memory.sqlite
-  reports/
+  evidence/
+  helpers/
+  interop/
   logs/
-  .interop/chrome-debug.json
-  .interop/daemon.pid
-  .interop/daemon-status.json
-  profiles/
-  policy-profiles/
-  knowledge/
-  services/registry.json
-  providers/registry.json
-  debug-bundles/
-  observability/
-  skills/
+  memory/
+  packages/installed/
+  packages/drafts/
+  policy/
+  reports/
+  runtime/
+  secrets/
+  state/
+  workflows/
+  legacy/
 ```
 
-`debug-bundles/` and `observability/` are created when debug bundle or observability features are used.
+Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run by default and only targets retention-safe runtime temp files. Older non-core folders such as `trading/` are reported as legacy/non-core when present; Browser Control does not delete or move user data without an explicit cleanup command.
 
 ## Main Config Keys
 
