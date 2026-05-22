@@ -5,7 +5,7 @@
  *   import { connectBrowser, smartClick, Daemon, ... } from "browser-control";
  */
 
-// Browser core — connection, actions, stealth
+// Browser core — connection and browser workflow primitives.
 export {
   connectBrowser,
   createAutomationContext,
@@ -115,10 +115,6 @@ export type {
 export { SkillRegistry, validateManifest } from "./skill_registry";
 export { SkillMemoryStore } from "./skill_memory";
 
-// Built-in skills
-export { publishSite, openCmsCollection, setResponsiveBreakpoint, openLayerPanel, openStylePanel } from "./skills/framer_skill";
-export type { FramerSkillResult } from "./skills/framer_skill";
-
 // Daemon
 export { Daemon } from "./runtime/daemon";
 export type {
@@ -132,20 +128,6 @@ export type {
 // Scheduler
 export { Scheduler } from "./runtime/scheduler";
 export type { ScheduledTask } from "./runtime/scheduler";
-
-// Proxy management
-export {
-  ProxyManager,
-  loadProxyConfigs,
-  toPlaywrightProxySettings,
-} from "./proxy_manager";
-export type { ProxyConfig } from "./proxy_manager";
-
-// Captcha solving
-export { CaptchaSolver } from "./captcha_solver";
-
-// Stealth
-export { createStealthContext } from "./stealth";
 
 // Network interception
 export {
@@ -901,7 +883,6 @@ export type {
   DebugNamespace,
 } from "./browser_control";
 
-// Product data home, benchmarks, and trading supervisor foundations.
+// Product data home and package/runtime benchmarks.
 export * from "./data_home";
 export * from "./benchmarks/runner";
-export * from "./trading";

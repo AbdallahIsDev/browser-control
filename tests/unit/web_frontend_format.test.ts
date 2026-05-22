@@ -134,6 +134,7 @@ test("home view is package-first, not generic prompt-first UI", () => {
 	// Old developer elements must not exist
 	assert.doesNotMatch(source, /What should your agent do\?/);
 	assert.doesNotMatch(source, /Submit Intent/);
+	assert.doesNotMatch(source, /\/api\/tasks/);
 	assert.doesNotMatch(source, /System Load/);
 	assert.doesNotMatch(source, /CDP Bridge/);
 });

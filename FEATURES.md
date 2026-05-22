@@ -149,14 +149,14 @@ Allow/deny/tracker profiles, built-in tracker list, blocked-request tracking, do
 ### Automation Packages
 Status: Implemented local packages.
 
-Local package install/list/info/update/remove/grant/run/eval, manifest validation, permission model, trust review/history, eval history, package runner, bundled TradingView ICT sample package.
+Local package install/list/info/update/remove/grant/run/eval/review/history/sign, manifest validation, permission model, trust review/history, eval history, package runner, and recording-to-package draft materialization.
 
 This is the strategic center of the product. Every feature should support package creation, execution, repair, or evidence.
 
 ### Package Trust & Signing Primitives
 Status: Partial.
 
-Trust review and package risk/permission review exist. Hash/signature-related primitives and docs exist in places, but end-to-end package signing CLI/workflow is planned. Marketplace comes after package quality.
+Trust review and package risk/permission review exist. Manifests accept `trust` metadata, package digests can be computed, and `bc package sign` can produce a local digest/signature. Marketplace comes after package quality.
 
 ### Action Recorder
 Status: Implemented baseline.
@@ -188,7 +188,7 @@ Known limits: current dirty worktree has CLI lifecycle fixes and some full relea
 ### TypeScript API
 Status: Implemented.
 
-`createBrowserControl()` exposes namespaces: `browser`, `terminal`, `fs`, `session`, `service`, `provider`, `debug`, `config`, `dashboard`, `workflow`, `harness`, `package`, `benchmark`, `state`, plus status and cleanup helpers. Public exports cover browser, policy, terminal, filesystem, services, providers, workflows, packages, observability, knowledge, security, benchmarks, and trading modules.
+`createBrowserControl()` exposes namespaces: `browser`, `terminal`, `fs`, `session`, `service`, `provider`, `debug`, `config`, `dashboard`, `workflow`, `harness`, `package`, `benchmark`, `state`, plus status and cleanup helpers. Public exports cover browser workflow runtime, policy, terminal/filesystem support, services, providers, workflows, packages, observability, knowledge, security, and benchmarks. High-risk/non-core helper modules such as trading, CAPTCHA, stealth, proxy internals, and one-off site skills are internal/experimental and are not public product API.
 
 ### Web Dashboard (Experimental / Internal)
 Status: Partial, hidden from production positioning.
@@ -415,7 +415,7 @@ Snapshot diff and formatted summaries exist; signature/codegen-style enhancement
 | Feature | Current Status | Notes |
 |---------|----------------|-------|
 | Automation Marketplace (Strategic Future) | Planned | Comes after package quality. Near-term: package manifest clarity, creation flow, eval, trust review, examples, run history. Remote registry/selling/discovery/publishing come later. |
-| Package Signing CLI | Planned | Local packages/trust review exist; end-to-end `bc package sign` workflow does not. |
+| Package Signing CLI | Active | `bc package sign` computes package digests and can sign with a local private key. Trust review remains local; marketplace trust is later. |
 | SSRF/Internal Network Protection | Planned | Network rules exist; browser navigation/outbound SSRF protection for private networks/metadata endpoints is not complete. |
 | Device Emulation | Planned | Viewport config exists; full mobile presets/geolocation/offline/headers/device profiles are not implemented. |
 | Playwright Trace Recording | Planned | Screencast/debug receipts exist; Playwright trace `.zip` viewer integration does not. |

@@ -421,6 +421,7 @@ export class BrowserActions {
 	private readonly downloadPages = new WeakSet<Page>();
 	private readonly downloadContexts = new WeakSet<BrowserContext>();
 	private readonly downloadRegistry: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
+	private readonly trackedPages = new WeakSet<Page>();
 
 	constructor(context: BrowserActionContext) {
 		this.context = context;
@@ -520,10 +521,22 @@ export class BrowserActions {
 	}
 
 	private trackContextPages(context: BrowserContext, pages = context.pages()): void {
-		for (const page of pages) this.trackPageDownloads(page);
+		for (const page of pages) this.trackPageLifecycle(page);
 		if (this.downloadContexts.has(context) || typeof (context as unknown as { on?: unknown }).on !== "function") return;
-		context.on("page", (page) => this.trackPageDownloads(page));
+		context.on("page", (page) => this.trackPageLifecycle(page));
 		this.downloadContexts.add(context);
+	}
+
+	private trackPageLifecycle(page: Page): void {
+		this.trackPageDownloads(page);
+		if (this.trackedPages.has(page) || typeof (page as unknown as { on?: unknown }).on !== "function") return;
+		page.on("close", () => {
+			for (const [tabId, mappedPage] of this.tabIdMap.entries()) {
+				if (mappedPage === page) this.tabIdMap.delete(tabId);
+			}
+			this.trackedPages.delete(page);
+		});
+		this.trackedPages.add(page);
 	}
 
 	private trackPageDownloads(page: Page): void {

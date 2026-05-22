@@ -5,59 +5,106 @@ import {
 	RotateCcw,
 	ShieldCheck,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "../api";
 
 const SUGGESTIONS = [
 	{
 		label: "Run Automation Package",
-		prompt:
-			"Run the Automation Package named [package-name] with these inputs: ",
+		action: "run-package",
 	},
 	{
 		label: "Create Package from Successful Run",
-		prompt:
-			"Capture the successful browser workflow at [URL] as an Automation Package draft.",
+		action: "create-draft",
 	},
 	{
 		label: "Repair Failed Package",
-		prompt:
-			"Repair the failed Automation Package run [run-id] using latest evidence.",
+		action: "repair-package",
 	},
 	{
 		label: "Open Evidence Report",
-		prompt:
-			"Open the evidence and report output for Automation Package run [run-id].",
+		action: "open-evidence",
 	},
 	{
 		label: "Review Permissions",
-		prompt:
-			"Review permissions and risk for Automation Package [package-name].",
+		action: "review-permissions",
 	},
-];
+] as const;
+
+type PackageAction = (typeof SUGGESTIONS)[number]["action"];
 
 export function CommandView() {
-	const [prompt, setPrompt] = useState("");
+	const [action, setAction] = useState<PackageAction>("run-package");
+	const [packageName, setPackageName] = useState("");
+	const [workflow, setWorkflow] = useState("main");
+	const [recordingId, setRecordingId] = useState("");
+	const [runId, setRunId] = useState("");
+	const [reviewStatus, setReviewStatus] = useState("pending");
+	const [notes, setNotes] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitError, setSubmitError] = useState("");
 	const [submitMessage, setSubmitMessage] = useState("");
-	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
 	const handleRun = async () => {
-		if (!prompt.trim() || isSubmitting) return;
+		if (isSubmitting) return;
 		setIsSubmitting(true);
 		setSubmitError("");
 		setSubmitMessage("");
 		try {
-			await apiFetch("/api/tasks", {
-				method: "POST",
-				body: JSON.stringify({ prompt, action: prompt.slice(0, 48) }),
-			});
-			setPrompt("");
-			setSubmitMessage("Task submitted.");
+			if (action === "run-package") {
+				if (!packageName.trim() || !workflow.trim()) {
+					throw new Error("Package name and workflow are required.");
+				}
+				await apiFetch(`/api/packages/${encodeURIComponent(packageName)}/run`, {
+					method: "POST",
+					body: JSON.stringify({ workflow }),
+				});
+				setSubmitMessage("Package run started.");
+			} else if (action === "create-draft") {
+				if (!recordingId.trim()) {
+					throw new Error("Recording id is required.");
+				}
+				await apiFetch(
+					`/api/recordings/${encodeURIComponent(recordingId)}/materialize`,
+					{
+						method: "POST",
+						body: JSON.stringify({ install: true, overwrite: true }),
+					},
+				);
+				setSubmitMessage("Package draft saved and installed.");
+			} else if (action === "review-permissions") {
+				if (!packageName.trim()) {
+					throw new Error("Package name is required.");
+				}
+				await apiFetch(`/api/packages/${encodeURIComponent(packageName)}/review`, {
+					method: "POST",
+					body: JSON.stringify({
+						status: reviewStatus,
+						reviewedBy: "web-user",
+						reason: notes,
+					}),
+				});
+				setSubmitMessage("Package review recorded.");
+			} else if (action === "open-evidence") {
+				if (!runId.trim()) throw new Error("Run id is required.");
+				window.location.hash = `#evidence:${encodeURIComponent(runId)}`;
+				setSubmitMessage("Evidence view selected.");
+			} else {
+				if (!runId.trim()) throw new Error("Run id is required.");
+				setSubmitMessage("Repair workspace recorded. Use evidence view to patch and re-evaluate package.");
+			}
 		} catch (err: unknown) {
 			setSubmitError(err instanceof Error ? err.message : String(err));
 		} finally {
@@ -72,10 +119,17 @@ export function CommandView() {
 		}
 	};
 
-	const handleSuggestion = (suggestionPrompt: string) => {
-		setPrompt(suggestionPrompt);
-		textareaRef.current?.focus();
+	const handleSuggestion = (nextAction: PackageAction) => {
+		setAction(nextAction);
 	};
+
+	const canSubmit = Boolean(
+		(action === "run-package" && packageName.trim() && workflow.trim()) ||
+		(action === "create-draft" && recordingId.trim()) ||
+		(action === "review-permissions" && packageName.trim()) ||
+			((action === "open-evidence" || action === "repair-package") &&
+				runId.trim()),
+	);
 
 	return (
 		<PageShell className="min-h-[70vh]">
@@ -127,9 +181,9 @@ export function CommandView() {
 						<Button
 							key={s.label}
 							type="button"
-							variant="outline"
+							variant={action === s.action ? "default" : "outline"}
 							size="sm"
-							onClick={() => handleSuggestion(s.prompt)}
+							onClick={() => handleSuggestion(s.action)}
 							className="h-9 px-4 rounded text-xs font-medium text-muted-foreground bg-background hover:bg-muted/50 border-border/75!"
 						>
 							{s.label}
@@ -137,16 +191,102 @@ export function CommandView() {
 					))}
 				</div>
 
-				{/* Package command composer */}
+				{/* Package action composer */}
 				<div className="w-full relative border border-border/50 rounded shadow-sm bg-card">
-					<Textarea
-						ref={textareaRef}
-						placeholder="Run a package, create a package draft from a successful browser workflow, repair a failed package, or open evidence..."
-						value={prompt}
-						onChange={(e) => setPrompt(e.target.value)}
-						onKeyDown={handleKeyDown}
-						className="min-h-[140px] md:min-h-[160px] text-[15px] leading-relaxed resize-none bg-transparent! border-0 p-4 focus-visible:ring-0 placeholder:text-muted-foreground/60"
-					/>
+					<div className="grid gap-4 p-4 md:grid-cols-2">
+						<div className="space-y-2">
+							<Label>Action</Label>
+							<Select
+								value={action}
+								onValueChange={(value) => setAction(value as PackageAction)}
+							>
+								<SelectTrigger className="w-full">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{SUGGESTIONS.map((item) => (
+										<SelectItem key={item.action} value={item.action}>
+											{item.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						{action === "run-package" || action === "review-permissions" ? (
+							<div className="space-y-2">
+								<Label>Package</Label>
+								<Input
+									value={packageName}
+									onChange={(e) => setPackageName(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="package-name"
+								/>
+							</div>
+						) : null}
+						{action === "run-package" ? (
+							<div className="space-y-2">
+								<Label>Workflow</Label>
+								<Input
+									value={workflow}
+									onChange={(e) => setWorkflow(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="workflow id or name"
+								/>
+							</div>
+						) : null}
+						{action === "create-draft" ? (
+							<div className="space-y-2">
+								<Label>Recording id</Label>
+								<Input
+									value={recordingId}
+									onChange={(e) => setRecordingId(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="rec-..."
+								/>
+							</div>
+						) : null}
+						{action === "repair-package" || action === "open-evidence" ? (
+							<div className="space-y-2">
+								<Label>Run id</Label>
+								<Input
+									value={runId}
+									onChange={(e) => setRunId(e.target.value)}
+									onKeyDown={handleKeyDown}
+									placeholder="run id"
+								/>
+							</div>
+						) : null}
+						{action === "review-permissions" ? (
+							<div className="space-y-2">
+								<Label>Review status</Label>
+								<Select
+									value={reviewStatus}
+									onValueChange={(value) => {
+										if (value) setReviewStatus(value);
+									}}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="pending">Pending</SelectItem>
+										<SelectItem value="approved">Approved</SelectItem>
+										<SelectItem value="rejected">Rejected</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						) : null}
+						<div className="space-y-2 md:col-span-2">
+							<Label>Notes</Label>
+							<Textarea
+								placeholder="Inputs, evidence notes, repair notes, or permission review reason"
+								value={notes}
+								onChange={(e) => setNotes(e.target.value)}
+								onKeyDown={handleKeyDown}
+								className="min-h-[92px] resize-none bg-transparent!"
+							/>
+						</div>
+					</div>
 
 					{/* Action row */}
 					<div className="flex items-center justify-between p-2 gap-2">
@@ -163,10 +303,10 @@ export function CommandView() {
 
 						<Button
 							onClick={handleRun}
-							disabled={!prompt.trim() || isSubmitting}
+							disabled={!canSubmit || isSubmitting}
 							size="icon"
 							className="h-8 w-8"
-							aria-label="Run task"
+							aria-label="Run package action"
 						>
 							<ArrowRight size={16} />
 						</Button>

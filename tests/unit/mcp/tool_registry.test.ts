@@ -108,6 +108,23 @@ describe("MCP Tool Registry", () => {
       // Debug tools
       assert.ok(names.includes("bc_debug_health"));
 
+      // Package tools
+      for (const toolName of [
+        "bc_package_install",
+        "bc_package_list",
+        "bc_package_info",
+        "bc_package_remove",
+        "bc_package_update",
+        "bc_package_grant",
+        "bc_package_run",
+        "bc_package_eval",
+        "bc_package_review",
+        "bc_package_review_history",
+        "bc_package_eval_history",
+      ]) {
+        assert.ok(names.includes(toolName), `${toolName} missing`);
+      }
+
       // Service tools (Section 14)
       assert.ok(names.includes("bc_service_list"));
       assert.ok(names.includes("bc_service_resolve"));

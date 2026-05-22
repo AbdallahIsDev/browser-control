@@ -251,13 +251,6 @@
     },
     {
       "declarations": [
-        "src/trading/broker_adapter.ts"
-      ],
-      "kind": "type",
-      "name": "AccountRisk"
-    },
-    {
-      "declarations": [
         "src/skill.ts"
       ],
       "kind": "type",
@@ -304,13 +297,6 @@
       ],
       "kind": "type+value",
       "name": "AIAgent"
-    },
-    {
-      "declarations": [
-        "src/trading/tradingview_adapter.ts"
-      ],
-      "kind": "type+value",
-      "name": "AnalysisOnlyTradingViewAdapter"
     },
     {
       "declarations": [
@@ -409,13 +395,6 @@
       ],
       "kind": "value",
       "name": "blockResource"
-    },
-    {
-      "declarations": [
-        "src/trading/broker_adapter.ts"
-      ],
-      "kind": "type",
-      "name": "BrokerAdapter"
     },
     {
       "declarations": [
@@ -650,13 +629,6 @@
     },
     {
       "declarations": [
-        "src/captcha_solver.ts"
-      ],
-      "kind": "type+value",
-      "name": "CaptchaSolver"
-    },
-    {
-      "declarations": [
         "src/terminal/snapshot.ts"
       ],
       "kind": "value",
@@ -675,13 +647,6 @@
       ],
       "kind": "value",
       "name": "captureSessionSnapshot"
-    },
-    {
-      "declarations": [
-        "src/trading/tradingview_adapter.ts"
-      ],
-      "kind": "type",
-      "name": "ChartState"
     },
     {
       "declarations": [
@@ -923,24 +888,10 @@
     },
     {
       "declarations": [
-        "src/trading/order_ticket.ts"
-      ],
-      "kind": "value",
-      "name": "createOrderTicket"
-    },
-    {
-      "declarations": [
         "src/security/proof_of_work.ts"
       ],
       "kind": "value",
       "name": "createProofOfWorkChallenge"
-    },
-    {
-      "declarations": [
-        "src/stealth.ts"
-      ],
-      "kind": "value",
-      "name": "createStealthContext"
     },
     {
       "declarations": [
@@ -1480,13 +1431,6 @@
       ],
       "kind": "value",
       "name": "formatSnapshotCollection"
-    },
-    {
-      "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "type",
-      "name": "FramerSkillResult"
     },
     {
       "declarations": [
@@ -2379,13 +2323,6 @@
     },
     {
       "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "LiveApproval"
-    },
-    {
-      "declarations": [
         "src/knowledge/store.ts"
       ],
       "kind": "value",
@@ -2418,13 +2355,6 @@
       ],
       "kind": "value",
       "name": "loadPersistedState"
-    },
-    {
-      "declarations": [
-        "src/proxy_manager.ts"
-      ],
-      "kind": "value",
-      "name": "loadProxyConfigs"
     },
     {
       "declarations": [
@@ -2526,31 +2456,10 @@
     },
     {
       "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "ManagedTrade"
-    },
-    {
-      "declarations": [
         "src/skill.ts"
       ],
       "kind": "type",
       "name": "ManifestValidationResult"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "MarketAnalysis"
-    },
-    {
-      "declarations": [
-        "src/trading/tradingview_adapter.ts"
-      ],
-      "kind": "type",
-      "name": "MarketAnalysisAdapter"
     },
     {
       "declarations": [
@@ -2638,20 +2547,6 @@
     },
     {
       "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "value",
-      "name": "openCmsCollection"
-    },
-    {
-      "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "value",
-      "name": "openLayerPanel"
-    },
-    {
-      "declarations": [
         "src/browser/actions.ts"
       ],
       "kind": "type",
@@ -2659,38 +2554,10 @@
     },
     {
       "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "OpenPosition"
-    },
-    {
-      "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "value",
-      "name": "openStylePanel"
-    },
-    {
-      "declarations": [
         "src/web/server.ts"
       ],
       "kind": "value",
       "name": "openUrlInDefaultBrowser"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "OrderTicket"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "OrderType"
     },
     {
       "declarations": [
@@ -2754,13 +2621,6 @@
       ],
       "kind": "type+value",
       "name": "PackageRunner"
-    },
-    {
-      "declarations": [
-        "src/trading/broker_adapter.ts"
-      ],
-      "kind": "type+value",
-      "name": "PaperBrokerAdapter"
     },
     {
       "declarations": [
@@ -2859,13 +2719,6 @@
       ],
       "kind": "type",
       "name": "PolicyTaskIntent"
-    },
-    {
-      "declarations": [
-        "src/trading/position_store.ts"
-      ],
-      "kind": "type+value",
-      "name": "PositionStore"
     },
     {
       "declarations": [
@@ -3044,20 +2897,6 @@
     },
     {
       "declarations": [
-        "src/proxy_manager.ts"
-      ],
-      "kind": "type",
-      "name": "ProxyConfig"
-    },
-    {
-      "declarations": [
-        "src/proxy_manager.ts"
-      ],
-      "kind": "type+value",
-      "name": "ProxyManager"
-    },
-    {
-      "declarations": [
         "src/knowledge/store.ts"
       ],
       "kind": "value",
@@ -3069,13 +2908,6 @@
       ],
       "kind": "value",
       "name": "pruneDebugBundles"
-    },
-    {
-      "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "value",
-      "name": "publishSite"
     },
     {
       "declarations": [
@@ -3240,13 +3072,6 @@
     },
     {
       "declarations": [
-        "src/trading/policy.ts"
-      ],
-      "kind": "value",
-      "name": "requiresLiveOrderApproval"
-    },
-    {
-      "declarations": [
         "src/session_manager.ts"
       ],
       "kind": "value",
@@ -3391,20 +3216,6 @@
       ],
       "kind": "type",
       "name": "RetrySummary"
-    },
-    {
-      "declarations": [
-        "src/trading/risk_engine.ts"
-      ],
-      "kind": "type",
-      "name": "RiskDecision"
-    },
-    {
-      "declarations": [
-        "src/trading/risk_engine.ts"
-      ],
-      "kind": "type+value",
-      "name": "RiskEngine"
     },
     {
       "declarations": [
@@ -3709,13 +3520,6 @@
     },
     {
       "declarations": [
-        "src/skills/framer_skill.ts"
-      ],
-      "kind": "value",
-      "name": "setResponsiveBreakpoint"
-    },
-    {
-      "declarations": [
         "src/operator/types.ts"
       ],
       "kind": "type",
@@ -3874,13 +3678,6 @@
       ],
       "kind": "value",
       "name": "successResult"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "SupervisorDecision"
     },
     {
       "declarations": [
@@ -4129,69 +3926,6 @@
     },
     {
       "declarations": [
-        "src/proxy_manager.ts"
-      ],
-      "kind": "value",
-      "name": "toPlaywrightProxySettings"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "TradeMode"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "TradePlan"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "TradeSide"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "TradeStatus"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_supervisor.ts"
-      ],
-      "kind": "type+value",
-      "name": "TradeSupervisor"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_supervisor.ts"
-      ],
-      "kind": "type",
-      "name": "TradeSupervisorOptions"
-    },
-    {
-      "declarations": [
-        "src/trading/trade_plan.ts"
-      ],
-      "kind": "type",
-      "name": "TradeTarget"
-    },
-    {
-      "declarations": [
-        "src/trading/policy.ts"
-      ],
-      "kind": "type",
-      "name": "TradingPolicyDecision"
-    },
-    {
-      "declarations": [
         "src/policy/profiles.ts"
       ],
       "kind": "value",
@@ -4294,13 +4028,6 @@
       ],
       "kind": "value",
       "name": "validateManifest"
-    },
-    {
-      "declarations": [
-        "src/trading/policy.ts"
-      ],
-      "kind": "value",
-      "name": "validateOrderTicket"
     },
     {
       "declarations": [
@@ -4476,13 +4203,6 @@
       ],
       "kind": "type",
       "name": "WriteFileOptions"
-    },
-    {
-      "declarations": [
-        "src/trading/journal.ts"
-      ],
-      "kind": "value",
-      "name": "writeTradeJournalEntry"
     }
   ],
   "source": "src/index.ts"

@@ -1311,6 +1311,46 @@ export function createWebAppServer(
 			return;
 		}
 
+		const recordingMaterializeMatch =
+			/^\/api\/recordings\/([^/]+)\/materialize$/u.exec(pathname);
+		if (request.method === "POST" && recordingMaterializeMatch) {
+			const id = decodeURIComponent(recordingMaterializeMatch[1] ?? "");
+			const body = await readJsonBody(request);
+			const { convertRecordingToPackage, getRecorder } = await import(
+				"../observability/recorder"
+			);
+			const { materializePackageDraft } = await import("../packages/materialize");
+			const session = getRecorder().getSession(id);
+			if (!session) {
+				json(response, 404, {
+					success: false,
+					error: `Recording not found: ${id}`,
+				});
+				return;
+			}
+			try {
+				const materialized = materializePackageDraft(
+					convertRecordingToPackage(session),
+					{ overwrite: body.overwrite === true },
+				);
+				const install =
+					body.install === true
+						? await api.package.install(materialized.packageDir)
+						: undefined;
+				json(response, install && !install.success ? 403 : 200, {
+					success: install ? install.success : true,
+					data: { materialized, installedPackage: install?.data },
+					...(install?.error ? { error: install.error } : {}),
+				});
+			} catch (error) {
+				json(response, 400, {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+			return;
+		}
+
 		const configKeyMatch = /^\/api\/config\/([^/]+)$/u.exec(pathname);
 		if (request.method === "GET" && configKeyMatch) {
 			const key = decodeURIComponent(configKeyMatch[1] ?? "");
@@ -1731,6 +1771,24 @@ export function createWebAppServer(
 		if (request.method === "GET" && pathname === "/api/packages") {
 			const result = api.package.list();
 			json(response, result.success ? 200 : 403, result.data ?? []);
+			return;
+		}
+
+		if (request.method === "POST" && pathname === "/api/packages/install") {
+			const body = await readJsonBody(request);
+			const source = asString(body.source, "source");
+			const result = await api.package.install(source);
+			json(response, result.success ? 200 : 403, result);
+			return;
+		}
+
+		const packageRunMatch = /^\/api\/packages\/([^/]+)\/run$/u.exec(pathname);
+		if (request.method === "POST" && packageRunMatch) {
+			const name = decodeURIComponent(packageRunMatch[1] ?? "");
+			const body = await readJsonBody(request);
+			const workflow = asString(body.workflow, "workflow");
+			const result = await api.package.run(name, workflow);
+			json(response, result.success ? 200 : 403, result);
 			return;
 		}
 
