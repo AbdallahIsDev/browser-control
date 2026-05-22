@@ -208,7 +208,7 @@ export function TradingView() {
 			<div className="space-y-4 md:space-y-6">
 				<div className="mb-2">
 					<h2 className="text-lg font-semibold tracking-tight">
-						TradingView analysis skill
+						TradingView analysis package
 					</h2>
 					<p className="text-sm text-muted-foreground mt-1">
 						Review chart analysis, paper trade plans, and approval requests

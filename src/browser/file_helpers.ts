@@ -19,6 +19,8 @@ export interface DownloadResult {
  * Extended download result with URL, status, and error information.
  */
 export interface ExtendedDownloadResult {
+  /** Stable Browser Control download id */
+  id?: string;
   /** URL the download was initiated from */
   url: string;
   /** Suggested filename from the download */
@@ -28,9 +30,15 @@ export interface ExtendedDownloadResult {
   /** Size in bytes of the downloaded file */
   sizeBytes?: number;
   /** Download status */
-  status: "completed" | "failed" | "canceled";
+  status: "pending" | "completed" | "failed" | "canceled";
   /** Error message if the download failed */
   error?: string;
+  /** ISO timestamp when Browser Control observed the download */
+  createdAt?: string;
+  /** ISO timestamp when save/failure completed */
+  completedAt?: string;
+  /** Browser Control tab id associated with the download */
+  tabId?: string;
 }
 
 export class DownloadManager {

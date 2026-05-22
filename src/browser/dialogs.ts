@@ -46,7 +46,6 @@ interface PendingDialog {
 
 interface PageHandlers {
   dialog: (d: PlaywrightDialog) => void;
-  cdp: (params: Record<string, unknown>) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,14 +109,9 @@ export class BrowserDialogSupervisor {
       this.handlePlaywrightDialog(dialog, page, sessionId);
     };
 
-    const cdpHandler = (params: Record<string, unknown>): void => {
-      this.handleCdpDialogOpening(params, page, sessionId);
-    };
-
     page.on("dialog", dialogHandler);
-    this.tryAttachCdp(page, cdpHandler);
 
-    this.pageHandlers.set(page, { dialog: dialogHandler, cdp: cdpHandler });
+    this.pageHandlers.set(page, { dialog: dialogHandler });
   }
 
   detachFromPage(page: Page): void {

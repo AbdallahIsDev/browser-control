@@ -2,14 +2,14 @@
 
 ## System Architecture
 
-Browser Control is a **local automation engine** with five execution surfaces and three domain paths, all governed by a centralized policy engine.
+Browser Control is a **CLI/MCP-first reusable browser workflow runtime** with three production integration surfaces and two experimental operator UI surfaces, all governed by a centralized policy engine.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                    Execution Surfaces                      │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────┐  ┌────┐ │
 │  │   CLI   │  │  TS API │  │   MCP   │  │ Web │  │Desktop│ │
-│  │ bc ...  │  │createBC │  │ stdio   │  │Dash │  │Electron│ │
+│  │ bc ...  │  │createBC │  │ stdio   │  │ Exp │  │ Exp   │ │
 │  └────┬────┘  └────┬────┘  └────┬────┘  └──┬──┘  └──┬──┘ │
 │       │            │            │          │         │     │
 │       └────────────┴────────────┴──────────┴─────────┘     │
@@ -48,7 +48,7 @@ Browser Control is a **local automation engine** with five execution surfaces an
 
 ### 1. CLI (`bc`)
 
-The primary human operator surface. 100+ subcommands for setup, status, sessions, browser, terminal, filesystem, debug, and configuration. Implemented in `src/cli.ts`.
+The primary public operator and agent surface. Commands cover setup, status, sessions, browser, terminal/filesystem support, workflow/package execution, evidence, debug, and configuration. Implemented in `src/cli.ts`.
 
 ### 2. TypeScript API
 
@@ -56,15 +56,15 @@ Programmatic interface for embedding Browser Control in Node.js applications. Ex
 
 ### 3. MCP Server
 
-Model Context Protocol stdio server for AI agent integration. Exposes 66 tools across 10 categories. Implemented in `src/mcp/server.ts` with tools registered in `src/mcp/tools/`.
+Model Context Protocol stdio server for AI agent integration. Exposes 88 tools across 11 categories. Implemented in `src/mcp/server.ts` with tools registered in `src/mcp/tools/`.
 
-### 4. Web Dashboard
+### 4. Web Dashboard (Experimental)
 
-React 19 + Vite frontend served by a loopback-only Express server. Provides visual browser session management, terminal, and debugging. Frontend in `web/`, backend in `src/web/server.ts`.
+React 19 + Vite frontend served by a loopback-only server. This is an internal operator surface and must not be presented as the main product until stable and redesigned around Automation Packages.
 
-### 5. Desktop App
+### 5. Desktop App (Experimental)
 
-Electron wrapper that spawns the web server and loads the dashboard in a native window. Implemented in `desktop/main.cjs`, `desktop/preload.cjs`, and `desktop/security.cjs`.
+Electron wrapper for the experimental dashboard. Implemented in `desktop/main.cjs`, `desktop/preload.cjs`, and `desktop/security.cjs`.
 
 ## Execution Paths
 

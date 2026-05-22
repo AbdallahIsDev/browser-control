@@ -3,7 +3,7 @@
 Primary API:
 
 ```ts
-import { createBrowserControl } from "browser-control";
+import { createBrowserControl } from "@abdallahisdev/browser-control";
 
 const bc = createBrowserControl({ policyProfile: "balanced" });
 
@@ -119,7 +119,7 @@ Call `bc.close()` at the end of short-lived scripts. Terminal actions can use da
 Example:
 
 ```ts
-import { createBrowserControl } from "browser-control";
+import { createBrowserControl } from "@abdallahisdev/browser-control";
 
 async function main() {
   const bc = createBrowserControl();

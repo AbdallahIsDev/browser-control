@@ -1,7 +1,7 @@
 {
-	"name": "browser-control",
-	"version": "1.1.1",
-	"description": "Unified browser, terminal, filesystem, and MCP automation engine for AI agents.",
+	"name": "@abdallahisdev/browser-control",
+	"version": "0.0.1",
+	"description": "Reusable browser workflow runtime for AI agents.",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
@@ -12,28 +12,26 @@
 		"./package.json": "./package.json"
 	},
 	"bin": {
-		"bc": "cli.js"
+		"bc": "./cli.js"
 	},
 	"files": [
 		"dist/",
 		"web/dist/**/*",
-		"desktop/",
 		"cli.js",
 		"launch_browser.bat",
 		"launch_browser.ps1",
 		"scripts/launch_browser.cjs",
 		"scripts/launch_browser.sh",
 		"scripts/install_wsl_bc.sh",
-		"scripts/desktop_after_pack.cjs",
 		"wsl_cdp_bridge.cjs",
 		"examples/",
-		"automation-packages/tradingview-ict-analysis/",
 		"LICENSE",
 		"README.md",
 		".env.example",
 		"docs/getting-started.md",
 		"docs/cli.md",
 		"docs/mcp.md",
+		"docs/packages.md",
 		"docs/wsl-windows-chrome.md",
 		"docs/troubleshooting.md",
 		"docs/policy.md",

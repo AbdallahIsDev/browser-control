@@ -185,7 +185,7 @@ export interface ScreencastSession {
   status: ScreencastStatus;
   actionAnnotations: boolean;
   retention: "keep" | "delete-on-success" | "debug-only";
-  mode: "native" | "frames" | "metadata-only";
+  mode: "trace" | "native" | "frames" | "metadata-only";
 }
 
 export interface ScreencastOptions {

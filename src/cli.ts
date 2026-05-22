@@ -642,8 +642,8 @@ Browser Lifecycle:
                                                                       Export auth state (cookies/storage)
   browser auth import <file> [--live | --stored] [--profile=default] [--yes]
                                                                       Import auth state from file
-  run --skill=<name> --action=<action> [--params='{"key":"value"}']  Run a task
-  schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<action> Schedule a task
+  run --package=<name> --workflow=<name> [--params='{"key":"value"}'] Run an Automation Package workflow
+  schedule <id> --cron="*/5 * * * *" --package=<name> --workflow=<name> Schedule an Automation Package workflow
   schedule list                                                      List scheduled tasks
   schedule pause <id>                                                Pause a scheduled task
   schedule resume <id>                                               Resume a scheduled task
@@ -653,29 +653,18 @@ Browser Lifecycle:
   daemon status                                                      Check daemon status
   daemon health                                                      Run health checks
   daemon logs                                                        View daemon logs
-  proxy test                                                         Test proxies
-  proxy add <url>                                                    Add a proxy
-  proxy remove <url>                                                 Remove a proxy
-  proxy list                                                         List proxies
   memory stats                                                       Show memory stats
   memory clear                                                       Clear memory
   memory get <key>                                                   Get a memory key
   memory set <key> <value>                                           Set a memory key
-  skill list                                                         List skills (name, version, actions)
-  skill health <name>                                                Check skill health
-  skill actions <name>                                               Show skill action metadata
-  skill install <path>                                               Install a packaged skill from a directory
-  skill validate <name-or-path>                                      Validate a skill manifest
-  skill remove <name>                                                Remove an installed skill
   report generate                                                    Generate report
   report view                                                        View report
-  captcha test                                                       Validate captcha solver configuration
   policy list                                                        List built-in policy profiles
   policy inspect <name>                                              Inspect a policy profile
   policy export <name> [file]                                         Export a policy profile to JSON
   policy import <file>                                               Import a custom policy profile
-  knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
-  knowledge show <name-or-domain>                                    Show knowledge for a domain or skill
+  knowledge list [--kind=interaction-skill|domain-skill]             List internal knowledge artifacts
+  knowledge show <name-or-domain>                                    Show knowledge for a domain or package
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
@@ -719,8 +708,8 @@ MCP:
   mcp serve                                                           Start MCP stdio server
 
 Knowledge:
-  knowledge list [--kind=interaction-skill|domain-skill]             List knowledge artifacts
-  knowledge show <name-or-domain>                                    Show knowledge for a domain or skill
+  knowledge list [--kind=interaction-skill|domain-skill]             List internal knowledge artifacts
+  knowledge show <name-or-domain>                                    Show knowledge for a domain or package
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact

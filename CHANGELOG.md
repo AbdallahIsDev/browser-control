@@ -37,7 +37,7 @@ All notable changes to Browser Control will be documented in this file.
 - ✅ Directory auto-creation on write
 
 #### MCP Server
-- ✅ Full MCP stdio server (66 tools)
+- ✅ Full MCP stdio server (88 tools)
 - ✅ 10 tool categories: status, session, browser, terminal, filesystem, debug, provider, service, workflow, harness
 - ✅ Strict input validation (unknown params rejected)
 - ✅ ActionResult JSON output shape

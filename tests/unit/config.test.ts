@@ -280,26 +280,6 @@ test(".env.example exists and documents key env vars", () => {
     "BROWSER_MODE",
     "BROWSER_LAUNCH_PROFILE",
     "BROWSER_USER_DATA_DIR",
-    "BROWSERLESS_ENDPOINT",
-    "BROWSERLESS_API_KEY",
-    "ENABLE_STEALTH",
-    "STEALTH_LOCALE",
-    "STEALTH_TIMEZONE_ID",
-    "BROWSER_USER_AGENT",
-    "STEALTH_FINGERPRINT_SEED",
-    "STEALTH_WEBGL_VENDOR",
-    "STEALTH_WEBGL_RENDERER",
-    "STEALTH_PLATFORM",
-    "STEALTH_HARDWARE_CONCURRENCY",
-    "STEALTH_DEVICE_MEMORY",
-    "PROXY_LIST",
-    "CAPTCHA_PROVIDER",
-    "CAPTCHA_API_KEY",
-    "CAPTCHA_TIMEOUT_MS",
-    "OPENROUTER_API_KEY",
-    "OPENROUTER_MODEL",
-    "STAGEHAND_MODEL",
-    "OPENROUTER_BASE_URL",
     "RESUME_POLICY",
     "MEMORY_ALERT_MB",
     "CHROME_TAB_LIMIT",
@@ -310,6 +290,9 @@ test(".env.example exists and documents key env vars", () => {
   for (const varName of requiredVars) {
     assert.ok(content.includes(varName), `.env.example should document ${varName}`);
   }
+  for (const hiddenVar of ["BROWSERLESS_API_KEY", "ENABLE_STEALTH", "PROXY_LIST", "CAPTCHA_API_KEY", "OPENROUTER_API_KEY"]) {
+    assert.ok(!content.includes(hiddenVar), `.env.example should not advertise hidden non-core var ${hiddenVar}`);
+  }
 });
 
 // ── Package Metadata ─────────────────────────────────────────────────
@@ -318,7 +301,7 @@ test("package.json has required package fields", () => {
   const pkgPath = path.join(process.cwd(), "package.json");
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
 
-  assert.equal(pkg.name, "browser-control");
+  assert.equal(pkg.name, "@abdallahisdev/browser-control");
   assert.ok(!("private" in pkg), "package.json should not have 'private: true'");
   assert.equal(pkg.main, "./dist/index.js");
   assert.equal(pkg.types, "./dist/index.d.ts");

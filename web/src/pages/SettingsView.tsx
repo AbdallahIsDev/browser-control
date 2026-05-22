@@ -24,6 +24,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { apiFetch } from "../api";
+import { isProductionFeatureEnabled } from "../featureFlags";
 
 interface Settings {
 	theme?: string;
@@ -370,210 +371,114 @@ export function SettingsView() {
 								{settings.dataHome || "Not configured"}
 							</p>
 						</div>
-						<div>
-							<Label className="text-xs text-muted-foreground">
-								Browser Provider
-							</Label>
-							<div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-								<Input
-									className="h-9 sm:max-w-xs"
-									value={providerName}
-									onChange={(event) => setProviderName(event.target.value)}
-									placeholder="local"
-								/>
-								<Button
-									type="button"
-									size="sm"
-									onClick={saveProvider}
-									className="sm:w-auto w-full"
-								>
-									Save
-								</Button>
-							</div>
-						</div>
-						<div className="space-y-3">
+						{isProductionFeatureEnabled("advancedProviders") && (
 							<div>
 								<Label className="text-xs text-muted-foreground">
-									Provider Catalog
+									Browser Provider
 								</Label>
-								<p className="text-xs text-muted-foreground mt-1">
-									Read-only setup guide; selecting remote providers still
-									requires explicit configuration and policy approval.
-								</p>
-							</div>
-							<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-								{providerCatalog.map((entry) => (
-									<div
-										key={entry.name}
-										className="rounded-md border border-border p-3"
+								<div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+									<Input
+										className="h-9 sm:max-w-xs"
+										value={providerName}
+										onChange={(event) => setProviderName(event.target.value)}
+										placeholder="local"
+									/>
+									<Button
+										type="button"
+										size="sm"
+										onClick={saveProvider}
+										className="sm:w-auto w-full"
 									>
-										<div className="flex flex-wrap items-center gap-2">
-											<p className="font-medium">{entry.label}</p>
-											<Badge
-												variant={entry.remote ? "destructive" : "secondary"}
-											>
-												{entry.remote ? "Remote" : "Local"}
-											</Badge>
-										</div>
-										<p className="mt-2 text-xs text-muted-foreground">
-											{entry.description}
-										</p>
-										<div className="mt-3 flex flex-wrap gap-2">
-											<Badge variant="outline">risk {entry.risk}</Badge>
-											<Badge variant="outline">
-												{entry.requiresEndpoint ? "Endpoint" : "No endpoint"}
-											</Badge>
-											<Badge variant="outline">
-												{entry.requiresAuth ? "Credential" : "No credential"}
-											</Badge>
-										</div>
-										<p className="mt-3 text-xs text-muted-foreground">
-											{entry.setupHint}
-										</p>
-									</div>
-								))}
+										Save
+									</Button>
+								</div>
 							</div>
-						</div>
-						<div className="space-y-3">
-							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+						)}
+						{isProductionFeatureEnabled("advancedProviders") && (
+							<div className="space-y-3">
 								<div>
 									<Label className="text-xs text-muted-foreground">
-										Provider Health
+										Provider Catalog
 									</Label>
 									<p className="text-xs text-muted-foreground mt-1">
-										Remote providers are opt-in; diagnostics do not switch the
-										active provider.
+										Read-only setup guide; selecting remote providers still
+										requires explicit configuration and policy approval.
 									</p>
 								</div>
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									onClick={runProviderHealth}
-									disabled={providerLoading}
-									className="sm:w-auto w-full"
-								>
-									Refresh Health
-								</Button>
-							</div>
-							<div className="space-y-3 md:hidden">
-								{providerRows.map((provider) => (
-									<div
-										key={`mobile-${provider.name}-${provider.configured}`}
-										className="rounded-md border border-border p-3"
-									>
-										<div className="flex flex-wrap items-center justify-between gap-2">
-											<div>
-												<p className="font-medium">{provider.name}</p>
-												<p className="text-xs text-muted-foreground">
-													{provider.type}
-												</p>
-											</div>
-											<div className="flex flex-wrap gap-2">
-												{provider.name === providerList.activeProvider && (
-													<Badge variant="secondary">Active</Badge>
-												)}
+								<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+									{providerCatalog.map((entry) => (
+										<div
+											key={entry.name}
+											className="rounded-md border border-border p-3"
+										>
+											<div className="flex flex-wrap items-center gap-2">
+												<p className="font-medium">{entry.label}</p>
 												<Badge
-													variant={
-														provider.health?.state === "healthy"
-															? "default"
-															: provider.health?.state === "degraded"
-																? "secondary"
-																: "destructive"
-													}
+													variant={entry.remote ? "destructive" : "secondary"}
 												>
-													{provider.health?.state || "Unknown"}
+													{entry.remote ? "Remote" : "Local"}
 												</Badge>
 											</div>
+											<p className="mt-2 text-xs text-muted-foreground">
+												{entry.description}
+											</p>
+											<div className="mt-3 flex flex-wrap gap-2">
+												<Badge variant="outline">risk {entry.risk}</Badge>
+												<Badge variant="outline">
+													{entry.requiresEndpoint ? "Endpoint" : "No endpoint"}
+												</Badge>
+												<Badge variant="outline">
+													{entry.requiresAuth ? "Credential" : "No credential"}
+												</Badge>
+											</div>
+											<p className="mt-3 text-xs text-muted-foreground">
+												{entry.setupHint}
+											</p>
 										</div>
-										<p className="mt-2 text-xs text-muted-foreground">
-											{provider.health?.summary || "Health not checked."}
-										</p>
-										<dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-											<div>
-												<dt className="text-muted-foreground">Score</dt>
-												<dd>{provider.health?.score ?? "-"}</dd>
-											</div>
-											<div>
-												<dt className="text-muted-foreground">Capabilities</dt>
-												<dd>
-													{provider.health
-														? `${provider.health.launchSupported ? "launch" : "no launch"} / ${
-																provider.health.attachSupported
-																	? "attach"
-																	: "no attach"
-															}`
-														: "-"}
-												</dd>
-											</div>
-											<div className="col-span-2 min-w-0">
-												<dt className="text-muted-foreground">Endpoint</dt>
-												<dd className="break-all font-mono">
-													{provider.endpoint}
-												</dd>
-											</div>
-										</dl>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											onClick={async () => {
-												setProviderName(provider.name);
-												setMessage(`Saving provider: ${provider.name}`);
-												try {
-													await apiFetch("/api/browser/providers/use", {
-														method: "POST",
-														body: JSON.stringify({ name: provider.name }),
-													});
-													await loadProviders();
-													setMessage(`Provider saved: ${provider.name}`);
-												} catch (err: unknown) {
-													setMessage(
-														`Provider save failed: ${
-															err instanceof Error ? err.message : String(err)
-														}`,
-													);
-												}
-											}}
-											disabled={provider.name === providerList.activeProvider}
-											className="mt-3 w-full"
-										>
-											Use Provider
-										</Button>
-									</div>
-								))}
+									))}
+								</div>
 							</div>
-							<div className="hidden overflow-x-auto md:block">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>Name</TableHead>
-											<TableHead>Type</TableHead>
-											<TableHead>State</TableHead>
-											<TableHead>Score</TableHead>
-											<TableHead>Capabilities</TableHead>
-											<TableHead>Endpoint</TableHead>
-											<TableHead>Action</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{providerRows.map((provider) => (
-											<TableRow key={`${provider.name}-${provider.configured}`}>
-												<TableCell className="font-medium">
-													<div className="flex flex-wrap items-center gap-2">
-														<span>{provider.name}</span>
-														{provider.name === providerList.activeProvider && (
-															<Badge variant="secondary">Active</Badge>
-														)}
-														{provider.configured && (
-															<Badge variant="outline">Configured</Badge>
-														)}
-													</div>
-												</TableCell>
-												<TableCell className="text-sm">
-													{provider.type}
-												</TableCell>
-												<TableCell>
+						)}
+						{isProductionFeatureEnabled("advancedProviders") && (
+							<div className="space-y-3">
+								<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+									<div>
+										<Label className="text-xs text-muted-foreground">
+											Provider Health
+										</Label>
+										<p className="text-xs text-muted-foreground mt-1">
+											Remote providers are opt-in; diagnostics do not switch the
+											active provider.
+										</p>
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										onClick={runProviderHealth}
+										disabled={providerLoading}
+										className="sm:w-auto w-full"
+									>
+										Refresh Health
+									</Button>
+								</div>
+								<div className="space-y-3 md:hidden">
+									{providerRows.map((provider) => (
+										<div
+											key={`mobile-${provider.name}-${provider.configured}`}
+											className="rounded-md border border-border p-3"
+										>
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<div>
+													<p className="font-medium">{provider.name}</p>
+													<p className="text-xs text-muted-foreground">
+														{provider.type}
+													</p>
+												</div>
+												<div className="flex flex-wrap gap-2">
+													{provider.name === providerList.activeProvider && (
+														<Badge variant="secondary">Active</Badge>
+													)}
 													<Badge
 														variant={
 															provider.health?.state === "healthy"
@@ -585,184 +490,298 @@ export function SettingsView() {
 													>
 														{provider.health?.state || "Unknown"}
 													</Badge>
-													<p className="mt-1 max-w-72 text-xs text-muted-foreground">
-														{provider.health?.summary || "Health not checked."}
-													</p>
-												</TableCell>
-												<TableCell className="text-sm">
-													{provider.health?.score ?? "-"}
-												</TableCell>
-												<TableCell className="text-xs">
-													{provider.health
-														? `${provider.health.launchSupported ? "launch" : "no launch"} / ${
-																provider.health.attachSupported
-																	? "attach"
-																	: "no attach"
-															}`
-														: "-"}
-												</TableCell>
-												<TableCell className="max-w-72 break-all font-mono text-xs">
-													{provider.endpoint}
-												</TableCell>
-												<TableCell>
-													<Button
-														type="button"
-														size="sm"
-														variant="outline"
-														onClick={async () => {
-															setProviderName(provider.name);
-															setMessage(`Saving provider: ${provider.name}`);
-															try {
-																await apiFetch("/api/browser/providers/use", {
-																	method: "POST",
-																	body: JSON.stringify({ name: provider.name }),
-																});
-																await loadProviders();
-																setMessage(`Provider saved: ${provider.name}`);
-															} catch (err: unknown) {
-																setMessage(
-																	`Provider save failed: ${
-																		err instanceof Error
-																			? err.message
-																			: String(err)
-																	}`,
-																);
-															}
-														}}
-														disabled={
-															provider.name === providerList.activeProvider
-														}
-														className="sm:w-auto w-full"
-													>
-														Use
-													</Button>
-												</TableCell>
-											</TableRow>
-										))}
-										{providerRows.length === 0 && (
+												</div>
+											</div>
+											<p className="mt-2 text-xs text-muted-foreground">
+												{provider.health?.summary || "Health not checked."}
+											</p>
+											<dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+												<div>
+													<dt className="text-muted-foreground">Score</dt>
+													<dd>{provider.health?.score ?? "-"}</dd>
+												</div>
+												<div>
+													<dt className="text-muted-foreground">
+														Capabilities
+													</dt>
+													<dd>
+														{provider.health
+															? `${provider.health.launchSupported ? "launch" : "no launch"} / ${
+																	provider.health.attachSupported
+																		? "attach"
+																		: "no attach"
+																}`
+															: "-"}
+													</dd>
+												</div>
+												<div className="col-span-2 min-w-0">
+													<dt className="text-muted-foreground">Endpoint</dt>
+													<dd className="break-all font-mono">
+														{provider.endpoint}
+													</dd>
+												</div>
+											</dl>
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												onClick={async () => {
+													setProviderName(provider.name);
+													setMessage(`Saving provider: ${provider.name}`);
+													try {
+														await apiFetch("/api/browser/providers/use", {
+															method: "POST",
+															body: JSON.stringify({ name: provider.name }),
+														});
+														await loadProviders();
+														setMessage(`Provider saved: ${provider.name}`);
+													} catch (err: unknown) {
+														setMessage(
+															`Provider save failed: ${
+																err instanceof Error ? err.message : String(err)
+															}`,
+														);
+													}
+												}}
+												disabled={provider.name === providerList.activeProvider}
+												className="mt-3 w-full"
+											>
+												Use Provider
+											</Button>
+										</div>
+									))}
+								</div>
+								<div className="hidden overflow-x-auto md:block">
+									<Table>
+										<TableHeader>
 											<TableRow>
-												<TableCell
-													colSpan={7}
-													className="text-center text-muted-foreground"
-												>
-													No providers available.
-												</TableCell>
+												<TableHead>Name</TableHead>
+												<TableHead>Type</TableHead>
+												<TableHead>State</TableHead>
+												<TableHead>Score</TableHead>
+												<TableHead>Capabilities</TableHead>
+												<TableHead>Endpoint</TableHead>
+												<TableHead>Action</TableHead>
 											</TableRow>
-										)}
-									</TableBody>
-								</Table>
+										</TableHeader>
+										<TableBody>
+											{providerRows.map((provider) => (
+												<TableRow
+													key={`${provider.name}-${provider.configured}`}
+												>
+													<TableCell className="font-medium">
+														<div className="flex flex-wrap items-center gap-2">
+															<span>{provider.name}</span>
+															{provider.name ===
+																providerList.activeProvider && (
+																<Badge variant="secondary">Active</Badge>
+															)}
+															{provider.configured && (
+																<Badge variant="outline">Configured</Badge>
+															)}
+														</div>
+													</TableCell>
+													<TableCell className="text-sm">
+														{provider.type}
+													</TableCell>
+													<TableCell>
+														<Badge
+															variant={
+																provider.health?.state === "healthy"
+																	? "default"
+																	: provider.health?.state === "degraded"
+																		? "secondary"
+																		: "destructive"
+															}
+														>
+															{provider.health?.state || "Unknown"}
+														</Badge>
+														<p className="mt-1 max-w-72 text-xs text-muted-foreground">
+															{provider.health?.summary ||
+																"Health not checked."}
+														</p>
+													</TableCell>
+													<TableCell className="text-sm">
+														{provider.health?.score ?? "-"}
+													</TableCell>
+													<TableCell className="text-xs">
+														{provider.health
+															? `${provider.health.launchSupported ? "launch" : "no launch"} / ${
+																	provider.health.attachSupported
+																		? "attach"
+																		: "no attach"
+																}`
+															: "-"}
+													</TableCell>
+													<TableCell className="max-w-72 break-all font-mono text-xs">
+														{provider.endpoint}
+													</TableCell>
+													<TableCell>
+														<Button
+															type="button"
+															size="sm"
+															variant="outline"
+															onClick={async () => {
+																setProviderName(provider.name);
+																setMessage(`Saving provider: ${provider.name}`);
+																try {
+																	await apiFetch("/api/browser/providers/use", {
+																		method: "POST",
+																		body: JSON.stringify({
+																			name: provider.name,
+																		}),
+																	});
+																	await loadProviders();
+																	setMessage(
+																		`Provider saved: ${provider.name}`,
+																	);
+																} catch (err: unknown) {
+																	setMessage(
+																		`Provider save failed: ${
+																			err instanceof Error
+																				? err.message
+																				: String(err)
+																		}`,
+																	);
+																}
+															}}
+															disabled={
+																provider.name === providerList.activeProvider
+															}
+															className="sm:w-auto w-full"
+														>
+															Use
+														</Button>
+													</TableCell>
+												</TableRow>
+											))}
+											{providerRows.length === 0 && (
+												<TableRow>
+													<TableCell
+														colSpan={7}
+														className="text-center text-muted-foreground"
+													>
+														No providers available.
+													</TableCell>
+												</TableRow>
+											)}
+										</TableBody>
+									</Table>
+								</div>
 							</div>
-						</div>
+						)}
 					</CardContent>
 				</Card>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>Model Provider</CardTitle>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<div className="flex flex-col sm:flex-row sm:items-center gap-3">
-							<Label
-								htmlFor="model-provider"
-								className="text-xs text-muted-foreground shrink-0"
-							>
-								Provider:
-							</Label>
-							<Select
-								value={modelProvider}
-								onValueChange={(value) =>
-									setModelProvider(value ?? "openrouter")
-								}
-							>
-								<SelectTrigger
-									id="model-provider"
-									className="h-9 w-full sm:w-56"
+				{isProductionFeatureEnabled("generalAgentUi") && (
+					<Card>
+						<CardHeader>
+							<CardTitle>Model Provider</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+								<Label
+									htmlFor="model-provider"
+									className="text-xs text-muted-foreground shrink-0"
 								>
-									<SelectValue placeholder="Provider" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="openrouter">OpenRouter</SelectItem>
-									<SelectItem value="ollama">Ollama</SelectItem>
-									<SelectItem value="openai-compatible">
-										Custom (OpenAI Compatible)
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						{modelProvider === "openai-compatible" && (
+									Provider:
+								</Label>
+								<Select
+									value={modelProvider}
+									onValueChange={(value) =>
+										setModelProvider(value ?? "openrouter")
+									}
+								>
+									<SelectTrigger
+										id="model-provider"
+										className="h-9 w-full sm:w-56"
+									>
+										<SelectValue placeholder="Provider" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="openrouter">OpenRouter</SelectItem>
+										<SelectItem value="ollama">Ollama</SelectItem>
+										<SelectItem value="openai-compatible">
+											Custom (OpenAI Compatible)
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							{modelProvider === "openai-compatible" && (
+								<div>
+									<Label
+										htmlFor="model-endpoint"
+										className="text-xs text-muted-foreground"
+									>
+										Endpoint:
+									</Label>
+									<Input
+										id="model-endpoint"
+										className="mt-1 h-9"
+										value={modelEndpoint}
+										onChange={(e) => setModelEndpoint(e.target.value)}
+										placeholder="http://localhost:8080/v1"
+									/>
+								</div>
+							)}
 							<div>
 								<Label
-									htmlFor="model-endpoint"
+									htmlFor="model-key"
 									className="text-xs text-muted-foreground"
 								>
-									Endpoint:
+									API Key:
 								</Label>
 								<Input
-									id="model-endpoint"
+									id="model-key"
+									type="password"
 									className="mt-1 h-9"
-									value={modelEndpoint}
-									onChange={(e) => setModelEndpoint(e.target.value)}
-									placeholder="http://localhost:8080/v1"
+									value={modelKey}
+									onChange={(e) => setModelKey(e.target.value)}
+									placeholder="API Key"
 								/>
 							</div>
-						)}
-						<div>
-							<Label
-								htmlFor="model-key"
-								className="text-xs text-muted-foreground"
+							<div>
+								<Label
+									htmlFor="model-name"
+									className="text-xs text-muted-foreground"
+								>
+									Model Name:
+								</Label>
+								<Input
+									id="model-name"
+									className="mt-1 h-9"
+									value={modelName}
+									onChange={(e) => setModelName(e.target.value)}
+									placeholder="gpt-4o"
+								/>
+							</div>
+							<Button
+								type="button"
+								size="sm"
+								onClick={async () => {
+									setMessage("Saving model config...");
+									try {
+										await apiFetch("/api/config/modelProvider", {
+											method: "POST",
+											body: JSON.stringify({
+												modelProvider,
+												modelEndpoint,
+												modelKey,
+												modelName,
+											}),
+										});
+										setMessage("Model config saved");
+									} catch (e: unknown) {
+										setMessage(`Failed: ${String(e)}`);
+									}
+								}}
+								className="sm:w-auto w-full"
 							>
-								API Key:
-							</Label>
-							<Input
-								id="model-key"
-								type="password"
-								className="mt-1 h-9"
-								value={modelKey}
-								onChange={(e) => setModelKey(e.target.value)}
-								placeholder="API Key"
-							/>
-						</div>
-						<div>
-							<Label
-								htmlFor="model-name"
-								className="text-xs text-muted-foreground"
-							>
-								Model Name:
-							</Label>
-							<Input
-								id="model-name"
-								className="mt-1 h-9"
-								value={modelName}
-								onChange={(e) => setModelName(e.target.value)}
-								placeholder="gpt-4o"
-							/>
-						</div>
-						<Button
-							type="button"
-							size="sm"
-							onClick={async () => {
-								setMessage("Saving model config...");
-								try {
-									await apiFetch("/api/config/modelProvider", {
-										method: "POST",
-										body: JSON.stringify({
-											modelProvider,
-											modelEndpoint,
-											modelKey,
-											modelName,
-										}),
-									});
-									setMessage("Model config saved");
-								} catch (e: unknown) {
-									setMessage(`Failed: ${String(e)}`);
-								}
-							}}
-							className="sm:w-auto w-full"
-						>
-							Save Model Config
-						</Button>
-					</CardContent>
-				</Card>
+								Save Model Config
+							</Button>
+						</CardContent>
+					</Card>
+				)}
 
 				<Card>
 					<CardHeader>

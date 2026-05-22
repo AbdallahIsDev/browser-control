@@ -1,4 +1,4 @@
-import type { Page, Route, Response } from "playwright";
+import type { BrowserContext, Page, Route, Response } from "playwright";
 
 // ── Route types ─────────────────────────────────────────────────────
 
@@ -32,7 +32,11 @@ export class NetworkInterceptor {
 
   private readonly maxCapturedResponses: number;
 
-  private readonly activeRoutes: Array<{ urlPattern: string | RegExp; handler: (route: Route) => Promise<void> }> = [];
+  private readonly activeRoutes: Array<{
+    target: Page | BrowserContext;
+    urlPattern: string | RegExp;
+    handler: (route: Route) => Promise<void>;
+  }> = [];
 
   constructor(options: NetworkInterceptorOptions = {}) {
     this.maxCapturedResponses = options.maxCapturedResponses ?? 100;
@@ -42,7 +46,16 @@ export class NetworkInterceptor {
 
   /** Register a route interception on a page. */
   async intercept(page: Page, handler: RouteHandler): Promise<void> {
-    await page.route(handler.urlPattern, async (route: Route) => {
+    await this.interceptOn(page, handler);
+  }
+
+  /** Register a route interception on a context so it applies to current and future tabs. */
+  async interceptContext(context: BrowserContext, handler: RouteHandler): Promise<void> {
+    await this.interceptOn(context, handler);
+  }
+
+  private async interceptOn(target: Page | BrowserContext, handler: RouteHandler): Promise<void> {
+    const routeHandler = async (route: Route) => {
       if (handler.predicate) {
         const shouldHandle = await handler.predicate(route);
         if (!shouldHandle) {
@@ -72,31 +85,42 @@ export class NetworkInterceptor {
           await route.continue();
           break;
       }
-    });
+    };
 
+    await target.route(handler.urlPattern, routeHandler);
     this.activeRoutes.push({
+      target,
       urlPattern: handler.urlPattern,
-      handler: async () => {},
+      handler: routeHandler,
     });
   }
 
   /** Remove a route interception from a page by pattern. */
   async removeIntercept(page: Page, pattern: string | RegExp): Promise<void> {
-    await page.unroute(pattern);
-    const key = typeof pattern === "string" ? pattern : pattern.source;
-    const idx = this.activeRoutes.findIndex((r) => {
-      const rKey = typeof r.urlPattern === "string" ? r.urlPattern : r.urlPattern.source;
-      return rKey === key;
-    });
-    if (idx !== -1) {
-      this.activeRoutes.splice(idx, 1);
+    await this.removeInterceptFrom(page, pattern);
+  }
+
+  /** Remove a context route by pattern. */
+  async removeContextIntercept(context: BrowserContext, pattern: string | RegExp): Promise<void> {
+    await this.removeInterceptFrom(context, pattern);
+  }
+
+  private async removeInterceptFrom(target: Page | BrowserContext, pattern: string | RegExp): Promise<void> {
+    const matches = this.activeRoutes.filter((r) => r.target === target && samePattern(r.urlPattern, pattern));
+    if (matches.length === 0) {
+      await target.unroute(pattern).catch(() => undefined);
+      return;
     }
+    for (const entry of matches) {
+      await target.unroute(entry.urlPattern, entry.handler).catch(() => undefined);
+    }
+    this.removeTrackedRoutes((r) => r.target === target && samePattern(r.urlPattern, pattern));
   }
 
   /** Capture responses matching a pattern and store them internally. */
   async captureResponse(page: Page, pattern: string | RegExp, maxEntries?: number): Promise<void> {
     const limit = maxEntries ?? this.maxCapturedResponses;
-    await page.route(pattern, async (route: Route) => {
+    const handler = async (route: Route) => {
       const response = await route.fetch();
       const intercepted: InterceptedResponse = {
         url: response.url(),
@@ -115,11 +139,13 @@ export class NetworkInterceptor {
 
       this.pushCapturedResponse(intercepted, limit);
       await route.fulfill({ response });
-    });
+    };
 
+    await page.route(pattern, handler);
     this.activeRoutes.push({
+      target: page,
       urlPattern: pattern,
-      handler: async () => {},
+      handler,
     });
   }
 
@@ -127,7 +153,7 @@ export class NetworkInterceptor {
 
   /** Intercept all requests matching urlPattern and record their responses. */
   async captureResponses(page: Page, urlPattern: string | RegExp): Promise<void> {
-    await page.route(urlPattern, async (route: Route) => {
+    const handler = async (route: Route) => {
       const response = await route.fetch();
       const intercepted: InterceptedResponse = {
         url: response.url(),
@@ -146,23 +172,27 @@ export class NetworkInterceptor {
 
       this.pushCapturedResponse(intercepted);
       await route.fulfill({ response });
-    });
+    };
 
+    await page.route(urlPattern, handler);
     this.activeRoutes.push({
+      target: page,
       urlPattern,
-      handler: async () => {},
+      handler,
     });
   }
 
   /** Block requests matching urlPattern. */
   async blockResource(page: Page, urlPattern: string | RegExp): Promise<void> {
-    await page.route(urlPattern, async (route: Route) => {
+    const handler = async (route: Route) => {
       await route.abort();
-    });
+    };
 
+    await page.route(urlPattern, handler);
     this.activeRoutes.push({
+      target: page,
       urlPattern,
-      handler: async () => {},
+      handler,
     });
   }
 
@@ -182,17 +212,19 @@ export class NetworkInterceptor {
     const contentType = options.contentType ?? "application/json";
     const body = typeof options.body === "string" ? options.body : JSON.stringify(options.body ?? {});
 
-    await page.route(urlPattern, async (route: Route) => {
+    const handler = async (route: Route) => {
       await route.fulfill({
         status,
         headers: { "Content-Type": contentType, ...headers },
         body,
       });
-    });
+    };
 
+    await page.route(urlPattern, handler);
     this.activeRoutes.push({
+      target: page,
       urlPattern,
-      handler: async () => {},
+      handler,
     });
   }
 
@@ -270,9 +302,9 @@ export class NetworkInterceptor {
 
   /** Remove all active route interceptions from all tracked pages. */
   async unrouteAll(): Promise<void> {
-    for (const entry of this.activeRoutes) {
-      // We don't have the page reference stored, so we just clear the tracking
-      // The actual unroute must be done by the caller or via removeIntercept
+    const entries = [...this.activeRoutes];
+    for (const entry of entries) {
+      await entry.target.unroute(entry.urlPattern, entry.handler).catch(() => undefined);
     }
     this.activeRoutes.length = 0;
   }
@@ -284,6 +316,20 @@ export class NetworkInterceptor {
       this.capturedResponses.shift();
     }
   }
+
+  private removeTrackedRoutes(predicate: (route: { target: Page | BrowserContext; urlPattern: string | RegExp; handler: (route: Route) => Promise<void> }) => boolean): void {
+    for (let i = this.activeRoutes.length - 1; i >= 0; i--) {
+      if (predicate(this.activeRoutes[i])) {
+        this.activeRoutes.splice(i, 1);
+      }
+    }
+  }
+}
+
+function samePattern(a: string | RegExp, b: string | RegExp): boolean {
+  if (typeof a === "string" && typeof b === "string") return a === b;
+  if (a instanceof RegExp && b instanceof RegExp) return a.source === b.source && a.flags === b.flags;
+  return false;
 }
 
 // ── Standalone helper wrappers ───────────────────────────────────────

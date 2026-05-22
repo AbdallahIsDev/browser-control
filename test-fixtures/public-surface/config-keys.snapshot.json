@@ -326,14 +326,6 @@
   "envVars": [
     {
       "backedByConfigRegistry": false,
-      "name": "AI_AGENT_COST_PER_TOKEN"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "AI_AGENT_MODEL"
-    },
-    {
-      "backedByConfigRegistry": false,
       "name": "BROKER_ALLOWED_DOMAINS"
     },
     {
@@ -362,14 +354,6 @@
     },
     {
       "backedByConfigRegistry": true,
-      "name": "BROWSERLESS_API_KEY"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "BROWSERLESS_ENDPOINT"
-    },
-    {
-      "backedByConfigRegistry": true,
       "name": "BROWSER_AUTO_LAUNCH"
     },
     {
@@ -383,22 +367,6 @@
     {
       "backedByConfigRegistry": true,
       "name": "BROWSER_CONTROL_HOME"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "BROWSER_CONTROL_MODEL_API_KEY"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "BROWSER_CONTROL_MODEL_ENDPOINT"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "BROWSER_CONTROL_MODEL_NAME"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "BROWSER_CONTROL_MODEL_PROVIDER"
     },
     {
       "backedByConfigRegistry": true,
@@ -422,10 +390,6 @@
     },
     {
       "backedByConfigRegistry": true,
-      "name": "BROWSER_USER_AGENT"
-    },
-    {
-      "backedByConfigRegistry": true,
       "name": "BROWSER_USER_DATA_DIR"
     },
     {
@@ -437,28 +401,12 @@
       "name": "BROWSER_VIEWPORT_WIDTH"
     },
     {
-      "backedByConfigRegistry": true,
-      "name": "CAPTCHA_API_KEY"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "CAPTCHA_PROVIDER"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "CAPTCHA_TIMEOUT_MS"
-    },
-    {
       "backedByConfigRegistry": false,
       "name": "CHROME_TAB_LIMIT"
     },
     {
       "backedByConfigRegistry": true,
       "name": "DAEMON_VISIBLE"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "ENABLE_STEALTH"
     },
     {
       "backedByConfigRegistry": true,
@@ -474,63 +422,11 @@
     },
     {
       "backedByConfigRegistry": true,
-      "name": "OPENROUTER_API_KEY"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "OPENROUTER_BASE_URL"
-    },
-    {
-      "backedByConfigRegistry": true,
-      "name": "OPENROUTER_MODEL"
-    },
-    {
-      "backedByConfigRegistry": true,
       "name": "POLICY_PROFILE"
     },
     {
       "backedByConfigRegistry": false,
-      "name": "PROXY_LIST"
-    },
-    {
-      "backedByConfigRegistry": false,
       "name": "RESUME_POLICY"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STAGEHAND_MODEL"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_DEVICE_MEMORY"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_FINGERPRINT_SEED"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_HARDWARE_CONCURRENCY"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_LOCALE"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_PLATFORM"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_TIMEZONE_ID"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_WEBGL_RENDERER"
-    },
-    {
-      "backedByConfigRegistry": false,
-      "name": "STEALTH_WEBGL_VENDOR"
     },
     {
       "backedByConfigRegistry": true,

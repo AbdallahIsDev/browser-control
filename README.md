@@ -1,8 +1,9 @@
 <div align="center">
   <h1>🖥️ Browser Control</h1>
-  <p><strong>Unified browser, terminal, filesystem, CLI, and MCP automation engine for AI agents.</strong></p>
+  <p><strong>Browser Control is a reusable browser workflow runtime for AI agents.</strong></p>
+  <p>Turn successful browser tasks into Automation Packages that can be replayed, repaired, reviewed, and shared.</p>
 
-  <a href="https://www.npmjs.com/package/browser-control"><img src="https://img.shields.io/npm/v/browser-control?color=blue" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@abdallahisdev/browser-control"><img src="https://img.shields.io/npm/v/@abdallahisdev/browser-control?color=blue" alt="npm version"></a>
   <img width="8" alt="">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
   <img width="8" alt="">
@@ -19,7 +20,9 @@
 
 ## What It Does
 
-Browser Control is a **local automation engine** that gives AI agents and operators one policy-governed surface across three domains:
+Browser Control gives AI agents a **local, policy-governed runtime** for reusable Chromium browser workflows, evidence capture, filesystem reports, and helper scripts.
+
+It does not replace Codex/Claude Code. It works with existing agents to turn repeated browser tasks into reusable Automation Packages.
 
 | Domain | Capabilities |
 |--------|-------------|
@@ -29,7 +32,7 @@ Browser Control is a **local automation engine** that gives AI agents and operat
 
 Every action is gated by a **policy engine** (`safe` / `balanced` / `trusted` profiles) and returns a structured `ActionResult` with success/failure, risk level, and optional debug evidence.
 
-It exposes this surface through **five operator surfaces**: CLI (`bc`), TypeScript API, MCP server, authenticated local web dashboard, and Electron desktop app. Terminal-capable agents should prefer the CLI first; MCP Lite and full MCP remain available for MCP-native clients.
+Public integration is CLI-first and MCP-first. The TypeScript API is available for embedding. The web dashboard and Electron desktop app remain experimental/internal operator surfaces until they are stable and redesigned around Automation Packages.
 
 > **Not a native desktop GUI automation product.** The browser path targets Chromium/CDP and semantic accessibility snapshots. It does not automate native OS windows or non-browser desktop apps.
 
@@ -60,13 +63,20 @@ npm run build
 npm link              # Makes `bc` command globally available
 ```
 
+Experimental npm package:
+
+```powershell
+npm install -g @abdallahisdev/browser-control
+bc --help
+```
+
 First setup:
 
 ```powershell
 bc setup --non-interactive --profile balanced
 bc doctor
 bc status
-bc web open
+bc package list
 ```
 
 **WSL users:** Run `sh scripts/install_wsl_bc.sh` if `bc` resolves to the Linux calculator instead.
@@ -180,7 +190,7 @@ browser-control/
 │   ├── runtime/                # Daemon, broker, health, scheduler
 │   ├── observability/          # Debug bundles, console/network capture, recording, visual diff
 │   ├── operator/               # Doctor, setup, dashboard
-│   ├── providers/              # local / custom CDP / browserless
+│   ├── providers/              # local-first browser providers; remote providers are opt-in internals
 │   ├── services/               # bc:// registry and optional .localhost proxy
 │   ├── security/               # credential vault, network rules, redaction
 │   ├── state/                  # SQLite-backed durable state
@@ -211,7 +221,7 @@ See the full architecture: [docs/architecture/source-layout.md](docs/architectur
 ## 📚 TypeScript API
 
 ```typescript
-import { createBrowserControl } from "browser-control";
+import { createBrowserControl } from "@abdallahisdev/browser-control";
 
 const bc = createBrowserControl({ policyProfile: "balanced" });
 
@@ -229,25 +239,20 @@ Full API reference: [docs/api.md](docs/api.md)
 
 <br/>
 
-## 🖥️ Dashboard & Desktop App
+## 🖥️ Experimental Operator UI
 
-Browser Control includes a **token-gated local web dashboard** (React + Vite) served on loopback and an **Electron desktop app**.
+Browser Control includes a token-gated local web dashboard and an Electron wrapper in the repository, but they are **not the main product surface** and are not positioned as stable production UI yet.
+
+Use CLI/MCP for normal agent integration. Treat dashboard/desktop as experimental internal operator interfaces.
 
 ```powershell
-npm run web:dev           # Dev dashboard
-npm run web:build         # Build for production
-bc web open               # Start dashboard in background and open a token URL
-bc web open --json        # Print reachable URL/token/PID JSON, then exit
-bc web open --wait=true   # Keep the web server in the foreground
-bc web open --port=0      # Use an auto-assigned free port
-npm run cli -- web open   # Source checkout equivalent
-npm run desktop:dev       # Electron dev mode
-npm run desktop:build     # Package Electron app into dist-desktop\win-unpacked\
+npm run web:dev           # Experimental dashboard dev mode
+npm run web:build         # Build experimental dashboard assets
+bc web open               # Internal loopback operator UI
+npm run desktop:dev       # Experimental Electron wrapper
 ```
 
-`bc web open` leaves a background loopback server running so the returned dashboard URL stays reachable after the command exits. Stop the returned PID when using `--json` in scripts.
-
-Current dashboard areas include runtime status, tasks, browser/provider state, workflows, packages, evidence, settings, and advanced maintenance actions.
+Future dashboard direction is package-first: Package Library, Run Automation Package, Create Package from Successful Run, Run History, Evidence Viewer, Repair Failed Package, Permissions/Risk Review, and tool-call/time/token savings.
 
 <br/>
 
@@ -263,7 +268,7 @@ Browser Control has a broad CLI surface for both operators and agents. Common ar
 - `service register|list|resolve|remove`
 - `daemon start|stop|status|health|logs`
 - `run` and `schedule` for queued tasks and recurring automations
-- `debug`, `policy`, `knowledge`, `proxy`, `memory`, `skill`, `report`, `captcha`
+- `debug`, `policy`, `knowledge`, `memory`, `report`, and package/workflow commands
 
 Full command reference: [docs/cli.md](docs/cli.md)
 
@@ -283,12 +288,12 @@ Full command reference: [docs/cli.md](docs/cli.md)
 | ✅ TypeScript API | Stable |
 | ✅ Service registry (`bc://`) | Stable |
 | ✅ Debug bundles + observability | Stable |
-| ✅ Web dashboard (React/Vite) | Active |
-| ✅ Electron desktop app | Active |
+| 🧪 Web dashboard (React/Vite) | Experimental/internal |
+| 🧪 Electron desktop app | Experimental/internal |
 | 🔄 Self-healing harness | Active |
 | ✅ Workflow graph runtime, events, helpers | Active |
 | ✅ Automation packages, trust review, evals | Active |
-| 🔄 Remote providers (browserless and custom CDP) | Active |
+| 🧪 Remote providers | Experimental/opt-in |
 | 🎯 Production hardening | Planned |
 | 🎯 Cross-platform package publishing | Planned |
 
@@ -317,6 +322,7 @@ Full security documentation: [SECURITY.md](SECURITY.md) | [docs/security.md](doc
 | [CLI Reference](docs/cli.md) | Full `bc` command reference |
 | [TypeScript API](docs/api.md) | `createBrowserControl()` API surface |
 | [MCP Setup & Tools](docs/mcp.md) | MCP server config + current tool surface |
+| [Automation Packages](docs/packages.md) | Package-first workflow model and commands |
 | [Architecture Overview](docs/architecture/overview.md) | System architecture, data flow, component map |
 | [Source Layout](docs/architecture/source-layout.md) | Directory structure and conventions |
 | [Browser Behavior](docs/browser.md) | Modes, profiles, CDP, remote providers |
@@ -345,5 +351,5 @@ MIT — see [LICENSE](LICENSE) for details.
 <br/>
 
 <div align="center">
-  <strong>Tell your agent what to do, and Browser Control gets it done.</strong>
+  <strong>Turn repeated browser tasks into reusable Automation Packages.</strong>
 </div>

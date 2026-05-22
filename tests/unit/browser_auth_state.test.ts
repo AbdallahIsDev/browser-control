@@ -14,8 +14,10 @@ import {
   loadAuthSnapshot,
   deleteAuthSnapshot,
   listAuthSnapshots,
+  exportAuthSnapshot,
+  importAuthSnapshot,
+  normalizeAuthSnapshot,
   type AuthSnapshot,
-  type CookieRecord,
 } from "../../src/browser_auth_state";
 
 describe("browser_auth_state", () => {
@@ -160,6 +162,115 @@ describe("browser_auth_state", () => {
       assert.ok(cookie.name);
       assert.ok(cookie.value);
       assert.ok(cookie.domain);
+    });
+  });
+
+  describe("Playwright storageState compatibility", () => {
+    it("exports Playwright storageState with IndexedDB enabled and legacy fields populated", async () => {
+      const calls: unknown[] = [];
+      const context = {
+        storageState: async (options?: unknown) => {
+          calls.push(options);
+          return {
+            cookies: [{ name: "sid", value: "1", domain: "example.com", path: "/" }],
+            origins: [
+              {
+                origin: "https://example.com",
+                localStorage: [{ name: "theme", value: "dark" }],
+                indexedDB: [{ name: "db" }],
+              },
+            ],
+          };
+        },
+        pages: () => [],
+      };
+
+      const snapshot = await exportAuthSnapshot(context as never, "p1");
+
+      assert.deepEqual(calls[0], { indexedDB: true });
+      assert.equal(snapshot.formatVersion, 2);
+      assert.equal(snapshot.storageState?.origins[0].origin, "https://example.com");
+      assert.equal(snapshot.localStorage["https://example.com"].theme, "dark");
+      assert.equal(snapshot.cookies[0].name, "sid");
+    });
+
+    it("falls back when IndexedDB storageState is unavailable", async () => {
+      const calls: unknown[] = [];
+      const context = {
+        storageState: async (options?: unknown) => {
+          calls.push(options);
+          if (options) throw new Error("indexedDB unsupported");
+          return {
+            cookies: [],
+            origins: [{ origin: "https://example.com", localStorage: [] }],
+          };
+        },
+        pages: () => [],
+      };
+
+      const snapshot = await exportAuthSnapshot(context as never, "p1");
+
+      assert.deepEqual(calls, [{ indexedDB: true }, undefined]);
+      assert.deepEqual(snapshot.storageState?.cookies, []);
+    });
+
+    it("normalizes old snapshots into storageState shape", () => {
+      const legacy = createTestSnapshot("legacy");
+      const normalized = normalizeAuthSnapshot(legacy);
+
+      assert.equal(normalized.formatVersion, 2);
+      assert.equal(normalized.storageState?.cookies.length, legacy.cookies.length);
+      assert.equal(normalized.storageState?.origins[0].origin, "https://example.com");
+      assert.equal(normalized.storageState?.origins[0].localStorage[0].name, "user_token");
+    });
+
+    it("imports cookies and installs localStorage init scripts from storageState", async () => {
+      const addedCookies: unknown[] = [];
+      const initScripts: unknown[] = [];
+      const context = {
+        addCookies: async (cookies: unknown[]) => addedCookies.push(...cookies),
+        addInitScript: async (_fn: unknown, arg: unknown) => initScripts.push(arg),
+        pages: () => [],
+      };
+      const snapshot: AuthSnapshot = {
+        profileId: "p1",
+        cookies: [],
+        localStorage: {},
+        sessionStorage: {},
+        capturedAt: new Date().toISOString(),
+        storageState: {
+          cookies: [{ name: "sid", value: "1", domain: "example.com", path: "/" }],
+          origins: [
+            {
+              origin: "https://example.com",
+              localStorage: [{ name: "theme", value: "dark" }],
+            },
+          ],
+        },
+      };
+
+      await importAuthSnapshot(context as never, snapshot);
+
+      assert.equal(addedCookies.length, 1);
+      assert.deepEqual(initScripts[0], {
+        expectedOrigin: "https://example.com",
+        entries: { theme: "dark" },
+      });
+    });
+
+    it("handles missing and empty auth snapshots", async () => {
+      const context = {
+        addCookies: async () => assert.fail("should not add empty cookies"),
+        addInitScript: async () => assert.fail("should not install empty storage"),
+        pages: () => [],
+      };
+      await importAuthSnapshot(context as never, {
+        profileId: "empty",
+        cookies: [],
+        localStorage: {},
+        sessionStorage: {},
+        capturedAt: new Date().toISOString(),
+      });
     });
   });
 });

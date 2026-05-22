@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Locator, Page } from "playwright";
+import type { BrowserContext, Download, Locator, Page } from "playwright";
 import {
 	type A11yElement,
 	type A11ySnapshot,
@@ -418,6 +418,9 @@ export class BrowserActions {
 		Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>
 	>();
 	private readonly networkPrivacyPages = new WeakSet<Page>();
+	private readonly downloadPages = new WeakSet<Page>();
+	private readonly downloadContexts = new WeakSet<BrowserContext>();
+	private readonly downloadRegistry: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
 
 	constructor(context: BrowserActionContext) {
 		this.context = context;
@@ -479,6 +482,7 @@ export class BrowserActions {
 		const context = bm.getContext();
 		if (context) {
 			const pages = context.pages();
+			this.trackContextPages(context, pages);
 			if (pages.length > 0) return pages[0];
 		}
 		const browser = bm.getBrowser();
@@ -486,6 +490,7 @@ export class BrowserActions {
 			const contexts = browser.contexts();
 			if (contexts.length > 0) {
 				const pages = contexts[0].pages();
+				this.trackContextPages(contexts[0], pages);
 				if (pages.length > 0) return pages[0];
 			}
 		}
@@ -499,6 +504,7 @@ export class BrowserActions {
 		const context = bm.getContext();
 		if (context) {
 			const pages = context.pages();
+			this.trackContextPages(context, pages);
 			if (pages.length > 0) return pages;
 		}
 		const browser = bm.getBrowser();
@@ -506,10 +512,68 @@ export class BrowserActions {
 			const contexts = browser.contexts();
 			if (contexts.length > 0) {
 				const pages = contexts[0].pages();
+				this.trackContextPages(contexts[0], pages);
 				if (pages.length > 0) return pages;
 			}
 		}
 		return [];
+	}
+
+	private trackContextPages(context: BrowserContext, pages = context.pages()): void {
+		for (const page of pages) this.trackPageDownloads(page);
+		if (this.downloadContexts.has(context) || typeof (context as unknown as { on?: unknown }).on !== "function") return;
+		context.on("page", (page) => this.trackPageDownloads(page));
+		this.downloadContexts.add(context);
+	}
+
+	private trackPageDownloads(page: Page): void {
+		if (this.downloadPages.has(page) || typeof (page as unknown as { on?: unknown }).on !== "function") return;
+		page.on("download", (download) => {
+			void this.recordDownload(page, download);
+		});
+		page.on("close", () => {
+			this.downloadPages.delete(page);
+		});
+		this.downloadPages.add(page);
+	}
+
+	private async recordDownload(page: Page, download: Download): Promise<void> {
+		const sessionId = this.getSessionId();
+		const downloadsDir = getSessionDownloadsDir(sessionId);
+		fs.mkdirSync(downloadsDir, { recursive: true });
+		const createdAt = new Date().toISOString();
+		const id = `download-${Date.now()}-${this.downloadRegistry.length + 1}`;
+		const suggestedFilename = download.suggestedFilename() || id;
+		const filePath = path.join(downloadsDir, suggestedFilename);
+		const record: ExtendedDownloadResult & { sortTimeMs: number } = {
+			id,
+			url: download.url(),
+			suggestedFilename,
+			path: filePath,
+			status: "pending",
+			createdAt,
+			tabId: await this.getTabIdForPage(page, "0").catch(() => undefined),
+			sortTimeMs: Date.now(),
+		};
+		this.downloadRegistry.unshift(record);
+		try {
+			await download.saveAs(filePath);
+			const failure = await download.failure().catch(() => null);
+			record.completedAt = new Date().toISOString();
+			record.sortTimeMs = Date.now();
+			if (failure) {
+				record.status = "failed";
+				record.error = failure;
+				return;
+			}
+			record.status = "completed";
+			record.sizeBytes = fs.existsSync(filePath) ? fs.statSync(filePath).size : undefined;
+		} catch (error: unknown) {
+			record.completedAt = new Date().toISOString();
+			record.sortTimeMs = Date.now();
+			record.status = "failed";
+			record.error = error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	private async getWindowTarget(
@@ -3273,11 +3337,12 @@ export class BrowserActions {
 	private generateLocatorCandidates(element: A11yElement): LocatorCandidate[] {
 		const candidates: LocatorCandidate[] = [];
 
-		// 1. Role/name locator (highest confidence)
+		// Playwright has no stable public locator-codegen API. Keep this as a
+		// thin candidate list around public locator methods.
 		if (element.role && element.name) {
 			candidates.push({
 				kind: "role",
-				value: `getByRole("${element.role}", { name: "${this.escapeString(element.name)}" })`,
+				value: `getByRole("${element.role}", { name: "${this.escapeString(element.name)}", exact: true })`,
 				confidence: "high",
 				reason: "Semantic role with accessible name",
 			});
@@ -3338,16 +3403,6 @@ export class BrowserActions {
 				value: `locator("${element.selector}")`,
 				confidence: "medium",
 				reason: "CSS selector",
-			});
-		}
-
-		// 7. XPath (last resort, low confidence)
-		if (element.name) {
-			candidates.push({
-				kind: "xpath",
-				value: `xpath(\`//*[text()="${this.escapeString(element.name)}"]\`)`,
-				confidence: "low",
-				reason: "XPath fallback (brittle)",
 			});
 		}
 
@@ -4971,12 +5026,14 @@ export class BrowserActions {
 			return policyEval as ActionResult<ExtendedDownloadResult[]>;
 
 		try {
+			this.getPages();
 			const downloadsDir = getSessionDownloadsDir(sessionId);
 			const helpers = { fs, path };
 
 			// Ensure downloads directory exists
 			if (!helpers.fs.existsSync(downloadsDir)) {
-				return successResult([], {
+				const registryOnly = this.downloadRegistry.map(({ sortTimeMs: _sortTimeMs, ...download }) => download);
+				return successResult(registryOnly, {
 					path: policyEval.path,
 					sessionId,
 					policyDecision: policyEval.policyDecision,
@@ -4987,10 +5044,16 @@ export class BrowserActions {
 
 			// Read files in downloads directory
 			const entries = helpers.fs.readdirSync(downloadsDir);
-			const downloads: Array<ExtendedDownloadResult & { mtimeMs: number }> = [];
+			const downloads: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [...this.downloadRegistry];
+			const knownPaths = new Set(
+				downloads
+					.map((download) => download.path)
+					.filter((downloadPath): downloadPath is string => Boolean(downloadPath)),
+			);
 
 			for (const entry of entries) {
 				const fullPath = helpers.path.join(downloadsDir, entry);
+				if (knownPaths.has(fullPath)) continue;
 				try {
 					const stats = helpers.fs.statSync(fullPath);
 					if (stats.isFile()) {
@@ -5000,15 +5063,16 @@ export class BrowserActions {
 							path: fullPath,
 							sizeBytes: stats.size,
 							status: "completed",
-							mtimeMs: stats.mtimeMs,
+							completedAt: stats.mtime.toISOString(),
+							sortTimeMs: stats.mtimeMs,
 						});
 					}
 				} catch {}
 			}
 
 			// Sort by modification time (most recent first)
-			downloads.sort((a, b) => b.mtimeMs - a.mtimeMs);
-			const result = downloads.map(({ mtimeMs: _mtimeMs, ...download }) => download);
+			downloads.sort((a, b) => b.sortTimeMs - a.sortTimeMs);
+			const result = downloads.map(({ sortTimeMs: _sortTimeMs, ...download }) => download);
 
 			return successResult(result, {
 				path: policyEval.path,

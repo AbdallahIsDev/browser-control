@@ -30,6 +30,24 @@ function readSnapshot(fileName: string): unknown {
 	return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+const HIDDEN_NON_CORE_ENV_VARS = new Set([
+	"AI_AGENT_MODEL",
+	"BROWSERLESS_API_KEY",
+	"BROWSERLESS_ENDPOINT",
+	"BROWSERBASE_API_KEY",
+	"BROWSERBASE_PROJECT_ID",
+	"BROWSER_CONTROL_MODEL_API_KEY",
+	"BROWSER_CONTROL_MODEL_ENDPOINT",
+	"BROWSER_CONTROL_MODEL_NAME",
+	"BROWSER_CONTROL_MODEL_PROVIDER",
+	"BROWSER_USER_AGENT",
+	"CAPTCHA_API_KEY",
+	"CAPTCHA_PROVIDER",
+	"OPENROUTER_API_KEY",
+	"OPENROUTER_BASE_URL",
+	"OPENROUTER_MODEL",
+]);
+
 for (const descriptor of SNAPSHOTS) {
 	test(`${descriptor.fileName} matches current public surface`, async () => {
 		const actual = await buildSnapshot(descriptor.fileName);
@@ -133,6 +151,7 @@ test("config inventory and .env.example stay aligned", () => {
 	const documented = new Set(inventory.envVars.map((entry) => entry.name));
 
 	for (const envVar of configEnvVars) {
+		if (HIDDEN_NON_CORE_ENV_VARS.has(envVar)) continue;
 		assert.ok(
 			documented.has(envVar),
 			`.env.example missing public config env var: ${envVar}`,
@@ -142,7 +161,7 @@ test("config inventory and .env.example stay aligned", () => {
 	assert.ok(inventory.configKeys.some((entry) => entry.key === "dataHome"));
 	assert.ok(
 		inventory.configKeys.some((entry) =>
-			entry.envVars.includes("OPENROUTER_API_KEY"),
+			entry.envVars.includes("BROWSER_CHROME_PATH"),
 		),
 	);
 });

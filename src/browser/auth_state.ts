@@ -40,10 +40,23 @@ export interface AuthSnapshot {
   localStorage: Record<string, Record<string, string>>;
   /** sessionStorage per origin — limited, may be empty */
   sessionStorage: Record<string, Record<string, string>>;
+  /** Playwright-native storage state. Primary persisted auth format. */
+  storageState?: PlaywrightStorageState;
+  /** Snapshot format marker for migration-compatible readers. */
+  formatVersion?: 2;
   /** ISO timestamp when snapshot was captured */
   capturedAt: string;
   /** Optional human-readable label */
   label?: string;
+}
+
+export interface PlaywrightStorageState {
+  cookies: CookieRecord[];
+  origins: Array<{
+    origin: string;
+    localStorage: Array<{ name: string; value: string }>;
+    indexedDB?: unknown[];
+  }>;
 }
 
 export interface ExportOptions {
@@ -74,48 +87,13 @@ export async function exportAuthSnapshot(
   profileId: string,
   options: ExportOptions = {},
 ): Promise<AuthSnapshot> {
-  const cookies = await context.cookies() as CookieRecord[];
-  const localStorage: Record<string, Record<string, string>> = {};
+  const storageState = await exportPlaywrightStorageState(context);
+  const cookies = storageState.cookies;
+  const localStorage = storageStateToLocalStorage(storageState);
   const sessionStorage: Record<string, Record<string, string>> = {};
 
-  if (options.includeLocalStorage ?? false) {
-    const pages = context.pages();
-    const targetPages = options.origins
-      ? pages.filter((p) => {
-          try {
-            const origin = new URL(p.url()).origin;
-            return options.origins!.some((o) => origin.includes(o));
-          } catch {
-            return false;
-          }
-        })
-      : pages.filter((p) => !p.url().startsWith("about:") && !p.url().startsWith("chrome:"));
-
-    for (const page of targetPages) {
-      try {
-        const origin = new URL(page.url()).origin;
-        const storage = await extractLocalStorage(page);
-        if (Object.keys(storage).length > 0) {
-          localStorage[origin] = storage;
-        }
-      } catch (error: unknown) {
-        log.warn(`Failed to extract localStorage from ${page.url()}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }
-
   if (options.includeSessionStorage ?? false) {
-    const pages = context.pages();
-    const targetPages = options.origins
-      ? pages.filter((p) => {
-          try {
-            const origin = new URL(p.url()).origin;
-            return options.origins!.some((o) => origin.includes(o));
-          } catch {
-            return false;
-          }
-        })
-      : pages.filter((p) => !p.url().startsWith("about:") && !p.url().startsWith("chrome:"));
+    const targetPages = getPagesForOrigins(context, options.origins);
 
     for (const page of targetPages) {
       try {
@@ -135,6 +113,8 @@ export async function exportAuthSnapshot(
     cookies,
     localStorage,
     sessionStorage,
+    storageState,
+    formatVersion: 2,
     capturedAt: new Date().toISOString(),
     label: options.label,
   };
@@ -159,22 +139,25 @@ export async function importAuthSnapshot(
   snapshot: AuthSnapshot,
   options: ImportOptions = {},
 ): Promise<void> {
+  const normalized = normalizeAuthSnapshot(snapshot);
   // Import cookies
-  if (snapshot.cookies.length > 0) {
-    await context.addCookies(snapshot.cookies);
-    log.info(`Imported ${snapshot.cookies.length} cookies.`);
+  if (normalized.cookies.length > 0) {
+    await context.addCookies(normalized.cookies);
+    log.info(`Imported ${normalized.cookies.length} cookies.`);
   }
 
   // Import localStorage (requires page navigation to each origin)
-  if (!options.cookiesOnly && Object.keys(snapshot.localStorage).length > 0) {
+  if (!options.cookiesOnly && Object.keys(normalized.localStorage).length > 0) {
     const targetOrigins = options.origins
-      ? Object.keys(snapshot.localStorage).filter((o) =>
+      ? Object.keys(normalized.localStorage).filter((o) =>
           options.origins!.some((target) => o.includes(target)),
         )
-      : Object.keys(snapshot.localStorage);
+      : Object.keys(normalized.localStorage);
+
+    await installLocalStorageInitScripts(context, normalized.localStorage, targetOrigins);
 
     for (const origin of targetOrigins) {
-      const storage = snapshot.localStorage[origin];
+      const storage = normalized.localStorage[origin];
       if (!storage || Object.keys(storage).length === 0) {
         continue;
       }
@@ -201,8 +184,8 @@ export async function importAuthSnapshot(
   }
 
   log.info("Auth snapshot imported", {
-    profileId: snapshot.profileId,
-    cookies: snapshot.cookies.length,
+    profileId: normalized.profileId,
+    cookies: normalized.cookies.length,
   });
 }
 
@@ -298,6 +281,93 @@ async function extractLocalStorage(page: Page): Promise<Record<string, string>> 
     });
   } catch {
     return {};
+  }
+}
+
+async function exportPlaywrightStorageState(context: BrowserContext): Promise<PlaywrightStorageState> {
+  try {
+    return await context.storageState({ indexedDB: true }) as PlaywrightStorageState;
+  } catch (error: unknown) {
+    log.warn(`IndexedDB storageState export failed; retrying without IndexedDB: ${error instanceof Error ? error.message : String(error)}`);
+    return await context.storageState() as PlaywrightStorageState;
+  }
+}
+
+function storageStateToLocalStorage(
+  storageState: PlaywrightStorageState,
+): Record<string, Record<string, string>> {
+  const result: Record<string, Record<string, string>> = {};
+  for (const entry of storageState.origins ?? []) {
+    const values: Record<string, string> = {};
+    for (const item of entry.localStorage ?? []) {
+      values[item.name] = item.value;
+    }
+    if (Object.keys(values).length > 0) {
+      result[entry.origin] = values;
+    }
+  }
+  return result;
+}
+
+function localStorageToStorageStateOrigins(
+  localStorage: Record<string, Record<string, string>>,
+): PlaywrightStorageState["origins"] {
+  return Object.entries(localStorage).map(([origin, values]) => ({
+    origin,
+    localStorage: Object.entries(values).map(([name, value]) => ({ name, value })),
+  }));
+}
+
+export function normalizeAuthSnapshot(snapshot: AuthSnapshot): AuthSnapshot {
+  const storageState = snapshot.storageState ?? {
+    cookies: snapshot.cookies ?? [],
+    origins: localStorageToStorageStateOrigins(snapshot.localStorage ?? {}),
+  };
+  return {
+    ...snapshot,
+    cookies: storageState.cookies ?? snapshot.cookies ?? [],
+    localStorage: Object.keys(snapshot.localStorage ?? {}).length > 0
+      ? snapshot.localStorage
+      : storageStateToLocalStorage(storageState),
+    sessionStorage: snapshot.sessionStorage ?? {},
+    storageState,
+    formatVersion: snapshot.formatVersion ?? 2,
+  };
+}
+
+function getPagesForOrigins(context: BrowserContext, origins?: string[]): Page[] {
+  const pages = context.pages();
+  const validPages = pages.filter((p) => !p.url().startsWith("about:") && !p.url().startsWith("chrome:"));
+  if (!origins) return validPages;
+  return validPages.filter((p) => {
+    try {
+      const origin = new URL(p.url()).origin;
+      return origins.some((o) => origin.includes(o));
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function installLocalStorageInitScripts(
+  context: BrowserContext,
+  localStorage: Record<string, Record<string, string>>,
+  targetOrigins: string[],
+): Promise<void> {
+  for (const origin of targetOrigins) {
+    const storage = localStorage[origin];
+    if (!storage || Object.keys(storage).length === 0) continue;
+    await context.addInitScript(
+      ({ expectedOrigin, entries }) => {
+        if (globalThis.location?.origin !== expectedOrigin) return;
+        for (const [key, value] of Object.entries(entries)) {
+          globalThis.localStorage?.setItem(key, String(value));
+        }
+      },
+      { expectedOrigin: origin, entries: storage },
+    ).catch((error: unknown) => {
+      log.warn(`Failed to install localStorage init script for ${origin}: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 }
 
