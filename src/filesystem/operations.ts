@@ -105,6 +105,15 @@ export interface ListOptions {
   extension?: string;
   /** Base directory for resolving relative paths. */
   cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
+}
+
+export interface MoveOptions {
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
 }
 
 export interface DeleteOptions {
@@ -112,6 +121,13 @@ export interface DeleteOptions {
   recursive?: boolean;
   /** If true, don't throw if path doesn't exist. Default: false. */
   force?: boolean;
+  /** Base directory for resolving relative paths. */
+  cwd?: string;
+  /** Allowed root directories for sandbox enforcement. */
+  allowedRoots?: string[];
+}
+
+export interface StatOptions {
   /** Base directory for resolving relative paths. */
   cwd?: string;
   /** Allowed root directories for sandbox enforcement. */
@@ -218,7 +234,7 @@ export function listDir(
   dirPath: string,
   options: ListOptions = {},
 ): ListResult {
-  const resolved = resolvePath(dirPath, options.cwd);
+  const resolved = resolvePathSafe(dirPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolved)) {
     throw new FsError(`Directory not found: ${resolved}`, "ENOENT", resolved);
@@ -313,10 +329,10 @@ function readDirEntries(
 export function moveFile(
   srcPath: string,
   dstPath: string,
-  options: { cwd?: string } = {},
+  options: MoveOptions = {},
 ): MoveResult {
-  const resolvedSrc = resolvePath(srcPath, options.cwd);
-  const resolvedDst = resolvePath(dstPath, options.cwd);
+  const resolvedSrc = resolvePathSafe(srcPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
+  const resolvedDst = resolvePathSafe(dstPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolvedSrc)) {
     throw new FsError(`Source not found: ${resolvedSrc}`, "ENOENT", resolvedSrc);
@@ -395,8 +411,8 @@ export function deletePath(
 /**
  * Get file/directory metadata.
  */
-export function statPath(targetPath: string): FileStatResult {
-  const resolved = resolvePath(targetPath);
+export function statPath(targetPath: string, options: StatOptions = {}): FileStatResult {
+  const resolved = resolvePathSafe(targetPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolved)) {
     return {

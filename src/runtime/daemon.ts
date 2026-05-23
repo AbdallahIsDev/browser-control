@@ -1084,32 +1084,58 @@ export class Daemon {
 
 	fsRead(pathname: string): unknown {
 		this.assertOperationAllowed("fs_read", { path: pathname });
-		return fsReadFile(pathname);
+		return fsReadFile(pathname, {
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
 	}
 
 	fsWrite(pathname: string, content: string): unknown {
 		this.assertOperationAllowed("fs_write", { path: pathname });
-		return fsWriteFile(pathname, content);
+		return fsWriteFile(pathname, content, {
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
 	}
 
 	fsList(pathname: string, recursive = false, extension?: string): unknown {
 		this.assertOperationAllowed("fs_list", { path: pathname });
-		return fsListDir(pathname, { recursive, extension });
+		return fsListDir(pathname, {
+			recursive,
+			extension,
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
 	}
 
 	fsMove(src: string, dst: string): unknown {
 		this.assertOperationAllowed("fs_move", { src, dst, path: src });
-		return fsMoveFile(src, dst);
+		return fsMoveFile(src, dst, {
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
 	}
 
 	fsDelete(pathname: string, recursive = false, force = false): unknown {
 		this.assertOperationAllowed("fs_delete", { path: pathname, recursive });
-		return fsDeletePath(pathname, { recursive, force });
+		return fsDeletePath(pathname, {
+			recursive,
+			force,
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
 	}
 
 	fsStat(pathname: string): unknown {
 		this.assertOperationAllowed("fs_stat", { path: pathname });
-		return fsStatPath(pathname);
+		return fsStatPath(pathname, {
+			allowedRoots: this.getFilesystemAllowedRoots(),
+		});
+	}
+
+	private getFilesystemAllowedRoots(): string[] {
+		const roots = [process.cwd()];
+		const dataHome =
+			this.appConfig?.dataHome ?? loadConfig({ validate: false }).dataHome;
+		if (dataHome) {
+			roots.push(dataHome);
+		}
+		return [...new Set(roots.map((root) => path.resolve(root)))];
 	}
 
 	getRecentTasks(): Array<{

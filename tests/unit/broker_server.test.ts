@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { once } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
 
+import { Daemon } from "../../src/daemon";
+import { resetStateStorage } from "../../src/state";
 import {
   createBrokerServer,
   normalizeClientIp,
@@ -795,6 +800,100 @@ test("createBrokerServer rejects config mutation when auth key is not provided",
   assert.equal(response.status, 401);
   const body = await response.json() as { error?: string };
   assert.match(body.error ?? "", /unauthorized/i);
+});
+
+test("broker filesystem endpoints reject paths outside daemon filesystem sandbox", async (t) => {
+  const originalHome = process.env.BROWSER_CONTROL_HOME;
+  const originalPolicy = process.env.POLICY_PROFILE;
+  const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-fs-home-"));
+  const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-fs-outside-"));
+  process.env.BROWSER_CONTROL_HOME = dataHome;
+  process.env.POLICY_PROFILE = "trusted";
+
+  const outsideRead = path.join(outsideRoot, "read.txt");
+  const outsideWrite = path.join(outsideRoot, "write.txt");
+  const outsideDelete = path.join(outsideRoot, "delete.txt");
+  const outsideMoveSrc = path.join(outsideRoot, "move-src.txt");
+  const outsideMoveDst = path.join(outsideRoot, "move-dst.txt");
+  fs.writeFileSync(outsideRead, "outside read");
+  fs.writeFileSync(outsideDelete, "outside delete");
+  fs.writeFileSync(outsideMoveSrc, "outside move");
+
+  const daemon = new Daemon({
+    heartbeatIntervalMs: 60_000,
+    chromeWatchdogIntervalMs: 60_000,
+    memoryStore: undefined,
+    healthCheck: {
+      runCritical: async () => true,
+      runAll: async () => ({
+        overall: "healthy",
+        checks: [],
+        timestamp: new Date().toISOString(),
+      }),
+    },
+    brokerFactory: async () => ({
+      start: async () => {},
+      stop: async () => {},
+    }),
+  });
+  await daemon.start();
+
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "fs-sandbox-key",
+      POLICY_PROFILE: "trusted",
+    },
+    daemon,
+  });
+
+  t.after(async () => {
+    await broker.close();
+    await daemon.stop().catch(() => {});
+    resetStateStorage();
+    if (originalHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = originalHome;
+    }
+    if (originalPolicy === undefined) {
+      delete process.env.POLICY_PROFILE;
+    } else {
+      process.env.POLICY_PROFILE = originalPolicy;
+    }
+    fs.rmSync(dataHome, { recursive: true, force: true });
+    fs.rmSync(outsideRoot, { recursive: true, force: true });
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+  const headers = {
+    "content-type": "application/json",
+    "x-api-key": "fs-sandbox-key",
+  };
+
+  const cases = [
+    { endpoint: "read", body: { path: outsideRead } },
+    { endpoint: "write", body: { path: outsideWrite, content: "blocked" } },
+    { endpoint: "delete", body: { path: outsideDelete } },
+    { endpoint: "move", body: { src: outsideMoveSrc, dst: outsideMoveDst } },
+    { endpoint: "list", body: { path: outsideRoot } },
+    { endpoint: "stat", body: { path: outsideRead } },
+  ];
+
+  for (const item of cases) {
+    const response = await fetch(`${baseUrl}/api/v1/fs/${item.endpoint}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(item.body),
+    });
+    assert.equal(response.status, 400, `${item.endpoint} should reject outside sandbox`);
+    assert.match(await response.text(), /allowed roots|sandbox/i);
+  }
+
+  assert.equal(fs.existsSync(outsideWrite), false);
+  assert.equal(fs.existsSync(outsideDelete), true);
+  assert.equal(fs.existsSync(outsideMoveSrc), true);
+  assert.equal(fs.existsSync(outsideMoveDst), false);
 });
 
 test("createBrokerServer rejects config mutation when policy requires confirmation", async (t) => {

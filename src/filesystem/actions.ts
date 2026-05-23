@@ -25,9 +25,11 @@ import {
   type DeleteResult,
   type FileStatResult,
   type ListOptions,
+  type MoveOptions,
   type DeleteOptions,
   type ReadFileOptions,
   type WriteFileOptions,
+  type StatOptions,
 } from "./operations";
 import path from "node:path";
 import type { PolicyEvalResult, SessionManager } from "../session_manager";
@@ -360,6 +362,7 @@ export class FsActions {
         recursive: options.recursive,
         extension: options.extension,
         cwd: this.getWorkingDirectory(),
+        allowedRoots: this.getDefaultAllowedRoots("read"),
       };
       const result = fsListDir(options.path, listOpts);
 
@@ -398,9 +401,11 @@ export class FsActions {
     if (!this.isAllowedOrConfirmed(policyEval, options.confirmed)) return policyEval as ActionResult<MoveResult>;
 
     try {
-      const result = fsMoveFile(options.src, options.dst, {
+      const moveOpts: MoveOptions = {
         cwd: this.getWorkingDirectory(),
-      });
+        allowedRoots: this.getDefaultAllowedRoots("write"),
+      };
+      const result = fsMoveFile(options.src, options.dst, moveOpts);
 
       log.info("File moved", { from: result.from, to: result.to });
 
@@ -482,11 +487,11 @@ export class FsActions {
     if (!isPolicyAllowed(policyEval)) return policyEval as ActionResult<FileStatResult>;
 
     try {
-      const cwd = this.getWorkingDirectory();
-      const statPath = cwd && !options.path.startsWith("~")
-        ? path.resolve(cwd, options.path)
-        : options.path;
-      const result = fsStatPath(statPath);
+      const statOpts: StatOptions = {
+        cwd: this.getWorkingDirectory(),
+        allowedRoots: this.getDefaultAllowedRoots("read"),
+      };
+      const result = fsStatPath(options.path, statOpts);
 
       return successResult(result, {
         path: policyEval.path,
