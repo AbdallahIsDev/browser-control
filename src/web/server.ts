@@ -16,6 +16,7 @@ import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
 import { getDashboardConfigMutationError } from "../shared/config";
+import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { logger } from "../shared/logger";
 import { getDataHome } from "../shared/paths";
 import {
@@ -3211,14 +3212,21 @@ export function openUrlInDefaultBrowser(url: string): void {
 }
 
 if (require.main === module) {
-	void startWebAppServer({
+	const server = createWebAppServer({
 		host: process.env.BROWSER_CONTROL_WEB_HOST,
 		port: process.env.BROWSER_CONTROL_WEB_PORT
 			? Number(process.env.BROWSER_CONTROL_WEB_PORT)
 			: undefined,
 		token: process.env.BROWSER_CONTROL_WEB_TOKEN,
 		allowRemote: process.env.BROWSER_CONTROL_WEB_ALLOW_REMOTE === "1",
-	})
+	});
+	installGlobalFatalHandlers({
+		component: "web",
+		logger: webLogger,
+		shutdown: () => server.close(),
+	});
+	void server
+		.listen()
 		.then((info) => {
 			printServerInfo(info);
 		})

@@ -21,6 +21,7 @@ import {
 } from "../policy/execution_router";
 import type { PolicyTaskIntent } from "../policy/types";
 import { loadConfig } from "../shared/config";
+import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { type Logger, logger } from "../shared/logger";
 import {
 	getChromeDebugPath,
@@ -2502,6 +2503,11 @@ export class Daemon {
 if (require.main === module) {
 	const daemon = new Daemon({
 		schedulerEnabled: !process.argv.includes("--dev"),
+	});
+	installGlobalFatalHandlers({
+		component: "daemon",
+		logger,
+		shutdown: () => daemon.stop(),
 	});
 
 	daemon.start().catch((error: unknown) => {

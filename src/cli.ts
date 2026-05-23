@@ -7,6 +7,7 @@ import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
 import type { ScreencastOptions } from "./observability/types";
 import type { ProviderConfig } from "./providers/types";
+import { installGlobalFatalHandlers } from "./shared/fatal_handlers";
 
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
@@ -6548,6 +6549,7 @@ async function handleDebug(args: ParsedArgs): Promise<void> {
 }
 
 if (require.main === module) {
+	installGlobalFatalHandlers({ component: "cli" });
 	runCli().catch((error) => {
 		if (error instanceof CliError) {
 			console.error(error.message);
