@@ -1,7 +1,48 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
+import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
+import { resetStateStorage } from "../../src/state/index";
 import { parseArgs } from "../../src/cli";
+
+function runCli(
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv },
+) {
+  const cliPath = path.join(process.cwd(), "src", "cli.ts");
+  const script = `
+    process.chdir(${JSON.stringify(options.cwd)});
+    process.argv = ${JSON.stringify(["node", "cli.ts", ...args])};
+    (async () => {
+      const cli = require(${JSON.stringify(cliPath)});
+      await cli.runCli(process.argv);
+    })().catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = error && typeof error.exitCode === "number" ? error.exitCode : 1;
+    });
+  `;
+  return spawnSync(
+    process.execPath,
+    [
+      "--require",
+      require.resolve("ts-node/register"),
+      "--require",
+      require.resolve("tsconfig-paths/register"),
+      "-e",
+      script,
+    ],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, ...options.env },
+      encoding: "utf8",
+      windowsHide: true,
+    },
+  );
+}
 
 test("parseArgs parses commands correctly", () => {
   const result = parseArgs(["node", "cli.ts", "run", "--skill=test", "--action=click"]);
@@ -148,6 +189,61 @@ test("parseArgs handles proxy add with positional URL", () => {
   assert.equal(result.command, "proxy");
   assert.equal(result.subcommand, "add");
   assert.deepEqual(result.positional, ["http://proxy.example.com:8080"]);
+});
+
+test("proxy add stores proxy credentials in the credential vault", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-home-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-cwd-"));
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const previousBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+
+  try {
+    const env = {
+      BROWSER_CONTROL_HOME: home,
+      BROWSER_CONTROL_STATE_BACKEND: "json",
+    };
+    const added = runCli(
+      ["proxy", "add", "http://user:pass@proxy.example.test:8080"],
+      { cwd, env },
+    );
+    assert.equal(added.status, 0, added.stderr);
+
+    const proxyFile = fs.readFileSync(path.join(cwd, "proxies.json"), "utf8");
+    assert.doesNotMatch(proxyFile, /user|pass/u);
+    const proxies = JSON.parse(proxyFile) as Array<{
+      url: string;
+      status: string;
+      credentialRef?: string;
+    }>;
+    assert.equal(proxies[0]?.url, "http://proxy.example.test:8080/");
+    assert.equal(proxies[0]?.status, "active");
+    assert.match(proxies[0]?.credentialRef ?? "", /^secret:\/\/site\//u);
+
+    process.env.BROWSER_CONTROL_HOME = home;
+    process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+    resetStateStorage();
+    resetCredentialVault();
+    const stored = await new CredentialVault().getValue(proxies[0]!.credentialRef!);
+    assert.deepEqual(JSON.parse(stored ?? "{}"), {
+      username: "user",
+      password: "pass",
+    });
+
+    const listed = runCli(["proxy", "list", "--json"], { cwd, env });
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.doesNotMatch(listed.stdout, /user|pass/u);
+    const listedProxies = JSON.parse(listed.stdout) as Array<{ url: string }>;
+    assert.equal(listedProxies[0]?.url, "http://proxy.example.test:8080/");
+  } finally {
+    resetCredentialVault();
+    resetStateStorage();
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    if (previousBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
+    else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("parseArgs handles captcha test command", () => {

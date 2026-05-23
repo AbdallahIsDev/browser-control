@@ -11,6 +11,7 @@ export interface ProxyConfig {
   url: string;
   username?: string;
   password?: string;
+  credentialRef?: string;
   status: "active" | "cooldown" | "dead";
   lastUsed?: Date;
 }
@@ -103,6 +104,9 @@ function normalizeProxyConfig(input: ProxyConfigInput): ProxyConfig {
     username: input.username?.trim() || undefined,
     password: input.password?.trim() || undefined,
     status: input.status ?? "active",
+    ...(input.credentialRef?.trim()
+      ? { credentialRef: input.credentialRef.trim() }
+      : {}),
     ...(lastUsed ? { lastUsed } : {}),
   };
 }
@@ -173,6 +177,22 @@ export function toPlaywrightProxySettings(proxy: ProxyConfig): NonNullable<Brows
     server: `${parsed.protocol}//${parsed.host}`,
     username: username || undefined,
     password: password || undefined,
+  };
+}
+
+export async function resolveProxyConfigSecrets(proxy: ProxyConfig): Promise<ProxyConfig> {
+  const cloned = cloneProxy(proxy);
+  if (!cloned.credentialRef) return cloned;
+
+  const { CredentialVault } = await import("./security/credential_vault");
+  const rawValue = await new CredentialVault().getValue(cloned.credentialRef);
+  if (!rawValue) return cloned;
+
+  const parsed = JSON.parse(rawValue) as { username?: unknown; password?: unknown };
+  return {
+    ...cloned,
+    username: typeof parsed.username === "string" ? parsed.username : cloned.username,
+    password: typeof parsed.password === "string" ? parsed.password : cloned.password,
   };
 }
 
@@ -270,9 +290,10 @@ export class ProxyManager {
 }
 
 async function testProxyConnection(proxy: ProxyConfig): Promise<ProxyValidationProbeResult> {
+  const resolvedProxy = await resolveProxyConfigSecrets(proxy);
   const client = await request.newContext({
     ignoreHTTPSErrors: true,
-    proxy: toPlaywrightProxySettings(proxy),
+    proxy: toPlaywrightProxySettings(resolvedProxy),
   });
 
   try {

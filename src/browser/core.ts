@@ -9,7 +9,11 @@ import {
 	type Locator,
 	type Page,
 } from "playwright";
-import { type ProxyConfig, toPlaywrightProxySettings } from "../proxy_manager";
+import {
+	type ProxyConfig,
+	resolveProxyConfigSecrets,
+	toPlaywrightProxySettings,
+} from "../proxy_manager";
 import {
 	type MemoryStore,
 	restoreContextCookies,
@@ -424,15 +428,15 @@ function getFirstDefinedString(
 	return undefined;
 }
 
-function resolveContextProxy(
+async function resolveContextProxy(
 	proxy: ProxyConfig | BrowserContextOptions["proxy"] | undefined,
-): BrowserContextOptions["proxy"] | undefined {
+): Promise<BrowserContextOptions["proxy"] | undefined> {
 	if (!proxy) {
 		return undefined;
 	}
 
 	if ("url" in proxy) {
-		return toPlaywrightProxySettings(proxy);
+		return toPlaywrightProxySettings(await resolveProxyConfigSecrets(proxy));
 	}
 
 	return proxy;
@@ -468,7 +472,7 @@ export async function createAutomationContext(
 	options: AutomationContextOptions = {},
 ): Promise<BrowserContext> {
 	const env = options.env ?? process.env;
-	const contextProxy = resolveContextProxy(options.proxy);
+	const contextProxy = await resolveContextProxy(options.proxy);
 	const viewport = resolveAutomationViewport(options);
 	const stealthRequested =
 		options.enableStealth ??

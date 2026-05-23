@@ -494,15 +494,23 @@ async function cleanupBrowserSession(
 function sanitizeProxyUrlForStorage(rawUrl: string): {
 	url: string;
 	hadCredentials: boolean;
+	username?: string;
+	password?: string;
 } {
 	const normalized = /^[a-z]+:\/\//i.test(rawUrl.trim())
 		? rawUrl.trim()
 		: `http://${rawUrl.trim()}`;
 	const parsed = new URL(normalized);
 	const hadCredentials = Boolean(parsed.username || parsed.password);
+	const username = parsed.username
+		? decodeURIComponent(parsed.username)
+		: undefined;
+	const password = parsed.password
+		? decodeURIComponent(parsed.password)
+		: undefined;
 	parsed.username = "";
 	parsed.password = "";
-	return { url: parsed.toString(), hadCredentials };
+	return { url: parsed.toString(), hadCredentials, username, password };
 }
 
 function redactProxyUrl(rawUrl: string): string {
@@ -1263,9 +1271,22 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 
 			try {
 				const sanitized = sanitizeProxyUrlForStorage(url);
+				let credentialRef: string | undefined;
 				if (sanitized.hadCredentials) {
+					const { CredentialVault } = await import("./security/credential_vault");
+					const proxyScope = new URL(sanitized.url).host;
+					const stored = await new CredentialVault().set(
+						"site",
+						proxyScope,
+						"proxy-credentials",
+						JSON.stringify({
+							username: sanitized.username ?? "",
+							password: sanitized.password ?? "",
+						}),
+					);
+					credentialRef = stored.id;
 					console.error(
-						"Warning: proxy credentials were not written to proxies.json. Store credentials outside project files and configure them through a supported secret/env path.",
+						"Warning: proxy credentials were stored in the credential vault and were not written to proxies.json.",
 					);
 				}
 				const proxyPath = path.join(process.cwd(), "proxies.json");
@@ -1274,12 +1295,25 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 					configs = JSON.parse(fs.readFileSync(proxyPath, "utf8"));
 				}
 
-				if (configs.some((c: { url: string }) => c.url === sanitized.url)) {
+				const existing = configs.find(
+					(c: { url: string }) => c.url === sanitized.url,
+				) as { credentialRef?: string } | undefined;
+				if (existing) {
+					if (credentialRef) {
+						existing.credentialRef = credentialRef;
+						fs.writeFileSync(proxyPath, JSON.stringify(configs, null, 2));
+						console.log(`Proxy updated: ${sanitized.url}`);
+						break;
+					}
 					console.log("Proxy already exists");
 					break;
 				}
 
-				configs.push({ url: sanitized.url, status: "active" });
+				configs.push({
+					url: sanitized.url,
+					status: "active",
+					...(credentialRef ? { credentialRef } : {}),
+				});
 				fs.writeFileSync(proxyPath, JSON.stringify(configs, null, 2));
 				console.log(`Proxy added: ${sanitized.url}`);
 			} catch (error) {
