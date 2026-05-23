@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 
 // Set up test data home before imports
 const testHome = path.join(os.tmpdir(), `bc-test-auth-${Date.now()}`);
@@ -77,7 +78,7 @@ describe("browser_auth_state", () => {
     it("should save a snapshot to memory store", () => {
       const snapshot = createTestSnapshot();
       saveAuthSnapshotToStore(store, "test-profile", snapshot);
-      const loaded = store.get<AuthSnapshot>("auth_snapshot:test-profile");
+      const loaded = loadAuthSnapshot(store, "test-profile");
       assert.ok(loaded);
       assert.equal(loaded.profileId, "test-profile");
       assert.equal(loaded.cookies.length, 2);
@@ -86,8 +87,43 @@ describe("browser_auth_state", () => {
     it("should save with TTL", () => {
       const snapshot = createTestSnapshot();
       saveAuthSnapshotToStore(store, "ttl-profile", snapshot, 1000);
-      const loaded = store.get<AuthSnapshot>("auth_snapshot:ttl-profile");
+      const loaded = loadAuthSnapshot(store, "ttl-profile");
       assert.ok(loaded);
+    });
+
+    it("does not persist cookie or storage values in plaintext SQLite rows", () => {
+      const dbPath = path.join(testHome, "auth-snapshot.sqlite");
+      const fileStore = new MemoryStore({ filename: dbPath });
+      const snapshot = createTestSnapshot("encrypted-profile");
+      snapshot.cookies[0].value = "cookie-marker-secret";
+      snapshot.localStorage["https://example.com"]["user_token"] = "local-marker-secret";
+      snapshot.sessionStorage = {
+        "https://example.com": {
+          csrf: "session-marker-secret",
+        },
+      };
+
+      try {
+        saveAuthSnapshotToStore(fileStore, "encrypted-profile", snapshot);
+        const loaded = loadAuthSnapshot(fileStore, "encrypted-profile");
+        assert.equal(loaded?.cookies[0].value, "cookie-marker-secret");
+        assert.equal(loaded?.localStorage["https://example.com"]["user_token"], "local-marker-secret");
+        assert.equal(loaded?.sessionStorage["https://example.com"].csrf, "session-marker-secret");
+      } finally {
+        fileStore.close();
+      }
+
+      const db = new DatabaseSync(dbPath, { readOnly: true });
+      try {
+        const row = db.prepare("SELECT value_json FROM memory_store WHERE key = ?")
+          .get("auth_snapshot:encrypted-profile") as { value_json: string };
+        assert.ok(row);
+        assert.doesNotMatch(row.value_json, /cookie-marker-secret/);
+        assert.doesNotMatch(row.value_json, /local-marker-secret/);
+        assert.doesNotMatch(row.value_json, /session-marker-secret/);
+      } finally {
+        db.close();
+      }
     });
   });
 

@@ -13,6 +13,7 @@
 
 import type { BrowserContext, Page } from "playwright";
 import { MemoryStore, saveContextCookies, restoreContextCookies } from "../runtime/memory_store";
+import { createCredentialProtectionService } from "../security/credential_provider";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("browser_auth_state");
@@ -192,6 +193,53 @@ export async function importAuthSnapshot(
 // ── Memory Store Persistence ────────────────────────────────────────
 
 const AUTH_SNAPSHOT_PREFIX = "auth_snapshot:";
+const PROTECTED_AUTH_SNAPSHOT_VERSION = 3;
+
+interface ProtectedAuthSnapshotRecord {
+  protected: true;
+  formatVersion: typeof PROTECTED_AUTH_SNAPSHOT_VERSION;
+  profileId: string;
+  capturedAt: string;
+  label?: string;
+  encryption: "credential-protection-service";
+  encryptedPayload: string;
+}
+
+function isProtectedAuthSnapshotRecord(value: unknown): value is ProtectedAuthSnapshotRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { protected?: unknown }).protected === true &&
+    (value as { formatVersion?: unknown }).formatVersion === PROTECTED_AUTH_SNAPSHOT_VERSION &&
+    typeof (value as { encryptedPayload?: unknown }).encryptedPayload === "string"
+  );
+}
+
+function protectAuthSnapshot(snapshot: AuthSnapshot): ProtectedAuthSnapshotRecord {
+  const protector = createCredentialProtectionService();
+  const encrypted = protector.protect(JSON.stringify(snapshot));
+  return {
+    protected: true,
+    formatVersion: PROTECTED_AUTH_SNAPSHOT_VERSION,
+    profileId: snapshot.profileId,
+    capturedAt: snapshot.capturedAt,
+    ...(snapshot.label ? { label: snapshot.label } : {}),
+    encryption: "credential-protection-service",
+    encryptedPayload: encrypted.toString("base64"),
+  };
+}
+
+function unprotectAuthSnapshot(record: ProtectedAuthSnapshotRecord): AuthSnapshot | null {
+  try {
+    const protector = createCredentialProtectionService();
+    return JSON.parse(
+      protector.unprotect(Buffer.from(record.encryptedPayload, "base64")),
+    ) as AuthSnapshot;
+  } catch (error: unknown) {
+    log.error(`Failed to decrypt auth snapshot for profile "${record.profileId}": ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
 
 /** Save an auth snapshot to the memory store. */
 export function saveAuthSnapshotToStore(
@@ -200,7 +248,7 @@ export function saveAuthSnapshotToStore(
   snapshot: AuthSnapshot,
   ttlMs?: number,
 ): void {
-  store.set(`${AUTH_SNAPSHOT_PREFIX}${profileId}`, snapshot, ttlMs);
+  store.set(`${AUTH_SNAPSHOT_PREFIX}${profileId}`, protectAuthSnapshot(snapshot), ttlMs);
   log.info(`Auth snapshot saved for profile "${profileId}".`);
 }
 
@@ -209,7 +257,16 @@ export function loadAuthSnapshot(
   store: MemoryStore,
   profileId: string,
 ): AuthSnapshot | null {
-  return store.get<AuthSnapshot>(`${AUTH_SNAPSHOT_PREFIX}${profileId}`);
+  const stored = store.get<AuthSnapshot | ProtectedAuthSnapshotRecord>(
+    `${AUTH_SNAPSHOT_PREFIX}${profileId}`,
+  );
+  if (!stored) {
+    return null;
+  }
+  if (isProtectedAuthSnapshotRecord(stored)) {
+    return unprotectAuthSnapshot(stored);
+  }
+  return stored;
 }
 
 /** Delete an auth snapshot from the memory store. */
