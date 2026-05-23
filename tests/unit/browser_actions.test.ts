@@ -60,6 +60,7 @@ type MockBrowserContext = {
 type MockPage = {
 	calls: MockPageCalls;
 	hasBrowserWindow?: boolean;
+	windowState?: "normal" | "minimized" | "maximized" | "fullscreen";
 	targetId: string;
 	windowId?: number;
 	context?: () => MockBrowserContext;
@@ -170,7 +171,7 @@ function createAttachFailLaunchSucceedManager(pages: MockPage[]): TestBrowserMan
 			detach: async () => undefined,
 			send: async (method: string) => {
 				if (method === "Target.getTargetInfo") return { targetInfo: { targetId: page.targetId ?? page.url() } };
-				if (method === "Browser.getWindowForTarget") return { windowId: page.windowId ?? 1, bounds: { windowState: "normal" } };
+				if (method === "Browser.getWindowForTarget") return { windowId: page.windowId ?? 1, bounds: { windowState: page.windowState ?? "normal" } };
 				if (method === "Target.activateTarget") { page.calls.activateTarget += 1; return {}; }
 				return {};
 			},
@@ -239,7 +240,7 @@ function createAttachFailLaunchCaptureManager(
 				if (method === "Browser.getWindowForTarget") {
 					return {
 						windowId: page.windowId ?? 1,
-						bounds: { windowState: "normal" },
+						bounds: { windowState: page.windowState ?? "normal" },
 					};
 				}
 				if (method === "Target.activateTarget") {
@@ -321,7 +322,7 @@ function createMockBrowserContext(
 					}
 					return {
 						windowId: page.windowId ?? 1,
-						bounds: { windowState: "normal" },
+						bounds: { windowState: page.windowState ?? "normal" },
 					};
 				}
 				if (method === "Browser.setWindowBounds") {
@@ -375,7 +376,10 @@ function createConnectedBrowserManager(
 
 function createMockPage(
 	url = "about:blank",
-	options: { hasBrowserWindow?: boolean } = {},
+	options: {
+		hasBrowserWindow?: boolean;
+		windowState?: "normal" | "minimized" | "maximized" | "fullscreen";
+	} = {},
 ): MockPage {
 	const calls = {
 		bringToFront: 0,
@@ -396,6 +400,7 @@ function createMockPage(
 	return {
 		calls,
 		hasBrowserWindow: options.hasBrowserWindow,
+		windowState: options.windowState,
 		targetId: `target-${Math.random().toString(36).slice(2)}`,
 		bringToFront: async () => {
 			calls.bringToFront += 1;
@@ -730,6 +735,42 @@ describe("BrowserActions", () => {
 				assert.deepEqual(page.calls.goto, ["https://example.com"]);
 				assert.equal(state.newPages, 0);
 				assert.equal(page.calls.activateTarget > 0, true);
+				assert.equal(page.calls.setWindowBounds, 0);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("does not refocus a user-minimized Chrome window during navigation", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("chrome://newtab/", {
+				hasBrowserWindow: true,
+				windowState: "minimized",
+			});
+			const state = { pages: [page], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.open({
+					url: "https://example.com",
+				});
+
+				assert.equal(result.success, true);
+				assert.deepEqual(page.calls.goto, ["https://example.com"]);
+				assert.equal(state.newPages, 0);
+				assert.equal(page.calls.activateTarget, 0);
+				assert.equal(page.calls.bringToFront, 0);
 				assert.equal(page.calls.setWindowBounds, 0);
 			} finally {
 				isolatedStore.close();
@@ -1774,7 +1815,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.equal(hiddenPage.calls.activateTarget, 0);
 				assert.equal(hiddenPage.calls.bringToFront, 0);
-			assert.equal(visiblePage.calls.activateTarget, 0);
+				assert.equal(visiblePage.calls.activateTarget > 0, true);
 				assert.equal(visiblePage.calls.bringToFront, 1);
 				assert.equal(result.data?.activeTabId, visiblePage.targetId);
 				assert.equal(result.data?.url, "chrome://newtab/");
@@ -2297,6 +2338,37 @@ describe("BrowserActions", () => {
 					(result.data?.[0] as { source?: string } | undefined)?.source,
 					"filesystem-fallback",
 				);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("does not refocus a user-minimized Chrome window during tab switch", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("chrome://newtab/", {
+				hasBrowserWindow: true,
+				windowState: "minimized",
+			});
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.tabSwitch("0");
+
+				assert.equal(result.success, true);
+				assert.equal(page.calls.activateTarget, 0);
+				assert.equal(page.calls.bringToFront, 0);
+				assert.equal(result.data?.activeTabId, page.targetId);
 			} finally {
 				isolatedStore.close();
 			}

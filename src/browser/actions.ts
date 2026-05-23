@@ -81,6 +81,7 @@ interface BrowserWindowTarget {
 	page: Page;
 	targetId: string;
 	windowId: number;
+	windowState?: string;
 }
 
 	// ── High-Level Composite Action Types (Section 31) ──────────────────
@@ -592,9 +593,15 @@ export class BrowserActions {
 				targetId,
 			})) as {
 				windowId?: number;
+				bounds?: { windowState?: string };
 			};
 			if (typeof windowInfo.windowId !== "number") return null;
-			return { page, targetId, windowId: windowInfo.windowId };
+			return {
+				page,
+				targetId,
+				windowId: windowInfo.windowId,
+				windowState: windowInfo.bounds?.windowState,
+			};
 		} catch {
 			return null;
 		} finally {
@@ -605,6 +612,7 @@ export class BrowserActions {
 	private async activateWindowTarget(
 		target: BrowserWindowTarget,
 	): Promise<void> {
+		if (target.windowState === "minimized") return;
 		let client:
 			| Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>
 			| undefined;
@@ -621,6 +629,15 @@ export class BrowserActions {
 			await client?.detach?.().catch(() => undefined);
 		}
 		await target.page.bringToFront().catch(() => undefined);
+	}
+
+	private async foregroundPage(page: Page): Promise<void> {
+		const target = await this.getWindowTarget(page);
+		if (target) {
+			await this.activateWindowTarget(target);
+			return;
+		}
+		await page.bringToFront().catch(() => undefined);
 	}
 
 	private async getWindowTargets(
@@ -800,7 +817,7 @@ export class BrowserActions {
 		// Try durable targetId first
 		const existingPage = this.tabIdMap.get(tabId);
 		if (existingPage && pages.includes(existingPage)) {
-			await existingPage.bringToFront().catch(() => undefined);
+			await this.foregroundPage(existingPage);
 			return existingPage;
 		}
 
@@ -812,7 +829,7 @@ export class BrowserActions {
 		}
 		const refreshedPage = this.tabIdMap.get(tabId);
 		if (refreshedPage) {
-			await refreshedPage.bringToFront().catch(() => undefined);
+			await this.foregroundPage(refreshedPage);
 			return refreshedPage;
 		}
 
@@ -821,7 +838,7 @@ export class BrowserActions {
 			const index = parseInt(tabId, 10);
 			if (index >= 0 && index < pages.length) {
 				const numericPage = pages[index];
-				await numericPage.bringToFront().catch(() => undefined);
+				await this.foregroundPage(numericPage);
 				return numericPage;
 			}
 			const sessionId = this.getSessionId();
@@ -1089,8 +1106,8 @@ export class BrowserActions {
 		// page.viewportSize() returns null for visible browsers - changing it would
 		// mutate the real Chrome window layout (bug: forced 16:9 viewport).
 		// For headless browsers, Playwright already sets an appropriate viewport.
-		// Just ensure the page is brought to front for visibility.
-		await page.bringToFront().catch(() => undefined);
+		// Just ensure the page is brought to front for visibility unless the user minimized it.
+		await this.foregroundPage(page);
 	}
 
 	private async failureWithDebug<T>(
@@ -1322,7 +1339,7 @@ export class BrowserActions {
 		if (target) {
 			await this.activateWindowTarget(target);
 		} else {
-			await page.bringToFront().catch(() => undefined);
+			await this.foregroundPage(page);
 		}
 		await locator
 			.scrollIntoViewIfNeeded({ timeout: timeoutMs })
@@ -1456,7 +1473,7 @@ export class BrowserActions {
 			if (openedTarget) {
 				await this.activateWindowTarget(openedTarget);
 			}
-			await page.bringToFront().catch(() => undefined);
+			await this.foregroundPage(page);
 			const title = await page.title();
 			await this.persistObservability(sessionId, page);
 
