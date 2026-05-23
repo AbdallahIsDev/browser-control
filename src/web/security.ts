@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { constantTimeTokenEqual } from "../shared/auth";
 
 const DEFAULT_ALLOWED_HEADERS = "Content-Type, Authorization, X-API-Key";
 
@@ -107,7 +108,10 @@ export function isAuthorizedRequest(
 
 	allowQueryToken = false,
 ): boolean {
-	return extractAuthToken(request, requestUrl, allowQueryToken) === token;
+	return constantTimeTokenEqual(
+		extractAuthToken(request, requestUrl, allowQueryToken),
+		token,
+	);
 }
 
 export class UnsupportedMediaTypeError extends Error {

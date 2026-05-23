@@ -18,6 +18,7 @@ import {
 	loadConfig,
 	setUserConfigValue,
 } from "../shared/config";
+import { constantTimeTokenEqual } from "../shared/auth";
 import { Logger } from "../shared/logger";
 import type { SkillManifest } from "../skill";
 import type {
@@ -1022,7 +1023,7 @@ export function createBrokerServer(
 			// Require auth for all endpoints except health
 			if (!isHealthPath(pathname)) {
 				const apiKey = extractApiKey(request);
-				if (apiKey !== config.authKey) {
+				if (!constantTimeTokenEqual(apiKey, config.authKey)) {
 					writeJson(response, 401, { error: "Unauthorized." });
 					return;
 				}
@@ -1369,7 +1370,7 @@ export function createBrokerServer(
 
 		if (config.authKey) {
 			const apiKey = extractApiKey(request);
-			if (apiKey !== config.authKey) {
+			if (!constantTimeTokenEqual(apiKey, config.authKey)) {
 				writeUpgradeError(socket, 401, "Unauthorized.");
 				return;
 			}

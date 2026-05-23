@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
@@ -12,6 +13,7 @@ import type { BrowserControlAPI } from "../../src/browser_control";
 import { resetRecorder } from "../../src/observability/recorder";
 import { createBrokerServer } from "../../src/runtime/broker_server";
 import { resetCredentialVault } from "../../src/security/credential_vault";
+import { constantTimeTokenEqual } from "../../src/shared/auth";
 import type { ActionResult } from "../../src/shared/action_result";
 import { resetStateStorage } from "../../src/state/index";
 import { createWebAppServer } from "../../src/web/server";
@@ -564,6 +566,27 @@ test("web app config mutation only allows dashboard-safe keys", async (t) => {
 	}
 
 	assert.deepEqual(setCalls, [{ key: "logLevel", value: "debug" }]);
+});
+
+test("auth token comparison uses timing-safe equality for same-length tokens", (t) => {
+	let calls = 0;
+	t.mock.method(crypto, "timingSafeEqual", (
+		actual: NodeJS.ArrayBufferView,
+		expected: NodeJS.ArrayBufferView,
+	) => {
+		calls += 1;
+		assert.equal(Buffer.isBuffer(actual), true);
+		assert.equal(Buffer.isBuffer(expected), true);
+		assert.equal(actual.byteLength, expected.byteLength);
+		return false;
+	});
+
+	assert.equal(constantTimeTokenEqual("test-token", "xxxx-token"), false);
+	assert.equal(calls, 1);
+	assert.equal(constantTimeTokenEqual("short", "test-token"), false);
+	assert.equal(calls, 1);
+	assert.equal(constantTimeTokenEqual(null, "test-token"), false);
+	assert.equal(calls, 1);
 });
 
 test("web app JSON endpoints reject missing or wrong content type", async (t) => {
