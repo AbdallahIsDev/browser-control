@@ -551,6 +551,7 @@ export class BrowserActions {
 			status: "pending",
 			createdAt,
 			tabId: await this.getTabIdForPage(page, "0").catch(() => undefined),
+			source: "playwright",
 			sortTimeMs: Date.now(),
 		};
 		this.downloadRegistry.unshift(record);
@@ -5020,9 +5021,10 @@ export class BrowserActions {
 			const downloadsDir = getSessionDownloadsDir(sessionId);
 			const helpers = { fs, path };
 
-			// Ensure downloads directory exists
-			if (!helpers.fs.existsSync(downloadsDir)) {
-				const registryOnly = this.downloadRegistry.map(({ sortTimeMs: _sortTimeMs, ...download }) => download);
+			if (this.downloadRegistry.length > 0) {
+				const registryOnly = [...this.downloadRegistry]
+					.sort((a, b) => b.sortTimeMs - a.sortTimeMs)
+					.map(({ sortTimeMs: _sortTimeMs, ...download }) => download);
 				return successResult(registryOnly, {
 					path: policyEval.path,
 					sessionId,
@@ -5032,18 +5034,21 @@ export class BrowserActions {
 				});
 			}
 
-			// Read files in downloads directory
+			if (!helpers.fs.existsSync(downloadsDir)) {
+				return successResult([], {
+					path: policyEval.path,
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				});
+			}
+
 			const entries = helpers.fs.readdirSync(downloadsDir);
-			const downloads: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [...this.downloadRegistry];
-			const knownPaths = new Set(
-				downloads
-					.map((download) => download.path)
-					.filter((downloadPath): downloadPath is string => Boolean(downloadPath)),
-			);
+			const downloads: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
 
 			for (const entry of entries) {
 				const fullPath = helpers.path.join(downloadsDir, entry);
-				if (knownPaths.has(fullPath)) continue;
 				try {
 					const stats = helpers.fs.statSync(fullPath);
 					if (stats.isFile()) {
@@ -5054,6 +5059,7 @@ export class BrowserActions {
 							sizeBytes: stats.size,
 							status: "completed",
 							completedAt: stats.mtime.toISOString(),
+							source: "filesystem-fallback",
 							sortTimeMs: stats.mtimeMs,
 						});
 					}

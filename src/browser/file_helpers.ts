@@ -39,6 +39,8 @@ export interface ExtendedDownloadResult {
   completedAt?: string;
   /** Browser Control tab id associated with the download */
   tabId?: string;
+  /** Metadata source for the download record */
+  source?: "playwright" | "filesystem-fallback";
 }
 
 export class DownloadManager {

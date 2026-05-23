@@ -19,6 +19,7 @@ import {
 import { NetworkRuleEngine } from "../../src/security/network_rules";
 import { ServiceRegistry } from "../../src/services/registry";
 import { isPolicyAllowed, SessionManager } from "../../src/session_manager";
+import { getSessionDownloadsDir } from "../../src/shared/paths";
 import { getStateStorage, resetStateStorage } from "../../src/state/index";
 
 type ViewportSize = { width: number; height: number };
@@ -2223,6 +2224,81 @@ describe("BrowserActions", () => {
 				assert.ok(policyEval.policyDecision);
 				assert.ok(policyEval.risk);
 				assert.ok(policyEval.path);
+			}
+		});
+	});
+
+	describe("downloadsList", () => {
+		it("does not merge stale filesystem files when Playwright registry has downloads", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const manager = createConnectedBrowserManager([createMockPage()]);
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "trusted" });
+				const actions = new BrowserActions({ sessionManager: sm });
+				const sessionId = sm.getActiveSession()?.id;
+				assert.ok(sessionId);
+				const downloadsDir = getSessionDownloadsDir(sessionId);
+				fs.mkdirSync(downloadsDir, { recursive: true });
+				fs.writeFileSync(path.join(downloadsDir, "tracked.txt"), "tracked");
+				fs.writeFileSync(path.join(downloadsDir, "stale.txt"), "stale");
+
+				(
+					actions as unknown as {
+						downloadRegistry: Array<Record<string, unknown>>;
+					}
+				).downloadRegistry.push({
+					id: "download-1",
+					url: "https://example.test/tracked.txt",
+					suggestedFilename: "tracked.txt",
+					path: path.join(downloadsDir, "tracked.txt"),
+					sizeBytes: 7,
+					status: "completed",
+					createdAt: "2026-05-23T00:00:00.000Z",
+					completedAt: "2026-05-23T00:00:01.000Z",
+					sortTimeMs: 2,
+				});
+
+				const result = await actions.downloadsList();
+
+				assert.equal(result.success, true, JSON.stringify(result, null, 2));
+				assert.equal(result.data?.length, 1);
+				assert.equal(result.data?.[0]?.suggestedFilename, "tracked.txt");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("labels filesystem entries as fallback when registry is empty", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const manager = createConnectedBrowserManager([createMockPage()]);
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "trusted" });
+				const actions = new BrowserActions({ sessionManager: sm });
+				const sessionId = sm.getActiveSession()?.id;
+				assert.ok(sessionId);
+				const downloadsDir = getSessionDownloadsDir(sessionId);
+				fs.mkdirSync(downloadsDir, { recursive: true });
+				fs.writeFileSync(path.join(downloadsDir, "fallback.txt"), "fallback");
+
+				const result = await actions.downloadsList();
+
+				assert.equal(result.success, true, JSON.stringify(result, null, 2));
+				assert.equal(result.data?.length, 1);
+				assert.equal(result.data?.[0]?.suggestedFilename, "fallback.txt");
+				assert.equal(
+					(result.data?.[0] as { source?: string } | undefined)?.source,
+					"filesystem-fallback",
+				);
+			} finally {
+				isolatedStore.close();
 			}
 		});
 	});
