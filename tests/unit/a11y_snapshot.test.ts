@@ -185,6 +185,33 @@ test("snapshot(page) captures interactive elements from a real page", async () =
   }
 });
 
+test("snapshot(page) preserves Playwright AI snapshot refs and metadata", async () => {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <main>
+        <h1>Dashboard</h1>
+        <label for="search">Search</label>
+        <input id="search" type="text" />
+        <button>Submit</button>
+      </main>
+    `);
+
+    const snap = await snapshot(page, { sessionId: "s1" });
+    const heading = snap.elements.find((el) => el.role === "heading" && el.name === "Dashboard");
+    const textbox = snap.elements.find((el) => el.role === "textbox" && el.name === "Search");
+    const button = snap.elements.find((el) => el.role === "button" && el.name === "Submit");
+
+    assert.equal(heading?.ref, "e3");
+    assert.equal(heading?.level, 1);
+    assert.equal(textbox?.ref, "e4");
+    assert.equal(button?.ref, "e5");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("snapshot(page) honors rootSelector in DOM fallback mode", async () => {
   const browser = await launchBrowser();
   try {

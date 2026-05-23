@@ -162,12 +162,15 @@ class PlaywrightSnapshotAdapter implements SnapshotAdapter {
     }
 
     const ariaSnapshot = (bodyLocator as unknown as {
-      ariaSnapshot?: (options?: { timeout?: number }) => Promise<string>;
+      ariaSnapshot?: (options?: { timeout?: number; mode?: "ai" | "default" }) => Promise<string>;
     }).ariaSnapshot;
     if (typeof ariaSnapshot !== "function") return [];
 
     try {
-      const output = await ariaSnapshot.call(bodyLocator, { timeout: 1000 });
+      const output = await ariaSnapshot.call(bodyLocator, {
+        timeout: 1000,
+        mode: "ai",
+      });
       return parsePlaywrightAriaSnapshot(output);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -345,9 +348,18 @@ function parsePlaywrightAriaSnapshot(value: string): A11yElement[] {
     if (!role || (!INTERACTIVE_ROLES.has(role) && !STRUCTURAL_ROLES.has(role))) {
       continue;
     }
-    refCounter += 1;
-    const element: A11yElement = { ref: `e${refCounter}`, role };
+    const refMatch = /\[ref=(e\d+)\]/u.exec(trimmed);
+    let ref = refMatch?.[1];
+    if (!ref) {
+      refCounter += 1;
+      ref = `e${refCounter}`;
+    }
+    const element: A11yElement = { ref, role };
     if (match[2]) element.name = match[2];
+    const levelMatch = /\[level=(\d+)\]/u.exec(trimmed);
+    if (role === "heading" && levelMatch?.[1]) {
+      element.level = Number.parseInt(levelMatch[1], 10);
+    }
     elements.push(element);
   }
   return elements;
