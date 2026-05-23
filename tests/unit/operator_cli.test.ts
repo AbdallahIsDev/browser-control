@@ -666,6 +666,71 @@ test("bc --help does not import SQLite-backed runtime modules", () => {
 	}
 });
 
+test("bc --help is package-first", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.ok(
+			result.stdout.indexOf("Automation Packages") < result.stdout.indexOf("Operator"),
+			"Automation Packages should appear before Operator commands",
+		);
+		assert.ok(
+			result.stdout.indexOf("package record start") < result.stdout.indexOf("browser open"),
+			"package creation workflow should appear before raw browser commands",
+		);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc package --help shows package-focused help", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"package",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.match(result.stdout, /Usage: bc package <command>/);
+		assert.match(result.stdout, /package record start/);
+		assert.doesNotMatch(result.stdout, /Browser Actions:/);
+		assert.doesNotMatch(result.stdout, /Service Management:/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("top-level browser actions keep the first user argument", () => {
 	const parsed = parseArgs(["node", "cli.ts", "open", "https://example.com"]);
 	assert.deepEqual(getBrowserActionPositionals("open", parsed), [

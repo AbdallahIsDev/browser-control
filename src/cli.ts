@@ -552,6 +552,23 @@ Browser Control CLI
 
 Usage: bc <command> [subcommand] [options]
 
+Automation Packages (primary):
+  package record start --name=<name> [--domain=<domain>] [--json]     Start a package recording session
+  package record action <kind> --params=<json> [--json]               Add an explicit action to the active recording
+  package record stop [--json]                                        Stop the active package recording
+  package draft <recording-id> [--json]                               Draft package files from a recording
+  package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft
+  package install <source> [--json]                                  Install a package from local directory
+  package list [--json]                                              List installed packages
+  package info <name> [--json]                                       Show package info
+  package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
+  package run <name> <workflow> [--json]                             Run a package workflow
+  package eval <name> [--json]                                       Evaluate a package
+  package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
+  package review-history <name> [--json]                             Show package trust review history
+  package eval-history [name] [--json]                               Show package evaluation history
+  package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature
+
 Operator:
   doctor [--json]                                                    Run operator diagnostics
   setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]
@@ -586,25 +603,6 @@ Self-Healing Harness (Section 29):
   harness generate --id=<id> --purpose=<purpose> [--files=<path:content>] [--json]
                                                                      Generate a helper
   harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
-
-Automation Packages (Section 30):
-  package record start --name=<name> [--domain=<domain>] [--json]     Start a package recording session
-  package record action <kind> --params=<json> [--json]               Add an explicit action to the active recording
-  package record stop [--json]                                        Stop the active package recording
-  package draft <recording-id> [--json]                               Draft package files from a recording
-  package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft
-  package install <source> [--json]                                  Install a package from local directory
-  package list [--json]                                              List installed packages
-  package info <name> [--json]                                       Show package info
-  package remove <name> [--json]                                     Remove an installed package
-  package update <name> [source] [--json]                            Update an installed package
-  package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
-  package run <name> <workflow> [--json]                             Run a package workflow
-  package eval <name> [--json]                                       Evaluate a package
-  package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
-  package review-history <name> [--json]                             Show package trust review history
-  package eval-history [name] [--json]                               Show package evaluation history
-  package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature
 
 Browser Actions:
   open <url>                                                         Open a URL in the browser
@@ -731,6 +729,39 @@ Flags:
 
 Environment:
   BROKER_PORT                                                        Broker API port (default: 7788)
+`);
+}
+
+function printPackageHelp(): void {
+	console.log(`
+Browser Control CLI - Automation Packages
+
+Usage: bc package <command> [options]
+
+Create and replay reusable browser workflow packages:
+  package record start --name=<name> [--domain=<domain>] [--json]     Start a package recording session
+  package record action <kind> --params=<json> [--json]               Add an explicit action to the active recording
+  package record stop [--json]                                        Stop the active package recording and save discovery telemetry
+  package draft <recording-id> [--json]                               Draft package files from a recording
+  package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft
+
+Install, review, and run packages:
+  package install <source> [--json]                                  Install a package from local directory
+  package list [--json]                                              List installed packages
+  package info <name> [--json]                                       Show package info
+  package remove <name> [--json]                                     Remove an installed package
+  package update <name> [source] [--json]                            Update an installed package
+  package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
+  package run <name> <workflow> [--json]                             Run a package workflow and include savings telemetry
+  package eval <name> [--json]                                       Evaluate a package
+  package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
+  package review-history <name> [--json]                             Show package trust review history
+  package eval-history [name] [--json]                               Show package evaluation history
+  package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature
+
+Flags:
+  --json                                                             Raw JSON output
+  --help, -h                                                         Show this help
 `);
 }
 
@@ -3115,6 +3146,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 	const args = parseArgs(argv);
 
 	if (args.flags.help || args.flags.h || args.command === "help") {
+		if (args.command === "package") {
+			printPackageHelp();
+			return;
+		}
 		printHelp();
 		return;
 	}
