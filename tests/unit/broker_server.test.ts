@@ -67,6 +67,51 @@ test("createBrokerServer rejects oversized JSON request bodies", async (t) => {
   assert.match(body.error ?? "", /Request body too large/);
 });
 
+test("createBrokerServer defaults CORS to loopback origins only", async (t) => {
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "cors-default-key" },
+  });
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const blocked = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: { origin: "https://evil.example" },
+  });
+  assert.equal(blocked.headers.get("access-control-allow-origin"), null);
+
+  const loopback = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: { origin: "http://127.0.0.1:5173" },
+  });
+  assert.equal(
+    loopback.headers.get("access-control-allow-origin"),
+    "http://127.0.0.1:5173",
+  );
+  assert.equal(loopback.headers.get("vary"), "Origin");
+});
+
+test("createBrokerServer supports explicit wildcard CORS opt-in", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "cors-wildcard-key",
+      BROKER_ALLOWED_ORIGINS: "*",
+    },
+  });
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const response = await fetch(`${getBaseUrl(broker)}/api/v1/health`, {
+    headers: { origin: "https://client.example" },
+  });
+
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+});
+
 test("createBrokerServer exposes runtime endpoints and WebSocket completion events", async (t) => {
   let broker!: BrokerServer;
   let scheduledBody: Record<string, unknown> | undefined;

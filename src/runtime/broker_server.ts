@@ -267,6 +267,25 @@ function parseAllowedDomains(value: string | undefined): string[] {
 	});
 }
 
+function isLoopbackCorsOrigin(origin: string): boolean {
+	try {
+		const parsed = new URL(origin);
+		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+			return false;
+		}
+
+		const hostname = parsed.hostname.toLowerCase();
+		return (
+			hostname === "localhost" ||
+			hostname === "::1" ||
+			hostname === "[::1]" ||
+			/^127(?:\.\d{1,3}){3}$/.test(hostname)
+		);
+	} catch {
+		return false;
+	}
+}
+
 function resolveBrokerConfig(
 	options: BrokerServerOptions,
 ): BrokerResolvedConfig {
@@ -543,10 +562,14 @@ function setCorsHeaders(
 			? request.headers.origin
 			: undefined;
 	const allowOrigin = config.allowedOrigins
-		? requestOrigin && config.allowedOrigins.includes(requestOrigin)
+		? config.allowedOrigins.includes("*")
+			? "*"
+			: requestOrigin && config.allowedOrigins.includes(requestOrigin)
+				? requestOrigin
+				: undefined
+		: requestOrigin && isLoopbackCorsOrigin(requestOrigin)
 			? requestOrigin
-			: undefined
-		: "*";
+			: undefined;
 
 	if (allowOrigin) {
 		response.setHeader("Access-Control-Allow-Origin", allowOrigin);
