@@ -14,7 +14,8 @@ export class PackageEval {
     private readonly registry: PackageRegistry,
     private readonly memoryStore: MemoryStore,
     private readonly sessionId: string,
-    private readonly runtime: WorkflowRuntime
+    private readonly runtime: WorkflowRuntime,
+    private readonly options: { dataHome?: string } = {},
   ) {}
 
   async evaluate(packageName: string): Promise<ActionResult<PackageEvalResult[]>> {
@@ -28,7 +29,13 @@ export class PackageEval {
     }
 
     const evalResults: PackageEvalResult[] = [];
-    const runner = new PackageRunner(this.registry, this.memoryStore, this.sessionId, this.runtime);
+    const runner = new PackageRunner(
+      this.registry,
+      this.memoryStore,
+      this.sessionId,
+      this.runtime,
+      { dataHome: this.options.dataHome },
+    );
     
     let passedCount = 0;
     let failedCount = 0;

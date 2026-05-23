@@ -1612,6 +1612,7 @@ export function createBrowserControl(
 					sessionManager.getMemoryStore(),
 					getActionSessionId(),
 					buildWorkflowRuntime(),
+					{ dataHome: options.dataHome },
 				);
 				const result = await runner.runWorkflow(name, workflowNameOrId);
 				return attachPolicy(result, policy.policy);
@@ -1630,6 +1631,7 @@ export function createBrowserControl(
 					sessionManager.getMemoryStore(),
 					getActionSessionId(),
 					buildWorkflowRuntime(),
+					{ dataHome: options.dataHome },
 				);
 				const result = await evaluator.evaluate(name);
 				return attachPolicy(result, policy.policy);

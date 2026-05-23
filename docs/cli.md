@@ -169,6 +169,8 @@ daemon health [--json]
 daemon logs [--json]
 ```
 
+`package run --json` includes `data.savingsTelemetry` when replay metrics are available. The comparison uses the latest discovery recording for the same package name and reports duration, tool-call, and failure deltas.
+
 Windows daemon launches avoid visible helper windows by default. Use `--visible` or `daemonVisible=true` only when you need a console window.
 
 ## Terminal

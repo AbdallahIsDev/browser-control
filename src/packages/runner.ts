@@ -8,6 +8,7 @@ import { failureResult } from "../shared/action_result";
 import type { ActionResult } from "../shared/action_result";
 import { safeResolveRelativePath } from "./manifest";
 import type { InstalledAutomationPackage, PackagePermissionDecision } from "./types";
+import { recordReplayTelemetry } from "./savings_telemetry";
 
 function isWithinAllowedPath(rawPath: string, allowedPath: string): boolean {
   const resolvedPath = path.resolve(rawPath);
@@ -21,7 +22,8 @@ export class PackageRunner {
     private readonly registry: PackageRegistry,
     private readonly memoryStore: MemoryStore,
     private readonly sessionId: string,
-    private readonly runtime: WorkflowRuntime
+    private readonly runtime: WorkflowRuntime,
+    private readonly options: { dataHome?: string } = {},
   ) {}
 
   async runWorkflow(
@@ -29,13 +31,28 @@ export class PackageRunner {
     workflowNameOrId: string,
     options: { maxNodeTimeoutMs?: number } = {},
   ): Promise<ActionResult> {
+    const startedAt = new Date().toISOString();
+    const withTelemetry = (result: ActionResult): ActionResult => {
+      const telemetry = recordReplayTelemetry({
+        packageName,
+        workflowNameOrId,
+        startedAt,
+        result: result as ActionResult<import("../workflows/types").WorkflowRun>,
+        dataHome: this.options.dataHome,
+      });
+      if (result.data && typeof result.data === "object") {
+        (result.data as { savingsTelemetry?: unknown }).savingsTelemetry = telemetry;
+      }
+      return result;
+    };
+
     const pkg = this.registry.get(packageName);
     if (!pkg) {
-      return failureResult(`Package not found: ${packageName}`, { path: "command", sessionId: this.sessionId });
+      return withTelemetry(failureResult(`Package not found: ${packageName}`, { path: "command", sessionId: this.sessionId }));
     }
 
     if (!pkg.enabled || pkg.validationStatus !== "valid") {
-      return failureResult(`Package ${packageName} is not enabled or valid`, { path: "command", sessionId: this.sessionId });
+      return withTelemetry(failureResult(`Package ${packageName} is not enabled or valid`, { path: "command", sessionId: this.sessionId }));
     }
 
     let targetWorkflowPath: string | null = null;
@@ -69,14 +86,14 @@ export class PackageRunner {
     }
 
     if (!targetWorkflowPath || !fs.existsSync(targetWorkflowPath)) {
-      return failureResult(`Workflow ${workflowNameOrId} not found in package ${packageName}`, { path: "command", sessionId: this.sessionId });
+      return withTelemetry(failureResult(`Workflow ${workflowNameOrId} not found in package ${packageName}`, { path: "command", sessionId: this.sessionId }));
     }
 
     let graph: WorkflowGraph;
     try {
       graph = JSON.parse(fs.readFileSync(targetWorkflowPath, "utf8"));
     } catch (err) {
-      return failureResult(`Failed to parse workflow file: ${(err as Error).message}`, { path: "command", sessionId: this.sessionId });
+      return withTelemetry(failureResult(`Failed to parse workflow file: ${(err as Error).message}`, { path: "command", sessionId: this.sessionId }));
     }
 
     if (options.maxNodeTimeoutMs !== undefined) {
@@ -86,15 +103,16 @@ export class PackageRunner {
     // ENFORCE PERMISSIONS
     const permissionErrors = this.checkPermissions(pkg, graph);
     if (permissionErrors.length > 0) {
-      return failureResult(`Permission denied for package ${packageName}: ${permissionErrors.join("; ")}`, {
+      return withTelemetry(failureResult(`Permission denied for package ${packageName}: ${permissionErrors.join("; ")}`, {
         path: "command",
         sessionId: this.sessionId
-      });
+      }));
     }
 
-    return this.runtime
+    const result = await this.runtime
       .withExecutionScope({ packageName, workflowId: graph.id })
       .run(graph);
+    return withTelemetry(result);
   }
 
   private applyExecutionBounds(graph: WorkflowGraph, maxNodeTimeoutMs: number): WorkflowGraph {

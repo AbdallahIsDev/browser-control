@@ -17,7 +17,12 @@ import { resetStateStorage } from "../../src/state/index";
 import {
   ActionRecorder,
   convertRecordingToPackage,
+  type RecordingSession,
 } from "../../src/observability/recorder";
+import {
+  getPackageSavingsTelemetryHistory,
+  recordDiscoveryTelemetry,
+} from "../../src/packages/savings_telemetry";
 
 describe("Automation Packages - Hardened", () => {
   let tmpDataHome: string;
@@ -362,6 +367,70 @@ describe("Automation Packages - Hardened", () => {
       const evalResults = result.data as any[];
       assert.strictEqual(evalResults[0].status, "failed");
       assert.ok(evalResults[0].error?.includes("timed out"));
+    });
+  });
+
+  describe("Savings Telemetry", () => {
+    it("records discovery metrics from a package recording", () => {
+      const startedAt = "2026-05-23T10:00:00.000Z";
+      const session: RecordingSession = {
+        id: "rec-discovery-1",
+        startedAt,
+        name: "Basic Test Package",
+        actions: [
+          {
+            id: "act-1",
+            kind: "browser-open",
+            timestamp: "2026-05-23T10:00:01.000Z",
+            params: { url: "https://example.test" },
+          },
+          {
+            id: "act-2",
+            kind: "browser-click",
+            timestamp: "2026-05-23T10:00:05.000Z",
+            params: { target: "@e1" },
+            error: "not found",
+          },
+        ],
+      };
+
+      const record = recordDiscoveryTelemetry(session, tmpDataHome);
+      const history = getPackageSavingsTelemetryHistory(tmpDataHome);
+
+      assert.equal(record.kind, "discovery");
+      assert.equal(record.packageName, "basic-test-package");
+      assert.equal(record.toolCalls, 2);
+      assert.equal(record.failures, 1);
+      assert.equal(record.durationMs, 5000);
+      assert.equal(history[0].id, record.id);
+    });
+
+    it("attaches replay savings comparison to package run output", async () => {
+      const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
+      await bc.package.install(fixturePath);
+      const grantResult = bc.package.grantPermission("basic-test-package", "terminal");
+      assert.strictEqual(grantResult.success, true, grantResult.error);
+
+      recordDiscoveryTelemetry({
+        id: "rec-baseline",
+        startedAt: "2026-05-23T10:00:00.000Z",
+        name: "Basic Test Package",
+        actions: [
+          { id: "act-1", kind: "terminal-exec", timestamp: "2026-05-23T10:00:03.000Z", params: { command: "echo one" } },
+          { id: "act-2", kind: "terminal-exec", timestamp: "2026-05-23T10:00:07.000Z", params: { command: "echo two" } },
+          { id: "act-3", kind: "terminal-exec", timestamp: "2026-05-23T10:00:09.000Z", params: { command: "echo three" }, error: "retry" },
+        ],
+      }, tmpDataHome);
+
+      const runResult = await bc.package.run("basic-test-package", "test-workflow");
+
+      assert.strictEqual(runResult.success, true, runResult.error);
+      const telemetry = (runResult.data as any).savingsTelemetry;
+      assert.equal(telemetry.replay.kind, "replay");
+      assert.equal(telemetry.replay.packageName, "basic-test-package");
+      assert.equal(telemetry.comparison.baseline.toolCalls, 3);
+      assert.equal(telemetry.comparison.savings.toolCalls, 2);
+      assert.equal(telemetry.comparison.savings.failures, 1);
     });
   });
 });

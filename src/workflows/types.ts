@@ -28,7 +28,7 @@ export type WorkflowRunStatus = "running" | "paused" | "completed" | "failed" | 
 
 export interface WorkflowApprovalRecord { nodeId: string; approvedBy: string; approvedAt: string; metadata?: Record<string, unknown>; }
 
-export interface WorkflowRun { id: string; graphId: string; graphName: string; status: WorkflowRunStatus; currentNodeId?: string; state: Record<string, string | number | boolean>; nodeResults: Record<string, WorkflowNodeResult>; approvals: WorkflowApprovalRecord[]; artifacts: Array<{ kind: string; path: string }>; failures: Array<{ nodeId: string; error: string; timestamp: string }>; events: WorkflowEvent[]; startedAt: string; updatedAt: string; completedAt?: string; sessionId?: string; }
+export interface WorkflowRun { id: string; graphId: string; graphName: string; status: WorkflowRunStatus; currentNodeId?: string; state: Record<string, string | number | boolean>; nodeResults: Record<string, WorkflowNodeResult>; approvals: WorkflowApprovalRecord[]; artifacts: Array<{ kind: string; path: string }>; failures: Array<{ nodeId: string; error: string; timestamp: string }>; events: WorkflowEvent[]; startedAt: string; updatedAt: string; completedAt?: string; sessionId?: string; savingsTelemetry?: unknown; }
 
 export interface WorkflowValidationResult { valid: boolean; errors: string[]; }
 

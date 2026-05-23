@@ -17,6 +17,7 @@ import {
 	materializePackageDraft,
 	type MaterializedPackageDraft,
 } from "./materialize";
+import { recordDiscoveryTelemetry } from "./savings_telemetry";
 
 interface ActiveRecording {
 	id: string;
@@ -89,6 +90,7 @@ export function stopPackageRecording(options: { dataHome?: string } = {}): Recor
 	}
 	const session = getPackageRecording(active.id, options);
 	fs.rmSync(activePath(options.dataHome), { force: true });
+	recordDiscoveryTelemetry(session, options.dataHome);
 	return session;
 }
 
