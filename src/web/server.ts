@@ -36,6 +36,7 @@ import {
 	readJsonBody,
 	setCorsHeaders,
 	setSecurityHeaders,
+	UnsupportedMediaTypeError,
 } from "./security";
 import type {
 	PersistedWebAppServerInfo,
@@ -3059,6 +3060,14 @@ export function createWebAppServer(
 			const message = redactString(
 				error instanceof Error ? error.message : String(error),
 			);
+			if (error instanceof UnsupportedMediaTypeError) {
+				json(response, error.statusCode, {
+					success: false,
+					code: error.code,
+					error: message,
+				});
+				return;
+			}
 			json(response, 400, {
 				success: false,
 				code: "bad_request",

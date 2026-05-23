@@ -110,11 +110,44 @@ export function isAuthorizedRequest(
 	return extractAuthToken(request, requestUrl, allowQueryToken) === token;
 }
 
+export class UnsupportedMediaTypeError extends Error {
+	readonly statusCode = 415;
+	readonly code = "unsupported_media_type";
+
+	constructor() {
+		super("JSON request body requires Content-Type: application/json.");
+		this.name = "UnsupportedMediaTypeError";
+	}
+}
+
+function requestDeclaresBody(request: IncomingMessage): boolean {
+	const contentLength = request.headers["content-length"];
+	if (typeof contentLength === "string" && Number(contentLength) > 0) {
+		return true;
+	}
+	return typeof request.headers["transfer-encoding"] === "string";
+}
+
+function isJsonContentType(value: string | string[] | undefined): boolean {
+	const raw = Array.isArray(value) ? value[0] : value;
+	const mediaType = raw?.split(";", 1)[0]?.trim().toLowerCase();
+	return (
+		mediaType === "application/json" || mediaType?.endsWith("+json") === true
+	);
+}
+
 export async function readJsonBody(
 	request: IncomingMessage,
 
 	maxBytes = 1024 * 1024,
 ): Promise<Record<string, unknown>> {
+	if (
+		requestDeclaresBody(request) &&
+		!isJsonContentType(request.headers["content-type"])
+	) {
+		throw new UnsupportedMediaTypeError();
+	}
+
 	const chunks: Buffer[] = [];
 
 	let totalBytes = 0;

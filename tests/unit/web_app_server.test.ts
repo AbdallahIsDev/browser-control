@@ -38,6 +38,57 @@ function actionResult<T>(data: T): ActionResult<T> {
 	};
 }
 
+function rawHttpRequest(
+	url: string,
+	options: {
+		method: string;
+		headers?: Record<string, string>;
+		body?: string;
+	},
+): Promise<{
+	statusCode: number;
+	headers: http.IncomingHttpHeaders;
+	body: string;
+}> {
+	return new Promise((resolve, reject) => {
+		const parsed = new URL(url);
+		const request = http.request(
+			{
+				method: options.method,
+				hostname: parsed.hostname,
+				port: parsed.port,
+				path: `${parsed.pathname}${parsed.search}`,
+				headers: {
+					...(options.body
+						? {
+								"content-length": Buffer.byteLength(
+									options.body,
+								).toString(),
+							}
+						: {}),
+					...options.headers,
+				},
+			},
+			(response) => {
+				const chunks: Buffer[] = [];
+				response.on("data", (chunk) => {
+					chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+				});
+				response.on("end", () => {
+					resolve({
+						statusCode: response.statusCode ?? 0,
+						headers: response.headers,
+						body: Buffer.concat(chunks).toString("utf8"),
+					});
+				});
+			},
+		);
+		request.on("error", reject);
+		if (options.body) request.write(options.body);
+		request.end();
+	});
+}
+
 function mockApi(): BrowserControlAPI {
 	return {
 		status: async () => ({
@@ -513,6 +564,48 @@ test("web app config mutation only allows dashboard-safe keys", async (t) => {
 	}
 
 	assert.deepEqual(setCalls, [{ key: "logLevel", value: "debug" }]);
+});
+
+test("web app JSON endpoints reject missing or wrong content type", async (t) => {
+	const api = mockApi();
+	const setCalls: Array<{ key: string; value: unknown }> = [];
+	api.config = {
+		...api.config,
+		set: (key: string, value: unknown) => {
+			setCalls.push({ key, value });
+			return actionResult({ key, value, source: "user" } as never);
+		},
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const wrong = await fetch(`${info.url}/api/config/logLevel`, {
+		method: "POST",
+		headers: {
+			"content-type": "text/plain",
+			authorization: "Bearer test-token",
+		},
+		body: JSON.stringify({ value: "debug" }),
+	});
+	const wrongBody = (await wrong.json()) as { code?: string; error?: string };
+	assert.equal(wrong.status, 415);
+	assert.equal(wrongBody.code, "unsupported_media_type");
+	assert.match(wrongBody.error ?? "", /application\/json/i);
+
+	const missing = await rawHttpRequest(`${info.url}/api/config/logLevel`, {
+		method: "POST",
+		headers: { authorization: "Bearer test-token" },
+		body: JSON.stringify({ value: "trace" }),
+	});
+	const missingBody = JSON.parse(missing.body) as {
+		code?: string;
+		error?: string;
+	};
+	assert.equal(missing.statusCode, 415);
+	assert.equal(missingBody.code, "unsupported_media_type");
+	assert.match(missingBody.error ?? "", /application\/json/i);
+	assert.deepEqual(setCalls, []);
 });
 
 test("web app server exposes credential vault without leaking secret values", async (t) => {
