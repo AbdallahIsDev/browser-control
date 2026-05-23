@@ -587,6 +587,11 @@ Self-Healing Harness (Section 29):
   harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
 
 Automation Packages (Section 30):
+  package record start --name=<name> [--domain=<domain>] [--json]     Start a package recording session
+  package record action <kind> --params=<json> [--json]               Add an explicit action to the active recording
+  package record stop [--json]                                        Stop the active package recording
+  package draft <recording-id> [--json]                               Draft package files from a recording
+  package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft
   package install <source> [--json]                                  Install a package from local directory
   package list [--json]                                              List installed packages
   package info <name> [--json]                                       Show package info
@@ -5065,6 +5070,95 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 
 	try {
 		switch (subcommand) {
+			case "record": {
+				const recordAction = positional[0];
+				const {
+					recordPackageRecordingAction,
+					startPackageRecording,
+					stopPackageRecording,
+				} = await import("./packages/record_cli");
+				if (recordAction === "start") {
+					const name = flags.name ?? positional[1];
+					if (!name) {
+						console.error("Error: package recording name is required");
+						throw new CliError("Command failed");
+					}
+					const session = startPackageRecording({
+						name,
+						domain: flags.domain,
+					});
+					outputJson({ success: true, data: session }, !jsonOutput);
+					break;
+				}
+				if (recordAction === "action") {
+					const kind = positional[1];
+					if (!kind) {
+						console.error("Error: recorded action kind is required");
+						throw new CliError("Command failed");
+					}
+					const params =
+						flags.params === undefined
+							? {}
+							: JSON.parse(flags.params) as Record<string, unknown>;
+					const action = recordPackageRecordingAction({
+						kind: kind as import("./observability/recorder").RecordedActionKind,
+						params,
+					});
+					outputJson({ success: true, data: action }, !jsonOutput);
+					break;
+				}
+				if (recordAction === "stop") {
+					const session = stopPackageRecording();
+					outputJson({ success: true, data: session }, !jsonOutput);
+					break;
+				}
+				console.error(
+					"Error: Use 'package record start', 'package record action', or 'package record stop'",
+				);
+				throw new CliError("Command failed");
+			}
+			case "draft": {
+				const recordingId = positional[0];
+				if (!recordingId) {
+					console.error("Error: recording id is required");
+					throw new CliError("Command failed");
+				}
+				const { draftPackageRecording } = await import("./packages/record_cli");
+				outputJson(
+					{ success: true, data: draftPackageRecording(recordingId) },
+					!jsonOutput,
+				);
+				break;
+			}
+			case "materialize": {
+				const recordingId = positional[0];
+				if (!recordingId) {
+					console.error("Error: recording id is required");
+					throw new CliError("Command failed");
+				}
+				const { materializePackageRecording } = await import(
+					"./packages/record_cli"
+				);
+				const materialized = materializePackageRecording(recordingId, {
+					overwrite: flags.overwrite === "true",
+				});
+				const installedPackage =
+					flags.install === "true"
+						? await bc.package.install(materialized.packageDir)
+						: undefined;
+				outputJson(
+					{
+						success: installedPackage ? installedPackage.success : true,
+						data: {
+							...materialized,
+							...(installedPackage ? { installedPackage } : {}),
+						},
+						...(installedPackage?.error ? { error: installedPackage.error } : {}),
+					},
+					!jsonOutput,
+				);
+				break;
+			}
 			case "install": {
 				const source = positional[0];
 				if (!source) {
@@ -5226,7 +5320,7 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 			default:
 				console.error(`Unknown package command: ${subcommand}`);
 				console.error(
-					"Available: install, list, info, remove, update, grant, run, eval, review, review-history, eval-history, sign",
+					"Available: record, draft, materialize, install, list, info, remove, update, grant, run, eval, review, review-history, eval-history, sign",
 				);
 				throw new CliError('Command failed');
 		}

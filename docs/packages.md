@@ -8,6 +8,11 @@ CLI:
 
 ```powershell
 bc package install <source>
+bc package record start --name="Login smoke" --domain=example.com
+bc package record action terminal-exec --params='{"command":"echo smoke"}'
+bc package record stop
+bc package draft <recording-id>
+bc package materialize <recording-id> --overwrite
 bc package list
 bc package info <name>
 bc package update <name> [source]
@@ -24,8 +29,14 @@ bc package sign <source> --private-key=<pem> --signer=<name>
 Recording-to-package flow:
 
 ```powershell
+bc package record start --name="Login smoke" --domain=example.com --json
 bc browser task run --steps='<json>' --json
-# or use dashboard/API recording endpoints
+bc package record action terminal-exec --params='{"command":"echo smoke"}' --json
+bc package record stop --json
+bc package draft <recording-id> --json
+bc package materialize <recording-id> --overwrite --json
+
+# Dashboard/API recording endpoints are also available:
 # POST /api/recordings/start
 # POST /api/recordings/stop
 # POST /api/recordings/<id>/materialize {"install":true}

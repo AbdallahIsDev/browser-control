@@ -224,6 +224,95 @@ test("bc browser provider catalog --json lists provider setup metadata without s
 	}
 });
 
+test("bc package record start stop draft materialize creates reusable package draft", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const startedOutput = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"package",
+				"record",
+				"start",
+				"--name",
+				"Recorded CLI Package",
+				"--domain",
+				"example.com",
+				"--json",
+			]);
+		});
+		const started = JSON.parse(startedOutput) as { success: boolean; data: { id: string } };
+		assert.equal(started.success, true);
+		assert.match(started.data.id, /^rec-/);
+
+		const actionOutput = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"package",
+				"record",
+				"action",
+				"terminal-exec",
+				"--params",
+				'{"command":"echo packaged"}',
+				"--json",
+			]);
+		});
+		const action = JSON.parse(actionOutput) as { success: boolean; data: { kind: string } };
+		assert.equal(action.success, true);
+		assert.equal(action.data.kind, "terminal-exec");
+
+		const stoppedOutput = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "package", "record", "stop", "--json"]);
+		});
+		const stopped = JSON.parse(stoppedOutput) as { success: boolean; data: { id: string } };
+		assert.equal(stopped.success, true);
+		assert.equal(stopped.data.id, started.data.id);
+
+		const draftOutput = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"package",
+				"draft",
+				started.data.id,
+				"--json",
+			]);
+		});
+		const draft = JSON.parse(draftOutput) as {
+			success: boolean;
+			data: { package: { manifest: { name: string } } };
+		};
+		assert.equal(draft.success, true);
+		assert.equal(draft.data.package.manifest.name, "recorded-cli-package");
+
+		const materializedOutput = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"package",
+				"materialize",
+				started.data.id,
+				"--overwrite",
+				"--json",
+			]);
+		});
+		const materialized = JSON.parse(materializedOutput) as {
+			success: boolean;
+			data: { packageDir: string; manifestPath: string };
+		};
+		assert.equal(materialized.success, true);
+		assert.ok(materialized.data.packageDir.includes("recorded-cli-package"));
+		assert.equal(fs.existsSync(materialized.data.manifestPath), true);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc web serve --json --port=0 stays alive until killed", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
