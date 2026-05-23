@@ -15,6 +15,7 @@ import {
 import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
+import { getDashboardConfigMutationError } from "../shared/config";
 import { logger } from "../shared/logger";
 import { getDataHome } from "../shared/paths";
 import {
@@ -1360,6 +1361,14 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && configKeyMatch) {
 			const key = decodeURIComponent(configKeyMatch[1] ?? "");
+			const mutationError = getDashboardConfigMutationError(key);
+			if (mutationError) {
+				json(response, 403, {
+					success: false,
+					error: mutationError,
+				});
+				return;
+			}
 			const body = await readJsonBody(request);
 			const result = api.config.set(key, body.value);
 			events.emit("log.entry", {

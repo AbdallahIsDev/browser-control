@@ -389,6 +389,28 @@ const CONFIG_BY_KEY = new Map<ConfigKey, ConfigDefinition>(
   CONFIG_DEFINITIONS.map((definition) => [definition.key, definition]),
 );
 
+const DASHBOARD_MUTABLE_CONFIG_KEYS = new Set<ConfigKey>([
+  "logLevel",
+  "logFile",
+  "terminalCols",
+  "terminalRows",
+  "terminalResumePolicy",
+  "terminalAutoResume",
+  "browserViewportWidth",
+  "browserViewportHeight",
+  "browserUserAgent",
+]);
+
+export function isDashboardMutableConfigKey(key: string): key is ConfigKey {
+  return DASHBOARD_MUTABLE_CONFIG_KEYS.has(key as ConfigKey);
+}
+
+export function getDashboardConfigMutationError(key: string): string | null {
+  if (isDashboardMutableConfigKey(key)) return null;
+  if (!CONFIG_BY_KEY.has(key as ConfigKey)) return `Unknown config key: ${key}`;
+  return `Config key "${key}" is not mutable from the dashboard. Use the CLI or environment configuration for high-impact settings.`;
+}
+
 function getUserConfigBaseHome(env: NodeJS.ProcessEnv): string {
   const override = env.BROWSER_CONTROL_HOME;
   return override?.trim() || _getDataHome();

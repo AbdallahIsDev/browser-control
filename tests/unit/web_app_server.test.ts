@@ -473,6 +473,48 @@ test("web app server protects API routes and exposes status/capabilities", async
 	);
 });
 
+test("web app config mutation only allows dashboard-safe keys", async (t) => {
+	const api = mockApi();
+	const setCalls: Array<{ key: string; value: unknown }> = [];
+	api.config = {
+		...api.config,
+		set: (key: string, value: unknown) => {
+			setCalls.push({ key, value });
+			return actionResult({ key, value, source: "user" } as never);
+		},
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const allowed = await fetch(`${info.url}/api/config/logLevel`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ value: "debug" }),
+	});
+	assert.equal(allowed.status, 200);
+
+	for (const [key, value] of [
+		["policyProfile", "trusted"],
+		["browserLaunchProfile", "system"],
+		["browserlessApiKey", "secret-browserless-key"],
+	] as const) {
+		const denied = await fetch(`${info.url}/api/config/${key}`, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({ value }),
+		});
+		assert.equal(denied.status, 403, `${key} should be denied`);
+		assert.match(await denied.text(), /not mutable from the dashboard/i);
+	}
+
+	assert.deepEqual(setCalls, [{ key: "logLevel", value: "debug" }]);
+});
+
 test("web app server exposes credential vault without leaking secret values", async (t) => {
 	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-vault-"));
 	const previousHome = process.env.BROWSER_CONTROL_HOME;

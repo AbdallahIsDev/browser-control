@@ -79,6 +79,7 @@ import {
 import {
 	type ConfigEntry,
 	type ConfigSetResult,
+	getDashboardConfigMutationError,
 	getConfigEntries,
 	getConfigValue,
 	setUserConfigValue,
@@ -745,6 +746,13 @@ export function createBrowserControl(
 		list: () => getConfigEntries({ validate: false }),
 		get: (key) => getConfigValue(key, { validate: false }),
 		set: (key, value) => {
+			const dashboardMutationError = getDashboardConfigMutationError(key);
+			if (dashboardMutationError) {
+				return failureResult<ConfigSetResult>(dashboardMutationError, {
+					path: "command",
+					sessionId: sessionManager.getActiveSession()?.id ?? "default",
+				});
+			}
 			const policyEval = sessionManager.evaluateAction("config_set", {
 				key,
 				value,
