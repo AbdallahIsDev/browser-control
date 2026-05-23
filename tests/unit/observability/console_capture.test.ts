@@ -6,6 +6,50 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import { ConsoleCapture, getGlobalConsoleCapture, resetGlobalConsoleCapture } from "../../../src/observability/console_capture";
 
+class FakePage {
+  readonly handlers = new Map<string, Set<(payload: unknown) => void>>();
+
+  on(event: string, handler: (payload: unknown) => void): void {
+    const handlers = this.handlers.get(event) ?? new Set();
+    handlers.add(handler);
+    this.handlers.set(event, handlers);
+  }
+
+  off(event: string, handler: (payload: unknown) => void): void {
+    this.handlers.get(event)?.delete(handler);
+  }
+
+  url(): string {
+    return "https://example.com/page";
+  }
+
+  emit(event: string, payload: unknown): void {
+    for (const handler of this.handlers.get(event) ?? []) {
+      handler(payload);
+    }
+  }
+}
+
+class FakeConsoleMessage {
+  constructor(
+    private readonly msgType: string,
+    private readonly msgText: string,
+    private readonly msgLocation: { url?: string; lineNumber?: number; columnNumber?: number } = {},
+  ) {}
+
+  type(): string {
+    return this.msgType;
+  }
+
+  text(): string {
+    return this.msgText;
+  }
+
+  location(): { url?: string; lineNumber?: number; columnNumber?: number } {
+    return this.msgLocation;
+  }
+}
+
 describe("ConsoleCapture", () => {
   it("records and retrieves entries", () => {
     const capture = new ConsoleCapture();
@@ -71,6 +115,38 @@ describe("ConsoleCapture", () => {
     });
 
     assert.strictEqual(capture.getEntries("s1").length, 2);
+  });
+
+  it("captures Playwright console events without enabling CDP domains", () => {
+    const capture = new ConsoleCapture();
+    const page = new FakePage();
+
+    capture.startCapture("s1", page as any);
+    page.emit("console", new FakeConsoleMessage("error", "boom", {
+      url: "https://example.com/app.js",
+      lineNumber: 12,
+      columnNumber: 4,
+    }));
+
+    const entries = capture.getEntries("s1");
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].level, "error");
+    assert.strictEqual(entries[0].message, "boom");
+    assert.strictEqual(entries[0].source, "https://example.com/app.js");
+    assert.strictEqual(entries[0].line, 12);
+    assert.strictEqual(entries[0].column, 4);
+    assert.strictEqual(entries[0].pageUrl, "https://example.com/page");
+  });
+
+  it("removes Playwright console listener on stopCapture", () => {
+    const capture = new ConsoleCapture();
+    const page = new FakePage();
+
+    capture.startCapture("s1", page as any);
+    capture.stopCapture("s1", page as any);
+    page.emit("console", new FakeConsoleMessage("error", "after-stop"));
+
+    assert.strictEqual(capture.getEntries("s1").length, 0);
   });
 
   it("isolates sessions", () => {

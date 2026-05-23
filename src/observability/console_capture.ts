@@ -1,7 +1,7 @@
 /**
  * Browser Console Capture — Bounded ring buffer for console entries.
  *
- * Captures console entries from active pages/sessions using CDP Runtime/Console domains.
+ * Captures console entries from active pages/sessions using Playwright page events.
  * Uses bounded ring buffers to prevent unbounded memory growth.
  * Includes secret redaction before storage.
  */
@@ -10,6 +10,7 @@ import type { ConsoleEntry, ConsoleLevel } from "./types";
 import { redactConsoleEntry } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
 import type { MemoryStore } from "../runtime/memory_store";
+import type { ConsoleMessage, Page } from "playwright";
 
 // ── Ring Buffer ────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export interface ConsoleCaptureOptions {
 export class ConsoleCapture {
   private readonly buffers = new Map<string, RingBuffer<ConsoleEntry>>();
   private readonly options: Required<ConsoleCaptureOptions>;
-  private cdpListeners = new Map<string, (params: Record<string, unknown>) => void>();
+  private pageListeners = new Map<string, (message: ConsoleMessage) => void>();
 
   constructor(options: ConsoleCaptureOptions = {}) {
     this.options = {
@@ -81,38 +82,20 @@ export class ConsoleCapture {
   }
 
   /**
-   * Start capturing console entries for a CDP session.
+   * Start capturing console entries for a Playwright page.
    *
    * @param sessionId Unique session identifier
-   * @param cdpClient CDP client with `on` and `off` methods (e.g., from playwright)
+   * @param page Playwright page to observe
    */
-  startCapture(
-    sessionId: string,
-    cdpClient: {
-      on: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-      off: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-      send?: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-    },
-  ): void {
-    if (this.cdpListeners.has(sessionId)) {
-      // Already capturing for this session
-      return;
-    }
+  startCapture(sessionId: string, page: Page): void {
+    if (this.pageListeners.has(sessionId)) return;
 
-    // Enable console and runtime domains if possible
-    if (cdpClient.send) {
-      void cdpClient.send("Runtime.enable", {}).catch(() => {});
-      void cdpClient.send("Console.enable", {}).catch(() => {});
-    }
-
-    const listener = (params: Record<string, unknown>) => {
-      this.handleConsoleEvent(sessionId, params);
+    const listener = (message: ConsoleMessage) => {
+      this.handleConsoleMessage(sessionId, page, message);
     };
 
-    cdpClient.on("Console.messageAdded", listener);
-    cdpClient.on("Runtime.consoleAPICalled", listener);
-
-    this.cdpListeners.set(sessionId, listener);
+    page.on("console", listener);
+    this.pageListeners.set(sessionId, listener);
   }
 
   /**
@@ -120,15 +103,12 @@ export class ConsoleCapture {
    */
   stopCapture(
     sessionId: string,
-    cdpClient: {
-      off: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-    },
+    page: Page,
   ): void {
-    const listener = this.cdpListeners.get(sessionId);
+    const listener = this.pageListeners.get(sessionId);
     if (listener) {
-      cdpClient.off("Console.messageAdded", listener);
-      cdpClient.off("Runtime.consoleAPICalled", listener);
-      this.cdpListeners.delete(sessionId);
+      page.off("console", listener);
+      this.pageListeners.delete(sessionId);
     }
   }
 
@@ -177,7 +157,7 @@ export class ConsoleCapture {
       buffer.clear();
     }
     this.buffers.clear();
-    this.cdpListeners.clear();
+    this.pageListeners.clear();
   }
 
   /**
@@ -232,97 +212,33 @@ export class ConsoleCapture {
     return left === undefined || right === undefined || left === right;
   }
 
-  private handleConsoleEvent(sessionId: string, params: Record<string, unknown>): void {
-    const level = this.extractLevel(params);
+  private handleConsoleMessage(sessionId: string, page: Page, message: ConsoleMessage): void {
+    const level = this.toConsoleLevel(message.type());
     if (!level || !this.options.levels.includes(level)) {
       return;
     }
 
+    const location = message.location();
     const entry: ConsoleEntry = {
       level,
-      message: this.extractMessage(params),
+      message: message.text(),
       timestamp: new Date().toISOString(),
-      source: this.extractSource(params),
-      line: this.extractLine(params),
-      column: this.extractColumn(params),
+      source: location.url || undefined,
+      line: typeof location.lineNumber === "number" ? location.lineNumber : undefined,
+      column: typeof location.columnNumber === "number" ? location.columnNumber : undefined,
+      pageUrl: page.url(),
       sessionId,
     };
 
     this.recordEntry(sessionId, entry);
   }
 
-  private extractLevel(params: Record<string, unknown>): ConsoleLevel | null {
-    // Console.messageAdded format
-    if (params.message && typeof params.message === "object") {
-      const msg = params.message as Record<string, unknown>;
-      const level = msg.level;
-      if (typeof level === "string" && this.isValidLevel(level)) {
-        return level as ConsoleLevel;
-      }
+  private toConsoleLevel(level: string): ConsoleLevel | null {
+    if (level === "warning") return "warn";
+    if (["log", "warn", "error", "info", "debug"].includes(level)) {
+      return level as ConsoleLevel;
     }
-
-    // Runtime.consoleAPICalled format
-    if (typeof params.type === "string" && this.isValidLevel(params.type)) {
-      return params.type as ConsoleLevel;
-    }
-
     return null;
-  }
-
-  private extractMessage(params: Record<string, unknown>): string {
-    if (params.message && typeof params.message === "object") {
-      const msg = params.message as Record<string, unknown>;
-      if (typeof msg.text === "string") return msg.text;
-    }
-
-    if (Array.isArray(params.args)) {
-      return params.args
-        .map((arg: unknown) => {
-          if (typeof arg === "object" && arg !== null) {
-            const obj = arg as Record<string, unknown>;
-            if (typeof obj.value !== "undefined") return String(obj.value);
-            if (typeof obj.description === "string") return obj.description;
-          }
-          return String(arg);
-        })
-        .join(" ");
-    }
-
-    if (typeof params.text === "string") return params.text;
-
-    return JSON.stringify(params);
-  }
-
-  private extractSource(params: Record<string, unknown>): string | undefined {
-    if (params.message && typeof params.message === "object") {
-      const msg = params.message as Record<string, unknown>;
-      if (typeof msg.source === "string") return msg.source;
-      if (typeof msg.url === "string") return msg.url;
-    }
-    if (typeof params.url === "string") return params.url;
-    return undefined;
-  }
-
-  private extractLine(params: Record<string, unknown>): number | undefined {
-    if (params.message && typeof params.message === "object") {
-      const msg = params.message as Record<string, unknown>;
-      if (typeof msg.line === "number") return msg.line;
-    }
-    if (typeof params.lineNumber === "number") return params.lineNumber;
-    return undefined;
-  }
-
-  private extractColumn(params: Record<string, unknown>): number | undefined {
-    if (params.message && typeof params.message === "object") {
-      const msg = params.message as Record<string, unknown>;
-      if (typeof msg.column === "number") return msg.column;
-    }
-    if (typeof params.columnNumber === "number") return params.columnNumber;
-    return undefined;
-  }
-
-  private isValidLevel(level: string): boolean {
-    return ["log", "warn", "error", "info", "debug"].includes(level);
   }
 }
 

@@ -7,9 +7,10 @@
  */
 
 import type { NetworkEntry } from "./types";
-import { redactNetworkEntry, redactUrl, redactHeaders } from "./redaction";
+import { redactNetworkEntry } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
 import type { MemoryStore } from "../runtime/memory_store";
+import type { Page, Request, Response } from "playwright";
 
 // ── Ring Buffer (shared with console_capture pattern) ──────────────────
 
@@ -70,13 +71,14 @@ export interface NetworkCaptureOptions {
   errorStatusThreshold?: number;
 }
 
-type CdpHandler = (params: Record<string, unknown>) => void;
+type PageRequestHandler = (request: Request) => void;
+type PageResponseHandler = (response: Response) => void;
 
-interface CdpListenerSet {
-  requestWillBeSent: CdpHandler;
-  loadingFinished: CdpHandler;
-  loadingFailed: CdpHandler;
-  responseReceived: CdpHandler;
+interface PageListenerSet {
+  request: PageRequestHandler;
+  requestFailed: PageRequestHandler;
+  requestFinished: PageRequestHandler;
+  response: PageResponseHandler;
 }
 
 interface RequestMetadata {
@@ -88,8 +90,8 @@ interface RequestMetadata {
 export class NetworkCapture {
   private readonly buffers = new Map<string, RingBuffer<NetworkEntry>>();
   private readonly options: Required<NetworkCaptureOptions>;
-  private cdpListeners = new Map<string, CdpListenerSet>();
-  private requestMetadata = new Map<string, RequestMetadata>();
+  private pageListeners = new Map<string, PageListenerSet>();
+  private requestMetadata = new WeakMap<Request, RequestMetadata>();
 
   constructor(options: NetworkCaptureOptions = {}) {
     this.options = {
@@ -100,50 +102,34 @@ export class NetworkCapture {
   }
 
   /**
-   * Start capturing network events for a CDP session.
+   * Start capturing network events for a Playwright page.
    */
-  startCapture(
-    sessionId: string,
-    cdpClient: {
-      on: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-      off: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-      send?: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-    },
-  ): void {
-    if (this.cdpListeners.has(sessionId)) {
-      return;
-    }
+  startCapture(sessionId: string, page: Page): void {
+    if (this.pageListeners.has(sessionId)) return;
 
-    if (cdpClient.send) {
-      void cdpClient.send("Network.enable", {}).catch(() => {});
-    }
-
-    const requestWillBeSent: CdpHandler = (params) => {
-      this.handleRequestWillBeSent(sessionId, params);
+    const request: PageRequestHandler = (request) => {
+      this.handleRequest(sessionId, request);
+    };
+    const requestFailed: PageRequestHandler = (request) => {
+      this.handleRequestFailed(sessionId, request);
+    };
+    const requestFinished: PageRequestHandler = (request) => {
+      this.requestMetadata.delete(request);
+    };
+    const response: PageResponseHandler = (response) => {
+      this.handleResponse(sessionId, response);
     };
 
-    const loadingFinished: CdpHandler = (params) => {
-      this.handleLoadingFinished(sessionId, params);
-    };
+    page.on("request", request);
+    page.on("requestfailed", requestFailed);
+    page.on("requestfinished", requestFinished);
+    page.on("response", response);
 
-    const loadingFailed: CdpHandler = (params) => {
-      this.handleLoadingFailed(sessionId, params);
-    };
-
-    const responseReceived: CdpHandler = (params) => {
-      this.handleResponseReceived(sessionId, params);
-    };
-
-    cdpClient.on("Network.requestWillBeSent", requestWillBeSent);
-    cdpClient.on("Network.loadingFinished", loadingFinished);
-    cdpClient.on("Network.loadingFailed", loadingFailed);
-    cdpClient.on("Network.responseReceived", responseReceived);
-
-    this.cdpListeners.set(sessionId, {
-      requestWillBeSent,
-      loadingFinished,
-      loadingFailed,
-      responseReceived,
+    this.pageListeners.set(sessionId, {
+      request,
+      requestFailed,
+      requestFinished,
+      response,
     });
   }
 
@@ -152,23 +138,15 @@ export class NetworkCapture {
    */
   stopCapture(
     sessionId: string,
-    cdpClient: {
-      off: (event: string, handler: (params: Record<string, unknown>) => void) => void;
-    },
+    page: Page,
   ): void {
-    const listeners = this.cdpListeners.get(sessionId);
+    const listeners = this.pageListeners.get(sessionId);
     if (listeners) {
-      cdpClient.off("Network.requestWillBeSent", listeners.requestWillBeSent);
-      cdpClient.off("Network.loadingFinished", listeners.loadingFinished);
-      cdpClient.off("Network.loadingFailed", listeners.loadingFailed);
-      cdpClient.off("Network.responseReceived", listeners.responseReceived);
-      this.cdpListeners.delete(sessionId);
-    }
-    // Clean up timings for this session
-    for (const [key] of this.requestMetadata) {
-      if (key.startsWith(`${sessionId}:`)) {
-        this.requestMetadata.delete(key);
-      }
+      page.off("request", listeners.request);
+      page.off("requestfailed", listeners.requestFailed);
+      page.off("requestfinished", listeners.requestFinished);
+      page.off("response", listeners.response);
+      this.pageListeners.delete(sessionId);
     }
   }
 
@@ -212,8 +190,8 @@ export class NetworkCapture {
       buffer.clear();
     }
     this.buffers.clear();
-    this.cdpListeners.clear();
-    this.requestMetadata.clear();
+    this.pageListeners.clear();
+    this.requestMetadata = new WeakMap<Request, RequestMetadata>();
   }
 
   /**
@@ -246,60 +224,35 @@ export class NetworkCapture {
     return buffer;
   }
 
-  private handleRequestWillBeSent(sessionId: string, params: Record<string, unknown>): void {
-    const requestId = params.requestId as string;
-    if (!requestId) return;
-
-    const url = this.extractUrl(params);
-    if (!url) return;
-
-    const request = params.request as Record<string, unknown> | undefined;
-    const method = typeof request?.method === "string" ? request.method : "GET";
-    this.requestMetadata.set(`${sessionId}:${requestId}`, {
-      url,
-      method,
+  private handleRequest(_sessionId: string, request: Request): void {
+    this.requestMetadata.set(request, {
+      url: request.url(),
+      method: request.method(),
       startTime: Date.now(),
     });
   }
 
-  private handleLoadingFinished(sessionId: string, params: Record<string, unknown>): void {
-    const requestId = params.requestId as string;
-    if (!requestId) return;
-
-    // responseReceived captures errors/successes when configured; loadingFinished
-    // is the cleanup point for uncaptured successful requests.
-    this.requestMetadata.delete(`${sessionId}:${requestId}`);
-  }
-
-  private handleLoadingFailed(sessionId: string, params: Record<string, unknown>): void {
-    const requestId = params.requestId as string;
-    if (!requestId) return;
-
-    const metadata = this.requestMetadata.get(`${sessionId}:${requestId}`);
-    const errorText = params.errorText as string | undefined;
+  private handleRequestFailed(sessionId: string, request: Request): void {
+    const metadata = this.requestMetadata.get(request);
+    const failure = request.failure();
 
     const entry: NetworkEntry = {
-      url: metadata?.url ?? "unknown",
-      method: metadata?.method ?? "GET",
-      error: errorText ?? "Network loading failed",
+      url: metadata?.url ?? request.url(),
+      method: metadata?.method ?? request.method(),
+      error: failure?.errorText ?? "Network loading failed",
       timestamp: new Date().toISOString(),
       durationMs: metadata ? Date.now() - metadata.startTime : undefined,
+      resourceType: request.resourceType(),
       sessionId,
     };
 
     this.recordEntry(sessionId, entry);
-    this.requestMetadata.delete(`${sessionId}:${requestId}`);
+    this.requestMetadata.delete(request);
   }
 
-  private handleResponseReceived(sessionId: string, params: Record<string, unknown>): void {
-    const requestId = params.requestId as string;
-    if (!requestId) return;
-
-    const response = params.response as Record<string, unknown> | undefined;
-    if (!response) return;
-
-    const status = response.status as number | undefined;
-    if (!status) return;
+  private handleResponse(sessionId: string, response: Response): void {
+    const request = response.request();
+    const status = response.status();
 
     const shouldCapture =
       status >= this.options.errorStatusThreshold ||
@@ -307,31 +260,19 @@ export class NetworkCapture {
 
     if (!shouldCapture) return;
 
-    const metadata = this.requestMetadata.get(`${sessionId}:${requestId}`);
-    const url = (response.url as string) ?? metadata?.url ?? "unknown";
+    const metadata = this.requestMetadata.get(request);
 
     const entry: NetworkEntry = {
-      url,
-      method: metadata?.method ?? "GET",
+      url: response.url() || metadata?.url || request.url(),
+      method: metadata?.method ?? request.method(),
       status,
       timestamp: new Date().toISOString(),
       durationMs: metadata ? Date.now() - metadata.startTime : undefined,
+      resourceType: request.resourceType(),
       sessionId,
     };
 
     this.recordEntry(sessionId, entry);
-    this.requestMetadata.delete(`${sessionId}:${requestId}`);
-  }
-
-  private extractUrl(params: Record<string, unknown>): string | null {
-    const request = params.request as Record<string, unknown> | undefined;
-    if (request && typeof request.url === "string") {
-      return request.url;
-    }
-    if (typeof params.url === "string") {
-      return params.url;
-    }
-    return null;
   }
 
 }

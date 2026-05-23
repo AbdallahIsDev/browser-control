@@ -77,18 +77,6 @@ import {
 
 const log = logger.withComponent("browser_actions");
 
-type ObservabilityCdpClient = {
-	on: (
-		event: string,
-		handler: (params: Record<string, unknown>) => void,
-	) => void;
-	off: (
-		event: string,
-		handler: (params: Record<string, unknown>) => void,
-	) => void;
-	send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-};
-
 interface BrowserWindowTarget {
 	page: Page;
 	targetId: string;
@@ -413,10 +401,7 @@ export class BrowserActions {
 	private readonly context: BrowserActionContext;
 	private readonly refStore: RefStore;
 	private readonly dialogSupervisor = new BrowserDialogSupervisor();
-	private readonly observabilityClients = new Map<
-		string,
-		Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>
-	>();
+	private readonly observabilityPages = new Map<string, Page>();
 	private readonly networkPrivacyPages = new WeakSet<Page>();
 	private readonly downloadPages = new WeakSet<Page>();
 	private readonly downloadContexts = new WeakSet<BrowserContext>();
@@ -907,26 +892,18 @@ export class BrowserActions {
 		page: Page,
 		sessionId: string,
 	): Promise<void> {
-		if (this.observabilityClients.has(sessionId)) return;
+		if (this.observabilityPages.has(sessionId)) return;
+		if (typeof (page as unknown as { on?: unknown }).on !== "function") return;
 
 		try {
-			const client = await page.context().newCDPSession(page);
-			await Promise.allSettled([
-				client.send("Runtime.enable", {}),
-				client.send("Console.enable", {}),
-				client.send("Network.enable", {}),
-			]);
-			const captureClient: ObservabilityCdpClient = {
-				on: client.on.bind(client) as ObservabilityCdpClient["on"],
-				off: client.off.bind(client) as ObservabilityCdpClient["off"],
-				send: (method, params) => client.send(method as never, params as never),
-			};
-			getGlobalConsoleCapture().startCapture(sessionId, captureClient);
-			getGlobalNetworkCapture({ captureSuccess: true }).startCapture(
-				sessionId,
-				captureClient,
-			);
-			this.observabilityClients.set(sessionId, client);
+			getGlobalConsoleCapture().startCapture(sessionId, page);
+			getGlobalNetworkCapture({ captureSuccess: true }).startCapture(sessionId, page);
+			page.on("close", () => {
+				getGlobalConsoleCapture().stopCapture(sessionId, page);
+				getGlobalNetworkCapture({ captureSuccess: true }).stopCapture(sessionId, page);
+				this.observabilityPages.delete(sessionId);
+			});
+			this.observabilityPages.set(sessionId, page);
 		} catch (error: unknown) {
 			log.warn(
 				`Observability capture unavailable: ${error instanceof Error ? error.message : String(error)}`,
