@@ -348,8 +348,8 @@ export function getBrowserActionPositionals(
 	return action === "tab"
 		? args.positional
 		: [args.subcommand, ...args.positional].filter((value): value is string =>
-				Boolean(value),
-			);
+			Boolean(value),
+		);
 }
 
 async function getApiUrl(): Promise<string> {
@@ -458,13 +458,17 @@ async function withCliTimeout<T>(
 	label: string,
 ): Promise<{ result: T | ReturnType<typeof cliTimeoutResult>; timedOut: boolean }> {
 	let timedOut = false;
+	let timerHandle: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<ReturnType<typeof cliTimeoutResult>>((resolve) => {
-		setTimeout(() => {
+		timerHandle = setTimeout(() => {
 			timedOut = true;
 			resolve(cliTimeoutResult(label, timeoutMs));
 		}, timeoutMs);
 	});
 	const result = await Promise.race([promise, timeout]);
+	if (!timedOut && timerHandle) {
+		clearTimeout(timerHandle);
+	}
 	return { result, timedOut };
 }
 
@@ -1493,10 +1497,10 @@ async function handleSkill(args: ParsedArgs): Promise<void> {
 				const result = env.valid
 					? { healthy: true, details: "Required environment is configured." }
 					: {
-							healthy: false,
-							details: `Missing required env: ${env.missing.join(", ")}`,
-							missingEnv: env.missing,
-						};
+						healthy: false,
+						details: `Missing required env: ${env.missing.join(", ")}`,
+						missingEnv: env.missing,
+					};
 				outputJson(result, !jsonOutput);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
@@ -2365,11 +2369,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					const names = positional[1]
 						? [positional[1]]
 						: [
-								...new Set([
-									...listed.builtIn,
-									...listed.providers.map((provider) => provider.name),
-								]),
-							];
+							...new Set([
+								...listed.builtIn,
+								...listed.providers.map((provider) => provider.name),
+							]),
+						];
 					const reports = [];
 					for (const providerName of names) {
 						const config = registry.get(providerName);
@@ -3203,191 +3207,191 @@ export async function runCli(argv = process.argv): Promise<void> {
 
 	try {
 		switch (args.command) {
-		case "doctor":
-			await handleDoctor(args);
-			break;
+			case "doctor":
+				await handleDoctor(args);
+				break;
 
-		case "setup":
-			await handleSetup(args);
-			break;
+			case "setup":
+				await handleSetup(args);
+				break;
 
-		case "config":
-			await handleConfig(args);
-			break;
+			case "config":
+				await handleConfig(args);
+				break;
 
-		case "status":
-			await handleStatus(args);
-			break;
+			case "status":
+				await handleStatus(args);
+				break;
 
-		case "data":
-			await handleData(args);
-			break;
+			case "data":
+				await handleData(args);
+				break;
 
-		case "benchmark":
-			await handleBenchmark(args);
-			break;
+			case "benchmark":
+				await handleBenchmark(args);
+				break;
 
-		case "dashboard":
-			await handleDashboard(args);
-			break;
+			case "dashboard":
+				await handleDashboard(args);
+				break;
 
-		case "web":
-		case "app":
-			await handleWeb(args);
-			break;
+			case "web":
+			case "app":
+				await handleWeb(args);
+				break;
 
-		case "desktop":
-			await handleDesktop(args);
-			break;
+			case "desktop":
+				await handleDesktop(args);
+				break;
 
-		case "workflow":
-			await handleWorkflow(args);
-			break;
+			case "workflow":
+				await handleWorkflow(args);
+				break;
 
-		case "harness":
-			await handleHarness(args);
-			break;
+			case "harness":
+				await handleHarness(args);
+				break;
 
-		case "package":
-			await handlePackage(args);
-			break;
+			case "package":
+				await handlePackage(args);
+				break;
 
-		case "vault":
-			await handleVault(args);
-			break;
+			case "vault":
+				await handleVault(args);
+				break;
 
-		case "network":
-			await handleNetwork(args);
-			break;
+			case "network":
+				await handleNetwork(args);
+				break;
 
-		case "run":
-			await handleRun(args);
-			break;
+			case "run":
+				await handleRun(args);
+				break;
 
-		case "schedule":
-			await handleSchedule(args);
-			break;
+			case "schedule":
+				await handleSchedule(args);
+				break;
 
-		case "daemon":
-			await handleDaemon(args);
-			break;
+			case "daemon":
+				await handleDaemon(args);
+				break;
 
-		case "proxy":
-			await handleProxy(args);
-			break;
+			case "proxy":
+				await handleProxy(args);
+				break;
 
-		case "memory":
-			await handleMemory(args);
-			break;
+			case "memory":
+				await handleMemory(args);
+				break;
 
-		case "skill":
-			await handleSkill(args);
-			break;
+			case "skill":
+				await handleSkill(args);
+				break;
 
-		case "report":
-			await handleReport(args);
-			break;
+			case "report":
+				await handleReport(args);
+				break;
 
-		case "captcha":
-			await handleCaptcha(args);
-			break;
+			case "captcha":
+				await handleCaptcha(args);
+				break;
 
-		case "policy":
-			await handlePolicy(args);
-			break;
+			case "policy":
+				await handlePolicy(args);
+				break;
 
-		// ── Top-level browser actions (Section 5) ─────────────────────
-		case "open":
-			await handleBrowserAction("open", args);
-			break;
+			// ── Top-level browser actions (Section 5) ─────────────────────
+			case "open":
+				await handleBrowserAction("open", args);
+				break;
 
-		case "snapshot":
-			await handleBrowserAction("snapshot", args);
-			break;
+			case "snapshot":
+				await handleBrowserAction("snapshot", args);
+				break;
 
-		case "click":
-			await handleBrowserAction("click", args);
-			break;
+			case "click":
+				await handleBrowserAction("click", args);
+				break;
 
-		case "fill":
-			await handleBrowserAction("fill", args);
-			break;
+			case "fill":
+				await handleBrowserAction("fill", args);
+				break;
 
-		case "hover":
-			await handleBrowserAction("hover", args);
-			break;
+			case "hover":
+				await handleBrowserAction("hover", args);
+				break;
 
-		case "type":
-			await handleBrowserAction("type", args);
-			break;
+			case "type":
+				await handleBrowserAction("type", args);
+				break;
 
-		case "paste":
-			await handleBrowserAction("paste", args);
-			break;
+			case "paste":
+				await handleBrowserAction("paste", args);
+				break;
 
-		case "press":
-			await handleBrowserAction("press", args);
-			break;
+			case "press":
+				await handleBrowserAction("press", args);
+				break;
 
-		case "scroll":
-			await handleBrowserAction("scroll", args);
-			break;
+			case "scroll":
+				await handleBrowserAction("scroll", args);
+				break;
 
-		case "screenshot":
-			await handleBrowserAction("screenshot", args);
-			break;
+			case "screenshot":
+				await handleBrowserAction("screenshot", args);
+				break;
 
-		case "tab":
-			await handleBrowserAction("tab", args);
-			break;
+			case "tab":
+				await handleBrowserAction("tab", args);
+				break;
 
-		case "close":
-			await handleBrowserAction("close", args);
-			break;
+			case "close":
+				await handleBrowserAction("close", args);
+				break;
 
-		case "locator":
-			await handleLocator(args);
-			break;
+			case "locator":
+				await handleLocator(args);
+				break;
 
-		// ── Session commands (Section 5) ────────────────────────────────
-		case "session":
-			await handleSession(args);
-			break;
+			// ── Session commands (Section 5) ────────────────────────────────
+			case "session":
+				await handleSession(args);
+				break;
 
-		case "browser":
-			await handleBrowser(args);
-			break;
+			case "browser":
+				await handleBrowser(args);
+				break;
 
-		case "knowledge":
-			await handleKnowledge(args);
-			break;
+			case "knowledge":
+				await handleKnowledge(args);
+				break;
 
-		case "term":
-			await handleTerm(args);
-			break;
+			case "term":
+				await handleTerm(args);
+				break;
 
-		case "fs":
-			await handleFs(args);
-			break;
+			case "fs":
+				await handleFs(args);
+				break;
 
-		case "service":
-			await handleService(args);
-			break;
+			case "service":
+				await handleService(args);
+				break;
 
-		case "debug":
-			await handleDebug(args);
-			break;
+			case "debug":
+				await handleDebug(args);
+				break;
 
-		// ── MCP Server (Section 7) ──────────────────────────────────────
-		case "mcp":
-			await handleMcp(args);
-			break;
+			// ── MCP Server (Section 7) ──────────────────────────────────────
+			case "mcp":
+				await handleMcp(args);
+				break;
 
-		default:
-			console.error(`Unknown command: ${args.command}`);
-			printHelp();
-			throw new CliError("Unknown command");
-	}
+			default:
+				console.error(`Unknown command: ${args.command}`);
+				printHelp();
+				throw new CliError("Unknown command");
+		}
 
 	} finally {
 		// ── Clean exit ──────────────────────────────────────────────────
@@ -3615,13 +3619,13 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 			const deleted = deleteArtifact(artifact.filePath);
 			if (deleted) {
-			console.log(`Deleted: ${artifact.filePath}`);
-		} else {
-			console.error(`Error: Failed to delete ${artifact.filePath}`);
-			throw new CliError('Command failed');
+				console.log(`Deleted: ${artifact.filePath}`);
+			} else {
+				console.error(`Error: Failed to delete ${artifact.filePath}`);
+				throw new CliError('Command failed');
+			}
+			break;
 		}
-		break;
-	}
 
 		case "backends": {
 			const backendSubcommand = positional[0] ?? "list";
@@ -3817,7 +3821,7 @@ async function ensureDaemonRunning(): Promise<string> {
 	if (!established) {
 		throw new Error(
 			`Failed to start or connect to the daemon for terminal session commands. ` +
-				`Try manually: bc daemon start`,
+			`Try manually: bc daemon start`,
 		);
 	}
 
@@ -4306,13 +4310,13 @@ async function tryReuseWebServer(options: {
 	port: number;
 }): Promise<
 	| {
-			host: string;
-			port: number;
-			token: string;
-			url: string;
-			pid: number;
-			startedAt: string;
-	  }
+		host: string;
+		port: number;
+		token: string;
+		url: string;
+		pid: number;
+		startedAt: string;
+	}
 	| null
 > {
 	const { readActivePersistedWebAppServerInfo } = await import("./web/server");
@@ -5083,9 +5087,9 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				const filesFlag = flags.files;
 				const files = filesFlag
 					? filesFlag.split("\0").map((f) => {
-							const [path, ...rest] = f.split(":");
-							return { path: path ?? "", content: rest.join(":") || "" };
-						})
+						const [path, ...rest] = f.split(":");
+						return { path: path ?? "", content: rest.join(":") || "" };
+					})
 					: [{ path: "helper.js", content: "" }];
 				const result = await bc.harness.generate({
 					id,
