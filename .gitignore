@@ -6,6 +6,7 @@ node_modules/
 .commandcode/
 desktop/BrowserControlLauncher/
 desktop/bin/
+CLAUDE.md
 
 .env
 .env.*
@@ -41,8 +42,11 @@ nul
 premium-completion-tracker.md
 INSTRUCTIONS.md
 PROBLEMS.md
+IGNORED_PROBLEMS.md
 HIDDEN_NON_CORE_FEATURES.md
+IGNORED_FEATURES.md
 
+build_log.txt
 selectors.json
 screenshots/
 output/
@@ -54,5 +58,8 @@ dist-desktop/
 dist-desktop-*/
 release-desktop/
 win-unpacked/
+
+scratch/
+.commandcode/
 
 .tmp-*
