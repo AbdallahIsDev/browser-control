@@ -138,7 +138,7 @@ Helper registry for repeat failure recovery. Helpers are domain-specific recover
 
 ### Automation Packages (`src/packages/`)
 
-Installable automation packages with permission manifests, workflow runners, and eval proof. Example: `automation-packages/tradingview-ict-analysis/`.
+Installable automation packages with permission manifests, workflow runners, and eval proof.
 
 ### Observability (`src/observability/`)
 

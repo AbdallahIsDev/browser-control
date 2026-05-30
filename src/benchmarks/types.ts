@@ -1,6 +1,6 @@
 import type { ExecutionPath } from "../policy/types";
 
-export type BenchmarkSuiteName = "browser" | "terminal" | "filesystem" | "combined" | "package" | "trading" | "all";
+export type BenchmarkSuiteName = "browser" | "terminal" | "filesystem" | "combined" | "package" | "all";
 
 export interface BenchmarkTaskResult {
 	success: boolean;

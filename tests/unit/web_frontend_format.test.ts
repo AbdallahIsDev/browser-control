@@ -415,7 +415,7 @@ test("package library does not expose trading package by default", () => {
 	assert.doesNotMatch(source, /Optional skill/);
 });
 
-test("production feature flags hide risky dashboard surfaces by default", () => {
+test("production feature flags expose only in-scope dashboard surfaces", () => {
 	const flagsSource = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/featureFlags.ts"),
 		"utf8",
@@ -437,12 +437,13 @@ test("production feature flags hide risky dashboard surfaces by default", () => 
 		"generalAgentUi",
 		"proxyManager",
 		"stealthControls",
-		"trading",
 	]) {
 		assert.match(flagsSource, new RegExp(`${flag}: false`));
 	}
 
-	assert.match(appSource, /isProductionFeatureEnabled\("trading"\)/);
+	assert.doesNotMatch(flagsSource, /trading/);
+	assert.doesNotMatch(appSource, /TradingView/);
+	assert.doesNotMatch(appSource, /\/trading/);
 	assert.match(
 		appSource,
 		/isProductionFeatureEnabled\("fullTerminalDashboard"\)/,
@@ -656,10 +657,6 @@ test("pages avoid legacy panel and nested card anti-patterns", () => {
 		path.resolve(__dirname, "../../web/src/pages/AutomationsView.tsx"),
 		"utf8",
 	);
-	const tradingSource = fs.readFileSync(
-		path.resolve(__dirname, "../../web/src/pages/TradingView.tsx"),
-		"utf8",
-	);
 	const advancedSource = fs.readFileSync(
 		path.resolve(__dirname, "../../web/src/pages/AdvancedView.tsx"),
 		"utf8",
@@ -677,7 +674,6 @@ test("pages avoid legacy panel and nested card anti-patterns", () => {
 		commandSource,
 		browserSource,
 		automationsSource,
-		tradingSource,
 		advancedSource,
 		tasksSource,
 	]) {
@@ -836,43 +832,13 @@ test("automations view uses shared components and DataTable", () => {
 	assert.doesNotMatch(source, /<table\s/);
 });
 
-test("trading view uses shared components and PageShell", () => {
-	const source = fs.readFileSync(
-		path.resolve(__dirname, "../../web/src/pages/TradingView.tsx"),
-		"utf8",
+test("trading dashboard page is not shipped", () => {
+	assert.equal(
+		fs.existsSync(
+			path.resolve(__dirname, "../../web/src/pages/TradingView.tsx"),
+		),
+		false,
 	);
-
-	for (const expected of [
-		"@/components/layout/PageShell",
-		"@/components/ui/card",
-		"@/components/ui/button",
-		"@/components/ui/badge",
-		"@/components/common/DataTable",
-		"@/components/common/StatusBadge",
-		"@/components/common/EmptyState",
-		"@/components/common/ErrorState",
-	]) {
-		assert.match(
-			source,
-			new RegExp(expected.replaceAll("/", "\\/")),
-			`${expected} missing from TradingView`,
-		);
-	}
-
-	for (const expected of [
-		"TradingView analysis package",
-		"without making trading a primary Browser Control workflow",
-		"TechnicalIdDetails",
-		"Technical job ID",
-		"Technical ticket ID",
-		"Showing latest 12",
-	]) {
-		assert.match(source, new RegExp(expected));
-	}
-
-	assert.doesNotMatch(source, /className="panel"/);
-	assert.doesNotMatch(source, /<button\s/);
-	assert.doesNotMatch(source, /<table\s/);
 });
 
 test("advanced view uses shared components and ConfirmDialog", () => {
@@ -1005,7 +971,6 @@ test("pages use responsive mobile-first patterns for buttons and forms", () => {
 		"SettingsView.tsx",
 		"EvidenceView.tsx",
 		"BrowserView.tsx",
-		"TradingView.tsx",
 		"AdvancedView.tsx",
 	];
 

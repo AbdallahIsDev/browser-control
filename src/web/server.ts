@@ -282,24 +282,8 @@ function slugifyAutomationId(value: string): string {
 	return slug || `automation-${Date.now()}`;
 }
 
-function builtInAutomations(now = new Date().toISOString()): SavedAutomation[] {
-	return [
-		{
-			id: "tradingview-ict-analysis",
-			name: "TradingView ICT Analysis",
-			description:
-				"Analyze the active TradingView chart with ICT confluence and prepare a trade plan for review.",
-			category: "Trading",
-			prompt:
-				"Use the TradingView MCP chart state, OHLCV, visible indicators, and drawings to analyze market structure with the packaged guide at automation-packages/tradingview-ict-analysis/docs/ict-methodology.md. Prioritize fair value gaps, order blocks, liquidity sweeps, displacement, market structure shift, premium/discount, and OTE. Produce bias, invalidation, entry zone, stop, targets, risk notes, and a journal-ready summary. Do not place live trades unless the user explicitly approves the exact order.",
-			source: "built-in",
-			status: "ready",
-			approvalRequired: true,
-			createdAt: now,
-			updatedAt: now,
-			runCount: 0,
-		},
-	];
+function builtInAutomations(): SavedAutomation[] {
+	return [];
 }
 
 function readSavedAutomations(): SavedAutomation[] {
@@ -312,7 +296,9 @@ function readSavedAutomations(): SavedAutomation[] {
 	try {
 		const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
 		if (!Array.isArray(parsed)) return builtInAutomations();
-		return parsed as SavedAutomation[];
+		return (parsed as SavedAutomation[]).filter(
+			(item) => item.id !== "tradingview-ict-analysis",
+		);
 	} catch {
 		return builtInAutomations();
 	}
@@ -1322,7 +1308,9 @@ export function createWebAppServer(
 			const { convertRecordingToPackage, getRecorder } = await import(
 				"../observability/recorder"
 			);
-			const { materializePackageDraft } = await import("../packages/materialize");
+			const { materializePackageDraft } = await import(
+				"../packages/materialize"
+			);
 			const session = getRecorder().getSession(id);
 			if (!session) {
 				json(response, 404, {
@@ -1857,243 +1845,6 @@ export function createWebAppServer(
 			return;
 		}
 
-		if (request.method === "GET" && pathname === "/api/trading/status") {
-			const status = await api.status();
-			json(response, 200, {
-				mode: "analysis_only",
-				supervisor: "active",
-				broker: status.provider.active || "local",
-				health: status.health?.overall || "unknown",
-				defaultMode: "analysis_only",
-				paperTrading: true,
-				liveRequiresExactApproval: true,
-			});
-			return;
-		}
-
-		if (request.method === "GET" && pathname === "/api/trading/plans") {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			json(response, 200, await storage.listTradePlans());
-			return;
-		}
-
-		if (request.method === "POST" && pathname === "/api/trading/plans") {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const body = (await readJsonBody(request)) as {
-				planId?: string;
-				symbol?: string;
-				side?: string;
-				mode?: string;
-				status?: string;
-				riskPercent?: number;
-				thesis?: string;
-			};
-			const plan = {
-				id: `plan-${Date.now()}`,
-				planId: body.planId || `plan-${Date.now()}`,
-				symbol: body.symbol || "EURUSD",
-				side: (body.side === "sell" ? "sell" : "buy") as "buy" | "sell",
-				mode: (body.mode || "analysis_only") as
-					| "analysis_only"
-					| "paper"
-					| "live_assisted"
-					| "live_supervised",
-				status: (body.status || "draft") as
-					| "draft"
-					| "active"
-					| "completed"
-					| "cancelled",
-				riskPercent: body.riskPercent ?? 0.5,
-				thesis: body.thesis ?? "",
-				createdAt: new Date().toISOString(),
-				updatedAt: new Date().toISOString(),
-			};
-			await storage.saveTradePlan(plan);
-			json(response, 200, plan);
-			return;
-		}
-
-		if (request.method === "GET" && pathname === "/api/trading/tickets") {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			json(response, 200, await storage.listOrderTickets());
-			return;
-		}
-
-		const jobControlMatch =
-			/^\/api\/trading\/(?:supervisor\/)?jobs\/([^/]+)\/(start|pause|resume|stop)$/u.exec(
-				pathname,
-			);
-		if (request.method === "POST" && jobControlMatch) {
-			const jobId = decodeURIComponent(jobControlMatch[1] ?? "");
-			const action = jobControlMatch[2];
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const jobs = await storage.listSupervisorJobs();
-			const job = jobs.find((j) => j.id === jobId);
-			if (job) {
-				job.status =
-					action === "pause"
-						? "paused"
-						: action === "stop"
-							? "stopped"
-							: "active";
-				await storage.saveSupervisorJob(job);
-				json(response, 200, { success: true, job });
-			} else {
-				json(response, 404, { success: false, error: "Job not found" });
-			}
-			return;
-		}
-
-		// Alias: GET /api/trading/supervisor/jobs → same as /api/trading/jobs
-		if (
-			request.method === "GET" &&
-			(pathname === "/api/trading/supervisor/jobs" ||
-				pathname === "/api/trading/jobs")
-		) {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			json(response, 200, await storage.listSupervisorJobs());
-			return;
-		}
-
-		// Alias: GET /api/trading/supervisor/decisions → same as /api/trading/decisions
-		if (
-			request.method === "GET" &&
-			(pathname === "/api/trading/supervisor/decisions" ||
-				pathname === "/api/trading/decisions")
-		) {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const tradeId = requestUrl.searchParams.get("tradeId") || undefined;
-			json(response, 200, await storage.listSupervisorDecisions(tradeId));
-			return;
-		}
-
-		// POST /api/trading/tickets — create an order ticket
-		if (request.method === "POST" && pathname === "/api/trading/tickets") {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const body = (await readJsonBody(request)) as {
-				planId: string;
-				mode: string;
-				account: string;
-				platform: string;
-				symbol: string;
-				side: string;
-				size: number;
-				entry: number;
-				stopLoss?: number;
-				targets: number[];
-			};
-			const ticket = {
-				id: `ticket-${Date.now()}`,
-				planId: body.planId,
-				mode: body.mode || "paper",
-				account: body.account || "paper",
-				platform: body.platform || "paper",
-				symbol: body.symbol,
-				side: body.side,
-				size: body.size,
-				entry: body.entry,
-				stopLoss: body.stopLoss,
-				targets: body.targets || [],
-				status: "pending" as const,
-				createdAt: new Date().toISOString(),
-			};
-			await storage.saveOrderTicket(ticket);
-			json(response, 200, ticket);
-			return;
-		}
-
-		// POST /api/trading/tickets/:id/approve
-		const ticketApproveMatch =
-			/^\/api\/trading\/tickets\/([^/]+)\/approve$/u.exec(pathname);
-		if (request.method === "POST" && ticketApproveMatch) {
-			const ticketId = decodeURIComponent(ticketApproveMatch[1] ?? "");
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const tickets = await storage.listOrderTickets();
-			const ticket = tickets.find((t) => t.id === ticketId);
-			if (!ticket) {
-				json(response, 404, { success: false, error: "Ticket not found" });
-				return;
-			}
-			if (ticket.status !== "pending") {
-				json(response, 400, {
-					success: false,
-					error: `Ticket is ${ticket.status}, not pending`,
-				});
-				return;
-			}
-			// Live tickets require exact approval fields
-			const body = (await readJsonBody(request)) as {
-				approvedBy?: string;
-				text?: string;
-			};
-			const isLive =
-				ticket.mode === "live_assisted" || ticket.mode === "live_supervised";
-			if (isLive && !body.approvedBy) {
-				json(response, 400, {
-					success: false,
-					error:
-						"Live ticket approval requires approvedBy field with exact approval text",
-				});
-				return;
-			}
-			ticket.status = "approved";
-			ticket.approval = {
-				approvedAt: new Date().toISOString(),
-				approvedBy: body.approvedBy || "local-user",
-			};
-			await storage.saveOrderTicket(ticket);
-			json(response, 200, { success: true, ticket });
-			return;
-		}
-
-		// POST /api/trading/tickets/:id/reject
-		const ticketRejectMatch =
-			/^\/api\/trading\/tickets\/([^/]+)\/reject$/u.exec(pathname);
-		if (request.method === "POST" && ticketRejectMatch) {
-			const ticketId = decodeURIComponent(ticketRejectMatch[1] ?? "");
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const tickets = await storage.listOrderTickets();
-			const ticket = tickets.find((t) => t.id === ticketId);
-			if (!ticket) {
-				json(response, 404, { success: false, error: "Ticket not found" });
-				return;
-			}
-			ticket.status = "rejected";
-			await storage.saveOrderTicket(ticket);
-			json(response, 200, { success: true, ticket });
-			return;
-		}
-
-		// GET /api/trading/journal — aggregated journal/evidence for trading
-		if (request.method === "GET" && pathname === "/api/trading/journal") {
-			const { getStateStorage } = await import("../state/index");
-			const storage = getStateStorage();
-			const [decisions, evidence, plans, tickets] = await Promise.all([
-				storage.listSupervisorDecisions(),
-				storage.listEvidence(),
-				storage.listTradePlans(),
-				storage.listOrderTickets(),
-			]);
-			json(response, 200, {
-				plans: plans.length,
-				tickets: tickets.length,
-				decisions: decisions.slice(0, 50),
-				evidence: evidence
-					.filter((e) => e.type === "receipt" || e.type === "log")
-					.slice(0, 50),
-			});
-			return;
-		}
-
 		// ── State Storage API endpoints ────────────────────────────────
 		if (pathname.startsWith("/api/state/")) {
 			const { getStateStorage } = await import("../state/index");
@@ -2122,18 +1873,6 @@ export function createWebAppServer(
 						return;
 					case "audit-events":
 						json(response, 200, await storage.listAuditEvents());
-						return;
-					case "trade-plans":
-						json(response, 200, await storage.listTradePlans());
-						return;
-					case "order-tickets":
-						json(response, 200, await storage.listOrderTickets());
-						return;
-					case "supervisor-jobs":
-						json(response, 200, await storage.listSupervisorJobs());
-						return;
-					case "supervisor-decisions":
-						json(response, 200, await storage.listSupervisorDecisions());
 						return;
 					case "package-evals":
 						json(response, 200, await storage.listPackageEvals());

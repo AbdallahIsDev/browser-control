@@ -44,7 +44,7 @@ Last synchronized: 2026-04-26 section-24 implementation branch
 | 27 | Browser Discovery, Attach UX, Downloads, and Drop I/O | Implemented in current worktree | `src/browser/connection.ts`, `src/browser/actions.ts`, `src/mcp/tools/browser.ts` | CDP alias attach, explicit attach target handling, clean detach, drop files/data, downloads list. Section folder/spec is missing from this checkout. |
 | 28 | Operator Dashboard and Web/Desktop UI | Implemented in current worktree | `web/src/App.tsx`, `src/web/server.ts`, `src/operator/dashboard.ts`, `src/operator/generated_ui.ts` | Local dashboard, pages, web API, desktop wrapper hooks, and native generated UI schema/dispatcher. Still missing json-render runtime/devtools and full browser terminal polish. |
 | 29 | Workflow Graph and Self-Healing Harness | Implemented in current worktree | `src/workflows/*`, `src/harness/*`, `src/mcp/tools/workflow.ts` | Linear durable workflow runtime plus helper registry/validation/local-temp sandbox. Missing branching/loops and generated helper loop. |
-| 30 | Automation Packages and Evals | Implemented in current worktree | `src/packages/*`, `automation-packages/tradingview-ict-analysis/`, `tests/unit/packages.test.ts` | Local package install/list/info/update/remove/grant/run/eval. Missing remote marketplace, signing, and package UI generation. |
+| 30 | Automation Packages and Evals | Implemented in current worktree | `src/packages/*`, `tests/unit/packages.test.ts` | Local package install/list/info/update/remove/grant/run/eval. Missing remote marketplace, signing, and package UI generation. |
 
 ## Current Worktree Sync Expectation
 

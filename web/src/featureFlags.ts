@@ -6,7 +6,6 @@ export const productionFeatureFlags: Record<string, boolean> = {
 	generalAgentUi: false,
 	proxyManager: false,
 	stealthControls: false,
-	trading: false,
 };
 
 export type ProductionFeatureFlag =
@@ -16,8 +15,7 @@ export type ProductionFeatureFlag =
 	| "fullTerminalDashboard"
 	| "generalAgentUi"
 	| "proxyManager"
-	| "stealthControls"
-	| "trading";
+	| "stealthControls";
 
 export function isProductionFeatureEnabled(
 	flag: ProductionFeatureFlag,

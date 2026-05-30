@@ -40,7 +40,6 @@ import {
 	SettingsView,
 	TasksView,
 	TerminalView,
-	TradingView,
 	WorkflowsView,
 } from "./pages";
 import type { AppStatus } from "./types";
@@ -85,7 +84,6 @@ const pageLabels: Record<string, string> = {
 	tasks: "Run History",
 	automations: "Automations",
 	browser: "Browser",
-	trading: "Trading",
 	workflows: "Workflows",
 	packages: "Package Library",
 	evidence: "Evidence",
@@ -104,9 +102,6 @@ const pathToPage: Record<string, string> = {
 	"/settings": "settings",
 };
 
-if (isProductionFeatureEnabled("trading")) {
-	pathToPage["/trading"] = "trading";
-}
 if (isProductionFeatureEnabled("fullTerminalDashboard")) {
 	pathToPage["/terminal"] = "terminal";
 }
@@ -257,7 +252,6 @@ export default function App() {
 	}, []);
 
 	const handleSelect = useCallback((id: string) => {
-		if (id === "trading" && !isProductionFeatureEnabled("trading")) return;
 		if (
 			id === "terminal" &&
 			!isProductionFeatureEnabled("fullTerminalDashboard")
@@ -480,8 +474,6 @@ export default function App() {
 										<AutomationsView />
 									)}
 								{page === "browser" && <BrowserView />}
-								{page === "trading" &&
-									isProductionFeatureEnabled("trading") && <TradingView />}
 								{page === "workflows" && <WorkflowsView />}
 								{page === "packages" && <PackagesView />}
 								{page === "evidence" && <EvidenceView />}

@@ -36,7 +36,6 @@ const pages = [
 	["tasks", "Tasks"],
 	["automations", "Automations"],
 	["browser", "Browser"],
-	["trading", "Trading"],
 	["workflows", "Workflows"],
 	["packages", "Packages"],
 	["evidence", "Evidence"],
@@ -186,7 +185,7 @@ function renderAgent() {
           </div>
           <span class="model-chip">${esc(configValue("openrouterModel") || "Model not set")}</span>
         </div>
-        <textarea id="agent-prompt" placeholder="Analyze a site, run a local workflow, or prepare a TradingView ICT plan..."></textarea>
+        <textarea id="agent-prompt" placeholder="Run a local workflow or create a reusable automation package..."></textarea>
         <div class="command-actions">
           <button class="primary" id="agent-run">Run task</button>
           <button id="agent-save">Save automation</button>
@@ -336,20 +335,6 @@ function renderBrowser() {
 				"Screenshot captured.",
 			);
 		});
-}
-
-function renderTrading() {
-	document.getElementById("view").innerHTML = `
-    <div class="overview-grid">
-      ${metric("Default mode", "Analysis only", "Live trading needs exact approval")}
-      ${metric("Paper trading", "Available", "Paper adapter first")}
-      ${metric("Live assisted", "Approval gated", "No blind live orders")}
-      ${metric("Supervisor", "Stateful", "Warns before risky quit")}
-    </div>
-    <section class="panel spaced">
-      <div class="panel-title">Trade Supervisor</div>
-      ${automationCards(state.automations.filter((item) => /trading/i.test(item.category || item.name)))}
-    </section>`;
 }
 
 function renderWorkflows() {
@@ -626,7 +611,6 @@ function render() {
 	else if (state.page === "tasks") renderTasks();
 	else if (state.page === "automations") renderAutomations();
 	else if (state.page === "browser") renderBrowser();
-	else if (state.page === "trading") renderTrading();
 	else if (state.page === "workflows") renderWorkflows();
 	else if (state.page === "packages") renderPackages();
 	else if (state.page === "evidence") renderEvidence();

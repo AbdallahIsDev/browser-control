@@ -13,8 +13,8 @@ import type { BrowserControlAPI } from "../../src/browser_control";
 import { resetRecorder } from "../../src/observability/recorder";
 import { createBrokerServer } from "../../src/runtime/broker_server";
 import { resetCredentialVault } from "../../src/security/credential_vault";
-import { constantTimeTokenEqual } from "../../src/shared/auth";
 import type { ActionResult } from "../../src/shared/action_result";
+import { constantTimeTokenEqual } from "../../src/shared/auth";
 import { resetStateStorage } from "../../src/state/index";
 import { createWebAppServer } from "../../src/web/server";
 
@@ -63,9 +63,7 @@ function rawHttpRequest(
 				headers: {
 					...(options.body
 						? {
-								"content-length": Buffer.byteLength(
-									options.body,
-								).toString(),
+								"content-length": Buffer.byteLength(options.body).toString(),
 							}
 						: {}),
 					...options.headers,
@@ -257,11 +255,12 @@ function mockApi(): BrowserControlAPI {
 			},
 		},
 		package: {
-			install: async () => actionResult({
-				name: "basic-test-package",
-				version: "1.0.0",
-				installedAt: "2026-05-08T00:00:00.000Z",
-			} as never),
+			install: async () =>
+				actionResult({
+					name: "basic-test-package",
+					version: "1.0.0",
+					installedAt: "2026-05-08T00:00:00.000Z",
+				} as never),
 			list: () =>
 				actionResult([
 					{
@@ -270,15 +269,17 @@ function mockApi(): BrowserControlAPI {
 						installedAt: "2026-05-08T00:00:00.000Z",
 					},
 				] as never),
-			info: () => actionResult({
-				name: "basic-test-package",
-				version: "1.0.0",
-			} as never),
+			info: () =>
+				actionResult({
+					name: "basic-test-package",
+					version: "1.0.0",
+				} as never),
 			remove: () => actionResult({ removed: true }),
-			update: async () => actionResult({
-				name: "basic-test-package",
-				version: "1.0.0",
-			} as never),
+			update: async () =>
+				actionResult({
+					name: "basic-test-package",
+					version: "1.0.0",
+				} as never),
 			grantPermission: () => actionResult({ granted: true }),
 			run: async () => actionResult({ status: "completed" } as never),
 			eval: async () => actionResult([]),
@@ -570,16 +571,17 @@ test("web app config mutation only allows dashboard-safe keys", async (t) => {
 
 test("auth token comparison uses timing-safe equality for same-length tokens", (t) => {
 	let calls = 0;
-	t.mock.method(crypto, "timingSafeEqual", (
-		actual: NodeJS.ArrayBufferView,
-		expected: NodeJS.ArrayBufferView,
-	) => {
-		calls += 1;
-		assert.equal(Buffer.isBuffer(actual), true);
-		assert.equal(Buffer.isBuffer(expected), true);
-		assert.equal(actual.byteLength, expected.byteLength);
-		return false;
-	});
+	t.mock.method(
+		crypto,
+		"timingSafeEqual",
+		(actual: NodeJS.ArrayBufferView, expected: NodeJS.ArrayBufferView) => {
+			calls += 1;
+			assert.equal(Buffer.isBuffer(actual), true);
+			assert.equal(Buffer.isBuffer(expected), true);
+			assert.equal(actual.byteLength, expected.byteLength);
+			return false;
+		},
+	);
 
 	assert.equal(constantTimeTokenEqual("test-token", "xxxx-token"), false);
 	assert.equal(calls, 1);
@@ -1766,10 +1768,7 @@ test("web app server persists saved automations and queues run when broker is av
 		headers: { authorization: "Bearer test-token" },
 	});
 	assert.equal(defaults.status, 200);
-	assert.equal(
-		((await defaults.json()) as Array<{ id: string }>)[0].id,
-		"tradingview-ict-analysis",
-	);
+	assert.deepEqual(await defaults.json(), []);
 
 	const created = await fetch(`${info.url}/api/saved-automations`, {
 		method: "POST",
@@ -1881,7 +1880,7 @@ test("web app server returns readable tasks availability when broker is unreacha
 	assert.match(body.error, /task runtime is offline/i);
 });
 
-test("web app server exposes data, package, and trading product endpoints", async (t) => {
+test("web app server exposes data and package endpoints without trading product routes", async (t) => {
 	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-product-"));
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	process.env.BROWSER_CONTROL_HOME = tmpHome;
@@ -1911,12 +1910,7 @@ test("web app server exposes data, package, and trading product endpoints", asyn
 	);
 
 	const trading = await fetch(`${info.url}/api/trading/status`, { headers });
-	assert.equal(trading.status, 200);
-	assert.equal(
-		((await trading.json()) as { liveRequiresExactApproval: boolean })
-			.liveRequiresExactApproval,
-		true,
-	);
+	assert.equal(trading.status, 404);
 });
 
 // ── Regression 1: Terminal stream event contract ─────────────────────

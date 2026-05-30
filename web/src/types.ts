@@ -153,68 +153,6 @@ export interface EvidenceRecord {
 	createdAt?: string;
 }
 
-export interface TradePlan {
-	id: string;
-
-	symbol: string;
-
-	side: "buy" | "sell";
-
-	mode: "analysis_only" | "paper" | "live_assisted" | "live_supervised";
-
-	status: "draft" | "active" | "completed" | "cancelled";
-
-	thesis: string;
-}
-
-export interface OrderTicket {
-	id: string;
-
-	planId: string;
-
-	symbol: string;
-
-	status: string;
-}
-
-export interface SupervisorJob {
-	id: string;
-
-	status: "active" | "paused" | "stopped" | "completed";
-
-	planId: string;
-}
-
-export interface SupervisorDecision {
-	id: string;
-
-	jobId: string;
-
-	decision: string;
-
-	reason?: string;
-
-	createdAt?: string;
-}
-
-export interface JournalEntry {
-	id: string;
-
-	timestamp: string;
-
-	message: string;
-
-	evidencePath?: string;
-}
-
-export interface TradingStatus {
-	mode: "analysis_only" | "paper" | "live_assisted" | "live_supervised";
-
-	connection: string;
-
-	staleChart: boolean;
-}
-
 export type BrowserDialogType = "alert" | "confirm" | "prompt" | "beforeunload";
 
 export interface BrowserDialogInfo {
