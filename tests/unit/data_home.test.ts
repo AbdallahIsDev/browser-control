@@ -259,7 +259,8 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 			"automations",
 			"backups",
 			"browser/profiles",
-			"evidence/screencasts",
+			"observability/screencasts",
+			"observability/receipts",
 			"helpers/quarantine",
 			"legacy",
 			"reports/audits",
@@ -307,6 +308,17 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 				entry.path === "runtime/temp" && entry.present === false
 			),
 			"optional lazy directories should stay in inventory without counting as missing",
+		);
+		assert.ok(
+			report.directories.inventory.some((entry) =>
+				entry.path === "observability/screencasts" && entry.present === false
+			),
+			"screencast inventory should point at the recorder output location",
+		);
+		assert.equal(
+			report.directories.inventory.some((entry) => entry.path === "evidence/screencasts"),
+			false,
+			"dead evidence/screencasts inventory entry should not be advertised",
 		);
 		assert.ok(
 			report.legacyAliases.some((entry) => entry.legacy.endsWith(".interop")),

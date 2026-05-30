@@ -98,8 +98,6 @@ const INVENTORY_DIRS = [
 	"config",
 	"evidence",
 	"evidence/debug-bundles",
-	"evidence/receipts",
-	"evidence/screencasts",
 	"evidence/screenshots",
 	"helpers",
 	"helpers/by-site",
@@ -111,6 +109,9 @@ const INVENTORY_DIRS = [
 	"memory",
 	"memory/embeddings",
 	"memory/knowledge",
+	"observability",
+	"observability/receipts",
+	"observability/screencasts",
 	"packages",
 	"packages/installed",
 	"packages/evals",
@@ -194,14 +195,6 @@ const DIRECTORY_DESCRIPTIONS: Record<string, { purpose: string; safeToDelete: st
 		purpose: "Debug bundles for failed runs.",
 		safeToDelete: "Only after support/debugging no longer needs them.",
 	},
-	"evidence/receipts": {
-		purpose: "Execution receipts and trust/audit proof artifacts.",
-		safeToDelete: "Only after exporting needed receipts.",
-	},
-	"evidence/screencasts": {
-		purpose: "Recorded browser screencast evidence.",
-		safeToDelete: "Only after exporting needed videos.",
-	},
 	"evidence/screenshots": {
 		purpose: "Screenshots captured by browser tasks.",
 		safeToDelete: "Only after exporting needed screenshots.",
@@ -245,6 +238,18 @@ const DIRECTORY_DESCRIPTIONS: Record<string, { purpose: string; safeToDelete: st
 	"memory/knowledge": {
 		purpose: "Knowledge cache files.",
 		safeToDelete: "Only if regeneration cost is acceptable.",
+	},
+	observability: {
+		purpose: "Shared observability artifacts such as screencasts and receipts.",
+		safeToDelete: "Only after exporting evidence needed for debugging or support.",
+	},
+	"observability/receipts": {
+		purpose: "Screencast debug receipts and trust/audit proof artifacts.",
+		safeToDelete: "Only after exporting needed receipts.",
+	},
+	"observability/screencasts": {
+		purpose: "Recorded browser screencast evidence.",
+		safeToDelete: "Only after exporting needed videos.",
 	},
 	packages: {
 		purpose: "Automation Package registry, installed packages, drafts, and evals.",
