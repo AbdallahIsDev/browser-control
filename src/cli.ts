@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { LocatorCandidate, OpenOptions } from "./browser/actions";
+import type { BrowserActionName, LocatorCandidate, OpenOptions } from "./browser/actions";
 import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
 import type { ScreencastOptions } from "./observability/types";
@@ -223,6 +223,44 @@ export const VALUE_FLAGS = new Set([
 // Flags that can be repeated and should be collected as arrays
 const REPEATED_FLAGS = new Set(["file", "files", "data"]);
 
+const CLI_BROWSER_ACT_ACTIONS = [
+	"click",
+	"fill",
+	"press",
+	"hover",
+	"scroll",
+	"type",
+	"paste",
+	"screenshot",
+	"tab-close",
+	"open",
+	"navigate",
+	"open-many",
+	"capture",
+	"capture-many",
+	"fill-many",
+	"state",
+] as const;
+
+const CLI_BROWSER_ACT_ACTION_MAP: Record<string, BrowserActionName> = {
+	click: "click",
+	fill: "fill",
+	press: "press",
+	hover: "hover",
+	scroll: "scroll",
+	type: "type",
+	paste: "paste",
+	screenshot: "screenshot",
+	"tab-close": "tab-close",
+	open: "open",
+	navigate: "navigate",
+	"open-many": "openMany",
+	capture: "capture",
+	"capture-many": "captureMany",
+	"fill-many": "fillMany",
+	state: "state",
+};
+
 function isNegativeNumberToken(value: string): boolean {
 	return /^-\d+(?:\.\d+)?$/.test(value);
 }
@@ -437,6 +475,10 @@ async function getApiUrl(): Promise<string> {
 	const { loadConfig } = await import("./shared/config");
 	const config = loadConfig({ validate: false });
 	return `http://127.0.0.1:${config.brokerPort}/api/v1`;
+}
+
+function parseBrowserActAction(value: string): BrowserActionName | null {
+	return CLI_BROWSER_ACT_ACTION_MAP[value] ?? null;
 }
 
 async function getBrokerAuthorizationHeader(): Promise<string> {
@@ -3177,7 +3219,14 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		case "act": {
 			const action = positional[0];
 			if (!action) {
-				console.error("Error: Action is required (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state)");
+				console.error(`Error: Action is required (${CLI_BROWSER_ACT_ACTIONS.join(", ")})`);
+				throw commandFailed();
+			}
+			const parsedAction = parseBrowserActAction(action);
+			if (!parsedAction) {
+				console.error(
+					`Error: Invalid browser act action "${action}". Expected one of: ${CLI_BROWSER_ACT_ACTIONS.join(", ")}`,
+				);
 				throw commandFailed();
 			}
 			try {
@@ -3187,7 +3236,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
 				const timeoutMs = flags.timeoutMs ?? flags.timeout;
 				const { result, timedOut } = await withCliTimeout(bc.browser.act({
-					action: action as any,
+					action: parsedAction,
 					target: positional[1] ?? flags.target,
 					text: flags.text ?? positional[2],
 					key: flags.key,

@@ -839,6 +839,29 @@ test("parseArgs keeps browser act fill target and text positionals", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("browser act rejects invalid and camelCase actions before dispatch", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-act-allowlist-"));
+  try {
+    const invalid = runCli(["browser", "act", "frobnicate", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(invalid.status, 1);
+    assert.match(invalid.stderr, /Invalid browser act action "frobnicate"/);
+    assert.match(invalid.stderr, /open-many/);
+
+    const camelCase = runCli(["browser", "act", "openMany", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(camelCase.status, 1);
+    assert.match(camelCase.stderr, /Invalid browser act action "openMany"/);
+    assert.doesNotMatch(camelCase.stderr, /openMany, captureMany, fillMany/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs handles multiple positional after subcommand", () => {
   const result = parseArgs([
     "node", "cli.ts", "memory", "get", "mykey"
