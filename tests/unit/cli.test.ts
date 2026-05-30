@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { BrowserProfileManager, getProfilesDir } from "../../src/browser/profiles";
 import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
 import { resetStateStorage } from "../../src/state/index";
 import { parseArgs, runCli as runCliInProcess, VALUE_FLAGS } from "../../src/cli";
@@ -168,6 +169,75 @@ test("data cleanup --stale moves legacy trading only with explicit confirmation"
     assert.equal(fs.existsSync(path.join(home, "trading")), false);
     assert.equal(fs.existsSync(path.join(home, "legacy", "trading", "journals", "keep.md")), true);
   } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("data cleanup --purge-profiles reports stale profiles and requires confirmation to delete", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-profile-purge-"));
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    const manager = new BrowserProfileManager();
+    const stale = manager.createProfile("stale-cli-profile", "named");
+    fs.writeFileSync(path.join(stale.dataDir, "Cache"), "stale");
+
+    const registryPath = path.join(getProfilesDir(), "registry.json");
+    const registry = JSON.parse(fs.readFileSync(registryPath, "utf8")) as {
+      profiles: Array<{ id: string; lastUsedAt: string }>;
+    };
+    const staleMeta = registry.profiles.find((entry) => entry.id === stale.id);
+    assert.ok(staleMeta);
+    staleMeta.lastUsedAt = new Date("2024-01-01T00:00:00.000Z").toISOString();
+    fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+
+    const env = { BROWSER_CONTROL_HOME: home };
+    const dryRun = runCli(["data", "cleanup", "--purge-profiles", "--json"], {
+      cwd: process.cwd(),
+      env,
+    });
+    assert.equal(dryRun.status, 0, dryRun.stderr);
+    const dryRunJson = JSON.parse(dryRun.stdout) as {
+      dryRun: boolean;
+      candidates: Array<{ id: string }>;
+      deleted: Array<{ id: string }>;
+    };
+    assert.equal(dryRunJson.dryRun, true);
+    assert.ok(dryRunJson.candidates.some((entry) => entry.id === stale.id));
+    assert.deepEqual(dryRunJson.deleted, []);
+    assert.equal(fs.existsSync(stale.dataDir), true);
+
+    const rejected = runCli(
+      ["data", "cleanup", "--purge-profiles", "--dry-run=false", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /profile purge requires --yes/);
+    assert.equal(fs.existsSync(stale.dataDir), true);
+
+    const invalidDays = runCli(
+      ["data", "cleanup", "--purge-profiles", "--days=-1", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    assert.notEqual(invalidDays.status, 0);
+    assert.match(invalidDays.stderr, /--days must be a non-negative number/);
+    assert.equal(fs.existsSync(stale.dataDir), true);
+
+    const deleted = runCli(
+      ["data", "cleanup", "--purge-profiles", "--dry-run=false", "--yes", "--json"],
+      { cwd: process.cwd(), env },
+    );
+    assert.equal(deleted.status, 0, deleted.stderr);
+    const deletedJson = JSON.parse(deleted.stdout) as {
+      dryRun: boolean;
+      deleted: Array<{ id: string }>;
+    };
+    assert.equal(deletedJson.dryRun, false);
+    assert.ok(deletedJson.deleted.some((entry) => entry.id === stale.id));
+    assert.equal(fs.existsSync(stale.dataDir), false);
+  } finally {
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
@@ -437,6 +507,7 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"non-interactive",
 		"overwrite",
 		"persist",
+		"purge-profiles",
 		"recursive",
 		"rotate",
 		"skip-browser-test",

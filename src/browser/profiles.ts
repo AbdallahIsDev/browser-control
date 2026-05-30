@@ -45,6 +45,24 @@ export interface ProfileMetadata {
   lastUsedAt: string;
 }
 
+export interface ProfilePurgeCandidate {
+  id: string;
+  name: string;
+  type: ProfileType;
+  dataDir: string;
+  lastUsedAt: string;
+  ageDays: number;
+  sizeBytes: number;
+}
+
+export interface ProfilePurgeResult {
+  dryRun: boolean;
+  olderThanDays: number;
+  candidates: ProfilePurgeCandidate[];
+  deleted: ProfilePurgeCandidate[];
+  reclaimedBytes: number;
+}
+
 // ── Path Helpers ────────────────────────────────────────────────────
 
 /** Get the root directory for all browser profiles. */
@@ -95,6 +113,22 @@ function saveRegistry(registry: ProfileRegistry): void {
   fs.mkdirSync(dir, { recursive: true });
   registry.updatedAt = new Date().toISOString();
   fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+}
+
+function sizeOfPath(target: string): number {
+  try {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return stat.size;
+    if (!stat.isDirectory()) return 0;
+    let total = 0;
+    for (const entry of fs.readdirSync(target)) {
+      total += sizeOfPath(path.join(target, entry));
+    }
+    return total;
+  } catch {
+    return 0;
+  }
 }
 
 // ── Profile Manager ─────────────────────────────────────────────────
@@ -266,6 +300,58 @@ export class BrowserProfileManager {
     }
 
     return toDelete.length;
+  }
+
+  /** Purge non-default profiles not used within the retention window. */
+  purgeStaleProfiles(options: {
+    olderThanDays?: number;
+    dryRun?: boolean;
+    now?: Date;
+  } = {}): ProfilePurgeResult {
+    const olderThanDays = options.olderThanDays ?? 30;
+    if (!Number.isFinite(olderThanDays) || olderThanDays < 0) {
+      throw new RangeError("olderThanDays must be a non-negative number");
+    }
+    const nowMs = (options.now ?? new Date()).getTime();
+    const dryRun = options.dryRun !== false;
+    const candidates: ProfilePurgeCandidate[] = [];
+
+    for (const meta of this.registry.profiles) {
+      if (meta.id === DEFAULT_SHARED_PROFILE_ID) continue;
+      const lastUsedMs = new Date(meta.lastUsedAt).getTime();
+      if (Number.isNaN(lastUsedMs)) continue;
+      const ageDays = (nowMs - lastUsedMs) / 86_400_000;
+      if (ageDays < olderThanDays) continue;
+      const dataDir = getProfileDataDir(meta.id);
+      candidates.push({
+        id: meta.id,
+        name: meta.name,
+        type: meta.type,
+        dataDir,
+        lastUsedAt: meta.lastUsedAt,
+        ageDays,
+        sizeBytes: sizeOfPath(dataDir),
+      });
+    }
+
+    const deleted: ProfilePurgeCandidate[] = [];
+    let reclaimedBytes = 0;
+    if (!dryRun) {
+      for (const candidate of candidates) {
+        if (this.deleteProfile(candidate.id)) {
+          deleted.push(candidate);
+          reclaimedBytes += candidate.sizeBytes;
+        }
+      }
+    }
+
+    return {
+      dryRun,
+      olderThanDays,
+      candidates,
+      deleted,
+      reclaimedBytes,
+    };
   }
 
   /** Reload registry from disk. */

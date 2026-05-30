@@ -684,7 +684,8 @@ Operator:
                                                                       Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
-  data doctor [--cleanup] | cleanup [--stale] | export [--json]        Inspect, clean, or export local data home
+  data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]
+                                                                      Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json] [--port=7790]                              Start/open local dashboard
@@ -4797,6 +4798,33 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	const runCleanup = (): void => {
 		const dryRunRequested = flags["dry-run"] === "false";
 		const confirm = flags.confirm;
+		if (flags["purge-profiles"] === "true") {
+			const dryRun = !dryRunRequested || !hasConfirmation(flags, "PURGE_PROFILES");
+			if (dryRunRequested && dryRun) {
+				console.error(
+					"Error: profile purge requires --yes (or legacy --confirm=PURGE_PROFILES).",
+				);
+				throw commandFailed();
+			}
+			const { BrowserProfileManager } = require("./browser/profiles") as typeof import("./browser/profiles");
+			const manager = new BrowserProfileManager();
+			const olderThanDays = flags.days ? Number(flags.days) : 30;
+			if (!Number.isFinite(olderThanDays) || olderThanDays < 0) {
+				console.error("Error: --days must be a non-negative number.");
+				throw commandFailed();
+			}
+			const result = manager.purgeStaleProfiles({
+				olderThanDays,
+				dryRun,
+			});
+			if (jsonOutput) outputJson(result, false);
+			else {
+				console.log(
+					`${result.dryRun ? "Dry run" : "Profile purge"}: ${result.candidates.length} candidates, ${result.deleted.length} deleted, ${result.reclaimedBytes} bytes reclaimed.`,
+				);
+			}
+			return;
+		}
 		const includeStaleLegacy = flags.stale === "true";
 		const requiredConfirm = includeStaleLegacy ? "MOVE_STALE_LEGACY" : "DELETE_RUNTIME_TEMP";
 		const dryRun = !dryRunRequested || confirm !== requiredConfirm;
