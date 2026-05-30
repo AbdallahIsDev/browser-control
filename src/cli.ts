@@ -16,6 +16,9 @@ const { buildSafeChildEnv } = require("../safe_child_env.cjs") as {
 	): NodeJS.ProcessEnv;
 };
 
+const TRUSTED_SESSION_WARNING =
+	"trusted policy allows credential reveal, raw CDP, and network interception. Only use for development environments.";
+
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
 interface CliErrorOptions {
@@ -6203,6 +6206,13 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 			} else {
 				if (result.success) {
 					outputJson(result.data, true);
+					if (
+						subcommand === "create" &&
+						(result.data as { policyProfile?: unknown } | undefined)
+							?.policyProfile === "trusted"
+					) {
+						console.warn(`\x1b[33mWarning: ${TRUSTED_SESSION_WARNING}\x1b[0m`);
+					}
 					if (result.warning) console.warn(`Warning: ${result.warning}`);
 				} else {
 					console.error(`Error: ${result.error}`);

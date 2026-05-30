@@ -73,6 +73,47 @@ test("parseArgs parses session lifecycle subcommands", () => {
   assert.deepEqual(cleanup.flags, { json: "true" });
 });
 
+test("session create warns when using trusted policy in human output", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-trusted-warn-"));
+  const dataHome = path.join(cwd, "data");
+  try {
+    const result = runCli(["session", "create", "trusted-warn", "--policy=trusted"], {
+      cwd,
+      env: { BROWSER_CONTROL_HOME: dataHome },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stderr,
+      /Warning: trusted policy allows credential reveal, raw CDP, and network interception\. Only use for development environments\./,
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("session create suppresses trusted policy warning in json output", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-trusted-json-"));
+  const dataHome = path.join(cwd, "data");
+  try {
+    const result = runCli(
+      ["session", "create", "trusted-json", "--policy=trusted", "--json"],
+      {
+        cwd,
+        env: { BROWSER_CONTROL_HOME: dataHome },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stderr, /Warning: trusted policy allows/);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data.policyProfile, "trusted");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs parses positional arguments", () => {
   const result = parseArgs(["node", "cli.ts", "memory", "set", "key1", "value1"]);
   assert.equal(result.command, "memory");
