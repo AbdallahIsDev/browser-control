@@ -75,8 +75,8 @@ describe("createBrowserControl", () => {
   it("session namespace has all methods", () => {
     const bc = createBrowserControl({ memoryStore: store });
 
-    // Session namespace only exposes create, list, use, status
-    const sessionMethods = ["create", "use", "list", "status"];
+    // Session namespace exposes the public session lifecycle surface.
+    const sessionMethods = ["create", "use", "list", "status", "destroy", "cleanup"];
 
     for (const method of sessionMethods) {
       assert.equal(typeof bc.session[method as keyof typeof bc.session], "function", `session.${method} is not a function`);

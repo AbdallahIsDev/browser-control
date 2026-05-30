@@ -61,6 +61,18 @@ test("parseArgs parses subcommands correctly", () => {
   assert.deepEqual(result.positional, []);
 });
 
+test("parseArgs parses session lifecycle subcommands", () => {
+  const destroy = parseArgs(["node", "cli.ts", "session", "destroy", "session-1"]);
+  assert.equal(destroy.command, "session");
+  assert.equal(destroy.subcommand, "destroy");
+  assert.deepEqual(destroy.positional, ["session-1"]);
+
+  const cleanup = parseArgs(["node", "cli.ts", "session", "cleanup", "--json"]);
+  assert.equal(cleanup.command, "session");
+  assert.equal(cleanup.subcommand, "cleanup");
+  assert.deepEqual(cleanup.flags, { json: "true" });
+});
+
 test("parseArgs parses positional arguments", () => {
   const result = parseArgs(["node", "cli.ts", "memory", "set", "key1", "value1"]);
   assert.equal(result.command, "memory");

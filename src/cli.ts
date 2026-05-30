@@ -731,6 +731,8 @@ Session:
   session create <name> [--policy=balanced]                         Create a new session
   session use <name-or-id>                                          Set the active session
   session status                                                     Show active session status
+  session destroy <name-or-id>                                       Destroy a session and release owned resources
+  session cleanup                                                    Remove idle sessions and enforce session cap
 
 Browser Lifecycle:
   browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]
@@ -6101,9 +6103,24 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 				break;
 			}
 
+			case "destroy": {
+				const nameOrId = positional[0];
+				if (!nameOrId) {
+					console.error("Error: Session name or ID is required");
+					throw commandFailed();
+				}
+				result = await _sessionManager.destroy(nameOrId);
+				break;
+			}
+
+			case "cleanup": {
+				result = await _sessionManager.cleanupIdleSessions();
+				break;
+			}
+
 			default:
 				console.error(`Unknown session command: ${subcommand}`);
-				console.error("Available: list, create, use, status");
+				console.error("Available: list, create, use, status, destroy, cleanup");
 				throw commandFailed();
 		}
 

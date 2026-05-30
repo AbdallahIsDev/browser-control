@@ -41,6 +41,23 @@ import { logger } from "./shared/logger";
 import { TerminalSessionManager } from "./terminal/session";
 
 const log = logger.withComponent("session_manager");
+const DEFAULT_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_MAX_SESSIONS = 50;
+const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function readNonNegativeIntegerEnv(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
 
 // ── Session State ──────────────────────────────────────────────────────
 
@@ -85,6 +102,13 @@ export interface SessionListEntry {
 	runtimeDir: string;
 	createdAt: string;
 	lastActivityAt: string;
+}
+
+export interface SessionCleanupSummary {
+	removed: number;
+	removedIds: string[];
+	remaining: number;
+	reason: "idle" | "max-sessions" | "manual";
 }
 
 // ── Rich Policy Evaluation Result (Issue 2) ─────────────────────────────
@@ -719,10 +743,15 @@ export class BrokerTerminalRuntime implements TerminalRuntime {
 export class SessionManager {
 	private readonly sessions = new Map<string, SessionState>();
 	private readonly memoryStore: MemoryStore;
+	private readonly ownsMemoryStore: boolean;
 	private readonly policyEngine: DefaultPolicyEngine;
 	private readonly executionRouter: ExecutionRouter;
 	private readonly browserManager: BrowserConnectionManager;
 	private readonly terminalManager: TerminalSessionManager;
+	private readonly sessionIdleTimeoutMs: number;
+	private readonly maxSessions: number;
+	private readonly sessionSweepIntervalMs: number;
+	private sessionSweepTimer: ReturnType<typeof setInterval> | null = null;
 	private activeSessionId: string | null = null;
 
 	constructor(
@@ -731,10 +760,32 @@ export class SessionManager {
 			policyEngine?: DefaultPolicyEngine;
 			browserManager?: BrowserConnectionManager;
 			terminalManager?: TerminalSessionManager;
+			sessionIdleTimeoutMs?: number;
+			maxSessions?: number;
+			sessionSweepIntervalMs?: number;
 		} = {},
 	) {
 		const config = loadConfig({ validate: false });
 		this.memoryStore = options.memoryStore ?? new MemoryStore();
+		this.ownsMemoryStore = !options.memoryStore;
+		this.sessionIdleTimeoutMs =
+			options.sessionIdleTimeoutMs ??
+			readPositiveIntegerEnv(
+				"BROWSER_CONTROL_SESSION_IDLE_TIMEOUT_MS",
+				DEFAULT_SESSION_IDLE_TIMEOUT_MS,
+			);
+		this.maxSessions =
+			options.maxSessions ??
+			readPositiveIntegerEnv(
+				"BROWSER_CONTROL_MAX_SESSIONS",
+				DEFAULT_MAX_SESSIONS,
+			);
+		this.sessionSweepIntervalMs =
+			options.sessionSweepIntervalMs ??
+			readNonNegativeIntegerEnv(
+				"BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS",
+				DEFAULT_SESSION_SWEEP_INTERVAL_MS,
+			);
 		this.policyEngine =
 			options.policyEngine ??
 			new DefaultPolicyEngine({ profileName: config.policyProfile });
@@ -755,6 +806,12 @@ export class SessionManager {
 		// Reload persisted sessions from MemoryStore so that
 		// separate CLI/API invocations see existing sessions.
 		this.loadPersistedSessions();
+		void this.cleanupIdleSessions().catch((error: unknown) => {
+			log.warn(
+				`Initial session cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		});
+		this.startSessionSweep();
 	}
 
 	// ── Session Lifecycle ────────────────────────────────────────────────
@@ -844,6 +901,7 @@ export class SessionManager {
 		// Persist AFTER activeSessionId is set so the session:active marker
 		// is written correctly.
 		this.persistSession(state);
+		await this.cleanupIdleSessions();
 
 		log.info("Session created", { sessionId, name, policyProfile });
 
@@ -929,6 +987,95 @@ export class SessionManager {
 		return successResult(state, {
 			path: "a11y",
 			sessionId: state.id,
+		});
+	}
+
+	/**
+	 * Destroy a session and release resources it owns when possible.
+	 */
+	async destroy(nameOrId: string): Promise<ActionResult<SessionCleanupSummary>> {
+		const state = this.resolveSession(nameOrId);
+		if (!state) {
+			return failureResult(`Session not found: ${nameOrId}`, {
+				path: "a11y",
+				sessionId: this.activeSessionId ?? "none",
+			});
+		}
+
+		await this.destroySessionState(state, "manual");
+		const summary: SessionCleanupSummary = {
+			removed: 1,
+			removedIds: [state.id],
+			remaining: this.sessions.size,
+			reason: "manual",
+		};
+		return successResult(summary, {
+			path: "a11y",
+			sessionId: this.activeSessionId ?? "none",
+		});
+	}
+
+	/**
+	 * Remove idle non-active sessions and enforce the max session cap.
+	 */
+	async cleanupIdleSessions(options: {
+		now?: Date;
+		idleTimeoutMs?: number;
+		maxSessions?: number;
+	} = {}): Promise<ActionResult<SessionCleanupSummary>> {
+		const nowMs = (options.now ?? new Date()).getTime();
+		const idleTimeoutMs = options.idleTimeoutMs ?? this.sessionIdleTimeoutMs;
+		const maxSessions = options.maxSessions ?? this.maxSessions;
+		const candidates = new Map<string, SessionState>();
+		const candidateReasons = new Map<string, SessionCleanupSummary["reason"]>();
+		let cleanupReason: SessionCleanupSummary["reason"] = "idle";
+
+		for (const state of this.sessions.values()) {
+			if (state.id === this.activeSessionId) continue;
+			const lastActivityMs = new Date(state.lastActivityAt).getTime();
+			if (!Number.isFinite(lastActivityMs)) {
+				candidates.set(state.id, state);
+				candidateReasons.set(state.id, "idle");
+				continue;
+			}
+			if (nowMs - lastActivityMs >= idleTimeoutMs) {
+				candidates.set(state.id, state);
+				candidateReasons.set(state.id, "idle");
+				cleanupReason = "idle";
+			}
+		}
+
+		const projectedSize = this.sessions.size - candidates.size;
+		if (projectedSize > maxSessions) {
+			const oldest = Array.from(this.sessions.values())
+				.filter((state) => state.id !== this.activeSessionId && !candidates.has(state.id))
+				.sort((a, b) => new Date(a.lastActivityAt).getTime() - new Date(b.lastActivityAt).getTime());
+			for (const state of oldest) {
+				if (this.sessions.size - candidates.size <= maxSessions) break;
+				if (candidates.size === 0) cleanupReason = "max-sessions";
+				candidates.set(state.id, state);
+				candidateReasons.set(state.id, "max-sessions");
+			}
+		}
+
+		const removedIds: string[] = [];
+		for (const state of candidates.values()) {
+			await this.destroySessionState(
+				state,
+				candidateReasons.get(state.id) ?? cleanupReason,
+			);
+			removedIds.push(state.id);
+		}
+
+		const summary: SessionCleanupSummary = {
+			removed: removedIds.length,
+			removedIds,
+			remaining: this.sessions.size,
+			reason: cleanupReason,
+		};
+		return successResult(summary, {
+			path: "a11y",
+			sessionId: this.activeSessionId ?? "none",
 		});
 	}
 
@@ -1428,6 +1575,74 @@ export class SessionManager {
 
 	// ── Internal Helpers ──────────────────────────────────────────────────
 
+	private startSessionSweep(): void {
+		if (this.sessionSweepIntervalMs <= 0) return;
+		this.sessionSweepTimer = setInterval(() => {
+			void this.cleanupIdleSessions().catch((error: unknown) => {
+				log.warn(
+					`Session cleanup sweep failed: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			});
+		}, this.sessionSweepIntervalMs);
+		this.sessionSweepTimer.unref?.();
+	}
+
+	private async destroySessionState(
+		state: SessionState,
+		reason: SessionCleanupSummary["reason"],
+	): Promise<void> {
+		if (state.terminalSessionId) {
+			try {
+				await this.terminalManager.close(state.terminalSessionId);
+			} catch (error: unknown) {
+				log.warn(
+					`Failed to close terminal for removed session ${state.id}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+
+		const activeConnection = this.browserManager.getConnection?.();
+		if (
+			state.browserConnectionId &&
+			activeConnection?.id === state.browserConnectionId
+		) {
+			try {
+				await this.browserManager.disconnect();
+			} catch (error: unknown) {
+				log.warn(
+					`Failed to disconnect browser for removed session ${state.id}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+
+		this.sessions.delete(state.id);
+		this.memoryStore.delete(`session:${state.id}`);
+
+		if (this.activeSessionId === state.id) {
+			this.activeSessionId = this.pickMostRecentSessionId();
+			if (this.activeSessionId) {
+				this.memoryStore.set(
+					"session:active",
+					{ id: this.activeSessionId },
+					this.sessionIdleTimeoutMs,
+				);
+			} else {
+				this.memoryStore.delete("session:active");
+			}
+		}
+
+		log.info("Session removed", { sessionId: state.id, reason });
+	}
+
+	private pickMostRecentSessionId(): string | null {
+		const [latest] = Array.from(this.sessions.values()).sort(
+			(a, b) =>
+				new Date(b.lastActivityAt).getTime() -
+				new Date(a.lastActivityAt).getTime(),
+		);
+		return latest?.id ?? null;
+	}
+
 	private resolveSession(nameOrId?: string): SessionState | null {
 		if (!nameOrId) {
 			return this.activeSessionId
@@ -1454,9 +1669,17 @@ export class SessionManager {
 
 	private persistSession(state: SessionState): void {
 		try {
-			this.memoryStore.set(`session:${state.id}`, state);
+			this.memoryStore.set(
+				`session:${state.id}`,
+				state,
+				this.sessionIdleTimeoutMs,
+			);
 			if (this.activeSessionId === state.id) {
-				this.memoryStore.set("session:active", { id: state.id });
+				this.memoryStore.set(
+					"session:active",
+					{ id: state.id },
+					this.sessionIdleTimeoutMs,
+				);
 			}
 		} catch (error: unknown) {
 			log.warn(
@@ -1553,6 +1776,11 @@ export class SessionManager {
 	 * This closes the memory store, terminal manager, and browser connections.
 	 */
 	close(): void {
+		if (this.sessionSweepTimer) {
+			clearInterval(this.sessionSweepTimer);
+			this.sessionSweepTimer = null;
+		}
+
 		try {
 			this.terminalManager.closeAll().catch(() => { /* ignore */ });
 		} catch { /* ignore */ }
@@ -1561,9 +1789,11 @@ export class SessionManager {
 			this.browserManager.close();
 		} catch { /* ignore */ }
 
-		try {
-			this.memoryStore.close();
-		} catch { /* ignore */ }
+		if (this.ownsMemoryStore) {
+			try {
+				this.memoryStore.close();
+			} catch { /* ignore */ }
+		}
 	}
 }
 

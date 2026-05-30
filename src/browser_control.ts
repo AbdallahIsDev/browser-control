@@ -66,6 +66,7 @@ import { ServiceRegistry } from "./services/registry";
 import {
 	isPolicyAllowed,
 	type PolicyAllowResult,
+	type SessionCleanupSummary,
 	type SessionListEntry,
 	SessionManager,
 	type SessionState,
@@ -398,6 +399,8 @@ export interface SessionNamespace {
 	list(): ActionResult<SessionListEntry[]>;
 	use(nameOrId: string): ActionResult<SessionState>;
 	status(nameOrId?: string): ActionResult<SessionState>;
+	destroy(nameOrId: string): Promise<ActionResult<SessionCleanupSummary>>;
+	cleanup(): Promise<ActionResult<SessionCleanupSummary>>;
 }
 
 // ── Provider Namespace ────────────────────────────────────────────────
@@ -1119,6 +1122,8 @@ export function createBrowserControl(
 			list: () => sessionManager.list(),
 			use: (nameOrId) => sessionManager.use(nameOrId),
 			status: (nameOrId) => sessionManager.status(nameOrId),
+			destroy: (nameOrId) => sessionManager.destroy(nameOrId),
+			cleanup: () => sessionManager.cleanupIdleSessions(),
 		},
 		service: {
 			register: (o) => serviceActions.register(o),

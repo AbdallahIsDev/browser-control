@@ -11,15 +11,19 @@ import { stopDefaultDaemon } from "../helpers/daemon_helpers";
 describe("SessionManager", () => {
   let manager: SessionManager;
   let store: MemoryStore;
+  let previousSweepInterval: string | undefined;
 
   beforeEach(() => {
+    previousSweepInterval = process.env.BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS;
+    process.env.BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS = "0";
     process.env.BROWSER_CONTROL_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "bc-session-home-"));
     store = new MemoryStore({ filename: ":memory:" });
-    manager = new SessionManager({ memoryStore: store });
+    manager = new SessionManager({ memoryStore: store, sessionSweepIntervalMs: 0 });
   });
 
   afterEach(async () => {
     const home = process.env.BROWSER_CONTROL_HOME;
+    manager.close();
     store.close();
     // Stop any daemon that may have been auto-started by tests that
     // call ensureDaemonRuntime({ autoStart: true }). Without this, the
@@ -29,6 +33,11 @@ describe("SessionManager", () => {
     if (home) {
       fs.rmSync(home, { recursive: true, force: true });
       delete process.env.BROWSER_CONTROL_HOME;
+    }
+    if (previousSweepInterval === undefined) {
+      delete process.env.BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS;
+    } else {
+      process.env.BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS = previousSweepInterval;
     }
   });
 
@@ -187,8 +196,9 @@ describe("SessionManager", () => {
   describe("accessors", () => {
     it("returns null for getActiveSession when no session", async () => {
       const freshStore = new MemoryStore({ filename: ":memory:" });
-      const freshManager = new SessionManager({ memoryStore: freshStore });
+      const freshManager = new SessionManager({ memoryStore: freshStore, sessionSweepIntervalMs: 0 });
       assert.equal(freshManager.getActiveSession(), null);
+      freshManager.close();
       freshStore.close();
     });
 
@@ -199,9 +209,10 @@ describe("SessionManager", () => {
 
     it("returns terminal manager", async () => {
       const freshStore = new MemoryStore({ filename: ":memory:" });
-      const freshManager = new SessionManager({ memoryStore: freshStore });
+      const freshManager = new SessionManager({ memoryStore: freshStore, sessionSweepIntervalMs: 0 });
       const tm = freshManager.getTerminalManager();
       assert.ok(tm);
+      freshManager.close();
       freshStore.close();
     });
 
@@ -261,6 +272,56 @@ describe("SessionManager", () => {
       manager.bindTerminal("nonexistent", "term-x");
       manager.unbindTerminal("nonexistent");
       manager.setWorkingDirectory("nonexistent", "/path");
+    });
+  });
+
+  describe("cleanup", () => {
+    it("removes idle non-active sessions and preserves the active session", async () => {
+      const active = await manager.create("active");
+      const idle = await manager.create("idle");
+      const idleState = manager.getSession(idle.data!.id)!;
+      idleState.lastActivityAt = "2024-01-01T00:00:00.000Z";
+
+      const result = await manager.cleanupIdleSessions({
+        now: new Date("2026-05-30T00:00:00.000Z"),
+        idleTimeoutMs: 30 * 60 * 1000,
+      });
+
+      assert.equal(result.success, true);
+      assert.deepEqual(result.data!.removedIds, [idle.data!.id]);
+      assert.equal(manager.getSession(idle.data!.id), null);
+      assert.equal(manager.getSession(active.data!.id)?.name, "active");
+      assert.equal(store.get(`session:${idle.data!.id}`), null);
+    });
+
+    it("enforces max session count without evicting the active session", async () => {
+      const active = await manager.create("active");
+      const oldest = await manager.create("oldest");
+      const newest = await manager.create("newest");
+      manager.getSession(oldest.data!.id)!.lastActivityAt = "2026-05-30T00:00:00.000Z";
+      manager.getSession(newest.data!.id)!.lastActivityAt = "2026-05-30T00:01:00.000Z";
+
+      const result = await manager.cleanupIdleSessions({
+        now: new Date("2026-05-30T00:02:00.000Z"),
+        idleTimeoutMs: Number.MAX_SAFE_INTEGER,
+        maxSessions: 2,
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(result.data!.reason, "max-sessions");
+      assert.deepEqual(result.data!.removedIds, [oldest.data!.id]);
+      assert.equal(manager.getSession(active.data!.id)?.name, "active");
+      assert.equal(manager.getSession(newest.data!.id)?.name, "newest");
+    });
+
+    it("destroys sessions explicitly", async () => {
+      const created = await manager.create("remove-me");
+      const result = await manager.destroy(created.data!.id);
+
+      assert.equal(result.success, true);
+      assert.deepEqual(result.data!.removedIds, [created.data!.id]);
+      assert.equal(manager.getSession(created.data!.id), null);
+      assert.equal(manager.getActiveSession(), null);
     });
   });
 
@@ -577,6 +638,7 @@ describe("SessionManager", () => {
       const firstManager = new SessionManager({ memoryStore: firstStore });
       await firstManager.create("trusted-persisted", { policyProfile: "trusted" });
       firstManager.close();
+      firstStore.close();
 
       const secondStore = new MemoryStore({ filename: dbPath });
       const secondManager = new SessionManager({ memoryStore: secondStore });
@@ -584,6 +646,7 @@ describe("SessionManager", () => {
       assert.equal(secondManager.getPolicyEngine().getActiveProfile(), "trusted");
 
       secondManager.close();
+      secondStore.close();
       fs.rmSync(dbPath, { force: true });
     });
 
@@ -623,6 +686,7 @@ describe("SessionManager", () => {
       assert.equal(persisted?.runtimeDir, state.runtimeDir);
 
       reloadedManager.close();
+      reloadedStore.close();
       fs.rmSync(dbPath, { force: true });
     });
   });
