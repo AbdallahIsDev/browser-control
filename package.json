@@ -151,7 +151,6 @@
 		"@types/ws": "^8.18.1",
 		"electron": "^41.5.0",
 		"electron-builder": "^26.8.1",
-		"electron-packager": "^17.1.2",
 		"pngjs": "^7.0.0",
 		"node-gyp": "^12.2.0",
 		"ts-node": "^10.9.2",
