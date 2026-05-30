@@ -203,7 +203,7 @@ export class DefaultPolicyEngine implements PolicyEngine {
     // Check denied commands
     if (policy.deniedCommands && policy.deniedCommands.length > 0) {
       const command = typeof step.params.command === "string" ? step.params.command : step.action;
-      if (this.matchesCommandPattern(command, policy.deniedCommands)) {
+      if (this.matchesCommandPattern(command, policy.deniedCommands, true)) {
         return {
           decision: "deny",
           reason: `Command matches denied pattern: ${command}`,
@@ -248,7 +248,7 @@ export class DefaultPolicyEngine implements PolicyEngine {
     // Check if confirmation is required
     if (policy.requireConfirmationCommands && policy.requireConfirmationCommands.length > 0) {
       const command = typeof step.params.command === "string" ? step.params.command : step.action;
-      if (this.matchesCommandPattern(command, policy.requireConfirmationCommands)) {
+      if (this.matchesCommandPattern(command, policy.requireConfirmationCommands, true)) {
         return {
           decision: "require_confirmation",
           reason: `Command requires confirmation: ${command}`,
@@ -569,12 +569,34 @@ export class DefaultPolicyEngine implements PolicyEngine {
   /**
    * Check if a command matches any pattern in a list.
    */
-  private matchesCommandPattern(command: string, patterns: string[]): boolean {
-    const cmd = command.toLowerCase().trim();
+  private matchesCommandPattern(command: string, patterns: string[], scanShellOperators = false): boolean {
+    const candidates = scanShellOperators
+      ? this.extractShellCommandHeads(command)
+      : [command.toLowerCase().trim()];
     return patterns.some(pattern => {
       const pat = pattern.toLowerCase().trim();
-      return cmd === pat || cmd.startsWith(pat + " ") || cmd.startsWith(pat + "/");
+      return candidates.some(candidate => this.matchesCommandCandidate(candidate, pat));
     });
+  }
+
+  private matchesCommandCandidate(candidate: string, pattern: string): boolean {
+    const normalized = candidate.toLowerCase().trim();
+    if (!normalized || !pattern) return false;
+    const executable = normalized.replace(/^[`'"]|[`'"]$/g, "");
+    const basename = executable.replace(/\\/g, "/").split("/").pop() ?? executable;
+    return (
+      executable === pattern ||
+      executable.startsWith(pattern + " ") ||
+      executable.startsWith(pattern + "/") ||
+      basename === pattern
+    );
+  }
+
+  private extractShellCommandHeads(command: string): string[] {
+    return command
+      .split(/&&|\|\||[;|()\n`]+/u)
+      .map(segment => segment.trim().match(/^\S+/u)?.[0]?.toLowerCase().trim())
+      .filter((head): head is string => Boolean(head));
   }
 
   /**

@@ -32,6 +32,7 @@ Command path:
 
 - terminal commands can read files, start processes, exfiltrate data, or modify the machine
 - one-shot and persistent terminals both need policy controls
+- command deny/confirmation rules inspect common shell separators, but static command deny lists are not a sandbox. Treat confirmation, auditing, scoped working directories, and OS permissions as the real safety boundary.
 
 Filesystem path:
 

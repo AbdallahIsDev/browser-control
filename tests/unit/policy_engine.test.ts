@@ -223,6 +223,24 @@ test("denies commands in the denied list", () => {
   assert.strictEqual(result.decision, "deny");
   assert.strictEqual(result.matchedRule, "deniedCommands");
 });
+test("denies commands in the denied list after shell operators", () => {
+  const mockLogger = new Logger({ component: "test", level: "info" });
+  const policyEngine = new DefaultPolicyEngine({
+    profileName: "balanced",
+    logger: mockLogger,
+  });
+  const step: RoutedStep = {
+    id: "test-deny-shell-operator",
+    path: "command",
+    action: "execute_command",
+    params: { command: "echo ok && rm -rf /tmp/browser-control-test" },
+    risk: "low",
+    sessionId: "test-session",
+  };
+  const result = policyEngine.evaluate(step);
+  assert.strictEqual(result.decision, "deny");
+  assert.strictEqual(result.matchedRule, "deniedCommands");
+});
 
 test("requires confirmation for commands in the confirmation list", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
@@ -235,6 +253,24 @@ test("requires confirmation for commands in the confirmation list", () => {
     path: "command",
     action: "execute_command",
     params: { command: "npm install package" },
+    risk: "low",
+    sessionId: "test-session",
+  };
+  const result = policyEngine.evaluate(step);
+  assert.strictEqual(result.decision, "require_confirmation");
+  assert.strictEqual(result.matchedRule, "requireConfirmationCommands");
+});
+test("requires confirmation for confirmation-listed commands after shell operators", () => {
+  const mockLogger = new Logger({ component: "test", level: "info" });
+  const policyEngine = new DefaultPolicyEngine({
+    profileName: "balanced",
+    logger: mockLogger,
+  });
+  const step: RoutedStep = {
+    id: "test-confirm-shell-operator",
+    path: "command",
+    action: "execute_command",
+    params: { command: "echo ok && npm install package" },
     risk: "low",
     sessionId: "test-session",
   };
