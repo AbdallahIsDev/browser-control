@@ -212,6 +212,50 @@ test("snapshot(page) preserves Playwright AI snapshot refs and metadata", async 
   }
 });
 
+test("snapshot(page, boxes) uses Playwright native boxes without DOM fallback", async () => {
+  let ariaOptions: { boxes?: boolean } | undefined;
+  const page = {
+    url: () => "https://example.test/",
+    title: async () => "Example",
+    locator: (selector: string) => {
+      assert.equal(selector, "body");
+      return {
+        ariaSnapshot: async (options?: { boxes?: boolean }) => {
+          ariaOptions = options;
+          return '- button "Save" [ref=e7] [box=10,20,30,40]';
+        },
+      };
+    },
+    evaluate: async (fn: () => unknown) => {
+      const source = String(fn);
+      if (source.includes("window.innerWidth")) {
+        return { width: 800, height: 600, deviceScaleFactor: 2 };
+      }
+      throw new Error("DOM fallback should not run when Playwright returns boxes");
+    },
+    context: () => ({
+      newCDPSession: async () => {
+        throw new Error("CDP fallback should not run");
+      },
+    }),
+  } as unknown as Page;
+
+  const snap = await snapshot(page, { sessionId: "s1", boxes: true });
+  const button = snap.elements.find((el) => el.role === "button");
+
+  assert.equal(ariaOptions?.boxes, true);
+  assert.equal(button?.ref, "e7");
+  assert.deepEqual(button?.bounds, {
+    x: 10,
+    y: 20,
+    width: 30,
+    height: 40,
+    viewportWidth: 800,
+    viewportHeight: 600,
+    deviceScaleFactor: 2,
+  });
+});
+
 test("snapshot(page) honors rootSelector in DOM fallback mode", async () => {
   const browser = await launchBrowser();
   try {

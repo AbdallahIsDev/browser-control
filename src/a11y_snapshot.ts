@@ -142,11 +142,11 @@ const STRUCTURAL_ROLES = new Set([
 ]);
 
 interface SnapshotAdapter {
-  capture(page: Page): Promise<A11yElement[]>;
+  capture(page: Page, options?: { boxes?: boolean }): Promise<A11yElement[]>;
 }
 
 class PlaywrightSnapshotAdapter implements SnapshotAdapter {
-  async capture(page: Page): Promise<A11yElement[]> {
+  async capture(page: Page, options: { boxes?: boolean } = {}): Promise<A11yElement[]> {
     const pageWithLocator = page as unknown as {
       locator?: (selector: string) => unknown;
     };
@@ -162,16 +162,18 @@ class PlaywrightSnapshotAdapter implements SnapshotAdapter {
     }
 
     const ariaSnapshot = (bodyLocator as unknown as {
-      ariaSnapshot?: (options?: { timeout?: number; mode?: "ai" | "default" }) => Promise<string>;
+      ariaSnapshot?: (options?: { timeout?: number; mode?: "ai" | "default"; boxes?: boolean }) => Promise<string>;
     }).ariaSnapshot;
     if (typeof ariaSnapshot !== "function") return [];
 
     try {
+      const viewportInfo = options.boxes ? await captureViewportInfo(page) : undefined;
       const output = await ariaSnapshot.call(bodyLocator, {
         timeout: 1000,
         mode: "ai",
+        boxes: options.boxes,
       });
-      return parsePlaywrightAriaSnapshot(output);
+      return parsePlaywrightAriaSnapshot(output, viewportInfo);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       log.debug?.(`Playwright ariaSnapshot unavailable: ${msg}`);
@@ -202,8 +204,8 @@ class ChromiumCdpSnapshotFallback implements SnapshotAdapter {
  *   captures the full page; rootSelector filtering is not supported
  *   in the primary path. If you need subtree-scoped snapshots,
  *   prefer the DOM fallback (e.g., on pages with no a11y tree).
- * @param options.boxes - If true, includes element bounds with viewport metadata.
- *   Bounds are only captured in the DOM fallback path. Default: false.
+ * @param options.boxes - If true, includes element bounds with viewport metadata
+ *   when the active snapshot path can provide them. Default: false.
  */
 export async function snapshot(
   page: Page,
@@ -243,20 +245,15 @@ export async function snapshot(
     const cdpFallback = new ChromiumCdpSnapshotFallback();
 
     // Primary: Playwright-native ariaSnapshot when available. Fallback is explicit.
-    elements = await playwrightAdapter.capture(page);
+    elements = await playwrightAdapter.capture(page, { boxes: options.boxes });
     if (elements.length === 0) {
       elements = await cdpFallback.capture(page);
     }
   }
 
   // Fallback: DOM-based synthetic extraction (rootSelector is honored here)
-  if (elements.length === 0) {
+  if (elements.length === 0 && isDomSnapshotFallbackEnabled()) {
     log.info("A11y tree empty, falling back to DOM-based synthetic snapshot");
-    elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
-  } else if (options.boxes) {
-    // Boxes requested but CDP path doesn't support bounds extraction yet
-    // Re-run with DOM fallback to get bounds
-    log.info("Boxes requested, re-running snapshot with DOM fallback for bounds");
     elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
   }
 
@@ -336,7 +333,38 @@ async function snapshotFromCdpA11yTree(page: Page): Promise<A11yElement[]> {
   }
 }
 
-function parsePlaywrightAriaSnapshot(value: string): A11yElement[] {
+interface SnapshotViewportInfo {
+  width: number;
+  height: number;
+  deviceScaleFactor?: number;
+}
+
+async function captureViewportInfo(page: Page): Promise<SnapshotViewportInfo> {
+  try {
+    return await page.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      deviceScaleFactor: window.devicePixelRatio,
+    }));
+  } catch {
+    try {
+      const viewport = page.viewportSize();
+      if (viewport) return { width: viewport.width, height: viewport.height };
+    } catch {
+      // Ignore and use zero metadata below.
+    }
+    return { width: 0, height: 0 };
+  }
+}
+
+function isDomSnapshotFallbackEnabled(): boolean {
+  return process.env.BROWSER_CONTROL_DOM_SNAPSHOT_FALLBACK !== "0";
+}
+
+function parsePlaywrightAriaSnapshot(
+  value: string,
+  viewportInfo?: SnapshotViewportInfo,
+): A11yElement[] {
   const elements: A11yElement[] = [];
   let refCounter = 0;
   for (const line of value.split(/\r?\n/u)) {
@@ -359,6 +387,18 @@ function parsePlaywrightAriaSnapshot(value: string): A11yElement[] {
     const levelMatch = /\[level=(\d+)\]/u.exec(trimmed);
     if (role === "heading" && levelMatch?.[1]) {
       element.level = Number.parseInt(levelMatch[1], 10);
+    }
+    const boxMatch = /\[box=\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/u.exec(trimmed);
+    if (boxMatch) {
+      element.bounds = {
+        x: Number.parseFloat(boxMatch[1] ?? "0"),
+        y: Number.parseFloat(boxMatch[2] ?? "0"),
+        width: Number.parseFloat(boxMatch[3] ?? "0"),
+        height: Number.parseFloat(boxMatch[4] ?? "0"),
+        viewportWidth: viewportInfo?.width ?? 0,
+        viewportHeight: viewportInfo?.height ?? 0,
+        deviceScaleFactor: viewportInfo?.deviceScaleFactor,
+      };
     }
     elements.push(element);
   }
