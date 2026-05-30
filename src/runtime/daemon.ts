@@ -12,6 +12,7 @@ import {
 	readFile as fsReadFile,
 	statPath as fsStatPath,
 	writeFile as fsWriteFile,
+	resolvePath as fsResolvePath,
 } from "../filesystem/operations";
 import { PolicyAuditLogger } from "../policy/audit";
 import { DefaultPolicyEngine } from "../policy/engine";
@@ -27,6 +28,7 @@ import {
 	getChromeDebugPath,
 	getDaemonStatusPath,
 	getPidFilePath,
+	getSecretsDir,
 } from "../shared/paths";
 import type { SkillContext } from "../skill";
 import { SkillMemoryStore } from "../skill_memory";
@@ -1084,6 +1086,7 @@ export class Daemon {
 	}
 
 	fsRead(pathname: string): unknown {
+		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_read", { path: pathname });
 		return fsReadFile(pathname, {
 			allowedRoots: this.getFilesystemAllowedRoots(),
@@ -1091,6 +1094,7 @@ export class Daemon {
 	}
 
 	fsWrite(pathname: string, content: string): unknown {
+		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_write", { path: pathname });
 		return fsWriteFile(pathname, content, {
 			allowedRoots: this.getFilesystemAllowedRoots(),
@@ -1098,6 +1102,7 @@ export class Daemon {
 	}
 
 	fsList(pathname: string, recursive = false, extension?: string): unknown {
+		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_list", { path: pathname });
 		return fsListDir(pathname, {
 			recursive,
@@ -1107,6 +1112,7 @@ export class Daemon {
 	}
 
 	fsMove(src: string, dst: string): unknown {
+		this.assertFilesystemPathsAllowed(src, dst);
 		this.assertOperationAllowed("fs_move", { src, dst, path: src });
 		return fsMoveFile(src, dst, {
 			allowedRoots: this.getFilesystemAllowedRoots(),
@@ -1114,6 +1120,7 @@ export class Daemon {
 	}
 
 	fsDelete(pathname: string, recursive = false, force = false): unknown {
+		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_delete", { path: pathname, recursive });
 		return fsDeletePath(pathname, {
 			recursive,
@@ -1123,20 +1130,50 @@ export class Daemon {
 	}
 
 	fsStat(pathname: string): unknown {
+		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_stat", { path: pathname });
 		return fsStatPath(pathname, {
 			allowedRoots: this.getFilesystemAllowedRoots(),
 		});
 	}
 
+	private getConfiguredDataHome(): string {
+		return this.appConfig?.dataHome ?? loadConfig({ validate: false }).dataHome;
+	}
+
 	private getFilesystemAllowedRoots(): string[] {
-		const roots = [process.cwd()];
-		const dataHome =
-			this.appConfig?.dataHome ?? loadConfig({ validate: false }).dataHome;
-		if (dataHome) {
-			roots.push(dataHome);
-		}
+		const roots = [this.getConfiguredDataHome()];
 		return [...new Set(roots.map((root) => path.resolve(root)))];
+	}
+
+	private assertFilesystemPathsAllowed(...pathsToCheck: string[]): void {
+		const secretsRoot = this.resolveExistingPathOrParent(
+			getSecretsDir(this.getConfiguredDataHome()),
+		);
+
+		for (const candidate of pathsToCheck) {
+			if (!candidate || typeof candidate !== "string") continue;
+			const resolved = this.resolveExistingPathOrParent(
+				fsResolvePath(candidate),
+			);
+			if (
+				resolved === secretsRoot ||
+				resolved.startsWith(`${secretsRoot}${path.sep}`)
+			) {
+				throw new Error(
+					"Filesystem sandbox blocks access to Browser Control secrets directory.",
+				);
+			}
+		}
+	}
+
+	private resolveExistingPathOrParent(pathname: string): string {
+		const resolved = path.resolve(pathname);
+		try {
+			return fs.realpathSync(resolved);
+		} catch {
+			return fs.realpathSync(path.dirname(resolved));
+		}
 	}
 
 	getRecentTasks(): Array<{

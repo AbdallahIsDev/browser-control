@@ -852,14 +852,18 @@ test("broker filesystem endpoints reject paths outside daemon filesystem sandbox
   const originalPolicy = process.env.POLICY_PROFILE;
   const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-fs-home-"));
   const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-fs-outside-"));
+  const secretPath = path.join(dataHome, "secrets", "broker-secret.txt");
   process.env.BROWSER_CONTROL_HOME = dataHome;
   process.env.POLICY_PROFILE = "trusted";
+  fs.mkdirSync(path.dirname(secretPath), { recursive: true });
+  fs.writeFileSync(secretPath, "secret");
 
   const outsideRead = path.join(outsideRoot, "read.txt");
   const outsideWrite = path.join(outsideRoot, "write.txt");
   const outsideDelete = path.join(outsideRoot, "delete.txt");
   const outsideMoveSrc = path.join(outsideRoot, "move-src.txt");
   const outsideMoveDst = path.join(outsideRoot, "move-dst.txt");
+  const repoRead = path.join(process.cwd(), "package.json");
   fs.writeFileSync(outsideRead, "outside read");
   fs.writeFileSync(outsideDelete, "outside delete");
   fs.writeFileSync(outsideMoveSrc, "outside move");
@@ -918,11 +922,17 @@ test("broker filesystem endpoints reject paths outside daemon filesystem sandbox
 
   const cases = [
     { endpoint: "read", body: { path: outsideRead } },
+    { endpoint: "read", body: { path: repoRead } },
+    { endpoint: "read", body: { path: secretPath } },
     { endpoint: "write", body: { path: outsideWrite, content: "blocked" } },
+    { endpoint: "write", body: { path: secretPath, content: "blocked" } },
     { endpoint: "delete", body: { path: outsideDelete } },
+    { endpoint: "delete", body: { path: secretPath } },
     { endpoint: "move", body: { src: outsideMoveSrc, dst: outsideMoveDst } },
     { endpoint: "list", body: { path: outsideRoot } },
+    { endpoint: "list", body: { path: path.dirname(secretPath) } },
     { endpoint: "stat", body: { path: outsideRead } },
+    { endpoint: "stat", body: { path: secretPath } },
   ];
 
   for (const item of cases) {
@@ -939,6 +949,7 @@ test("broker filesystem endpoints reject paths outside daemon filesystem sandbox
   assert.equal(fs.existsSync(outsideDelete), true);
   assert.equal(fs.existsSync(outsideMoveSrc), true);
   assert.equal(fs.existsSync(outsideMoveDst), false);
+  assert.equal(fs.readFileSync(secretPath, "utf8"), "secret");
 });
 
 test("createBrokerServer rejects config mutation when policy requires confirmation", async (t) => {
