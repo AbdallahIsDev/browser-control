@@ -15,6 +15,26 @@ bc.close();
 
 In this source checkout, import from `./browser_control` or use package exports after building/installing.
 
+## Broker Authentication
+
+The daemon broker requires a shared API key for HTTP and WebSocket clients. Set `BROKER_API_KEY` explicitly for integrations that manage their own secret. `BROKER_SECRET` remains a legacy fallback.
+
+If neither env var is set, Browser Control creates a local key at:
+
+```text
+~/.browser-control/secrets/broker-api-key
+```
+
+Older `~/.browser-control/interop/broker-api-key` and `~/.browser-control/.interop/broker-api-key` files are migrated into `secrets/broker-api-key` and removed. External broker clients should either read the canonical file or set `BROKER_API_KEY` to the same value before connecting.
+
+Accepted request headers:
+
+```text
+Authorization: Bearer <key>
+X-API-Key: <key>
+X-Broker-Api-Key: <key>
+```
+
 ## Namespaces
 
 `createBrowserControl()` returns these namespaces. This example lists the public facade methods:
