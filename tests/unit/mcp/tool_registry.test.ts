@@ -247,6 +247,23 @@ describe("MCP Tool Registry", () => {
       assert.equal(objectItem.properties.url.type, "string");
     });
 
+    it("bc_task_run.steps schema documents action-specific fields", () => {
+      const tools = buildToolRegistry(api);
+      const taskTool = tools.find((t) => t.name === "bc_task_run")!;
+      const stepsProp: any = taskTool.inputSchema.properties.steps;
+      const stepItems: any = stepsProp.items;
+
+      assert.ok(stepItems.oneOf, "step schema should expose action-specific variants");
+      assert.deepEqual(stepItems.properties.direction.enum, ["up", "down", "left", "right"]);
+      assert.match(stepItems.properties.action.description, /click|fill|scroll/);
+      assert.match(stepItems.properties.target.description, /click|fill|hover/);
+
+      const fieldsItems = stepItems.properties.fields.items;
+      assert.equal(fieldsItems.properties.target.type, "string");
+      assert.equal(fieldsItems.properties.text.type, "string");
+      assert.deepEqual(fieldsItems.required, ["target", "text"]);
+    });
+
     it("bc_browser_act handler preserves object URL entries", async () => {
       const browser = api.browser as unknown as {
         act: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;

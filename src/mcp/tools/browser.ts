@@ -71,6 +71,122 @@ const BROWSER_TOOL_ALIASES: Record<string, string> = {
   bc_browser_act: "bc_act",
 };
 
+const WAIT_UNTIL_VALUES = ["load", "domcontentloaded", "networkidle", "commit"] as const;
+const BROWSER_ACTION_VALUES = [
+  "click",
+  "fill",
+  "press",
+  "hover",
+  "scroll",
+  "type",
+  "paste",
+  "screenshot",
+  "tab-close",
+  "open",
+  "navigate",
+  "openMany",
+  "capture",
+  "captureMany",
+  "fillMany",
+  "state",
+] as const;
+
+const WAIT_UNTIL_SCHEMA = {
+  type: "string",
+  description: "Navigation wait condition.",
+  enum: [...WAIT_UNTIL_VALUES],
+};
+
+const URL_ENTRY_SCHEMA = {
+  oneOf: [
+    { type: "string" },
+    {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to open." },
+        label: { type: "string", description: "Optional label for result correlation." },
+        waitUntil: WAIT_UNTIL_SCHEMA,
+      },
+      required: ["url"],
+    },
+  ],
+};
+
+const URLS_SCHEMA = {
+  type: "array",
+  description: "Array of URLs or {url, label, waitUntil} objects for openMany/captureMany actions.",
+  items: URL_ENTRY_SCHEMA,
+};
+
+const FILL_FIELD_SCHEMA = {
+  type: "object",
+  properties: {
+    target: { type: "string", description: "Element ref or selector to fill." },
+    text: { type: "string", description: "Text to type into the field." },
+  },
+  required: ["target", "text"],
+};
+
+const FIELDS_SCHEMA = {
+  type: "array",
+  description: "Fields for fillMany action. Each item requires target and text.",
+  items: FILL_FIELD_SCHEMA,
+};
+
+const BROWSER_STEP_PROPERTIES = {
+  action: {
+    type: "string",
+    description: "Step action: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, or state.",
+    enum: [...BROWSER_ACTION_VALUES],
+  },
+  target: { type: "string", description: "Element ref or selector for click/fill/hover/type/paste/capture actions." },
+  text: { type: "string", description: "Text for fill/type/paste actions." },
+  key: { type: "string", description: "Keyboard key for press action." },
+  timeoutMs: { type: "number", description: "Per-step timeout in milliseconds." },
+  force: { type: "boolean", description: "Force click/fill-style action when supported." },
+  commit: { type: "boolean", description: "Commit typed text with Enter when supported." },
+  direction: { type: "string", description: "Scroll direction.", enum: ["up", "down", "left", "right"] },
+  amount: { type: "number", description: "Scroll amount in pixels." },
+  delayMs: { type: "number", description: "Delay between keystrokes in milliseconds." },
+  tabId: { type: "string", description: "Optional browser tab ID." },
+  url: { type: "string", description: "URL for open/navigate actions." },
+  urls: URLS_SCHEMA,
+  waitUntil: WAIT_UNTIL_SCHEMA,
+  fields: FIELDS_SCHEMA,
+  continueOnFailure: { type: "boolean", description: "Continue within fillMany after an individual field failure." },
+  captureOnSuccess: { type: "boolean", description: "Capture page state after successful step." },
+  snapshot: { type: "boolean", description: "Include accessibility snapshot in post-action capture." },
+  screenshot: { type: "boolean", description: "Include screenshot in post-action capture." },
+  content: { type: "string", description: "Reserved for future filesystem-output steps." },
+  filename: { type: "string", description: "Reserved output filename for future filesystem-output steps." },
+};
+
+const BROWSER_STEP_SCHEMA = {
+  type: "object",
+  description: "One deterministic browser task step. Use the matching fields for the selected action.",
+  properties: BROWSER_STEP_PROPERTIES,
+  required: ["action"],
+  additionalProperties: false,
+  oneOf: [
+    { properties: { action: { const: "click" } }, required: ["action", "target"] },
+    { properties: { action: { const: "fill" } }, required: ["action", "target", "text"] },
+    { properties: { action: { const: "press" } }, required: ["action", "key"] },
+    { properties: { action: { const: "hover" } }, required: ["action", "target"] },
+    { properties: { action: { const: "scroll" } }, required: ["action", "direction"] },
+    { properties: { action: { const: "type" } }, required: ["action", "text"] },
+    { properties: { action: { const: "paste" } }, required: ["action", "text"] },
+    { properties: { action: { const: "open" } }, required: ["action", "url"] },
+    { properties: { action: { const: "navigate" } }, required: ["action", "url"] },
+    { properties: { action: { const: "openMany" } }, required: ["action", "urls"] },
+    { properties: { action: { const: "captureMany" } }, required: ["action", "urls"] },
+    { properties: { action: { const: "fillMany" } }, required: ["action", "fields"] },
+    { properties: { action: { const: "screenshot" } }, required: ["action"] },
+    { properties: { action: { const: "tab-close" } }, required: ["action"] },
+    { properties: { action: { const: "capture" } }, required: ["action"] },
+    { properties: { action: { const: "state" } }, required: ["action"] },
+  ],
+} as any;
+
 function withShortAliases(tools: McpTool[]): McpTool[] {
   const aliases = tools.flatMap((tool) => {
     const alias = BROWSER_TOOL_ALIASES[tool.name];
@@ -726,9 +842,9 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         snapshot: { type: "boolean", description: "Include snapshot in post-action capture. Default: false (compact).", default: false },
         screenshot: { type: "boolean", description: "Include screenshot in post-action capture. Default: false.", default: false },
         url: { type: "string", description: "URL for open/navigate actions." },
-        urls: { type: "array", description: "Array of URLs or {url, label, waitUntil} objects for openMany/captureMany actions.", items: { oneOf: [{ type: "string" }, { type: "object", properties: { url: { type: "string" }, label: { type: "string" }, waitUntil: { type: "string", enum: ["load", "domcontentloaded", "networkidle", "commit"] } }, required: ["url"] }] } },
-        waitUntil: { type: "string", description: "Navigation wait condition: load, domcontentloaded, networkidle, commit.", enum: ["load", "domcontentloaded", "networkidle", "commit"] },
-        fields: { type: "array", description: "Fields for fillMany action.", items: { type: "object", properties: { target: { type: "string" }, text: { type: "string" } }, required: ["target", "text"] } },
+        urls: URLS_SCHEMA,
+        waitUntil: WAIT_UNTIL_SCHEMA,
+        fields: FIELDS_SCHEMA,
         continueOnFailure: { type: "boolean", description: "Continue on field failure for fillMany.", default: false },
         boxes: { type: "boolean", description: "Include element bounds for capture/state.", default: false },
         rootSelector: { type: "string", description: "Root CSS selector for scoped snapshot." },
@@ -768,7 +884,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_task_run",
       description: "Execute a deterministic multi-step browser task sequence. Each step runs a browser action (click, fill, press, etc.). Returns per-step results with timing, policy metadata, completed/executed/successful counts, failedStepIndex, finalState.",
       inputSchema: buildSchema({
-        steps: { type: "array", description: "Array of step objects. Each step must have an 'action' field.", items: { type: "object", properties: { action: { type: "string" }, target: { type: "string" }, text: { type: "string" }, key: { type: "string" }, timeoutMs: { type: "number" }, force: { type: "boolean" }, commit: { type: "boolean" }, direction: { type: "string" }, amount: { type: "number" }, delayMs: { type: "number" }, tabId: { type: "string" }, url: { type: "string" }, urls: { type: "array", items: { oneOf: [{ type: "string" }, { type: "object", properties: { url: { type: "string" }, label: { type: "string" }, waitUntil: { type: "string", enum: ["load", "domcontentloaded", "networkidle", "commit"] } }, required: ["url"] }] } }, waitUntil: { type: "string" }, fields: { type: "array", items: { type: "object" } }, captureOnSuccess: { type: "boolean" }, snapshot: { type: "boolean" }, screenshot: { type: "boolean" }, content: { type: "string" }, filename: { type: "string" } }, required: ["action"] } },
+        steps: { type: "array", description: "Array of browser task step objects. Each step must match the fields for its action.", items: BROWSER_STEP_SCHEMA },
         continueOnFailure: { type: "boolean", description: "Continue to next step if one fails. Default: false.", default: false },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["steps"]),
