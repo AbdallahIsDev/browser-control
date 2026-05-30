@@ -445,6 +445,7 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"stored",
 		"visible",
 		"wait",
+		"y",
 		"yes",
 	]);
 	const usedFlags = new Set<string>();
@@ -564,6 +565,85 @@ test("proxy add stores proxy credentials in the credential vault", async () => {
     else process.env.BROWSER_CONTROL_HOME = previousHome;
     if (previousBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
     else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("vault set and delete accept standard yes confirmations", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-home-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-cwd-"));
+  const env = {
+    BROWSER_CONTROL_HOME: home,
+    BROWSER_CONTROL_STATE_BACKEND: "json",
+  };
+
+  try {
+    const stored = runCli(
+      [
+        "vault",
+        "set",
+        "--scope",
+        "site",
+        "example.test",
+        "api-token",
+        "secret-value",
+        "--yes",
+        "--json",
+      ],
+      { cwd, env },
+    );
+    assert.equal(stored.status, 0, stored.stderr);
+    const body = JSON.parse(stored.stdout) as { id: string; hasValue: boolean };
+    assert.match(body.id, /^secret:\/\/site\/example\.test\/api-token$/u);
+    assert.equal(body.hasValue, true);
+    assert.doesNotMatch(stored.stdout, /secret-value/u);
+
+    const deleted = runCli(
+      ["vault", "delete", body.id, "-y", "--json"],
+      { cwd, env },
+    );
+    assert.equal(deleted.status, 0, deleted.stderr);
+    assert.deepEqual(JSON.parse(deleted.stdout), { success: true, id: body.id });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("vault confirmation errors advertise --yes and keep legacy token compatibility", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-confirm-home-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-confirm-cwd-"));
+  const env = {
+    BROWSER_CONTROL_HOME: home,
+    BROWSER_CONTROL_STATE_BACKEND: "json",
+  };
+
+  try {
+    const rejected = runCli(
+      ["vault", "set", "--scope", "site", "example.test", "api-token", "secret-value"],
+      { cwd, env },
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /requires --yes/i);
+    assert.match(rejected.stderr, /--confirm=STORE_SECRET/);
+
+    const legacy = runCli(
+      [
+        "vault",
+        "set",
+        "--scope",
+        "site",
+        "example.test",
+        "api-token",
+        "secret-value",
+        "--confirm=STORE_SECRET",
+        "--json",
+      ],
+      { cwd, env },
+    );
+    assert.equal(legacy.status, 0, legacy.stderr);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
   }

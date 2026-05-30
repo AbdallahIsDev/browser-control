@@ -232,6 +232,14 @@ function shouldConsumeFlagValue(flag: string, next?: string): next is string {
 	return !next.startsWith("-") || isNegativeNumberToken(next);
 }
 
+function hasConfirmation(flags: Record<string, string>, legacyToken: string): boolean {
+	return (
+		flags.yes === "true" ||
+		flags.y === "true" ||
+		flags.confirm === legacyToken
+	);
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
 	const args = argv.slice(2);
 	const result: ParsedArgs = {
@@ -5542,9 +5550,9 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 					);
 					throw commandFailed();
 				}
-				if (flags.confirm !== "STORE_SECRET") {
+				if (!hasConfirmation(flags, "STORE_SECRET")) {
 					console.error(
-						"Error: storing a secret requires --confirm=STORE_SECRET",
+						"Error: storing a secret requires --yes (or legacy --confirm=STORE_SECRET)",
 					);
 					throw commandFailed();
 				}
@@ -5569,9 +5577,9 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 					console.error("Error: secret id is required");
 					throw commandFailed();
 				}
-				if (flags.confirm !== "DELETE_SECRET") {
+				if (!hasConfirmation(flags, "DELETE_SECRET")) {
 					console.error(
-						"Error: deleting a secret requires --confirm=DELETE_SECRET",
+						"Error: deleting a secret requires --yes (or legacy --confirm=DELETE_SECRET)",
 					);
 					throw commandFailed();
 				}
@@ -5595,9 +5603,9 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 						console.error("Error: secret id and action(s) are required");
 						throw commandFailed();
 					}
-					if (flags.confirm !== "GRANT_SECRET") {
+					if (!hasConfirmation(flags, "GRANT_SECRET")) {
 						console.error(
-							"Error: granting secret use requires --confirm=GRANT_SECRET",
+							"Error: granting secret use requires --yes (or legacy --confirm=GRANT_SECRET)",
 						);
 						throw commandFailed();
 					}
