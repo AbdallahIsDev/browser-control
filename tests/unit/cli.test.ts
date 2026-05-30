@@ -172,6 +172,33 @@ test("data cleanup --stale moves legacy trading only with explicit confirmation"
   }
 });
 
+test("CLI validation errors do not end with generic Command failed", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-error-context-"));
+  try {
+    const result = runCli(["data", "cleanup", "--dry-run=false", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Destructive cleanup requires explicit confirmation/);
+    assert.doesNotMatch(result.stderr, /Command failed/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("CLI unknown subcommands preserve command context", () => {
+  const result = runCli(["config", "wat", "--json"], {
+    cwd: process.cwd(),
+    env: {},
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unknown config command: wat/);
+  assert.doesNotMatch(result.stderr, /Command failed/);
+});
+
 test("parseArgs handles existing space-separated value flags", () => {
   const result = parseArgs([
     "node",
