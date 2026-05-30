@@ -784,12 +784,34 @@ test("web app server exposes credential vault without leaking secret values", as
 	assert.equal(list.status, 200);
 	const listText = await list.text();
 	assert.doesNotMatch(listText, /super-secret-value/);
-	assert.match(listText, /secret:\/\/site\/example.test\/login/);
-	const listBody = JSON.parse(listText) as Array<{
+	assert.doesNotMatch(listText, /secret:\/\/site\/example.test\/login/);
+	assert.doesNotMatch(listText, /example\.test/);
+	assert.doesNotMatch(listText, /login/);
+	const listSummary = JSON.parse(listText) as {
+		count: number;
+		scopes: string[];
+		withValues: number;
+		missingValues: number;
+	};
+	assert.deepEqual(listSummary, {
+		count: 1,
+		scopes: ["site"],
+		withValues: 1,
+		missingValues: 0,
+	});
+
+	const verboseList = await fetch(`${info.url}/api/vault?verbose=true`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(verboseList.status, 200);
+	const verboseListText = await verboseList.text();
+	assert.doesNotMatch(verboseListText, /super-secret-value/);
+	assert.match(verboseListText, /secret:\/\/site\/example.test\/login/);
+	const verboseListBody = JSON.parse(verboseListText) as Array<{
 		id: string;
 		hasValue: boolean;
 	}>;
-	assert.equal(listBody[0]?.hasValue, true);
+	assert.equal(verboseListBody[0]?.hasValue, true);
 
 	const grant = await fetch(`${info.url}/api/vault/grants`, {
 		method: "POST",
@@ -829,7 +851,29 @@ test("web app server exposes credential vault without leaking secret values", as
 	});
 	const grantsText = await grantsAfterRevoke.text();
 	assert.doesNotMatch(grantsText, /super-secret-value/);
-	const grantsBody = JSON.parse(grantsText) as Array<{
+	assert.doesNotMatch(grantsText, /example\.test/);
+	assert.doesNotMatch(grantsText, /pkg\.alpha/);
+	assert.doesNotMatch(grantsText, /flow\.login/);
+	const grantsSummary = JSON.parse(grantsText) as {
+		count: number;
+		activeCount: number;
+		revokedCount: number;
+	};
+	assert.deepEqual(grantsSummary, {
+		count: 1,
+		activeCount: 0,
+		revokedCount: 1,
+	});
+
+	const verboseGrantsAfterRevoke = await fetch(
+		`${info.url}/api/vault/grants?verbose=true`,
+		{
+			headers: { authorization: "Bearer test-token" },
+		},
+	);
+	const verboseGrantsText = await verboseGrantsAfterRevoke.text();
+	assert.doesNotMatch(verboseGrantsText, /super-secret-value/);
+	const grantsBody = JSON.parse(verboseGrantsText) as Array<{
 		id: string;
 		revoked: boolean;
 		revokedAt?: string;

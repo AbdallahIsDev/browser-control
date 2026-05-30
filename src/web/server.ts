@@ -617,6 +617,40 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
 	return strings.length > 0 ? strings : undefined;
 }
 
+function isVerboseRequest(requestUrl: URL): boolean {
+	return requestUrl.searchParams.get("verbose") === "true";
+}
+
+function summarizeVaultEntries(
+	entries: Array<{ scope: string; hasValue: boolean }>,
+): {
+	count: number;
+	scopes: string[];
+	withValues: number;
+	missingValues: number;
+} {
+	const withValues = entries.filter((entry) => entry.hasValue).length;
+	return {
+		count: entries.length,
+		scopes: Array.from(new Set(entries.map((entry) => entry.scope))).sort(),
+		withValues,
+		missingValues: entries.length - withValues,
+	};
+}
+
+function summarizeSecretGrants(grants: Array<{ revoked: boolean }>): {
+	count: number;
+	activeCount: number;
+	revokedCount: number;
+} {
+	const revokedCount = grants.filter((grant) => grant.revoked).length;
+	return {
+		count: grants.length,
+		activeCount: grants.length - revokedCount,
+		revokedCount,
+	};
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -951,7 +985,12 @@ export function createWebAppServer(
 		if (request.method === "GET" && pathname === "/api/vault") {
 			const { CredentialVault } = await import("../security/credential_vault");
 			const vault = new CredentialVault(optionalStateStorage(api));
-			json(response, 200, await vault.list());
+			const entries = await vault.list();
+			json(
+				response,
+				200,
+				isVerboseRequest(requestUrl) ? entries : summarizeVaultEntries(entries),
+			);
 			return;
 		}
 
@@ -1035,7 +1074,12 @@ export function createWebAppServer(
 			const secretId = requestUrl.searchParams.get("secretId") ?? undefined;
 			const { CredentialVault } = await import("../security/credential_vault");
 			const vault = new CredentialVault(optionalStateStorage(api));
-			json(response, 200, await vault.listGrants(secretId));
+			const grants = await vault.listGrants(secretId);
+			json(
+				response,
+				200,
+				isVerboseRequest(requestUrl) ? grants : summarizeSecretGrants(grants),
+			);
 			return;
 		}
 

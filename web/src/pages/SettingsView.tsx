@@ -83,22 +83,17 @@ interface ActionResult<T> {
 	error?: string;
 }
 
-interface VaultEntry {
-	id: string;
-	scope: string;
-	scopeName: string;
-	secretName: string;
-	hasValue: boolean;
-	updatedAt: string;
+interface VaultSummary {
+	count: number;
+	scopes: string[];
+	withValues: number;
+	missingValues: number;
 }
 
-interface SecretGrant {
-	id: string;
-	secretId: string;
-	action: string;
-	domain?: string;
-	revoked: boolean;
-	createdAt: string;
+interface SecretGrantSummary {
+	count: number;
+	activeCount: number;
+	revokedCount: number;
 }
 
 interface NetworkRule {
@@ -120,8 +115,18 @@ export function SettingsView() {
 	const [modelEndpoint, setModelEndpoint] = useState("");
 	const [modelKey, setModelKey] = useState("");
 	const [modelName, setModelName] = useState("");
-	const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
-	const [secretGrants, setSecretGrants] = useState<SecretGrant[]>([]);
+	const [vaultSummary, setVaultSummary] = useState<VaultSummary>({
+		count: 0,
+		scopes: [],
+		withValues: 0,
+		missingValues: 0,
+	});
+	const [secretGrantSummary, setSecretGrantSummary] =
+		useState<SecretGrantSummary>({
+			count: 0,
+			activeCount: 0,
+			revokedCount: 0,
+		});
 	const [networkRules, setNetworkRules] = useState<NetworkRule[]>([]);
 	const [secretScope, setSecretScope] = useState("site");
 	const [secretScopeName, setSecretScopeName] = useState("");
@@ -147,12 +152,21 @@ export function SettingsView() {
 
 	const loadSecurity = useCallback(async () => {
 		const [vault, grants, rules] = await Promise.all([
-			apiFetch<VaultEntry[]>("/api/vault").catch(() => []),
-			apiFetch<SecretGrant[]>("/api/vault/grants").catch(() => []),
+			apiFetch<VaultSummary>("/api/vault").catch(() => ({
+				count: 0,
+				scopes: [],
+				withValues: 0,
+				missingValues: 0,
+			})),
+			apiFetch<SecretGrantSummary>("/api/vault/grants").catch(() => ({
+				count: 0,
+				activeCount: 0,
+				revokedCount: 0,
+			})),
 			apiFetch<NetworkRule[]>("/api/network/rules").catch(() => []),
 		]);
-		setVaultEntries(Array.isArray(vault) ? vault : []);
-		setSecretGrants(Array.isArray(grants) ? grants : []);
+		setVaultSummary(vault);
+		setSecretGrantSummary(grants);
 		setNetworkRules(Array.isArray(rules) ? rules : []);
 	}, []);
 
@@ -871,46 +885,39 @@ export function SettingsView() {
 							<Table>
 								<TableHeader>
 									<TableRow>
-										<TableHead>Reference</TableHead>
-										<TableHead>Scope</TableHead>
-										<TableHead>Updated</TableHead>
+										<TableHead>Metric</TableHead>
 										<TableHead>Value</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{vaultEntries.length === 0 ? (
-										<TableRow>
-											<TableCell
-												colSpan={4}
-												className="text-center text-muted-foreground"
-											>
-												No secrets stored.
-											</TableCell>
-										</TableRow>
-									) : (
-										vaultEntries.map((entry) => (
-											<TableRow key={entry.id}>
-												<TableCell className="font-mono text-xs">
-													{entry.id}
-												</TableCell>
-												<TableCell>
-													{entry.scope}:{entry.scopeName}
-												</TableCell>
-												<TableCell className="text-xs">
-													{entry.updatedAt?.slice(0, 19) || "Unknown"}
-												</TableCell>
-												<TableCell>
-													{entry.hasValue ? "Stored" : "Missing"}
-												</TableCell>
-											</TableRow>
-										))
-									)}
+									<TableRow>
+										<TableCell>Stored secrets</TableCell>
+										<TableCell>{vaultSummary.count}</TableCell>
+									</TableRow>
+									<TableRow>
+										<TableCell>Scope types</TableCell>
+										<TableCell>
+											{vaultSummary.scopes.length > 0
+												? vaultSummary.scopes.join(", ")
+												: "None"}
+										</TableCell>
+									</TableRow>
+									<TableRow>
+										<TableCell>Values stored</TableCell>
+										<TableCell>{vaultSummary.withValues}</TableCell>
+									</TableRow>
+									<TableRow>
+										<TableCell>Missing values</TableCell>
+										<TableCell>{vaultSummary.missingValues}</TableCell>
+									</TableRow>
 								</TableBody>
 							</Table>
 						</div>
 						<p className="text-xs text-muted-foreground">
-							{secretGrants.filter((grant) => !grant.revoked).length} active
-							grant(s); raw values are never displayed.
+							{secretGrantSummary.activeCount} active grant(s),{" "}
+							{secretGrantSummary.revokedCount} revoked;{" "}
+							{"raw values are never displayed"}, and credential identifiers are
+							summarized.
 						</p>
 					</CardContent>
 				</Card>
