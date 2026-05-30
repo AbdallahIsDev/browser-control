@@ -44,7 +44,8 @@ export function setSecurityHeaders(
 
 	response.setHeader("X-Frame-Options", "DENY");
 
-	const csp = `default-src 'self'; script-src 'self'${nonce ? ` 'nonce-${nonce}'` : ""}; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';`;
+	const nonceDirective = nonce ? ` 'nonce-${nonce}'` : "";
+	const csp = `default-src 'self'; script-src 'self'${nonceDirective}; style-src 'self'${nonceDirective}; style-src-elem 'self'${nonceDirective}; style-src-attr 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';`;
 
 	response.setHeader("Content-Security-Policy", csp);
 }

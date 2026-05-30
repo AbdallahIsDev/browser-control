@@ -1873,12 +1873,45 @@ test("web app server sets security headers (CSP, X-Frame-Options)", async (t) =>
 		csp?.includes("default-src 'self'"),
 		"CSP must restrict default-src",
 	);
+	assert.ok(
+		!csp?.includes("style-src 'self' 'unsafe-inline'"),
+		"CSP must not allow arbitrary inline style elements",
+	);
+	assert.ok(
+		csp?.includes("style-src-elem 'self' 'nonce-"),
+		"CSP must nonce inline style elements",
+	);
+	assert.ok(
+		csp?.includes("style-src-attr 'unsafe-inline'"),
+		"CSP must isolate React style attribute compatibility to style-src-attr",
+	);
 
 	const xFrame = response.headers.get("x-frame-options");
 	assert.equal(xFrame, "DENY", "X-Frame-Options must be DENY");
 
 	const nosniff = response.headers.get("x-content-type-options");
 	assert.equal(nosniff, "nosniff");
+});
+
+test("HTML responses do not emit un-nonced inline style blocks", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/`);
+	assert.equal(response.status, 200);
+	const csp = response.headers.get("content-security-policy");
+	const nonce = /style-src-elem 'self' 'nonce-([^']+)'/.exec(csp ?? "")?.[1];
+	assert.ok(nonce, "CSP must include a style nonce");
+
+	const body = await response.text();
+	for (const match of body.matchAll(/<style\b([^>]*)>/gi)) {
+		assert.match(
+			match[1] ?? "",
+			new RegExp(`\\bnonce="${nonce.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`),
+			"inline style blocks must use the CSP nonce",
+		);
+	}
 });
 
 test("web app server returns readable tasks availability when broker is unreachable", async (t) => {

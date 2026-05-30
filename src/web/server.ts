@@ -767,8 +767,9 @@ function indexHtml(nonce: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Browser Control Operator</title>
-  <style>
+  <style nonce="${nonce}">
     body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #f7f8fa; color: #17191c; }
+    .hidden { display: none !important; }
     .locked-screen { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px; }
     .locked-screen h1 { font-size: 20px; }
     main { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
@@ -779,6 +780,7 @@ function indexHtml(nonce: string): string {
     section { padding: 20px; }
     .grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 12px; }
     .panel { background: white; border: 1px solid #dde2ea; border-radius: 8px; padding: 14px; }
+    .stacked-panel { margin-top: 12px; }
     .panel h2 { margin: 0 0 8px; font-size: 14px; }
     pre { white-space: pre-wrap; overflow: auto; max-height: 360px; background: #101418; color: #d8f3dc; padding: 12px; border-radius: 6px; }
     button, input { font: inherit; }
@@ -793,7 +795,7 @@ function indexHtml(nonce: string): string {
     <h1>Browser Control Locked</h1>
     <p>Please open via CLI or provide a valid token.</p>
   </div>
-  <main id="app" style="display:none">
+  <main id="app" class="hidden">
     <nav>
       <h1>Browser Control</h1>
       <a href="#overview">Overview</a>
@@ -804,7 +806,7 @@ function indexHtml(nonce: string): string {
     </nav>
     <section>
       <div class="grid" id="summary"></div>
-      <div class="panel" id="terminal-panel" style="margin-top:12px">
+      <div class="panel stacked-panel" id="terminal-panel">
         <h2>Terminal</h2>
         <div class="row">
           <input id="command" value="node --version" aria-label="Command">
@@ -812,7 +814,7 @@ function indexHtml(nonce: string): string {
         </div>
         <pre id="terminalOut">Idle</pre>
       </div>
-      <div class="panel" id="events" style="margin-top:12px">
+      <div class="panel stacked-panel" id="events">
         <h2>Events</h2>
         <pre id="eventOut">Connecting...</pre>
       </div>
@@ -831,8 +833,8 @@ function indexHtml(nonce: string): string {
 
       if (!token) return;
 
-      document.getElementById("locked").style.display = "none";
-      document.getElementById("app").style.display = "grid";
+      document.getElementById("locked").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
 
       async function api(path, options = {}) {
         const res = await fetch(path, {
