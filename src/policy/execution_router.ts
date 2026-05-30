@@ -15,6 +15,138 @@ import type {
 } from "./types";
 import crypto from "crypto";
 
+const DANGEROUS_SYSTEM_COMMANDS = new Set([
+  "rm",
+  "rmdir",
+  "del",
+  "format",
+  "fdisk",
+  "dd",
+  "shutdown",
+  "reboot",
+  "halt",
+  "kill",
+]);
+
+const COMMAND_PREFIX_WRAPPERS = new Set([
+  "sudo",
+  "doas",
+  "time",
+  "nice",
+  "nohup",
+  "command",
+  "builtin",
+]);
+
+const SHELL_WRAPPERS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "cmd",
+  "cmd.exe",
+  "powershell",
+  "powershell.exe",
+  "pwsh",
+  "pwsh.exe",
+]);
+
+function tokenizeCommand(command: string): string[] {
+  const tokens: string[] = [];
+  const pattern = /&&|\|\||[;|&()]|"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|[^\s;|&()]+/g;
+  for (const match of command.matchAll(pattern)) {
+    tokens.push(match[1] ?? match[2] ?? match[0]);
+  }
+  return tokens;
+}
+
+function splitCommandSegments(tokens: string[]): string[][] {
+  const segments: string[][] = [];
+  let current: string[] = [];
+  for (const token of tokens) {
+    if ([";", "&&", "||", "|", "&"].includes(token)) {
+      if (current.length > 0) segments.push(current);
+      current = [];
+      continue;
+    }
+    if (token === "(" || token === ")") continue;
+    current.push(token);
+  }
+  if (current.length > 0) segments.push(current);
+  return segments;
+}
+
+function commandBasename(token: string): string {
+  const normalized = token
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^[\\./]+/, "")
+    .replace(/[;|&()]+$/g, "")
+    .replace(/\\/g, "/");
+  const basename = normalized.split("/").filter(Boolean).pop() ?? normalized;
+  return basename.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+}
+
+function isShellCommandSwitch(token: string): boolean {
+  const normalized = token.toLowerCase();
+  return normalized === "-c" ||
+    normalized === "-lc" ||
+    normalized === "/c" ||
+    normalized === "/k" ||
+    normalized === "-command" ||
+    normalized === "-commandwithargs";
+}
+
+function commandSegmentContainsDangerousCommand(
+  segment: string[],
+  depth: number,
+): boolean {
+  let index = 0;
+  while (index < segment.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(segment[index])) {
+    index++;
+  }
+
+  while (index < segment.length) {
+    const name = commandBasename(segment[index]);
+    if (name === "env") {
+      index++;
+      while (
+        index < segment.length &&
+        (segment[index].startsWith("-") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(segment[index]))
+      ) {
+        index++;
+      }
+      continue;
+    }
+    if (COMMAND_PREFIX_WRAPPERS.has(name)) {
+      index++;
+      continue;
+    }
+    if (DANGEROUS_SYSTEM_COMMANDS.has(name)) {
+      return true;
+    }
+    if (SHELL_WRAPPERS.has(name) && depth < 3) {
+      const commandSwitchIndex = segment.findIndex((token, i) => i > index && isShellCommandSwitch(token));
+      if (commandSwitchIndex >= 0 && commandSwitchIndex + 1 < segment.length) {
+        return containsDangerousSystemCommand(
+          segment.slice(commandSwitchIndex + 1).join(" "),
+          depth + 1,
+        );
+      }
+    }
+    return false;
+  }
+
+  return false;
+}
+
+function containsDangerousSystemCommand(command: string, depth = 0): boolean {
+  const tokens = tokenizeCommand(command);
+  return splitCommandSegments(tokens).some((segment) =>
+    commandSegmentContainsDangerousCommand(segment, depth),
+  );
+}
+
 // ── Path Inference Rules ────────────────────────────────────────────────
 
 export interface PathInferenceRule {
@@ -484,9 +616,8 @@ const DEFAULT_RISK_RULES: RiskAdjustmentRule[] = [
       if (action !== "execute_command" && action !== "shell") {
         return false;
       }
-      const command = typeof params.command === "string" ? params.command.toLowerCase() : "";
-      const dangerousCommands = ["rm", "rmdir", "del", "format", "fdisk", "dd", "shutdown", "reboot", "halt", "kill"];
-      return dangerousCommands.some(cmd => command.startsWith(cmd));
+      const command = typeof params.command === "string" ? params.command : "";
+      return containsDangerousSystemCommand(command);
     },
     adjustment: () => "critical",
   },

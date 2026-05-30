@@ -46,6 +46,32 @@ test("infers command path for command execution", () => {
   assert.strictEqual(step.risk, "moderate");
 });
 
+test("elevates dangerous system commands after path and wrapper parsing", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "run command",
+    actor: "agent",
+    sessionId: "test-session",
+  };
+  const dangerousCommands = [
+    "rm -rf /",
+    "/bin/rm -rf /",
+    "\\rm -rf /",
+    "sudo /usr/bin/rm -rf /",
+    "cmd.exe /c del C:\\temp\\target.txt",
+    "bash -lc 'dd if=/dev/zero of=/dev/sda'",
+    "echo ok; shutdown now",
+  ];
+
+  for (const command of dangerousCommands) {
+    const step = router.buildRoutedStep(intent, "execute_command", { command });
+    assert.strictEqual(step.risk, "critical", command);
+  }
+
+  const safeEcho = router.buildRoutedStep(intent, "execute_command", { command: "echo rm" });
+  assert.strictEqual(safeEcho.risk, "moderate");
+});
+
 test("infers command path for terminal resume/status actions", () => {
   const router = new ExecutionRouter();
   const intent: PolicyTaskIntent = {
