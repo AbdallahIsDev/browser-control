@@ -252,6 +252,33 @@ function getWslHostCandidatesFromWindows(): string[] {
   return [...seen];
 }
 
+const ALLOW_REMOTE_CDP_ENV = "BROWSER_ALLOW_REMOTE_CDP";
+
+function isUnsafeCdpBindAddress(bindAddress: string): boolean {
+  const normalized = bindAddress.trim().toLowerCase();
+  return normalized === "0.0.0.0" || normalized === "::" || normalized === "[::]";
+}
+
+function isRemoteCdpAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[ALLOW_REMOTE_CDP_ENV]?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
+function validateCdpBindAddress(bindAddress: string, env: NodeJS.ProcessEnv = process.env): string {
+  const trimmed = bindAddress.trim();
+  if (!trimmed) return "";
+  if (!isUnsafeCdpBindAddress(trimmed)) return trimmed;
+  if (!isRemoteCdpAllowed(env)) {
+    throw new Error(
+      `Refusing unsafe Chrome CDP bind address: ${trimmed}. Use 127.0.0.1, or set ${ALLOW_REMOTE_CDP_ENV}=1 to expose CDP beyond this machine.`,
+    );
+  }
+  console.warn(
+    `WARNING: remote CDP is exposed on ${trimmed}. Any host that can reach this port can control the browser.`,
+  );
+  return trimmed;
+}
+
 function buildChromeArgs(opts: { port: number; userDataDir: string; bindAddress: string }): string[] {
   const args = [
     `--remote-debugging-port=${opts.port}`,
@@ -261,8 +288,9 @@ function buildChromeArgs(opts: { port: number; userDataDir: string; bindAddress:
     "--disable-background-mode",
   ];
 
-  if (opts.bindAddress && opts.bindAddress.trim()) {
-    args.push(`--remote-debugging-address=${opts.bindAddress.trim()}`);
+  const bindAddress = validateCdpBindAddress(opts.bindAddress);
+  if (bindAddress) {
+    args.push(`--remote-debugging-address=${bindAddress}`);
   }
 
   return args;
@@ -630,7 +658,7 @@ function stopWslBridge(port: number): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const port = Number(args[0] || process.env.BROWSER_DEBUG_PORT || "9222");
-  const bindAddress = args[1] || process.env.BROWSER_BIND_ADDRESS || "127.0.0.1";
+  const bindAddress = validateCdpBindAddress(args[1] || process.env.BROWSER_BIND_ADDRESS || "127.0.0.1");
   const chromeOverride = process.env.BROWSER_CHROME_PATH;
 
   if (!Number.isFinite(port) || port <= 0) {

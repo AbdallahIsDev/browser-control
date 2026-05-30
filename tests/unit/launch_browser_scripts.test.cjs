@@ -14,6 +14,7 @@ test("launch_browser.bat invokes the .cjs shim, not the raw .ts file", () => {
   assert.match(bat, /launch_browser\.cjs/);
   assert.doesNotMatch(bat, /node.*launch_browser\.ts/);
   assert.match(bat, /node /);
+  assert.match(bat, /BROWSER_ALLOW_REMOTE_CDP/);
 });
 
 test("launch_browser.ps1 invokes the .cjs shim, not the raw .ts file", () => {
@@ -21,6 +22,7 @@ test("launch_browser.ps1 invokes the .cjs shim, not the raw .ts file", () => {
 
   assert.match(ps1, /launch_browser\.cjs/);
   assert.doesNotMatch(ps1, /node.*launch_browser\.ts/);
+  assert.match(ps1, /BROWSER_ALLOW_REMOTE_CDP/);
 });
 
 test("launch_browser.ps1 uses Windows PowerShell 5.1-compatible nested Join-Path", () => {
@@ -36,6 +38,7 @@ test("scripts/launch_browser.sh invokes the .cjs shim, not the raw .ts file", ()
   assert.match(sh, /launch_browser\.cjs/);
   assert.doesNotMatch(sh, /node.*launch_browser\.ts/);
   assert.match(sh, /node/);
+  assert.match(sh, /BROWSER_ALLOW_REMOTE_CDP/);
 });
 
 // ── CJS shim existence and structure ──────────────────────────────────
@@ -321,13 +324,55 @@ test("buildChromeArgs includes debugging port and user-data-dir", () => {
   const args = launcher.buildChromeArgs({
     port: 9222,
     userDataDir: "/tmp/test-profile",
-    bindAddress: "0.0.0.0",
+    bindAddress: "127.0.0.1",
   });
 
   assert.ok(args.includes("--remote-debugging-port=9222"));
   assert.ok(args.includes("--user-data-dir=/tmp/test-profile"));
-  assert.ok(args.includes("--remote-debugging-address=0.0.0.0"));
+  assert.ok(args.includes("--remote-debugging-address=127.0.0.1"));
   assert.ok(args.includes("--no-first-run"));
+});
+
+for (const bindAddress of ["0.0.0.0", "::"]) {
+  test(`buildChromeArgs rejects ${bindAddress} without explicit remote CDP override`, () => {
+    const originalAllow = process.env.BROWSER_ALLOW_REMOTE_CDP;
+    delete process.env.BROWSER_ALLOW_REMOTE_CDP;
+    try {
+      assert.throws(
+        () =>
+          launcher.buildChromeArgs({
+            port: 9222,
+            userDataDir: "/tmp/test-profile",
+            bindAddress,
+          }),
+        /Refusing unsafe Chrome CDP bind address/,
+      );
+    } finally {
+      if (originalAllow === undefined) delete process.env.BROWSER_ALLOW_REMOTE_CDP;
+      else process.env.BROWSER_ALLOW_REMOTE_CDP = originalAllow;
+    }
+  });
+}
+
+test("buildChromeArgs allows all-interface CDP bind with explicit override", () => {
+  const originalAllow = process.env.BROWSER_ALLOW_REMOTE_CDP;
+  const originalWarn = console.warn;
+  const warnings = [];
+  process.env.BROWSER_ALLOW_REMOTE_CDP = "1";
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const args = launcher.buildChromeArgs({
+      port: 9222,
+      userDataDir: "/tmp/test-profile",
+      bindAddress: "0.0.0.0",
+    });
+    assert.ok(args.includes("--remote-debugging-address=0.0.0.0"));
+    assert.match(warnings.join("\n"), /remote CDP/);
+  } finally {
+    console.warn = originalWarn;
+    if (originalAllow === undefined) delete process.env.BROWSER_ALLOW_REMOTE_CDP;
+    else process.env.BROWSER_ALLOW_REMOTE_CDP = originalAllow;
+  }
 });
 
 test("buildChromeArgs omits --remote-debugging-address when bindAddress is empty", () => {
