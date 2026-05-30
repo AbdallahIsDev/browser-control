@@ -38,7 +38,7 @@ export interface DialogAuditEvent {
 }
 
 interface PendingDialog {
-  dialog: PlaywrightDialog | null;
+  dialog: PlaywrightDialog;
   info: DialogInfo;
   handled: boolean;
   timeout?: NodeJS.Timeout;
@@ -48,18 +48,9 @@ interface PageHandlers {
   dialog: (d: PlaywrightDialog) => void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type CdpClient = any;
-
-interface CdpSessionEntry {
-  client: CdpClient;
-  handler: (params: Record<string, unknown>) => void;
-}
-
 export class BrowserDialogSupervisor {
   private sessions = new Map<string, Map<string, PendingDialog>>();
   private pageHandlers = new WeakMap<Page, PageHandlers>();
-  private cdpSessions = new WeakMap<Page, CdpSessionEntry>();
   private idCounters = new Map<string, number>();
 
   private handlingMode: DialogHandlingMode = "must_respond";
@@ -106,7 +97,7 @@ export class BrowserDialogSupervisor {
     if (typeof (page as any).on !== "function") return;
 
     const dialogHandler = (dialog: PlaywrightDialog): void => {
-      this.handlePlaywrightDialog(dialog, page, sessionId);
+      this.handlePlaywrightDialog(dialog, sessionId);
     };
 
     page.on("dialog", dialogHandler);
@@ -120,61 +111,10 @@ export class BrowserDialogSupervisor {
     if (typeof (page as any).off === "function") {
       page.off("dialog", handlers.dialog);
     }
-    this.tryDetachCdp(page);
     this.pageHandlers.delete(page);
   }
 
-  private async tryAttachCdp(page: Page, handler: (params: Record<string, unknown>) => void): Promise<void> {
-    try {
-      const client = (await page.context().newCDPSession(page)) as unknown as {
-        on: (event: string, handler: (...args: unknown[]) => void) => void;
-        off: (event: string, handler: (...args: unknown[]) => void) => void;
-        send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-      };
-      client.on("Page.javascriptDialogOpening", handler as unknown as (...args: unknown[]) => void);
-      client.on("Page.javascriptDialogClosed", ((params: Record<string, unknown>) => {
-        this.handleCdpDialogClosed(params);
-      }) as unknown as (...args: unknown[]) => void);
-      this.cdpSessions.set(page, { client, handler });
-    } catch {
-      // CDP not available — Playwright events are sufficient
-    }
-  }
-
-  private tryDetachCdp(page: Page): void {
-    const entry = this.cdpSessions.get(page);
-    if (entry) {
-      try {
-        entry.client.off("Page.javascriptDialogOpening", entry.handler as (...args: unknown[]) => void);
-      } catch { /* ignore */ }
-      this.cdpSessions.delete(page);
-    }
-  }
-
-  private async respondViaCdp(page: Page, action: DialogAction, text?: string): Promise<boolean> {
-    try {
-      const entry = this.cdpSessions.get(page);
-      if (entry) {
-        await entry.client.send("Page.handleJavaScriptDialog", {
-          accept: action === "accept",
-          promptText: text,
-        });
-      } else {
-        const client = (await page.context().newCDPSession(page)) as unknown as {
-          send: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
-        };
-        await client.send("Page.handleJavaScriptDialog", {
-          accept: action === "accept",
-          promptText: text,
-        });
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private handlePlaywrightDialog(dialog: PlaywrightDialog, page: Page, sessionId: string): void {
+  private handlePlaywrightDialog(dialog: PlaywrightDialog, sessionId: string): void {
     const id = this.nextId(sessionId);
     const message = dialog.message();
     const info: DialogInfo = {
@@ -190,71 +130,33 @@ export class BrowserDialogSupervisor {
 
     log.info("Dialog detected (Playwright)", { id, type: info.type, sessionId });
     this.emitAudit({ timestamp: info.createdAt, sessionId, dialogId: id, type: info.type, action: "detected" });
-    this.startAutoHandling(id, sessionId, page);
+    this.startAutoHandling(id, sessionId);
   }
 
-  private handleCdpDialogOpening(params: Record<string, unknown>, page: Page, sessionId: string): void {
-    const { type, message, defaultPrompt } = params as { type: DialogType; message: string; defaultPrompt?: string };
-
-    const session = this.ensureSession(sessionId);
-    for (const [, entry] of session) {
-      if (!entry.handled) {
-        const age = Date.now() - new Date(entry.info.createdAt).getTime();
-        if (age < 500 && entry.info.type === type) {
-          return;
-        }
-      }
-    }
-
-    const id = this.nextId(sessionId);
-    const info: DialogInfo = {
-      id,
-      type,
-      message: this.redactMessage(message),
-      defaultValue: defaultPrompt || undefined,
-      createdAt: new Date().toISOString(),
-    };
-
-    session.set(id, { dialog: null, info, handled: false });
-
-    log.info("Dialog detected (CDP)", { id, type: info.type, sessionId });
-    this.emitAudit({ timestamp: info.createdAt, sessionId, dialogId: id, type: info.type, action: "detected" });
-    this.startAutoHandling(id, sessionId, page);
-  }
-
-  private handleCdpDialogClosed(_params: Record<string, unknown>): void {
-    // CDP dialog closed event — dialog was handled externally or by page
-    // Best-effort; pending dialog cleanup happens via getPendingDialogs filtering
-  }
-
-  private startAutoHandling(id: string, sessionId: string, page: Page): void {
+  private startAutoHandling(id: string, sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     const entry = session.get(id);
     if (!entry || entry.handled) return;
 
     if (this.handlingMode === "auto_accept") {
-      this.executeAuto(id, sessionId, page, "accept");
+      this.executeAuto(id, sessionId, "accept");
     } else if (this.handlingMode === "auto_dismiss") {
-      this.executeAuto(id, sessionId, page, "dismiss");
+      this.executeAuto(id, sessionId, "dismiss");
     } else {
-      this.scheduleSafetyTimeout(id, sessionId, page);
+      this.scheduleSafetyTimeout(id, sessionId);
     }
   }
 
-  private executeAuto(id: string, sessionId: string, page: Page, action: DialogAction): void {
+  private executeAuto(id: string, sessionId: string, action: DialogAction): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     const entry = session.get(id);
     if (!entry || entry.handled) return;
 
     entry.handled = true;
-    if (entry.dialog) {
-      if (action === "accept") entry.dialog.accept().catch(() => {});
-      else entry.dialog.dismiss().catch(() => {});
-    } else {
-      this.respondViaCdp(page, action).catch(() => {});
-    }
+    if (action === "accept") entry.dialog.accept().catch(() => {});
+    else entry.dialog.dismiss().catch(() => {});
 
     log.info(`Dialog auto-${action}ed`, { id, sessionId });
     this.emitAudit({
@@ -264,7 +166,7 @@ export class BrowserDialogSupervisor {
     });
   }
 
-  private scheduleSafetyTimeout(id: string, sessionId: string, page: Page): void {
+  private scheduleSafetyTimeout(id: string, sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     const entry = session.get(id);
@@ -274,8 +176,7 @@ export class BrowserDialogSupervisor {
       const current = session.get(id);
       if (current && !current.handled) {
         current.handled = true;
-        if (current.dialog) current.dialog.dismiss().catch(() => {});
-        else this.respondViaCdp(page, "dismiss").catch(() => {});
+        current.dialog.dismiss().catch(() => {});
         log.warn("Dialog safety timeout — dismissed", { id, timeoutMs: this.timeoutMs, sessionId });
         this.emitAudit({
           timestamp: new Date().toISOString(),
@@ -303,7 +204,7 @@ export class BrowserDialogSupervisor {
     return entry.info;
   }
 
-  respond(id: string, action: DialogAction, page?: Page, text?: string, sessionId = "default"): DialogResponse {
+  respond(id: string, action: DialogAction, _page?: Page, text?: string, sessionId = "default"): DialogResponse {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Dialog not found: ${id} in session ${sessionId}`);
 
@@ -318,12 +219,8 @@ export class BrowserDialogSupervisor {
 
     entry.handled = true;
 
-    if (entry.dialog) {
-      if (action === "accept") entry.dialog.accept(text).catch(() => {});
-      else entry.dialog.dismiss().catch(() => {});
-    } else if (page) {
-      this.respondViaCdp(page, action, text).catch(() => {});
-    }
+    if (action === "accept") entry.dialog.accept(text).catch(() => {});
+    else entry.dialog.dismiss().catch(() => {});
 
     log.info("Dialog responded", { id, action, sessionId });
     this.emitAudit({
