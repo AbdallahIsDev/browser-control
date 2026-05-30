@@ -24,11 +24,13 @@ import {
 import { collectFailureDebugMetadata } from "../observability/action_debug";
 import { getGlobalConsoleCapture } from "../observability/console_capture";
 import { getGlobalNetworkCapture } from "../observability/network_capture";
+import type { RecordedActionKind } from "../observability/recorder";
 import { getGlobalScreencastRecorder } from "../observability/screencast";
 import type {
 	ScreencastOptions,
 	ScreencastSession,
 } from "../observability/types";
+import { recordPackageRecordingAction } from "../packages/record_cli";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
 import { getProfile } from "../policy/profiles";
 import { getPageId, type RefStore, resolveRefLocator } from "../ref_store";
@@ -412,6 +414,21 @@ export class BrowserActions {
 	constructor(context: BrowserActionContext) {
 		this.context = context;
 		this.refStore = context.refStore ?? globalRefStore;
+	}
+
+	private recordPackageAction(
+		kind: RecordedActionKind,
+		params: Record<string, unknown>,
+		result: ActionResult,
+	): void {
+		try {
+			recordPackageRecordingAction({ kind, params, result });
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (!/No active package recording/u.test(message)) {
+				log.warn(`Package recorder skipped ${kind}: ${message}`);
+			}
+		}
 	}
 
 	// Maps targetId -> page for durable tab ID resolution
@@ -1501,7 +1518,7 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ url: page.url(), title, tabId: finalTabId },
 				{
 					path: policyEval.path,
@@ -1511,6 +1528,12 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-open",
+				{ url: options.url, resolvedUrl, waitUntil: options.waitUntil },
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			log.error(`Failed to open URL: ${message}`);
@@ -1602,7 +1625,7 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ url: page.url(), title, tabId: finalTabId },
 				{
 					path: policyEval.path,
@@ -1612,6 +1635,17 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-open",
+				{
+					url: options.url,
+					resolvedUrl,
+					tabId: options.tabId,
+					waitUntil: options.waitUntil,
+				},
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.recordTimelineEvent({
@@ -1725,11 +1759,25 @@ export class BrowserActions {
 			}
 
 			const someFailed = tabs.some(t => t.status === "failed");
-			return successResult({
+			const result = successResult({
 				browserSessionId: sessionId,
 				tabs,
 				...(someFailed ? { warning: `${tabs.filter(t => t.status === "failed").length} of ${tabs.length} tabs failed to load` } : {}),
 			}, { path: "a11y", sessionId });
+			for (const [index, tab] of tabs.entries()) {
+				if (tab.status === "failed") continue;
+				const item = items[index];
+				this.recordPackageAction(
+					"browser-open",
+					{
+						url: item?.url ?? tab.url,
+						label: tab.label,
+						waitUntil: item?.waitUntil,
+					},
+					successResult(tab, { path: "a11y", sessionId }),
+				);
+			}
+			return result;
 		} catch (error: unknown) {
 			return this.failureWithDebug(
 				`Failed to open many: ${error instanceof Error ? error.message : String(error)}`,
@@ -1783,7 +1831,15 @@ export class BrowserActions {
 				}
 			}
 
-			return successResult(result, { path: "a11y", sessionId });
+			const actionResult = successResult(result, { path: "a11y", sessionId });
+			if (result.snapshot) {
+				this.recordPackageAction(
+					"browser-snapshot",
+					{ tabId: options?.tabId, boxes: true },
+					successResult(result.snapshot, { path: "a11y", sessionId }),
+				);
+			}
+			return actionResult;
 		} catch (error: unknown) {
 			return this.failureWithDebug(
 				`Capture failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -1986,13 +2042,23 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(snap, {
+			const result = successResult(snap, {
 				path: policyEval.path,
 				sessionId,
 				policyDecision: policyEval.policyDecision,
 				risk: policyEval.risk,
 				auditId: policyEval.auditId,
 			});
+			this.recordPackageAction(
+				"browser-snapshot",
+				{
+					rootSelector: options.rootSelector,
+					boxes: options.boxes,
+					tabId: options.tabId,
+				},
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			log.error(`Snapshot failed: ${message}`);
@@ -2095,7 +2161,7 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ clicked: resolved.description, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
@@ -2105,6 +2171,17 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-click",
+				{
+					target: options.target,
+					tabId: options.tabId,
+					timeoutMs: options.timeoutMs,
+					force: options.force,
+				},
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.recordTimelineEvent({
@@ -2213,7 +2290,7 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ filled: resolved.description, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
@@ -2223,6 +2300,18 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-fill",
+				{
+					target: options.target,
+					text: options.text,
+					tabId: options.tabId,
+					timeoutMs: options.timeoutMs,
+					commit: options.commit,
+				},
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = this.redactSecretMessage(
 				error instanceof Error ? error.message : String(error),
@@ -2800,7 +2889,7 @@ export class BrowserActions {
 				success: true,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ pressed: options.key, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
@@ -2810,6 +2899,12 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-press",
+				{ key: options.key, tabId: options.tabId },
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.recordTimelineEvent({
@@ -3532,7 +3627,7 @@ export class BrowserActions {
 				artifactPath: outputPath,
 			});
 
-			return successResult(
+			const result = successResult(
 				{ path: outputPath, sizeBytes: stats.size, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
@@ -3542,6 +3637,18 @@ export class BrowserActions {
 					auditId: policyEval.auditId,
 				},
 			);
+			this.recordPackageAction(
+				"browser-screenshot",
+				{
+					outputPath: options.outputPath,
+					fullPage: options.fullPage,
+					target: options.target,
+					tabId: options.tabId,
+					annotate: options.annotate,
+				},
+				result,
+			);
+			return result;
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			this.recordTimelineEvent({

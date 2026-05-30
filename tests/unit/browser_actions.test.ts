@@ -11,6 +11,10 @@ import {
 	resetGlobalNetworkCapture,
 } from "../../src/observability/network_capture";
 import { loadDebugBundle } from "../../src/observability/debug_bundle";
+import {
+	getPackageRecording,
+	startPackageRecording,
+} from "../../src/packages/record_cli";
 import { createCredentialProtectionService } from "../../src/security/credential_provider";
 import {
 	CredentialVault,
@@ -523,6 +527,36 @@ describe("BrowserActions", () => {
 	});
 
 	describe("open", () => {
+		it("records successful browser opens into an active package recording", async () => {
+			const page = createMockPage("about:blank");
+			const state = { pages: [page], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const sm = new SessionManager({
+				memoryStore: isolatedStore,
+				browserManager: manager,
+			});
+			await sm.create("record-test", { policyProfile: "balanced" });
+			const recording = startPackageRecording({
+				name: "Recorded Browser Open",
+				dataHome,
+			});
+
+			try {
+				const actions = new BrowserActions({ sessionManager: sm });
+				const result = await actions.open({ url: "https://example.com/" });
+
+				assert.equal(result.success, true, result.error);
+				const saved = getPackageRecording(recording.id, { dataHome });
+				assert.equal(saved.actions.length, 1);
+				assert.equal(saved.actions[0].kind, "browser-open");
+				assert.equal(saved.actions[0].params.url, "https://example.com/");
+				assert.deepEqual(saved.actions[0].result, result.data);
+			} finally {
+				sm.close();
+			}
+		});
+
 		it("opens a new tab when a browser already has an active page", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const frontPage = createMockPage("https://front.example/");
