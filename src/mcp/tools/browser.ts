@@ -421,7 +421,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_generate_locator",
-      description: "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
+      description: "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css).",
       inputSchema: buildSchema({
         target: { type: "string", description: "Element ref (@e3), CSS selector, or text match to generate locators for." },
         tabId: { type: "string", description: "Optional tab ID." },

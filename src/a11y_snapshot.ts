@@ -42,6 +42,12 @@ export interface A11yElement {
   role: string;
   /** Accessible name (aria-label, label text, alt text, etc.) */
   name?: string;
+  /** Source used for the accessible name when known. */
+  nameSource?: "aria-label" | "aria-labelledby" | "label" | "placeholder" | "title" | "text" | "alt" | "unknown";
+  /** Native placeholder text for form controls. */
+  placeholder?: string;
+  /** Label text from aria-label, aria-labelledby, or associated label when known. */
+  label?: string;
   /** Visible text content summary */
   text?: string;
   /** Heading level (1-6) for heading role */
@@ -655,6 +661,9 @@ async function snapshotFromDOM(
         tag: string;
         role: string;
         name: string;
+        nameSource: A11yElement["nameSource"];
+        placeholder: string;
+        label: string;
         text: string;
         level: number | null;
         disabled: boolean;
@@ -681,11 +690,15 @@ async function snapshotFromDOM(
       }
       const capturedElements = new Set<Element>();
 
-      function getAccessibleName(el: Element): string {
+      function getAccessibleName(el: Element): {
+        name: string;
+        nameSource: A11yElement["nameSource"];
+        label: string;
+      } {
         // aria-label
         const ariaLabel = el.getAttribute("aria-label");
         if (ariaLabel) {
-          return ariaLabel;
+          return { name: ariaLabel, nameSource: "aria-label", label: ariaLabel };
         }
 
         // aria-labelledby
@@ -697,7 +710,7 @@ async function snapshotFromDOM(
             .filter((text): text is string => Boolean(text))
             .join(" ")
             .trim();
-          if (labelledText) return labelledText;
+          if (labelledText) return { name: labelledText, nameSource: "aria-labelledby", label: labelledText };
         }
 
         // <label for="...">
@@ -706,29 +719,30 @@ async function snapshotFromDOM(
           if (id) {
             const label = labelsByFor.get(id);
             if (label) {
-              return label;
+              return { name: label, nameSource: "label", label };
             }
           }
           // Parent <label>
           const parentLabel = el.closest("label");
           if (parentLabel) {
-            return parentLabel.textContent?.trim() ?? "";
+            const label = parentLabel.textContent?.trim() ?? "";
+            if (label) return { name: label, nameSource: "label", label };
           }
           // placeholder as fallback
           if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-            return el.placeholder ?? "";
+            if (el.placeholder) return { name: el.placeholder, nameSource: "placeholder", label: "" };
           }
         }
 
         // Alt text for images
         if (el instanceof HTMLImageElement) {
-          return el.alt ?? "";
+          if (el.alt) return { name: el.alt, nameSource: "alt", label: "" };
         }
 
         // Title attribute
         const title = el.getAttribute("title");
         if (title) {
-          return title;
+          return { name: title, nameSource: "title", label: "" };
         }
 
         // Visible text for controls that derive their accessible name from content
@@ -739,10 +753,11 @@ async function snapshotFromDOM(
           el.getAttribute("role") === "button" ||
           el.getAttribute("role") === "link"
         ) {
-          return el.textContent?.trim() ?? "";
+          const text = el.textContent?.trim() ?? "";
+          if (text) return { name: text, nameSource: "text", label: "" };
         }
 
-        return "";
+        return { name: "", nameSource: "unknown", label: "" };
       }
 
       function inferRole(el: Element): string {
@@ -792,25 +807,72 @@ async function snapshotFromDOM(
 
       function generateSelector(el: Element): string {
         const tag = el.tagName.toLowerCase();
+        function escapeAttributeValue(value: string): string {
+          return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        }
+        function escapeIdentifier(value: string): string {
+          const cssApi = (globalThis as unknown as { CSS?: { escape?: (input: string) => string } }).CSS;
+          if (typeof cssApi?.escape === "function") {
+            return cssApi.escape(value);
+          }
+          let escaped = "";
+          for (let index = 0; index < value.length; index += 1) {
+            const char = value.charAt(index);
+            const code = value.charCodeAt(index);
+            if (code === 0) {
+              escaped += "\uFFFD";
+              continue;
+            }
+            if (
+              (code >= 0x0001 && code <= 0x001f) ||
+              code === 0x007f ||
+              (index === 0 && code >= 0x0030 && code <= 0x0039) ||
+              (index === 1 &&
+                code >= 0x0030 &&
+                code <= 0x0039 &&
+                value.charCodeAt(0) === 0x002d)
+            ) {
+              escaped += `\\${code.toString(16)} `;
+              continue;
+            }
+            if (index === 0 && code === 0x002d && value.length === 1) {
+              escaped += "\\-";
+              continue;
+            }
+            if (
+              code >= 0x0080 ||
+              code === 0x002d ||
+              code === 0x005f ||
+              (code >= 0x0030 && code <= 0x0039) ||
+              (code >= 0x0041 && code <= 0x005a) ||
+              (code >= 0x0061 && code <= 0x007a)
+            ) {
+              escaped += char;
+              continue;
+            }
+            escaped += `\\${char}`;
+          }
+          return escaped;
+        }
         // data-test
         const dataTest = el.getAttribute("data-test");
         if (dataTest) {
-          return `[data-test="${dataTest}"]`;
+          return `[data-test="${escapeAttributeValue(dataTest)}"]`;
         }
         // data-testid
         const dataTestId = el.getAttribute("data-testid");
         if (dataTestId) {
-          return `[data-testid="${dataTestId}"]`;
+          return `[data-testid="${escapeAttributeValue(dataTestId)}"]`;
         }
         // aria-label
         const ariaLabel = el.getAttribute("aria-label");
         if (ariaLabel) {
-          return `[aria-label="${ariaLabel}"]`;
+          return `[aria-label="${escapeAttributeValue(ariaLabel)}"]`;
         }
         // id
         const htmlEl = el as HTMLElement;
         if (htmlEl.id) {
-          return `#${htmlEl.id}`;
+          return `#${escapeIdentifier(htmlEl.id)}`;
         }
         // tag + classes
         const classes = Array.from(el.classList).slice(0, 2).join(".");
@@ -862,7 +924,11 @@ async function snapshotFromDOM(
         if (!isInteractive && !isHeading) {
           continue;
         }
-        const name = getAccessibleName(el);
+        const accessibleName = getAccessibleName(el);
+        const placeholder =
+          el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+            ? el.placeholder
+            : "";
         const text = el.textContent?.trim().slice(0, 200) ?? "";
 
         const isCheckbox = tag === "input" && (el as HTMLInputElement).type === "checkbox";
@@ -871,8 +937,11 @@ async function snapshotFromDOM(
         const rawElement = {
           tag,
           role: role || "generic",
-          name,
-          text: name === text ? "" : text,
+          name: accessibleName.name,
+          nameSource: accessibleName.nameSource,
+          placeholder,
+          label: accessibleName.label,
+          text: accessibleName.name === text ? "" : text,
           level: tag.match(/^h([1-6])$/) ? parseInt(tag[1]) : null,
           disabled: (el as HTMLInputElement | HTMLButtonElement).disabled ?? false,
           checked: (isCheckbox || isRadio) ? (el as HTMLInputElement).checked : null,
@@ -912,6 +981,15 @@ async function snapshotFromDOM(
 
       if (raw.name) {
         element.name = raw.name;
+      }
+      if (raw.nameSource) {
+        element.nameSource = raw.nameSource;
+      }
+      if (raw.placeholder) {
+        element.placeholder = raw.placeholder;
+      }
+      if (raw.label) {
+        element.label = raw.label;
       }
       if (raw.text) {
         element.text = raw.text;

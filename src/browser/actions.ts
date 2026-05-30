@@ -350,7 +350,7 @@ export interface HighlightOptions {
 }
 
 export interface LocatorCandidate {
-	kind: "role" | "label" | "placeholder" | "text" | "testid" | "css" | "xpath";
+	kind: "role" | "label" | "placeholder" | "text" | "testid" | "css";
 	value: string;
 	confidence: "high" | "medium" | "low";
 	reason: string;
@@ -3407,28 +3407,95 @@ export class BrowserActions {
 		try {
 			const attrs = await handle.evaluate((el) => {
 				const elem = el as Element;
-				const role = elem.getAttribute("role") || elem.tagName.toLowerCase();
-				const name =
-					elem.getAttribute("aria-label") ||
-					elem.getAttribute("title") ||
-					elem.textContent?.slice(0, 100) ||
-					"";
+				const tag = elem.tagName.toLowerCase();
+				const role = elem.getAttribute("role") || tag;
 				const id = elem.id;
 				const dataTestId = elem.getAttribute("data-testid");
 				const dataTest = elem.getAttribute("data-test");
 				const placeholder = elem.getAttribute("placeholder");
-				const tag = elem.tagName.toLowerCase();
-				return { role, name, id, dataTestId, dataTest, placeholder, tag };
+				const ariaLabel = elem.getAttribute("aria-label");
+				const ariaLabelledBy = elem.getAttribute("aria-labelledby");
+				const title = elem.getAttribute("title");
+				const text = elem.textContent?.trim().slice(0, 100) || "";
+				let label = "";
+				let name = "";
+				let nameSource:
+					| "aria-label"
+					| "aria-labelledby"
+					| "label"
+					| "placeholder"
+					| "title"
+					| "text"
+					| "unknown" = "unknown";
+
+				if (ariaLabel) {
+					name = ariaLabel;
+					label = ariaLabel;
+					nameSource = "aria-label";
+				} else if (ariaLabelledBy) {
+					const labelledText = ariaLabelledBy
+						.split(/\s+/)
+						.map((labelId) => elem.ownerDocument.getElementById(labelId)?.textContent?.trim())
+						.filter((value): value is string => Boolean(value))
+						.join(" ")
+						.trim();
+					if (labelledText) {
+						name = labelledText;
+						label = labelledText;
+						nameSource = "aria-labelledby";
+					}
+				}
+
+				const formLabels = "labels" in elem
+					? Array.from((elem as HTMLInputElement).labels ?? [])
+							.map((item) => item.textContent?.trim())
+							.filter((value): value is string => Boolean(value))
+					: [];
+				if (!name && formLabels.length > 0) {
+					label = formLabels.join(" ").trim();
+					name = label;
+					nameSource = "label";
+				}
+
+				if (!name && title) {
+					name = title;
+					nameSource = "title";
+				}
+				if (!name && placeholder) {
+					name = placeholder;
+					nameSource = "placeholder";
+				}
+				if (!name && text) {
+					name = text;
+					nameSource = "text";
+				}
+
+				return {
+					role,
+					name,
+					nameSource,
+					label,
+					id,
+					dataTestId,
+					dataTest,
+					placeholder,
+					text,
+					tag,
+				};
 			});
 
 			element.role = attrs.role;
 			element.name = attrs.name;
+			element.nameSource = attrs.nameSource;
+			if (attrs.label) element.label = attrs.label;
+			if (attrs.placeholder) element.placeholder = attrs.placeholder;
+			if (attrs.text && attrs.nameSource !== "text") element.text = attrs.text;
 			element.selector = attrs.id
-				? `#${attrs.id}`
+				? `#${this.escapeCssIdentifier(attrs.id)}`
 				: attrs.dataTestId
-					? `[data-testid="${attrs.dataTestId}"]`
+					? `[data-testid="${this.escapeCssAttributeValue(attrs.dataTestId)}"]`
 					: attrs.dataTest
-						? `[data-test="${attrs.dataTest}"]`
+						? `[data-test="${this.escapeCssAttributeValue(attrs.dataTest)}"]`
 						: target;
 		} catch {
 			// Use defaults if evaluation fails
@@ -3451,23 +3518,29 @@ export class BrowserActions {
 			});
 		}
 
-		// 2. Label/placeholder locator
-		if (element.name) {
+		// 2. Label locator. Only suggest when the source is label-compatible.
+		const label = element.label ?? (
+			element.nameSource === "aria-label" ||
+			element.nameSource === "aria-labelledby" ||
+			element.nameSource === "label"
+				? element.name
+				: undefined
+		);
+		if (label) {
 			candidates.push({
 				kind: "label",
-				value: `getByLabel("${this.escapeString(element.name)}")`,
+				value: `getByLabel("${this.escapeString(label)}")`,
 				confidence: "high",
-				reason: "Accessible name or label",
+				reason: "Label-derived accessible name",
 			});
 		}
 
 		// 3. Placeholder locator (for inputs)
 		if (element.role === "textbox" || element.role === "searchbox") {
-			const placeholder = element.name;
-			if (placeholder) {
+			if (element.placeholder) {
 				candidates.push({
 					kind: "placeholder",
-					value: `getByPlaceholder("${this.escapeString(placeholder)}")`,
+					value: `getByPlaceholder("${this.escapeString(element.placeholder)}")`,
 					confidence: "medium",
 					reason: "Input placeholder text",
 				});
@@ -3503,7 +3576,7 @@ export class BrowserActions {
 		if (element.selector && this.isSpecificSelector(element.selector)) {
 			candidates.push({
 				kind: "css",
-				value: `locator("${element.selector}")`,
+				value: `locator("${this.escapeString(element.selector, { maxLength: null })}")`,
 				confidence: "medium",
 				reason: "CSS selector",
 			});
@@ -3523,8 +3596,55 @@ export class BrowserActions {
 		);
 	}
 
-	private escapeString(str: string): string {
-		return str.replace(/"/g, '\\"').replace(/\n/g, " ").trim().slice(0, 100);
+	private escapeString(str: string, options?: { maxLength?: number | null }): string {
+		const escaped = str.replace(/"/g, '\\"').replace(/\n/g, " ").trim();
+		if (options?.maxLength === null) return escaped;
+		return escaped.slice(0, options?.maxLength ?? 100);
+	}
+
+	private escapeCssIdentifier(value: string): string {
+		let escaped = "";
+		for (let index = 0; index < value.length; index += 1) {
+			const char = value.charAt(index);
+			const code = value.charCodeAt(index);
+			if (code === 0) {
+				escaped += "\uFFFD";
+				continue;
+			}
+			if (
+				(code >= 0x0001 && code <= 0x001f) ||
+				code === 0x007f ||
+				(index === 0 && code >= 0x0030 && code <= 0x0039) ||
+				(index === 1 &&
+					code >= 0x0030 &&
+					code <= 0x0039 &&
+					value.charCodeAt(0) === 0x002d)
+			) {
+				escaped += `\\${code.toString(16)} `;
+				continue;
+			}
+			if (index === 0 && code === 0x002d && value.length === 1) {
+				escaped += "\\-";
+				continue;
+			}
+			if (
+				code >= 0x0080 ||
+				code === 0x002d ||
+				code === 0x005f ||
+				(code >= 0x0030 && code <= 0x0039) ||
+				(code >= 0x0041 && code <= 0x005a) ||
+				(code >= 0x0061 && code <= 0x007a)
+			) {
+				escaped += char;
+				continue;
+			}
+			escaped += `\\${char}`;
+		}
+		return escaped;
+	}
+
+	private escapeCssAttributeValue(value: string): string {
+		return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 	}
 
 	/**

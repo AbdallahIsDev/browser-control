@@ -526,6 +526,152 @@ describe("BrowserActions", () => {
 		});
 	});
 
+	describe("locator generation", () => {
+		type LocatorCandidateForTest = {
+			kind: string;
+			value: string;
+			confidence: string;
+			reason: string;
+		};
+
+		function generateCandidates(element: Record<string, unknown>): LocatorCandidateForTest[] {
+			return (
+				browserActions as unknown as {
+					generateLocatorCandidates: (
+						element: Record<string, unknown>,
+					) => LocatorCandidateForTest[];
+				}
+			).generateLocatorCandidates(element);
+		}
+
+		it("uses placeholder attributes instead of accessible names for placeholder locators", () => {
+			const candidates = generateCandidates({
+				ref: "e1",
+				role: "textbox",
+				name: "Email address",
+				placeholder: "name@example.com",
+				nameSource: "label",
+			});
+
+			assert.ok(
+				candidates.some(
+					(candidate) =>
+						candidate.kind === "placeholder" &&
+						candidate.value === 'getByPlaceholder("name@example.com")',
+				),
+			);
+			assert.ok(
+				candidates.every(
+					(candidate) =>
+						candidate.kind !== "placeholder" ||
+						candidate.value !== 'getByPlaceholder("Email address")',
+				),
+			);
+		});
+
+		it("does not advertise xpath or label candidates from text-derived names", () => {
+			const candidates = generateCandidates({
+				ref: "e1",
+				role: "button",
+				name: "Submit",
+				nameSource: "text",
+				text: "Submit",
+				selector: "#submit",
+			});
+
+			assert.ok(candidates.every((candidate) => candidate.kind !== "xpath"));
+			assert.ok(candidates.every((candidate) => candidate.kind !== "label"));
+		});
+
+		it("keeps label candidates when the accessible name came from a label source", () => {
+			const candidates = generateCandidates({
+				ref: "e1",
+				role: "textbox",
+				name: "Email address",
+				nameSource: "aria-label",
+			});
+
+			assert.ok(
+				candidates.some(
+					(candidate) =>
+						candidate.kind === "label" &&
+						candidate.value === 'getByLabel("Email address")',
+				),
+			);
+		});
+
+		it("escapes CSS IDs when synthesizing element selectors", async () => {
+			const element = await (
+				browserActions as unknown as {
+					elementToA11yElement: (
+						page: unknown,
+						handle: { evaluate: (callback: (el: unknown) => unknown) => Promise<unknown> },
+						target: string,
+					) => Promise<Record<string, unknown>>;
+				}
+			).elementToA11yElement(
+				{},
+				{
+					evaluate: async (callback) =>
+						callback({
+							getAttribute: (name: string) =>
+								name === "aria-label" ? "Email" : null,
+							tagName: "INPUT",
+							id: "user.email",
+							textContent: "",
+						}),
+				},
+				"input",
+			);
+
+			assert.equal(element.selector, "#user\\.email");
+		});
+
+		it("escapes CSS IDs that begin with digits", async () => {
+			const element = await (
+				browserActions as unknown as {
+					elementToA11yElement: (
+						page: unknown,
+						handle: { evaluate: (callback: (el: unknown) => unknown) => Promise<unknown> },
+						target: string,
+					) => Promise<Record<string, unknown>>;
+				}
+			).elementToA11yElement(
+				{},
+				{
+					evaluate: async (callback) =>
+						callback({
+							getAttribute: (name: string) =>
+								name === "aria-label" ? "Email" : null,
+							tagName: "INPUT",
+							id: "1.user",
+							textContent: "",
+						}),
+				},
+				"input",
+			);
+
+			assert.equal(element.selector, "#\\31 \\.user");
+		});
+
+		it("does not truncate CSS selector candidates", () => {
+			const selector = `[data-testid="${"a".repeat(140)}"]`;
+			const candidates = generateCandidates({
+				ref: "e1",
+				role: "button",
+				selector,
+			});
+
+			assert.ok(
+				candidates.some(
+					(candidate) =>
+						candidate.kind === "css" &&
+						candidate.value === `locator("${selector.replace(/"/g, '\\"')}")`,
+				),
+			);
+		});
+	});
+
 	describe("open", () => {
 		it("records successful browser opens into an active package recording", async () => {
 			const page = createMockPage("about:blank");
