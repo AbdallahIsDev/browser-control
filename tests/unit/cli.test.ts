@@ -241,6 +241,42 @@ test("parseArgs handles space-separated service flag values", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("parseArgs keeps negative numeric values attached to value flags", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "scroll",
+    "--amount",
+    "-500",
+    "--json",
+  ]);
+
+  assert.equal(result.command, "browser");
+  assert.equal(result.subcommand, "scroll");
+  assert.equal(result.flags.amount, "-500");
+  assert.equal(result.flags.json, "true");
+  assert.deepEqual(result.positional, []);
+});
+
+test("parseArgs keeps negative decimal values attached to value flags", () => {
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "act",
+    "scroll",
+    "--amount",
+    "-12.5",
+    "--timeout",
+    "-1",
+  ]);
+
+  assert.equal(result.flags.amount, "-12.5");
+  assert.equal(result.flags.timeout, "-1");
+  assert.deepEqual(result.positional, ["scroll"]);
+});
+
 test("parseArgs handles space-separated provider flag values", () => {
   const result = parseArgs([
     "node",

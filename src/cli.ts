@@ -198,6 +198,15 @@ const VALUE_FLAGS = new Set([
 // Flags that can be repeated and should be collected as arrays
 const REPEATED_FLAGS = new Set(["file", "files", "data"]);
 
+function isNegativeNumberToken(value: string): boolean {
+	return /^-\d+(?:\.\d+)?$/.test(value);
+}
+
+function shouldConsumeFlagValue(flag: string, next?: string): next is string {
+	if (!VALUE_FLAGS.has(flag) || !next) return false;
+	return !next.startsWith("-") || isNegativeNumberToken(next);
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
 	const args = argv.slice(2);
 	const result: ParsedArgs = {
@@ -227,11 +236,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 				} else {
 					result.flags[key] = value;
 				}
-			} else if (
-				VALUE_FLAGS.has(flagPart) &&
-				args[i + 1] &&
-				!args[i + 1].startsWith("-")
-			) {
+			} else if (shouldConsumeFlagValue(flagPart, args[i + 1])) {
 				// Handle repeated flags with space-separated values
 				if (REPEATED_FLAGS.has(flagPart)) {
 					if (result.flags[flagPart]) {
