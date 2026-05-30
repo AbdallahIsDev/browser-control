@@ -9,6 +9,13 @@ import type { ScreencastOptions } from "./observability/types";
 import type { ProviderConfig } from "./providers/types";
 import { installGlobalFatalHandlers } from "./shared/fatal_handlers";
 
+const { buildSafeChildEnv } = require("../safe_child_env.cjs") as {
+	buildSafeChildEnv(
+		source?: NodeJS.ProcessEnv,
+		extra?: NodeJS.ProcessEnv,
+	): NodeJS.ProcessEnv;
+};
+
 // DEFAULT_PORT kept for help text; actual port comes from loadConfig()
 
 interface CliErrorOptions {
@@ -4515,6 +4522,7 @@ async function startBackgroundWebServer(options: {
 	const bgChild = spawn(process.execPath, bgArgs, {
 		stdio: "ignore",
 		detached: true,
+		env: buildSafeChildEnv(process.env),
 	});
 	bgChild.unref();
 	const recordPath = path.join(getDataHome(), "runtime", "web-server.json");
@@ -4969,7 +4977,9 @@ async function handleDesktop(args: ParsedArgs): Promise<void> {
 			const child = spawn(electronBin, [desktopMain], {
 				stdio: "ignore",
 				detached: true,
-				env: { ...process.env, BROWSER_CONTROL_NODE: process.execPath },
+				env: buildSafeChildEnv(process.env, {
+					BROWSER_CONTROL_NODE: process.execPath,
+				}),
 				windowsHide: true,
 			});
 			child.unref();
@@ -6246,7 +6256,7 @@ async function handleService(args: ParsedArgs): Promise<void> {
 								].filter((value): value is string => Boolean(value));
 								const child = spawn(process.execPath, childArgs, {
 									cwd: process.cwd(),
-									env: process.env,
+									env: buildSafeChildEnv(process.env),
 									detached: true,
 									stdio: "ignore",
 									windowsHide: true,

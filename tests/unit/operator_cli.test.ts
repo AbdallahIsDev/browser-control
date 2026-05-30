@@ -631,6 +631,14 @@ test("bc desktop start prefers Windows electron.exe over detached electron.cmd",
 	assert.match(content, /BROWSER_CONTROL_NODE: process\.execPath/u);
 });
 
+test("CLI background spawns use sanitized child env", () => {
+	const cliPath = path.join(process.cwd(), "src", "cli.ts");
+	const content = fs.readFileSync(cliPath, "utf8");
+	assert.match(content, /buildSafeChildEnv\(process\.env/u);
+	assert.doesNotMatch(content, /env:\s*process\.env/u);
+	assert.doesNotMatch(content, /\.\.\.process\.env/u);
+});
+
 test("bc --help does not import SQLite-backed runtime modules", () => {
 	const home = makeHome();
 	try {

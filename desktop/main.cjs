@@ -8,6 +8,8 @@ const path = require("node:path");
 
 const readline = require("node:readline");
 
+const { buildSafeChildEnv } = require("../safe_child_env.cjs");
+
 const {
 	createBrowserWindowOptions,
 
@@ -56,11 +58,9 @@ function startAppServer() {
 		serverProcess = spawn(nodeBin, args, {
 			cwd: rootDir(),
 
-			env: {
-				...process.env,
-
+			env: buildSafeChildEnv(process.env, {
 				BROWSER_CONTROL_DESKTOP: "1",
-			},
+			}),
 
 			stdio: ["ignore", "pipe", "pipe"],
 
