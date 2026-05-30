@@ -527,6 +527,42 @@ test("web app server protects API routes and exposes status/capabilities", async
 	);
 });
 
+test("web app server redacts status response secrets", async (t) => {
+	const api = mockApi();
+	api.status = async () =>
+		({
+			daemon: { state: "running" },
+			broker: {
+				reachable: true,
+				url: "https://broker.example.test?api_key=broker-secret-value",
+			},
+			provider: {
+				active: "browserless",
+				endpoint:
+					"wss://user:provider-secret@example.test/chromium?token=provider-token-value",
+			},
+			nested: {
+				callbackUrl: "https://example.test/callback?key=nested-secret-value",
+			},
+		}) as never;
+
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/api/status`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(response.status, 200);
+	const body = await response.text();
+	assert.doesNotMatch(body, /broker-secret-value/);
+	assert.doesNotMatch(body, /provider-secret/);
+	assert.doesNotMatch(body, /provider-token-value/);
+	assert.doesNotMatch(body, /nested-secret-value/);
+	assert.match(body, /REDACTED/);
+});
+
 test("web app server requires auth for healthz", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());
