@@ -390,7 +390,15 @@ export async function validatePersistedWebAppServerInfo(
 		return false;
 	}
 	try {
-		const health = await fetchJsonWithTimeout(`${info.url}/healthz`, {}, 5_000);
+		const health = await fetchJsonWithTimeout(
+			`${info.url}/healthz`,
+			{
+				headers: {
+					authorization: `Bearer ${info.token}`,
+				},
+			},
+			5_000,
+		);
 		if (!health.ok) return false;
 		const capabilitiesResponse = await fetchJsonWithTimeout(
 			`${info.url}/api/capabilities`,
@@ -2967,6 +2975,14 @@ export function createWebAppServer(
 			}
 
 			if (request.method === "GET" && requestUrl.pathname === "/healthz") {
+				if (!isAuthorizedRequest(request, token, requestUrl)) {
+					json(response, 401, {
+						success: false,
+						code: "unauthorized",
+						error: "Unauthorized.",
+					});
+					return;
+				}
 				json(response, 200, { ok: true });
 				return;
 			}

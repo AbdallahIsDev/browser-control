@@ -527,6 +527,21 @@ test("web app server protects API routes and exposes status/capabilities", async
 	);
 });
 
+test("web app server requires auth for healthz", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const denied = await fetch(`${info.url}/healthz`);
+	assert.equal(denied.status, 401);
+
+	const allowed = await fetch(`${info.url}/healthz`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(allowed.status, 200);
+	assert.deepEqual(await allowed.json(), { ok: true });
+});
+
 test("web app server rate limits repeated unauthorized api requests", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());

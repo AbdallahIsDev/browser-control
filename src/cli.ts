@@ -4575,7 +4575,9 @@ async function waitForReachableWebUrl(
 	let lastError: unknown;
 	while (Date.now() < deadline) {
 		try {
-			const health = await fetch(`${url}/healthz`);
+			const health = await fetch(`${url}/healthz`, {
+				headers: { authorization: `Bearer ${token}` },
+			});
 			const capabilities = await fetch(`${url}/api/capabilities`, {
 				headers: { authorization: `Bearer ${token}` },
 			});
