@@ -414,10 +414,12 @@ test("loadConfig auto-creates data home from BROWSER_CONTROL_HOME override", () 
 
   assert.equal(config.dataHome, tmpDir);
   assert.ok(fs.existsSync(tmpDir), "data home should be created");
-  assert.ok(fs.existsSync(path.join(tmpDir, "reports")), "reports/ subdirectory should be created");
-  assert.ok(fs.existsSync(path.join(tmpDir, "logs")), "logs/ subdirectory should be created");
-  assert.ok(fs.existsSync(path.join(tmpDir, ".interop")), ".interop/ subdirectory should be created");
-  assert.ok(fs.existsSync(path.join(tmpDir, "skills")), "skills/ subdirectory should be created");
+  for (const rel of ["config", "interop", "runtime", "secrets", "state"]) {
+    assert.ok(fs.existsSync(path.join(tmpDir, rel)), `${rel}/ should be created`);
+  }
+  for (const rel of ["reports", "logs", ".interop", "skills"]) {
+    assert.equal(fs.existsSync(path.join(tmpDir, rel)), false, `${rel}/ should be lazy`);
+  }
 
   // Cleanup
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -437,7 +439,8 @@ test("loadConfig auto-creates default data home when no override", () => {
 
   assert.equal(config.dataHome, tmpDir);
   assert.ok(fs.existsSync(tmpDir), "data home should exist after loadConfig");
-  assert.ok(fs.existsSync(path.join(tmpDir, "reports")), "reports/ should exist");
+  assert.ok(fs.existsSync(path.join(tmpDir, "runtime")), "runtime/ should exist");
+  assert.equal(fs.existsSync(path.join(tmpDir, "reports")), false, "reports/ should be lazy");
 
   // Cleanup
   fs.rmSync(tmpDir, { recursive: true, force: true });

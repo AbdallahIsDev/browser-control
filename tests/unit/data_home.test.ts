@@ -199,7 +199,28 @@ test("unsafe home does not create any root-level BC folders on guard rejection",
 	}
 });
 
-test("data home v2 creates manifest, target dirs, and non-destructive legacy aliases", () => {
+test("fresh data home init creates only essential root directories", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-minimal-"));
+	try {
+		ensureDataHomeAtPath(home);
+		const dirs = fs
+			.readdirSync(home, { withFileTypes: true })
+			.filter((entry) => entry.isDirectory())
+			.map((entry) => entry.name)
+			.sort();
+
+		assert.deepEqual(dirs, ["config", "interop", "runtime", "secrets", "state"]);
+		assert.equal(fs.existsSync(path.join(home, "manifest.json")), true);
+		assert.equal(fs.existsSync(path.join(home, "README.md")), true);
+		assert.equal(fs.existsSync(path.join(home, "legacy")), false);
+		assert.equal(fs.existsSync(path.join(home, ".interop")), false);
+		assert.equal(fs.existsSync(path.join(home, "runtime", "temp")), false);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("data home v2 creates manifest, essential dirs, and non-destructive legacy aliases", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-"));
 	try {
 		fs.mkdirSync(path.join(home, ".interop"), { recursive: true });
@@ -228,8 +249,27 @@ test("data home v2 creates manifest, target dirs, and non-destructive legacy ali
 		assert.equal(fs.existsSync(readmePath), true);
 		const readme = fs.readFileSync(readmePath, "utf8");
 		assert.match(readme, /Browser Control Data Home/);
+		assert.match(readme, /created lazily/);
 		assert.match(readme, /runtime\/temp/);
 		assert.match(readme, /Do not delete/);
+		for (const rel of ["config", "runtime", "state", "secrets", "interop"]) {
+			assert.equal(fs.existsSync(path.join(home, rel)), true, `${rel} should be created on init`);
+		}
+		for (const rel of [
+			"automations",
+			"backups",
+			"browser/profiles",
+			"evidence/screencasts",
+			"helpers/quarantine",
+			"legacy",
+			"reports/audits",
+			"runtime/temp",
+			"workflows/approvals",
+			".interop/new-install",
+			"profiles/new-install",
+		]) {
+			assert.equal(fs.existsSync(path.join(home, rel)), false, `${rel} should be lazy`);
+		}
 		assert.equal(fs.existsSync(getInteropDir(home)), true);
 		assert.equal(
 			fs.existsSync(path.join(getInteropDir(home), "chrome-debug.json")),
@@ -263,6 +303,12 @@ test("data home v2 creates manifest, target dirs, and non-destructive legacy ali
 		assert.equal(report.schemaVersion, 2);
 		assert.equal(report.directories.missing.length, 0);
 		assert.ok(
+			report.directories.inventory.some((entry) =>
+				entry.path === "runtime/temp" && entry.present === false
+			),
+			"optional lazy directories should stay in inventory without counting as missing",
+		);
+		assert.ok(
 			report.legacyAliases.some((entry) => entry.legacy.endsWith(".interop")),
 		);
 	} finally {
@@ -275,6 +321,7 @@ test("data cleanup dry run only targets retention-safe temp files", () => {
 	try {
 		ensureDataHomeAtPath(home);
 		const tempDir = getRuntimeTempDir(home);
+		fs.mkdirSync(tempDir, { recursive: true });
 		const staleTemp = path.join(tempDir, "old.tmp");
 		fs.writeFileSync(staleTemp, "old");
 		const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -376,6 +423,7 @@ test("data home report includes folder purpose, size, and staleness inventory", 
 	try {
 		ensureDataHomeAtPath(home);
 		const staleTemp = path.join(getRuntimeTempDir(home), "stale.tmp");
+		fs.mkdirSync(path.dirname(staleTemp), { recursive: true });
 		fs.writeFileSync(staleTemp, "stale-temp");
 		const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
 		fs.utimesSync(staleTemp, oldTime, oldTime);

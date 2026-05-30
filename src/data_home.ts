@@ -77,7 +77,15 @@ export interface DataExportResult {
 	filesCopied: number;
 }
 
-const TARGET_DIRS = [
+const REQUIRED_DIRS = [
+	"config",
+	"interop",
+	"runtime",
+	"secrets",
+	"state",
+] as const;
+
+const INVENTORY_DIRS = [
 	"automations",
 	"automations/saved",
 	"automations/runs",
@@ -134,6 +142,8 @@ const TARGET_DIRS = [
 	"services",
 	"providers",
 ];
+
+const REQUIRED_DIR_SET = new Set<string>(REQUIRED_DIRS);
 
 const DIRECTORY_DESCRIPTIONS: Record<string, { purpose: string; safeToDelete: string }> = {
 	automations: {
@@ -447,11 +457,11 @@ export function inspectDataHome(home = getDataHome()): DataHomeReport {
 	const present: string[] = [];
 	const missing: string[] = [];
 	const inventory: DataHomeDirectoryInventoryEntry[] = [];
-	for (const rel of TARGET_DIRS) {
+	for (const rel of INVENTORY_DIRS) {
 		const target = path.join(home, rel);
 		const exists = fs.existsSync(target);
 		if (exists) present.push(rel);
-		else missing.push(rel);
+		else if (REQUIRED_DIR_SET.has(rel)) missing.push(rel);
 		const staleReason = exists ? getStaleReason(home, rel) : undefined;
 		const metadata = DIRECTORY_DESCRIPTIONS[rel] ?? {
 			purpose: "Browser Control runtime data.",

@@ -16,6 +16,7 @@ test("cleanupDataHome: omitted options means dry-run true", () => {
   try {
     ensureDataHomeAtPath(home);
     const tempDir = getRuntimeTempDir(home);
+    fs.mkdirSync(tempDir, { recursive: true });
     const staleFile = path.join(tempDir, "stale.tmp");
     fs.writeFileSync(staleFile, "content");
     const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -36,6 +37,7 @@ test("cleanupDataHome: explicit dryRun: false without confirm defaults to dry-ru
   try {
     ensureDataHomeAtPath(home);
     const tempDir = getRuntimeTempDir(home);
+    fs.mkdirSync(tempDir, { recursive: true });
     const staleFile = path.join(tempDir, "stale.tmp");
     fs.writeFileSync(staleFile, "content");
     const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -55,6 +57,7 @@ test("cleanupDataHome: explicit dryRun: false with correct confirm deletes files
   try {
     ensureDataHomeAtPath(home);
     const tempDir = getRuntimeTempDir(home);
+    fs.mkdirSync(tempDir, { recursive: true });
     
     const staleFile = path.join(tempDir, "stale.tmp");
     fs.writeFileSync(staleFile, "stale");
