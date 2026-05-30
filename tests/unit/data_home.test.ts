@@ -74,6 +74,54 @@ test("ensureDataHomeAtPath(os.homedir()) rejects", () => {
 	}
 });
 
+for (const folder of ["Desktop", "Documents", "Downloads"]) {
+	test(`getDataHome rejects BROWSER_CONTROL_HOME=~/${folder}`, () => {
+		const previous = process.env.BROWSER_CONTROL_HOME;
+		const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		const unsafePath = path.join(os.homedir(), folder);
+		process.env.BROWSER_CONTROL_HOME = unsafePath;
+		try {
+			assert.throws(
+				() => getDataHome(),
+				/Refusing unsafe Browser Control data home/,
+				`should reject ${folder} as data home`,
+			);
+		} finally {
+			if (previous === undefined) delete process.env.BROWSER_CONTROL_HOME;
+			else process.env.BROWSER_CONTROL_HOME = previous;
+			if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+			else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+		}
+	});
+
+	test(`ensureDataHomeAtPath rejects ~/${folder} before creating Browser Control folders`, () => {
+		const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+		const unsafePath = path.join(os.homedir(), folder);
+		try {
+			assert.throws(
+				() => ensureDataHomeAtPath(unsafePath),
+				/Refusing unsafe Browser Control data home/,
+				`should reject ${folder} as explicit data home`,
+			);
+			assert.equal(
+				fs.existsSync(path.join(unsafePath, "manifest.json")),
+				false,
+				"manifest.json should not be created in visible user folders",
+			);
+			assert.equal(
+				fs.existsSync(path.join(unsafePath, "runtime")),
+				false,
+				"runtime dir should not be created in visible user folders",
+			);
+		} finally {
+			if (prevAllow === undefined) delete process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;
+			else process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME = prevAllow;
+		}
+	});
+}
+
 test("getDataHome default returns ~/.browser-control (not home root)", () => {
 	const previous = process.env.BROWSER_CONTROL_HOME;
 	const prevAllow = process.env.BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME;

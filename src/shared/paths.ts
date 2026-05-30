@@ -80,8 +80,12 @@ export function getDataHome(): string {
   return resolved;
 }
 function getUnsafeRoots(): Set<string> {
+  const visibleUserFolders = ["Desktop", "Documents", "Downloads"].map((folder) =>
+    path.join(os.homedir(), folder),
+  );
   return new Set([
     path.resolve(os.homedir()).toLowerCase(),
+    ...visibleUserFolders.map((folder) => path.resolve(folder).toLowerCase()),
     path.resolve("C:\\").toLowerCase(),
     path.resolve("C:").toLowerCase(),
     path.resolve("/").toLowerCase(),
