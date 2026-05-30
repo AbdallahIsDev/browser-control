@@ -13,11 +13,12 @@ Default execution order:
    - `bc browser snapshot --json`
    - `bc browser act <action> ... --json`
    - `bc browser act fill <target> <text> --json`
-   - `bc browser task run --steps='<json>' --json`
+   - `bc browser task run --steps-file <path> --json`
 2. Prefer one high-level CLI command over many tiny actions:
    - Use `bc browser state` instead of separate tab/dialog/download/snapshot calls.
    - Use `bc browser act --capture-on-success` when action + state can be one command.
    - Use `bc browser task run` for multi-step tasks.
+   - Separate `bc browser ...` commands are separate CLI processes and re-initialize config, session, and broker/browser-control plumbing. Batch related work into `browser act` or `browser task run` when possible.
 3. Use MCP Lite only when the agent environment cannot run CLI directly, or when direct in-client MCP browser interaction is required:
    - `bc_browser_state`
    - `bc_browser_act`

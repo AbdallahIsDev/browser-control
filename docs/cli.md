@@ -20,6 +20,8 @@ JSON mode:
 
 For terminal-capable agents such as Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, and Claude Code, CLI is the preferred Browser Control surface. It reduces tool calls and token use because one command can return compact, structured state for the whole operation.
 
+Each separate `bc browser ...` command is a separate CLI process. It re-loads config, resolves session state, and initializes the broker/browser-control plumbing before executing. Browser state is preserved through the managed CDP/session layer, but batching related actions with `browser act` or `browser task run` avoids repeated startup and synchronization overhead.
+
 Preferred sequence:
 
 ```powershell
