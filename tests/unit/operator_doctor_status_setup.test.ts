@@ -8,6 +8,8 @@ import { buildDoctorChecks, runDoctor } from "../../src/operator/doctor";
 import { runSetup } from "../../src/operator/setup";
 import { collectStatus } from "../../src/operator/status";
 import { loadUserConfig } from "../../src/config";
+import { cleanupStaleDaemonFiles } from "../../src/runtime/daemon_cleanup";
+import { getInteropDir } from "../../src/shared/paths";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-operator-"));
@@ -150,6 +152,55 @@ test("status reports stopped daemon without throwing when broker is unreachable"
     assert.equal(status.broker.reachable, false);
     assert.equal(status.dataHome, home);
     assert.equal(status.policyProfile, "balanced");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("status reads daemon state from canonical interop directory", async () => {
+  const home = makeHome();
+  try {
+    const interop = getInteropDir(home);
+    fs.mkdirSync(interop, { recursive: true });
+    fs.writeFileSync(path.join(interop, "daemon.pid"), `${process.pid}\n`);
+    fs.writeFileSync(
+      path.join(interop, "daemon-status.json"),
+      JSON.stringify({ status: "degraded", pid: process.pid, reason: "test degraded" }),
+    );
+
+    const status = await collectStatus({
+      env: {
+        BROWSER_CONTROL_HOME: home,
+        BROKER_PORT: "1",
+      },
+      brokerProbe: async () => ({
+        reachable: false,
+        brokerUrl: "http://127.0.0.1:1",
+      }),
+    });
+
+    assert.equal(status.daemon.state, "degraded");
+    assert.equal(status.daemon.pid, process.pid);
+    assert.equal(status.daemon.reason, "test degraded");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("cleanupStaleDaemonFiles removes stale canonical interop files", () => {
+  const home = makeHome();
+  try {
+    const interop = getInteropDir(home);
+    const pidPath = path.join(interop, "daemon.pid");
+    const statusPath = path.join(interop, "daemon-status.json");
+    fs.mkdirSync(interop, { recursive: true });
+    fs.writeFileSync(pidPath, "999999999\n");
+    fs.writeFileSync(statusPath, JSON.stringify({ status: "running", pid: 999999999 }));
+
+    cleanupStaleDaemonFiles(home);
+
+    assert.equal(fs.existsSync(pidPath), false);
+    assert.equal(fs.existsSync(statusPath), false);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

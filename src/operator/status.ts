@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadConfig } from "../shared/config";
 import { isPidAlive } from "../runtime/daemon_cleanup";
 import { ProviderRegistry } from "../providers/registry";
+import { getInteropDir, getLegacyInteropDir } from "../shared/paths";
 import type { BrowserControlConfig } from "../shared/config";
 import type { BrokerProbeResult, SystemStatus } from "./types";
 
@@ -59,7 +60,7 @@ export async function defaultBrokerProbe(config: BrowserControlConfig): Promise<
 }
 
 function localDaemonState(dataHome: string): { state: "running" | "stopped" | "degraded"; pid?: number; reason?: string } {
-  const interop = path.join(dataHome, ".interop");
+  const interop = pickDaemonInteropDir(dataHome);
   const pidPath = path.join(interop, "daemon.pid");
   const statusPath = path.join(interop, "daemon-status.json");
   let statusRecord: Record<string, unknown> = {};
@@ -87,6 +88,18 @@ function localDaemonState(dataHome: string): { state: "running" | "stopped" | "d
     pid,
     ...(typeof statusRecord.reason === "string" ? { reason: statusRecord.reason } : {}),
   };
+}
+
+function pickDaemonInteropDir(dataHome: string): string {
+  const canonical = getInteropDir(dataHome);
+  const legacy = getLegacyInteropDir(dataHome);
+  if (
+    fs.existsSync(path.join(canonical, "daemon.pid")) ||
+    fs.existsSync(path.join(canonical, "daemon-status.json"))
+  ) {
+    return canonical;
+  }
+  return legacy;
 }
 
 function countServices(dataHome: string, serviceRegistry?: { list(): Array<unknown> }): number {

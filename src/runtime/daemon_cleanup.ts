@@ -17,7 +17,7 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { getDataHome } from "../shared/paths";
+import { getDataHome, getInteropDir, getLegacyInteropDir } from "../shared/paths";
 
 // ── PID / process helpers ───────────────────────────────────────────
 
@@ -171,11 +171,15 @@ export function killAutomationBrowser(homeDir?: string): void {
  */
 export function cleanupStaleDaemonFiles(homeDir?: string): void {
   const dataHome = homeDir ?? getDataHome();
-  const interopDir = path.join(dataHome, ".interop");
+  for (const interopDir of [getInteropDir(dataHome), getLegacyInteropDir(dataHome)]) {
+    cleanupDaemonFilesInDir(interopDir);
+  }
+}
+
+function cleanupDaemonFilesInDir(interopDir: string): void {
   const pidFile = path.join(interopDir, "daemon.pid");
   const statusFile = path.join(interopDir, "daemon-status.json");
 
-  // Case 1: PID file exists but daemon is dead
   if (fs.existsSync(pidFile)) {
     const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
     if (isNaN(pid) || pid <= 0 || !isPidAlive(pid)) {
@@ -184,7 +188,6 @@ export function cleanupStaleDaemonFiles(homeDir?: string): void {
     }
   }
 
-  // Case 2: No PID file but status file claims "running" — stale
   if (!fs.existsSync(pidFile) && fs.existsSync(statusFile)) {
     try {
       const content = fs.readFileSync(statusFile, "utf8");
@@ -196,7 +199,6 @@ export function cleanupStaleDaemonFiles(homeDir?: string): void {
         }
       }
     } catch {
-      // Corrupt status file — remove it
       try { fs.unlinkSync(statusFile); } catch { /* best-effort */ }
     }
   }
@@ -250,16 +252,19 @@ export async function stopDaemon(options: {
   } catch { /* best-effort */ }
 
   // Step 3: Kill the daemon process tree via PID file
-  const pidFile = path.join(homeDir, ".interop", "daemon.pid");
-  try {
-    if (fs.existsSync(pidFile)) {
+  for (const pidFile of [
+    path.join(getInteropDir(homeDir), "daemon.pid"),
+    path.join(getLegacyInteropDir(homeDir), "daemon.pid"),
+  ]) {
+    try {
+      if (!fs.existsSync(pidFile)) continue;
       const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
       if (!isNaN(pid) && pid > 0) {
         killProcessTree(pid);
       }
       try { fs.unlinkSync(pidFile); } catch { /* best-effort */ }
-    }
-  } catch { /* best-effort */ }
+    } catch { /* best-effort */ }
+  }
 
   // Step 4: Remove stale PID and status files
   try {
