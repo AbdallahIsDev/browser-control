@@ -93,6 +93,36 @@ test("parseArgs handles boolean flags", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("data doctor --cleanup is an alias for data cleanup dry-run", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-data-cleanup-"));
+  try {
+    const tempDir = path.join(home, "runtime", "temp");
+    fs.mkdirSync(tempDir, { recursive: true });
+    const staleFile = path.join(tempDir, "old.tmp");
+    fs.writeFileSync(staleFile, "old");
+    const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    fs.utimesSync(staleFile, oldTime, oldTime);
+
+    const result = runCli(["data", "doctor", "--cleanup", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as {
+      dryRun: boolean;
+      candidates: Array<{ path: string }>;
+      deleted: string[];
+    };
+    assert.equal(parsed.dryRun, true);
+    assert.ok(parsed.candidates.some((entry) => entry.path === staleFile));
+    assert.deepEqual(parsed.deleted, []);
+    assert.equal(fs.existsSync(staleFile), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs handles existing space-separated value flags", () => {
   const result = parseArgs([
     "node",

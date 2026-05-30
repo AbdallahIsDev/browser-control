@@ -23,6 +23,51 @@ function copyDirFilesIfMissing(source: string, target: string): void {
     if (entry.isFile()) copyFileIfMissing(sourcePath, targetPath);
   }
 }
+
+function dataHomeReadmeText(): string {
+  return [
+    "# Browser Control Data Home",
+    "",
+    "This directory stores Browser Control runtime data, package data, browser state, evidence, and local configuration.",
+    "",
+    "Do not delete folders blindly. Use `bc data doctor --json` to inspect the layout and `bc data cleanup` for retention-safe cleanup.",
+    "",
+    "Important folders:",
+    "",
+    "- `automations/`: saved automations, schedules, and run records.",
+    "- `backups/`: local backup artifacts.",
+    "- `browser/profiles/`: browser profiles, cookies, and session state. Do not delete unless you want to lose browser logins.",
+    "- `cache/`: runtime caches that can be regenerated.",
+    "- `config/`: user-scoped Browser Control configuration.",
+    "- `evidence/`: screenshots, debug bundles, receipts, and screencasts.",
+    "- `helpers/`: automation helper scripts and registries used by packages.",
+    "- `interop/`: runtime coordination files such as PID files, auth keys, and browser debug metadata. Do not delete while Browser Control is running.",
+    "- `knowledge/`: local knowledge artifacts.",
+    "- `logs/`: runtime logs for troubleshooting.",
+    "- `memory/`: local SQLite memory, embeddings, and knowledge caches.",
+    "- `packages/`: installed Automation Packages, drafts, and evaluations.",
+    "- `policy/`: approval records and policy profiles.",
+    "- `providers/`: browser provider registry data.",
+    "- `reports/`: exports, audits, and health reports.",
+    "- `services/`: stable local service registry data.",
+    "- `skills/`: skill data retained for compatibility.",
+    "- `runtime/sessions/`: per-session runtime artifacts.",
+    "- `runtime/temp/`: temporary files. Safe cleanup path: `bc data cleanup`.",
+    "- `runtime/locks/`: lock files. Do not delete while Browser Control is running.",
+    "- `secrets/`: secret metadata and credential storage. Do not copy into support bundles.",
+    "- `state/`: persistent application state. Export before modifying.",
+    "- `workflows/`: workflow definitions, runs, and approvals.",
+    "- `legacy/`: preserved old non-core data. Inspect manually before deleting.",
+    "",
+    "Safe cleanup rule:",
+    "",
+    "- `bc data cleanup` is dry-run by default.",
+    "- Destructive cleanup requires `--dry-run=false --confirm=DELETE_RUNTIME_TEMP`.",
+    "- Cleanup targets retention-safe runtime temp files only.",
+    "",
+  ].join("\n");
+}
+
 export function getDataHome(): string {
   const override = process.env.BROWSER_CONTROL_HOME;
   let resolved: string;
@@ -180,6 +225,10 @@ export function ensureDataHomeAtPath(home: string): string {
       )}\n`,
       { mode: 0o600 },
     );
+  }
+  const rootReadme = path.join(home, "README.md");
+  if (!fs.existsSync(rootReadme)) {
+    fs.writeFileSync(rootReadme, dataHomeReadmeText(), { mode: 0o600 });
   }
   const secretsReadme = path.join(home, "secrets", "README.md");
   if (!fs.existsSync(secretsReadme)) {

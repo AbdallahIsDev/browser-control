@@ -176,6 +176,12 @@ test("data home v2 creates manifest, target dirs, and non-destructive legacy ali
 		);
 		assert.equal(manifest.schemaVersion, 2);
 		assert.equal(manifest.product, "browser-control");
+		const readmePath = path.join(home, "README.md");
+		assert.equal(fs.existsSync(readmePath), true);
+		const readme = fs.readFileSync(readmePath, "utf8");
+		assert.match(readme, /Browser Control Data Home/);
+		assert.match(readme, /runtime\/temp/);
+		assert.match(readme, /Do not delete/);
 		assert.equal(fs.existsSync(getInteropDir(home)), true);
 		assert.equal(
 			fs.existsSync(path.join(getInteropDir(home), "chrome-debug.json")),
@@ -267,6 +273,35 @@ test("data home report classifies trading as legacy non-core when present", () =
 			false,
 			"trading should not be listed as a normal user-editable product folder",
 		);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("data home report includes folder purpose, size, and staleness inventory", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-inventory-"));
+	try {
+		ensureDataHomeAtPath(home);
+		const staleTemp = path.join(getRuntimeTempDir(home), "stale.tmp");
+		fs.writeFileSync(staleTemp, "stale-temp");
+		const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
+		fs.utimesSync(staleTemp, oldTime, oldTime);
+
+		const report = inspectDataHome(home);
+		const inventory = report.directories.inventory;
+		assert.ok(Array.isArray(inventory));
+		const runtimeTemp = inventory.find((entry) => entry.path === "runtime/temp");
+		assert.ok(runtimeTemp, "runtime/temp should be inventoried");
+		assert.equal(runtimeTemp.present, true);
+		assert.match(runtimeTemp.purpose, /temporary/i);
+		assert.ok(runtimeTemp.sizeBytes >= Buffer.byteLength("stale-temp"));
+		assert.equal(runtimeTemp.stale, true);
+		assert.match(runtimeTemp.staleReason ?? "", /older than 24 hours/);
+
+		const profiles = inventory.find((entry) => entry.path === "browser/profiles");
+		assert.ok(profiles, "browser/profiles should be inventoried");
+		assert.match(profiles.purpose, /browser profiles/i);
+		assert.equal(profiles.stale, false);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}

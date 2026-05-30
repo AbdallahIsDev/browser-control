@@ -590,7 +590,7 @@ Operator:
                                                                       Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
-  data doctor|cleanup|export [--json]                                Inspect, clean, or export local data home
+  data doctor [--cleanup] | cleanup | export [--json]                 Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json] [--port=7790]                              Start/open local dashboard
@@ -4692,41 +4692,48 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	const action = subcommand || "doctor";
 	const { cleanupDataHome, exportDataHome, formatDataHomeReport, inspectDataHome } =
 		await import("./data_home");
+	const runCleanup = (): void => {
+		const dryRunRequested = flags["dry-run"] === "false";
+		const confirm = flags.confirm;
+		const dryRun = !dryRunRequested || confirm !== "DELETE_RUNTIME_TEMP";
+
+		if (dryRunRequested && confirm !== "DELETE_RUNTIME_TEMP") {
+			console.error(
+				"Error: Destructive cleanup requires explicit confirmation.",
+			);
+			console.error(
+				"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
+			);
+			throw new CliError('Command failed');
+		}
+
+		const result = cleanupDataHome(undefined, { dryRun, confirm });
+		if (jsonOutput) outputJson(result, false);
+		else {
+			console.log(
+				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.reclaimedBytes} bytes reclaimed.`,
+			);
+			if (result.dryRun && dryRunRequested) {
+				console.log(
+					"Note: This was a dry run because confirmation was invalid or missing.",
+				);
+			}
+		}
+	};
 
 	switch (action) {
 		case "doctor": {
+			if (flags.cleanup === "true") {
+				runCleanup();
+				return;
+			}
 			const report = inspectDataHome();
 			if (jsonOutput) outputJson(report, false);
 			else console.log(formatDataHomeReport(report));
 			return;
 		}
 		case "cleanup": {
-			const dryRunRequested = flags["dry-run"] === "false";
-			const confirm = flags.confirm;
-			const dryRun = !dryRunRequested || confirm !== "DELETE_RUNTIME_TEMP";
-
-			if (dryRunRequested && confirm !== "DELETE_RUNTIME_TEMP") {
-				console.error(
-					"Error: Destructive cleanup requires explicit confirmation.",
-				);
-				console.error(
-					"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
-				);
-				throw new CliError('Command failed');
-			}
-
-			const result = cleanupDataHome(undefined, { dryRun, confirm });
-			if (jsonOutput) outputJson(result, false);
-			else {
-				console.log(
-					`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.reclaimedBytes} bytes reclaimed.`,
-				);
-				if (result.dryRun && dryRunRequested) {
-					console.log(
-						"Note: This was a dry run because confirmation was invalid or missing.",
-					);
-				}
-			}
+			runCleanup();
 			return;
 		}
 		case "export": {
