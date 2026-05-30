@@ -164,21 +164,16 @@ describe("MCP Tool Registry", () => {
         "bc_snapshot",
         "bc_state",
         "bc_tab_list",
-        "bc_browser_act",
-        "bc_browser_capture",
-        "bc_browser_capture_many",
-        "bc_browser_click",
-        "bc_browser_fill",
-        "bc_browser_open",
-        "bc_browser_open_many",
-        "bc_browser_snapshot",
-        "bc_browser_state",
-        "bc_browser_tab_list",
         "bc_fs_write_output",
         "bc_session_status",
         "bc_status",
         "bc_task_run",
       ].sort());
+      assert.deepEqual(
+        names.filter((name) => name.startsWith("bc_browser_")),
+        [],
+        "lite mode should omit compatibility browser aliases to reduce tool schema tokens",
+      );
     });
 
     it("all tools have descriptions", () => {
