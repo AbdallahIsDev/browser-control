@@ -47,6 +47,7 @@ HIDDEN_NON_CORE_FEATURES.md
 IGNORED_FEATURES.md
 
 build_log.txt
+setup.json
 selectors.json
 screenshots/
 output/
