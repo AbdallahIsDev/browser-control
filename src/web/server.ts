@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import type { Duplex } from "node:stream";
 import {
 	type BrowserControlAPI,
 	createBrowserControl,
@@ -15,6 +16,7 @@ import {
 import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
+import { constantTimeTokenEqual } from "../shared/auth";
 import { getDashboardConfigMutationError } from "../shared/config";
 import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { logger } from "../shared/logger";
@@ -32,6 +34,7 @@ import { WebEventHub } from "./events";
 import {
 	assertSafeBind,
 	createLocalToken,
+	extractAuthToken,
 	isAuthorizedRequest,
 	readJsonBody,
 	setCorsHeaders,
@@ -79,6 +82,20 @@ export interface WebAppServer {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7790;
 const WEB_SERVER_RECORD_FILE = "web-server.json";
+const WEB_RATE_LIMIT_WINDOW_MS = 60_000;
+const WEB_UNAUTHENTICATED_RATE_LIMIT = 60;
+const WEB_AUTHENTICATED_RATE_LIMIT = 300;
+const WEB_RATE_LIMIT_MAX_BUCKETS = 10_000;
+
+interface WebRateLimitEntry {
+	key: string;
+	limit: number;
+}
+
+interface WebRateLimitDecision {
+	allowed: boolean;
+	retryAfterSeconds: number;
+}
 
 interface SavedAutomation {
 	id: string;
@@ -101,6 +118,185 @@ function automationStorePath(): string {
 
 function webServerRecordPath(): string {
 	return path.join(getDataHome(), "runtime", WEB_SERVER_RECORD_FILE);
+}
+
+function normalizeRemoteAddress(request: IncomingMessage): string {
+	return request.socket.remoteAddress ?? "unknown";
+}
+
+function rateLimitTokenHash(tokenValue: string): string {
+	return crypto.createHash("sha256").update(tokenValue).digest("base64url");
+}
+
+function getWebSocketProtocolTokens(request: IncomingMessage): string[] {
+	const protocol = request.headers["sec-websocket-protocol"];
+	if (typeof protocol !== "string") return [];
+	return protocol
+		.split(",")
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
+}
+
+function isAuthorizedWebSocketRequest(
+	request: IncomingMessage,
+	token: string,
+	requestUrl: URL,
+): boolean {
+	if (isAuthorizedRequest(request, token, requestUrl, true)) return true;
+	return getWebSocketProtocolTokens(request).some((protocolToken) =>
+		constantTimeTokenEqual(protocolToken, token),
+	);
+}
+
+class WebRateLimiter {
+	private readonly buckets = new Map<string, number[]>();
+
+	consume(
+		entries: WebRateLimitEntry[],
+		now = Date.now(),
+	): WebRateLimitDecision {
+		const cutoff = now - WEB_RATE_LIMIT_WINDOW_MS;
+		let retryAfterSeconds = 0;
+
+		for (const entry of entries) {
+			const timestamps = this.pruneExistingBucket(entry.key, cutoff);
+			if (timestamps.length >= entry.limit) {
+				const oldest = timestamps[0] ?? now;
+				retryAfterSeconds = Math.max(
+					retryAfterSeconds,
+					Math.max(
+						1,
+						Math.ceil((oldest + WEB_RATE_LIMIT_WINDOW_MS - now) / 1000),
+					),
+				);
+			}
+		}
+
+		if (retryAfterSeconds > 0) {
+			this.compact(cutoff);
+			return { allowed: false, retryAfterSeconds };
+		}
+
+		for (const entry of entries) {
+			const timestamps = this.bucketForWrite(entry.key, cutoff);
+			timestamps.push(now);
+		}
+
+		this.compact(cutoff);
+		return { allowed: true, retryAfterSeconds: 0 };
+	}
+
+	private pruneExistingBucket(key: string, cutoff: number): number[] {
+		const existing = this.buckets.get(key);
+		if (!existing) return [];
+		while (existing.length > 0 && (existing[0] ?? 0) <= cutoff) {
+			existing.shift();
+		}
+		if (existing.length === 0) this.buckets.delete(key);
+		return existing;
+	}
+
+	private bucketForWrite(key: string, cutoff: number): number[] {
+		const existing = this.pruneExistingBucket(key, cutoff);
+		if (existing.length > 0) return existing;
+		const created: number[] = [];
+		this.buckets.set(key, created);
+		return created;
+	}
+
+	private compact(cutoff: number): void {
+		if (this.buckets.size <= WEB_RATE_LIMIT_MAX_BUCKETS) return;
+		for (const [key, timestamps] of this.buckets) {
+			while (timestamps.length > 0 && (timestamps[0] ?? 0) <= cutoff) {
+				timestamps.shift();
+			}
+			if (timestamps.length === 0) this.buckets.delete(key);
+			if (this.buckets.size <= WEB_RATE_LIMIT_MAX_BUCKETS) break;
+		}
+	}
+}
+
+function createRateLimitEntries(
+	request: IncomingMessage,
+	token: string,
+	requestUrl: URL,
+	authorized: boolean,
+): WebRateLimitEntry[] {
+	const remoteAddress = normalizeRemoteAddress(request);
+	const protocolTokens =
+		requestUrl.pathname === "/events"
+			? getWebSocketProtocolTokens(request)
+			: [];
+	const presentedToken =
+		extractAuthToken(request, requestUrl, requestUrl.pathname === "/events") ??
+		protocolTokens.find((protocolToken) =>
+			constantTimeTokenEqual(protocolToken, token),
+		) ??
+		protocolTokens[0] ??
+		null;
+
+	if (authorized) {
+		const tokenHash = rateLimitTokenHash(presentedToken ?? token);
+		return [
+			{
+				key: `web:auth:ip:${remoteAddress}`,
+				limit: WEB_AUTHENTICATED_RATE_LIMIT,
+			},
+			{
+				key: `web:auth:token:${tokenHash}`,
+				limit: WEB_AUTHENTICATED_RATE_LIMIT,
+			},
+		];
+	}
+
+	const entries: WebRateLimitEntry[] = [
+		{
+			key: `web:unauth:ip:${remoteAddress}`,
+			limit: WEB_UNAUTHENTICATED_RATE_LIMIT,
+		},
+	];
+	if (presentedToken) {
+		entries.push({
+			key: `web:unauth:token:${rateLimitTokenHash(presentedToken)}`,
+			limit: WEB_UNAUTHENTICATED_RATE_LIMIT,
+		});
+	}
+	return entries;
+}
+
+function writeRateLimitResponse(
+	response: ServerResponse,
+	decision: WebRateLimitDecision,
+): void {
+	response.setHeader("Retry-After", String(decision.retryAfterSeconds));
+	json(response, 429, {
+		success: false,
+		code: "rate_limited",
+		error: "Rate limit exceeded.",
+		retryAfterSeconds: decision.retryAfterSeconds,
+	});
+}
+
+function writeRateLimitUpgradeError(
+	socket: Duplex,
+	decision: WebRateLimitDecision,
+): void {
+	socket.write(
+		[
+			"HTTP/1.1 429 Error",
+			"Content-Type: application/json",
+			`Retry-After: ${decision.retryAfterSeconds}`,
+			"Connection: close",
+			"",
+			JSON.stringify({
+				success: false,
+				code: "rate_limited",
+				error: "Rate limit exceeded.",
+				retryAfterSeconds: decision.retryAfterSeconds,
+			}),
+		].join("\r\n"),
+	);
+	socket.destroy();
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -705,6 +901,7 @@ export function createWebAppServer(
 
 	const server = http.createServer();
 	const localApiServers = new Set<http.Server>();
+	const rateLimiter = new WebRateLimiter();
 	let currentInfo: WebAppServerInfo | null = null;
 	let persistedInfo: PersistedWebAppServerInfo | null = null;
 	const startedAt = new Date().toISOString();
@@ -2772,19 +2969,25 @@ export function createWebAppServer(
 				return;
 			}
 
-			if (
-				requestUrl.pathname.startsWith("/api/") &&
-				!isAuthorizedRequest(request, token, requestUrl)
-			) {
-				json(response, 401, {
-					success: false,
-					code: "unauthorized",
-					error: "Unauthorized.",
-				});
-				return;
-			}
-
 			if (requestUrl.pathname.startsWith("/api/")) {
+				const authorized = isAuthorizedRequest(request, token, requestUrl);
+				const rateLimitDecision = rateLimiter.consume(
+					createRateLimitEntries(request, token, requestUrl, authorized),
+				);
+				if (!rateLimitDecision.allowed) {
+					writeRateLimitResponse(response, rateLimitDecision);
+					return;
+				}
+
+				if (!authorized) {
+					json(response, 401, {
+						success: false,
+						code: "unauthorized",
+						error: "Unauthorized.",
+					});
+					return;
+				}
+
 				await handleApi(request, response, requestUrl);
 				return;
 			}
@@ -2824,11 +3027,19 @@ export function createWebAppServer(
 			socket.destroy();
 			return;
 		}
+		const authorized = isAuthorizedWebSocketRequest(request, token, requestUrl);
+		const rateLimitDecision = rateLimiter.consume(
+			createRateLimitEntries(request, token, requestUrl, authorized),
+		);
+		if (!rateLimitDecision.allowed) {
+			writeRateLimitUpgradeError(socket, rateLimitDecision);
+			return;
+		}
 		events.handleUpgrade(
 			request,
 			socket,
 			head,
-			isAuthorizedRequest(request, token, requestUrl, true),
+			authorized,
 			allowedOrigins,
 			token,
 		);

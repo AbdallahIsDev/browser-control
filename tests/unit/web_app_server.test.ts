@@ -527,6 +527,40 @@ test("web app server protects API routes and exposes status/capabilities", async
 	);
 });
 
+test("web app server rate limits repeated unauthorized api requests", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	let response: Response | null = null;
+	for (let i = 0; i < 61; i += 1) {
+		response = await fetch(`${info.url}/api/status`, {
+			headers: { authorization: "Bearer wrong-token" },
+		});
+	}
+
+	assert.equal(response?.status, 429);
+	assert.equal(response?.headers.get("retry-after"), "60");
+	assert.match(await response.text(), /rate limit/i);
+});
+
+test("web app server rate limits repeated authorized api requests", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	let response: Response | null = null;
+	for (let i = 0; i < 301; i += 1) {
+		response = await fetch(`${info.url}/api/status`, {
+			headers: { authorization: "Bearer test-token" },
+		});
+	}
+
+	assert.equal(response?.status, 429);
+	assert.equal(response?.headers.get("retry-after"), "60");
+	assert.match(await response.text(), /rate limit/i);
+});
+
 test("web app config mutation only allows dashboard-safe keys", async (t) => {
 	const api = mockApi();
 	const setCalls: Array<{ key: string; value: unknown }> = [];
