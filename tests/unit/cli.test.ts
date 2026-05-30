@@ -501,6 +501,21 @@ test("parseArgs keeps newly added command value flags space-separated", () => {
 	assert.equal(result.flags.refs, "a,b");
 });
 
+test("parseArgs keeps task steps-file value space-separated", () => {
+	const result = parseArgs([
+		"node",
+		"cli.ts",
+		"browser",
+		"task",
+		"run",
+		"--steps-file",
+		"C:\\temp\\steps.json",
+	]);
+
+	assert.equal(result.flags["steps-file"], "C:\\temp\\steps.json");
+	assert.deepEqual(result.positional, ["run"]);
+});
+
 test("parseArgs normalizes legacy camelCase flags to kebab-case", () => {
 	const result = parseArgs([
 		"node",
@@ -696,6 +711,34 @@ test("proxy add stores proxy credentials in the credential vault", async () => {
     else process.env.BROWSER_CONTROL_HOME = previousHome;
     if (previousBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
     else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("browser task run reads steps from --steps-file", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-task-file-home-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-task-file-cwd-"));
+  const stepsPath = path.join(cwd, "steps.json");
+  fs.writeFileSync(stepsPath, "[]", "utf8");
+
+  try {
+    const result = runCli(
+      ["browser", "task", "run", "--steps-file", stepsPath, "--json"],
+      {
+        cwd,
+        env: {
+          BROWSER_CONTROL_HOME: home,
+          BROWSER_CONTROL_STATE_BACKEND: "json",
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data.totalSteps, 0);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
   }

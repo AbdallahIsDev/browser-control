@@ -206,6 +206,7 @@ export const VALUE_FLAGS = new Set([
 	"continue-on-failure",
 	"direction",
 	"steps",
+	"steps-file",
 	"snapshot",
 	"screenshot",
 	"downloads",
@@ -798,7 +799,7 @@ Browser Lifecycle:
   browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
   browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
                                                                       Run one composite browser action
-  browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps
+  browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser provider list                                              List browser providers
   browser provider catalog                                           List supported browser provider types
   browser provider use <name>                                        Set active browser provider
@@ -3286,19 +3287,37 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		case "task": {
 			const taskAction = positional[0];
 			if (taskAction !== "run") {
-				console.error("Error: Use 'task run --steps=<json>'");
+				console.error("Error: Use 'task run --steps=<json>' or 'task run --steps-file=<path>'");
 				throw commandFailed();
 			}
-			const stepsRaw = flags.steps;
+			if (flags.steps && flags["steps-file"]) {
+				console.error("Error: Use only one of --steps or --steps-file");
+				throw commandFailed();
+			}
+			let stepsRaw = flags.steps;
+			let stepsSource = "--steps";
+			if (flags["steps-file"]) {
+				stepsSource = "--steps-file";
+				try {
+					stepsRaw = fs.readFileSync(path.resolve(flags["steps-file"]), "utf8");
+				} catch (error) {
+					console.error(`Error: Could not read --steps-file: ${(error as Error).message}`);
+					throw commandFailed();
+				}
+			}
 			if (!stepsRaw) {
-				console.error("Error: --steps is required (JSON array of step objects)");
+				console.error("Error: --steps or --steps-file is required (JSON array of step objects)");
 				throw commandFailed();
 			}
 			let steps: any[];
 			try {
 				steps = JSON.parse(stepsRaw);
 			} catch {
-				console.error("Error: --steps must be valid JSON");
+				console.error(`Error: ${stepsSource} must be valid JSON`);
+				throw commandFailed();
+			}
+			if (!Array.isArray(steps)) {
+				console.error(`Error: ${stepsSource} must contain a JSON array of step objects`);
 				throw commandFailed();
 			}
 			try {

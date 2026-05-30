@@ -28,7 +28,7 @@ bc browser state --json
 bc browser open https://example.com --json
 bc browser snapshot --json
 bc browser act click "@e3" --capture-on-success --json
-bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
+bc browser task run --steps-file .\steps.json --json
 ```
 
 Use MCP Lite when the client cannot run CLI directly. Use full MCP only when the task needs a tool outside the Lite/high-level set.
@@ -91,7 +91,7 @@ browser open <url> [--wait-until] [--json]
 browser snapshot [--root-selector] [--boxes] [--json]
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
 browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
-browser task run --steps <json> [--timeout] [--continue-on-failure] [--json]
+browser task run --steps <json>|--steps-file <path> [--timeout] [--continue-on-failure] [--json]
 ```
 
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
@@ -111,14 +111,20 @@ Composite `browser act` and `browser task run` commands use a 30s CLI guard by d
 
 `browser task run` executes multiple steps in one command and returns per-step success, duration, policy metadata, audit id, path, tab id, and final compact state. `writeOutput` steps route through `FsActions.writeOutput`; use `filename` plus `content`, with `target` kept only as a backward-compatible filename alias.
 
+Prefer `--steps-file <path>` for complex tasks, especially on Windows, to avoid shell-specific JSON quoting.
+
 Example:
 
 ```powershell
-bc browser task run --steps='[
+@'
+[
   {"action":"open","url":"https://example.com"},
   {"action":"state","snapshot":true},
   {"action":"writeOutput","filename":"result.json","content":"{\"done\":true}"}
-]' --json
+]
+'@ | Set-Content -Path .\steps.json
+
+bc browser task run --steps-file .\steps.json --json
 ```
 
 ## Sessions

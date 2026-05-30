@@ -910,10 +910,11 @@
           "flags": [
             "continue-on-failure",
             "json",
-            "steps"
+            "steps",
+            "steps-file"
           ],
           "jsonSupport": true,
-          "syntax": "browser task run --steps='<json>' [--continue-on-failure] [--json] Run multiple browser/fs-output steps"
+          "syntax": "browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps"
         },
         {
           "commandPath": [
