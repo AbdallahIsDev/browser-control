@@ -81,6 +81,75 @@ test("loadConfig reads BROKER_API_KEY over BROKER_SECRET", () => {
   assert.equal(config2.brokerAuthKey, "secret1");
 });
 
+test("ensureBrokerAuthKey stores generated keys under secrets", async () => {
+  const { ensureBrokerAuthKey } = await import("../../src/shared/config");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-key-home-"));
+  try {
+    const key = ensureBrokerAuthKey({ BROWSER_CONTROL_HOME: home } as NodeJS.ProcessEnv);
+
+    assert.match(key, /^brk_/);
+    assert.equal(
+      fs.readFileSync(path.join(home, "secrets", "broker-api-key"), "utf8").trim(),
+      key,
+    );
+    assert.equal(
+      fs.existsSync(path.join(home, ".interop", "broker-api-key")),
+      false,
+      "generated broker key must not be written outside secrets",
+    );
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("ensureBrokerAuthKey migrates legacy broker keys into secrets", async () => {
+  const { ensureBrokerAuthKey } = await import("../../src/shared/config");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-key-migrate-"));
+  const legacyDir = path.join(home, ".interop");
+  fs.mkdirSync(legacyDir, { recursive: true });
+  fs.writeFileSync(path.join(legacyDir, "broker-api-key"), "legacy-key\n");
+  try {
+    const key = ensureBrokerAuthKey({ BROWSER_CONTROL_HOME: home } as NodeJS.ProcessEnv);
+
+    assert.equal(key, "legacy-key");
+    assert.equal(
+      fs.readFileSync(path.join(home, "secrets", "broker-api-key"), "utf8").trim(),
+      "legacy-key",
+    );
+    assert.equal(
+      fs.existsSync(path.join(legacyDir, "broker-api-key")),
+      false,
+      "legacy broker key file should be removed after migration",
+    );
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("ensureBrokerAuthKey migrates canonical interop broker keys into secrets", async () => {
+  const { ensureBrokerAuthKey } = await import("../../src/shared/config");
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-broker-key-interop-"));
+  const interopDir = path.join(home, "interop");
+  fs.mkdirSync(interopDir, { recursive: true });
+  fs.writeFileSync(path.join(interopDir, "broker-api-key"), "interop-key\n");
+  try {
+    const key = ensureBrokerAuthKey({ BROWSER_CONTROL_HOME: home } as NodeJS.ProcessEnv);
+
+    assert.equal(key, "interop-key");
+    assert.equal(
+      fs.readFileSync(path.join(home, "secrets", "broker-api-key"), "utf8").trim(),
+      "interop-key",
+    );
+    assert.equal(
+      fs.existsSync(path.join(interopDir, "broker-api-key")),
+      false,
+      "interop broker key file should be removed after migration",
+    );
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("loadConfig reads BROKER_ALLOWED_DOMAINS as CSV", () => {
   const config = loadConfig({
     env: { BROKER_ALLOWED_DOMAINS: "example.com, test.com" },

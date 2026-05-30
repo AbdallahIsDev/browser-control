@@ -160,13 +160,56 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 }
 
 function getBrokerAuthKeyPath(env: NodeJS.ProcessEnv): string {
-  return path.join(getDataHome(env), ".interop", "broker-api-key");
+  return path.join(getDataHome(env), "secrets", "broker-api-key");
+}
+
+function getLegacyBrokerAuthKeyPaths(env: NodeJS.ProcessEnv): string[] {
+  const home = getDataHome(env);
+  return [
+    path.join(home, "interop", "broker-api-key"),
+    path.join(home, ".interop", "broker-api-key"),
+  ];
+}
+
+function writePrivateFile(filePath: string, value: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(filePath, `${value.trim()}\n`, { mode: 0o600 });
+  if (process.platform !== "win32") {
+    fs.chmodSync(path.dirname(filePath), 0o700);
+    fs.chmodSync(filePath, 0o600);
+  }
+}
+
+function removeLegacyBrokerAuthKeyFiles(env: NodeJS.ProcessEnv): void {
+  for (const legacyPath of getLegacyBrokerAuthKeyPaths(env)) {
+    if (fs.existsSync(legacyPath)) {
+      fs.rmSync(legacyPath, { force: true });
+    }
+  }
+}
+
+function migrateLegacyBrokerAuthKeyFile(env: NodeJS.ProcessEnv): string | undefined {
+  const canonicalPath = getBrokerAuthKeyPath(env);
+  for (const legacyPath of getLegacyBrokerAuthKeyPaths(env)) {
+    if (!fs.existsSync(legacyPath)) continue;
+    const key = normalizeOptionalString(fs.readFileSync(legacyPath, "utf8"));
+    if (!key) continue;
+    if (!fs.existsSync(canonicalPath)) {
+      writePrivateFile(canonicalPath, key);
+    }
+    removeLegacyBrokerAuthKeyFiles(env);
+    return normalizeOptionalString(fs.readFileSync(canonicalPath, "utf8")) ?? key;
+  }
+  return undefined;
 }
 
 function readBrokerAuthKeyFile(env: NodeJS.ProcessEnv): string | undefined {
   const filePath = getBrokerAuthKeyPath(env);
-  if (!fs.existsSync(filePath)) return undefined;
-  return normalizeOptionalString(fs.readFileSync(filePath, "utf8"));
+  if (fs.existsSync(filePath)) {
+    removeLegacyBrokerAuthKeyFiles(env);
+    return normalizeOptionalString(fs.readFileSync(filePath, "utf8"));
+  }
+  return migrateLegacyBrokerAuthKeyFile(env);
 }
 
 export function ensureBrokerAuthKey(env: NodeJS.ProcessEnv = process.env): string {
@@ -177,12 +220,7 @@ export function ensureBrokerAuthKey(env: NodeJS.ProcessEnv = process.env): strin
 
   const key = `brk_${randomUUID().replace(/-/g, "")}`;
   const filePath = getBrokerAuthKeyPath(env);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(filePath, `${key}\n`, { mode: 0o600 });
-  if (process.platform !== "win32") {
-    fs.chmodSync(path.dirname(filePath), 0o700);
-    fs.chmodSync(filePath, 0o600);
-  }
+  writePrivateFile(filePath, key);
   return key;
 }
 
