@@ -123,6 +123,55 @@ test("data doctor --cleanup is an alias for data cleanup dry-run", () => {
   }
 });
 
+test("data cleanup --stale moves legacy trading only with explicit confirmation", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-stale-cleanup-"));
+  try {
+    const journal = path.join(home, "trading", "journals", "keep.md");
+    fs.mkdirSync(path.dirname(journal), { recursive: true });
+    fs.writeFileSync(journal, "keep");
+
+    const dryRun = runCli(["data", "cleanup", "--stale", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(dryRun.status, 0, dryRun.stderr);
+    const dryRunJson = JSON.parse(dryRun.stdout) as {
+      dryRun: boolean;
+      candidates: Array<{ path: string }>;
+      moved: Array<{ from: string; to: string }>;
+    };
+    assert.equal(dryRunJson.dryRun, true);
+    assert.ok(dryRunJson.candidates.some((entry) => entry.path === path.join(home, "trading")));
+    assert.deepEqual(dryRunJson.moved, []);
+    assert.equal(fs.existsSync(journal), true);
+
+    const move = runCli([
+      "data",
+      "cleanup",
+      "--stale",
+      "--dry-run=false",
+      "--confirm=MOVE_STALE_LEGACY",
+      "--json",
+    ], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(move.status, 0, move.stderr);
+    const moveJson = JSON.parse(move.stdout) as {
+      dryRun: boolean;
+      moved: Array<{ from: string; to: string }>;
+      deleted: string[];
+    };
+    assert.equal(moveJson.dryRun, false);
+    assert.ok(moveJson.moved.some((entry) => entry.from === path.join(home, "trading")));
+    assert.deepEqual(moveJson.deleted, []);
+    assert.equal(fs.existsSync(path.join(home, "trading")), false);
+    assert.equal(fs.existsSync(path.join(home, "legacy", "trading", "journals", "keep.md")), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs handles existing space-separated value flags", () => {
   const result = parseArgs([
     "node",

@@ -590,7 +590,7 @@ Operator:
                                                                       Create/update user config
   config list|get|set                                                Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
-  data doctor [--cleanup] | cleanup | export [--json]                 Inspect, clean, or export local data home
+  data doctor [--cleanup] | cleanup [--stale] | export [--json]        Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json] [--port=7790]                              Start/open local dashboard
@@ -4695,23 +4695,27 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	const runCleanup = (): void => {
 		const dryRunRequested = flags["dry-run"] === "false";
 		const confirm = flags.confirm;
-		const dryRun = !dryRunRequested || confirm !== "DELETE_RUNTIME_TEMP";
+		const includeStaleLegacy = flags.stale === "true";
+		const requiredConfirm = includeStaleLegacy ? "MOVE_STALE_LEGACY" : "DELETE_RUNTIME_TEMP";
+		const dryRun = !dryRunRequested || confirm !== requiredConfirm;
 
-		if (dryRunRequested && confirm !== "DELETE_RUNTIME_TEMP") {
+		if (dryRunRequested && confirm !== requiredConfirm) {
 			console.error(
 				"Error: Destructive cleanup requires explicit confirmation.",
 			);
 			console.error(
-				"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
+				includeStaleLegacy
+					? "Use: data cleanup --stale --dry-run=false --confirm=MOVE_STALE_LEGACY"
+					: "Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
 			);
 			throw new CliError('Command failed');
 		}
 
-		const result = cleanupDataHome(undefined, { dryRun, confirm });
+		const result = cleanupDataHome(undefined, { dryRun, confirm, includeStaleLegacy });
 		if (jsonOutput) outputJson(result, false);
 		else {
 			console.log(
-				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.reclaimedBytes} bytes reclaimed.`,
+				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.deleted.length} deleted, ${result.moved.length} moved, ${result.reclaimedBytes} bytes reclaimed.`,
 			);
 			if (result.dryRun && dryRunRequested) {
 				console.log(
