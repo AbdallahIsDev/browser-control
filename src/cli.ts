@@ -1130,6 +1130,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 
 	switch (subcommand) {
 		case "start": {
+			await cleanupStaleDaemonStatus();
 			const { spawnDaemonProcess } = await import("./runtime/daemon_launch");
 			const { getLogsDir } = await import("./shared/paths");
 			const logsDir = getLogsDir();

@@ -242,6 +242,23 @@ test("data cleanup --purge-profiles reports stale profiles and requires confirma
   }
 });
 
+test("daemon start cleans stale daemon files before spawning", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "src", "cli.ts"), "utf8");
+  const startIndex = source.indexOf('case "start": {');
+  const cleanupIndex = source.indexOf("await cleanupStaleDaemonStatus();", startIndex);
+  const spawnIndex = source.indexOf("const daemonProcess = spawnDaemonProcess", startIndex);
+
+  assert.notEqual(startIndex, -1);
+  assert.ok(
+    cleanupIndex > startIndex,
+    "daemon start should call stale cleanup in the start branch",
+  );
+  assert.ok(
+    cleanupIndex < spawnIndex,
+    "stale cleanup must happen before spawning the daemon",
+  );
+});
+
 test("CLI validation errors do not end with generic Command failed", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-error-context-"));
   try {
