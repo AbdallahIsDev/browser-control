@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
 import { resetStateStorage } from "../../src/state/index";
-import { parseArgs, runCli as runCliInProcess } from "../../src/cli";
+import { parseArgs, runCli as runCliInProcess, VALUE_FLAGS } from "../../src/cli";
 
 function runCli(
   args: string[],
@@ -377,6 +377,85 @@ test("parseArgs keeps negative decimal values attached to value flags", () => {
   assert.equal(result.flags.amount, "-12.5");
   assert.equal(result.flags.timeout, "-1");
   assert.deepEqual(result.positional, ["scroll"]);
+});
+
+test("parseArgs keeps newly added command value flags space-separated", () => {
+	const result = parseArgs([
+		"node",
+		"cli.ts",
+		"browser",
+		"act",
+		"fill",
+		"--text",
+		"hello",
+		"--delayMs",
+		"50",
+		"--domain",
+		"example.test",
+		"--refs",
+		"a,b",
+	]);
+
+	assert.equal(result.flags.text, "hello");
+	assert.equal(result.flags.delayMs, "50");
+	assert.equal(result.flags.domain, "example.test");
+	assert.equal(result.flags.refs, "a,b");
+});
+
+test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
+	const cliPath = path.join(process.cwd(), "src", "cli.ts");
+	const source = fs.readFileSync(cliPath, "utf8");
+	const rawList = /export const VALUE_FLAGS = new Set\(\[([\s\S]*?)\]\);/u.exec(source)?.[1] ?? "";
+	const rawValues = [...rawList.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
+	const duplicates = rawValues.filter((value, index) => rawValues.indexOf(value) !== index);
+	assert.deepEqual(duplicates, [], "VALUE_FLAGS should not contain duplicate entries");
+
+	const booleanOrPresenceFlags = new Set([
+		"all",
+		"allow-remote",
+		"allow-system-profile",
+		"annotate",
+		"background",
+		"capture",
+		"capture-on-success",
+		"captureOnSuccess",
+		"cleanup",
+		"commit",
+		"create-dirs",
+		"dashboard",
+		"detect",
+		"force",
+		"full-page",
+		"fullPage",
+		"h",
+		"hide",
+		"https",
+		"install",
+		"json",
+		"live",
+		"local-ca",
+		"non-interactive",
+		"overwrite",
+		"persist",
+		"recursive",
+		"rotate",
+		"skip-browser-test",
+		"skip-terminal-test",
+		"stale",
+		"stored",
+		"visible",
+		"wait",
+		"yes",
+	]);
+	const usedFlags = new Set<string>();
+	for (const match of source.matchAll(/flags(?:\.([a-zA-Z_$][\w$]*)|\["([^"]+)"\])/gu)) {
+		usedFlags.add(match[1] ?? match[2]);
+	}
+
+	const missing = [...usedFlags]
+		.filter((flag) => !VALUE_FLAGS.has(flag) && !booleanOrPresenceFlags.has(flag))
+		.sort();
+	assert.deepEqual(missing, []);
 });
 
 test("parseArgs handles space-separated provider flag values", () => {
