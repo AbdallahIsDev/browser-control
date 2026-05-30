@@ -108,6 +108,20 @@ test("CLI inventory includes required public commands", async () => {
 	}
 });
 
+test("CLI help does not list duplicate command paths", async () => {
+	const inventory = (await getCliCommandInventory()) as {
+		sections: Array<{ entries: Array<{ commandPath: string[] }> }>;
+	};
+	const commandPaths = inventory.sections.flatMap((section) =>
+		section.entries.map((entry) => entry.commandPath.join(" ")),
+	).filter(Boolean);
+	const duplicates = commandPaths
+		.filter((commandPath, index) => commandPaths.indexOf(commandPath) !== index)
+		.sort();
+
+	assert.deepEqual(duplicates, []);
+});
+
 test("MCP tool inventory has unique names and serializable schemas", () => {
 	const inventory = getMcpToolInventory() as {
 		tools: Array<{
