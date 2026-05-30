@@ -117,7 +117,6 @@ export const VALUE_FLAGS = new Set([
 	"days",
 	"debug-endpoint",
 	"delay",
-	"delayMs",
 	"domains",
 	"domain",
 	"domain-scope",
@@ -149,7 +148,6 @@ export const VALUE_FLAGS = new Set([
 	"name",
 	"output",
 	"output-path",
-	"outputPath",
 	"package-scope",
 	"params",
 	"path",
@@ -190,7 +188,6 @@ export const VALUE_FLAGS = new Set([
 	"tab",
 	"tab-ids",
 	"tab-id",
-	"tabId",
 	"target",
 	"target-type",
 	"task-tags",
@@ -199,7 +196,6 @@ export const VALUE_FLAGS = new Set([
 	"text",
 	"token",
 	"timeout",
-	"timeoutMs",
 	"type",
 	"url",
 	"usage",
@@ -208,7 +204,6 @@ export const VALUE_FLAGS = new Set([
 	"wait-until",
 	"annotation-position",
 	"continue-on-failure",
-	"continueOnFailure",
 	"direction",
 	"steps",
 	"snapshot",
@@ -222,6 +217,16 @@ export const VALUE_FLAGS = new Set([
 
 // Flags that can be repeated and should be collected as arrays
 const REPEATED_FLAGS = new Set(["file", "files", "data"]);
+
+const FLAG_ALIASES: Record<string, string> = {
+	captureOnSuccess: "capture-on-success",
+	continueOnFailure: "continue-on-failure",
+	delayMs: "delay",
+	fullPage: "full-page",
+	outputPath: "output-path",
+	tabId: "tab-id",
+	timeoutMs: "timeout",
+};
 
 const CLI_BROWSER_ACT_ACTIONS = [
 	"click",
@@ -270,6 +275,10 @@ function shouldConsumeFlagValue(flag: string, next?: string): next is string {
 	return !next.startsWith("-") || isNegativeNumberToken(next);
 }
 
+function canonicalFlagName(flag: string): string {
+	return FLAG_ALIASES[flag] ?? flag;
+}
+
 function hasConfirmation(flags: Record<string, string>, legacyToken: string): boolean {
 	return (
 		flags.yes === "true" ||
@@ -295,7 +304,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 			const flagPart = arg.slice(2);
 			const eqIndex = flagPart.indexOf("=");
 			if (eqIndex !== -1) {
-				const key = flagPart.slice(0, eqIndex);
+				const key = canonicalFlagName(flagPart.slice(0, eqIndex));
 				const value = flagPart.slice(eqIndex + 1);
 				// Handle repeated flags by appending with null character delimiter
 				if (REPEATED_FLAGS.has(key)) {
@@ -307,21 +316,24 @@ export function parseArgs(argv: string[]): ParsedArgs {
 				} else {
 					result.flags[key] = value;
 				}
-			} else if (shouldConsumeFlagValue(flagPart, args[i + 1])) {
-				// Handle repeated flags with space-separated values
-				if (REPEATED_FLAGS.has(flagPart)) {
-					if (result.flags[flagPart]) {
-						result.flags[flagPart] =
-							`${result.flags[flagPart]}\0${args[i + 1]}`;
-					} else {
-						result.flags[flagPart] = args[i + 1];
-					}
-				} else {
-					result.flags[flagPart] = args[i + 1];
-				}
-				i++;
 			} else {
-				result.flags[flagPart] = "true";
+				const key = canonicalFlagName(flagPart);
+				if (shouldConsumeFlagValue(key, args[i + 1])) {
+					// Handle repeated flags with space-separated values
+					if (REPEATED_FLAGS.has(key)) {
+						if (result.flags[key]) {
+							result.flags[key] =
+								`${result.flags[key]}\0${args[i + 1]}`;
+						} else {
+							result.flags[key] = args[i + 1];
+						}
+					} else {
+						result.flags[key] = args[i + 1];
+					}
+					i++;
+				} else {
+					result.flags[key] = "true";
+				}
 			}
 		} else if (arg.startsWith("-") && arg.length === 2) {
 			// Handle short flags like -h
@@ -1038,7 +1050,7 @@ async function handleRun(args: ParsedArgs): Promise<void> {
 		}
 	}
 	if (flags.priority) body.priority = flags.priority;
-	if (flags.timeoutMs) body.timeoutMs = Number(flags.timeoutMs);
+	if (flags.timeout) body.timeoutMs = Number(flags.timeout);
 
 	try {
 		const result = await apiRequest("/tasks/run", "POST", body);
@@ -3024,7 +3036,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.act({
 						action: "openMany",
@@ -3053,7 +3065,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.act({
 						action: "open",
@@ -3082,12 +3094,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.act({
 						action: "navigate",
 						url,
-						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						tabId: flags.tab ?? flags["tab-id"],
 						waitUntil: parseWaitUntil(flags["wait-until"]),
 					}),
 					timeoutMs ? Number(timeoutMs) : 60_000,
@@ -3107,11 +3119,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.act({
 						action: "capture",
-						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						tabId: flags.tab ?? flags["tab-id"],
 						snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
 						screenshot: flags.screenshot === "true",
 					}),
@@ -3142,7 +3154,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.act({
 						action: "captureMany",
@@ -3167,10 +3179,10 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.snapshot({
-						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						tabId: flags.tab ?? flags["tab-id"],
 						boxes: flags.boxes === "true",
 						rootSelector: flags["root-selector"],
 					}),
@@ -3192,13 +3204,13 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(
 					bc.browser.state({
-						tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+						tabId: flags.tab ?? flags["tab-id"],
 						snapshot: flags.snapshot === "true",
 						screenshot: flags.screenshot === "true",
-						fullPage: flags["full-page"] === "true" || flags.fullPage === "true",
+						fullPage: flags["full-page"] === "true",
 						dialog: flags.dialog !== "false",
 						downloads: flags.downloads === "true",
 					}),
@@ -3234,7 +3246,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const bc = createBrowserControl();
 				const fields = flags.fields ? JSON.parse(flags.fields) : undefined;
 				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(bc.browser.act({
 					action: parsedAction,
 					target: positional[1] ?? flags.target,
@@ -3245,11 +3257,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					commit: flags.commit === "true",
 					direction: flags.direction,
 					amount: flags.amount ? Number(flags.amount) : undefined,
-					delayMs: flags.delayMs ? Number(flags.delayMs) : undefined,
-					tabId: flags.tab ?? flags["tab-id"] ?? flags.tabId,
+					delayMs: flags.delay ? Number(flags.delay) : undefined,
+					tabId: flags.tab ?? flags["tab-id"],
 					captureOnSuccess:
-						flags.capture === "true" || flags["capture-on-success"] === "true" || flags.captureOnSuccess === "true",
-					outputPath: flags.output ?? flags["output-path"] ?? flags.outputPath,
+						flags.capture === "true" || flags["capture-on-success"] === "true",
+					outputPath: flags.output ?? flags["output-path"],
 					url: flags.url,
 					urls,
 					waitUntil: flags["wait-until"] as any,
@@ -3292,7 +3304,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const timeoutMs = flags.timeoutMs ?? flags.timeout;
+				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(bc.browser.taskRun({
 					steps,
 					continueOnFailure: flags["continue-on-failure"] === "true",
@@ -5814,10 +5826,9 @@ async function handleBrowserAction(
 
 	try {
 		let result: import("./shared/action_result").ActionResult | undefined;
-		const tabId = flags.tab ?? flags["tab-id"] ?? flags.tabId;
+		const tabId = flags.tab ?? flags["tab-id"];
 		const continueOnFailure =
-			flags["continue-on-failure"] === "true" ||
-			flags.continueOnFailure === "true";
+			flags["continue-on-failure"] === "true";
 
 		switch (action) {
 			case "open": {

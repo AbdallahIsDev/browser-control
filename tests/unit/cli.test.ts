@@ -487,7 +487,7 @@ test("parseArgs keeps newly added command value flags space-separated", () => {
 		"fill",
 		"--text",
 		"hello",
-		"--delayMs",
+		"--delay",
 		"50",
 		"--domain",
 		"example.test",
@@ -496,9 +496,37 @@ test("parseArgs keeps newly added command value flags space-separated", () => {
 	]);
 
 	assert.equal(result.flags.text, "hello");
-	assert.equal(result.flags.delayMs, "50");
+	assert.equal(result.flags.delay, "50");
 	assert.equal(result.flags.domain, "example.test");
 	assert.equal(result.flags.refs, "a,b");
+});
+
+test("parseArgs normalizes legacy camelCase flags to kebab-case", () => {
+	const result = parseArgs([
+		"node",
+		"cli.ts",
+		"browser",
+		"act",
+		"click",
+		"--timeoutMs",
+		"100",
+		"--tabId",
+		"tab-1",
+		"--outputPath=shot.png",
+		"--continueOnFailure=true",
+		"--captureOnSuccess",
+		"--fullPage",
+	]);
+
+	assert.equal(result.flags.timeout, "100");
+	assert.equal(result.flags["tab-id"], "tab-1");
+	assert.equal(result.flags["output-path"], "shot.png");
+	assert.equal(result.flags["continue-on-failure"], "true");
+	assert.equal(result.flags["capture-on-success"], "true");
+	assert.equal(result.flags["full-page"], "true");
+	assert.equal(result.flags.timeoutMs, undefined);
+	assert.equal(result.flags.tabId, undefined);
+	assert.equal(result.flags.outputPath, undefined);
 });
 
 test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
@@ -508,6 +536,11 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 	const rawValues = [...rawList.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
 	const duplicates = rawValues.filter((value, index) => rawValues.indexOf(value) !== index);
 	assert.deepEqual(duplicates, [], "VALUE_FLAGS should not contain duplicate entries");
+	assert.deepEqual(
+		rawValues.filter((value) => /[A-Z]/.test(value)),
+		[],
+		"VALUE_FLAGS should use canonical kebab-case flag names only",
+	);
 
 	const booleanOrPresenceFlags = new Set([
 		"all",
@@ -517,7 +550,6 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"background",
 		"capture",
 		"capture-on-success",
-		"captureOnSuccess",
 		"cleanup",
 		"commit",
 		"create-dirs",
@@ -525,7 +557,6 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"detect",
 		"force",
 		"full-page",
-		"fullPage",
 		"h",
 		"hide",
 		"https",
