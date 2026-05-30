@@ -197,8 +197,10 @@ test("source guards cover prior browser feature review regressions", () => {
 
 	assert.match(
 		snapshotSource,
-		/viewportInfo = await page\.evaluate\(\(\) => \(\{/,
+		/viewportInfo = await withDomSnapshotTimeout\("DOM snapshot viewport capture"/,
 	);
+	assert.match(snapshotSource, /withDomSnapshotTimeout\("DOM snapshot extraction"/);
+	assert.match(snapshotSource, /timed out after \$\{timeoutMs\}ms/);
 	assert.match(snapshotSource, /width: window\.innerWidth/);
 	assert.match(connection, /typeof browser\.once !== "function"/);
 	assert.match(provider, /options\.all[\s\S]*9229/);

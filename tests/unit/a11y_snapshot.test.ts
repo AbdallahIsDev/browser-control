@@ -289,6 +289,27 @@ test("snapshot(page) honors rootSelector in DOM fallback mode", async () => {
   }
 });
 
+test("snapshot DOM fallback times out and fails closed", async () => {
+  const previousTimeout = process.env.BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS;
+  process.env.BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS = "20";
+  try {
+    const page = {
+      url: () => "https://example.test/slow",
+      title: async () => "Slow DOM",
+      evaluate: async () => new Promise<never>(() => undefined),
+    } as unknown as Page;
+
+    const startedAt = Date.now();
+    const snap = await snapshot(page, { rootSelector: "#root" });
+
+    assert.ok(Date.now() - startedAt < 1000, "DOM fallback should not wait for Playwright's default timeout");
+    assert.deepEqual(snap.elements, []);
+  } finally {
+    if (previousTimeout === undefined) delete process.env.BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS;
+    else process.env.BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS = previousTimeout;
+  }
+});
+
 test("resolveRefLocator uses semantic resolution instead of fabricating data-testid", async () => {
   const browser = await launchBrowser();
   try {

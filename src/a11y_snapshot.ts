@@ -15,6 +15,36 @@ import type { DialogInfo } from "./browser/dialogs";
 import { logger } from "./shared/logger";
 
 const log = logger.withComponent("a11y_snapshot");
+const DEFAULT_DOM_SNAPSHOT_EVALUATE_TIMEOUT_MS = 2_000;
+
+function getDomSnapshotEvaluateTimeoutMs(): number {
+  const configured = Number(process.env.BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(configured, 10_000);
+  }
+  return DEFAULT_DOM_SNAPSHOT_EVALUATE_TIMEOUT_MS;
+}
+
+async function withDomSnapshotTimeout<T>(
+  label: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const timeoutMs = getDomSnapshotEvaluateTimeoutMs();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 // ── Core Types ──────────────────────────────────────────────────────
 
@@ -258,7 +288,7 @@ export async function snapshot(
   }
 
   // Fallback: DOM-based synthetic extraction (rootSelector is honored here)
-  if (elements.length === 0 && isDomSnapshotFallbackEnabled()) {
+  if (!options.rootSelector && elements.length === 0 && isDomSnapshotFallbackEnabled()) {
     log.info("A11y tree empty, falling back to DOM-based synthetic snapshot");
     elements = await snapshotFromDOM(page, options.rootSelector, options.boxes);
   }
@@ -641,17 +671,20 @@ async function snapshotFromDOM(
     let viewportInfo: { width: number; height: number; deviceScaleFactor: number } | undefined;
     if (boxes) {
       try {
-        viewportInfo = await page.evaluate(() => ({
-          width: window.innerWidth,
-          height: window.innerHeight,
-          deviceScaleFactor: window.devicePixelRatio,
-        }));
+        viewportInfo = await withDomSnapshotTimeout("DOM snapshot viewport capture", () =>
+          page.evaluate(() => ({
+            width: window.innerWidth,
+            height: window.innerHeight,
+            deviceScaleFactor: window.devicePixelRatio,
+          })),
+        );
       } catch {
         // Viewport capture failed, bounds will be omitted
       }
     }
 
-    const rawElements = await page.evaluate((scope: string) => {
+    const rawElements = await withDomSnapshotTimeout("DOM snapshot extraction", () =>
+      page.evaluate((scope: string) => {
       const root = document.querySelector(scope);
       if (!root) {
         return [];
@@ -970,7 +1003,8 @@ async function snapshotFromDOM(
       }
 
       return [...interactiveResults, ...headingResults];
-    }, rootScope);
+      }, rootScope),
+    );
 
     // Convert raw elements to A11yElement with refs
     return rawElements.map((raw, index) => {
