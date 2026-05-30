@@ -1,6 +1,7 @@
 [
   "http://127.0.0.1:8001",
   {
+    "_warning": "Do not commit proxies.json. Prefer `bc proxy add <url>` so credentials are stored in the Browser Control credential vault; plaintext username/password is only for manual local files.",
     "url": "http://proxy.example.com:8080",
     "username": "proxy-user",
     "password": "proxy-pass",

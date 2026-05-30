@@ -111,6 +111,23 @@ Provider registry path:
 ~/.browser-control/providers/registry.json
 ```
 
+## Proxy Pool
+
+Browser Control can load an optional proxy pool from `PROXY_LIST` or a project-local `proxies.json` file. Keep `proxies.json` local only; it may contain proxy credentials and is ignored by git. Prefer `bc proxy add <url>` for authenticated proxies because the CLI stores credentials in the Browser Control credential vault and writes only sanitized proxy entries.
+
+Example format:
+
+```json
+[
+  "http://127.0.0.1:8001",
+  {
+    "url": "http://proxy.example.com:8080",
+    "credentialRef": "secret://site/proxy.example.com:8080/proxy-credentials",
+    "status": "active"
+  }
+]
+```
+
 ## Services
 
 ```powershell

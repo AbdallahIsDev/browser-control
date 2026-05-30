@@ -16,3 +16,13 @@ test("repo root does not contain TypeScript compatibility shims", () => {
 
   assert.deepEqual(shimFiles, []);
 });
+
+test("live proxy config is ignored and example warns about credentials", () => {
+  const root = process.cwd();
+  const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+  const proxyExample = fs.readFileSync(path.join(root, "proxies.example.json"), "utf8");
+
+  assert.match(gitignore, /^proxies\.json$/m);
+  assert.match(proxyExample, /Do not commit proxies\.json/);
+  assert.match(proxyExample, /credential vault/);
+});

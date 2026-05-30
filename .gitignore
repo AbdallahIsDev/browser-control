@@ -48,6 +48,7 @@ IGNORED_FEATURES.md
 
 build_log.txt
 setup.json
+proxies.json
 selectors.json
 screenshots/
 output/
