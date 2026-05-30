@@ -15,7 +15,7 @@ Default execution order:
    - `bc browser act fill <target> <text> --json`
    - `bc browser task run --steps-file <path> --json`
 2. Prefer one high-level CLI command over many tiny actions:
-   - Use `bc browser state` instead of separate tab/dialog/download/snapshot calls.
+   - Use `bc browser state` for compact page/tab/dialog/download status; use `bc browser snapshot` only when you specifically need the full accessibility tree.
    - Use `bc browser act --capture-on-success` when action + state can be one command.
    - Use `bc browser task run` for multi-step tasks.
    - Separate `bc browser ...` commands are separate CLI processes and re-initialize config, session, and broker/browser-control plumbing. Batch related work into `browser act` or `browser task run` when possible.
