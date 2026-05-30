@@ -73,6 +73,8 @@ Config list/get output redacts sensitive keys:
 
 This redaction is not a global secrecy guarantee. Logs, MCP error strings, debug bundles, console entries, network entries, reports, terminal output, and screenshots can still contain private data from the browser, terminal, filesystem, or command errors. Store and share them carefully.
 
+Runtime artifacts such as screenshots, screencasts, receipts, and debug bundles are not encrypted at rest by default. Treat artifact encryption as future hardening for managed or multi-user deployments; today, protect the data home with OS account permissions and retention cleanup.
+
 Runtime data is local:
 
 ```text

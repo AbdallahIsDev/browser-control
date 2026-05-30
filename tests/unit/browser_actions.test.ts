@@ -1869,6 +1869,10 @@ describe("BrowserActions", () => {
 				assert.ok(screenshotPath.includes(path.join(dataHome, "runtime")));
 				assert.ok(screenshotPath.includes("test"));
 				assert.ok(screenshotPath.includes("screenshots"));
+				assert.match(
+					path.basename(screenshotPath),
+					/^screenshot-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/,
+				);
 				const manifestPath = path.join(
 					path.dirname(path.dirname(screenshotPath)),
 					"manifest.json",

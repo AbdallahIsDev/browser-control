@@ -13,6 +13,7 @@
  */
 
 import fs from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { BrowserContext, Download, Locator, Page } from "playwright";
 import {
@@ -1196,7 +1197,7 @@ export class BrowserActions {
 
 		if (!requestedPath) {
 			helpers.fs.mkdirSync(outputDir, { recursive: true });
-			return helpers.path.join(outputDir, `screenshot-${Date.now()}.png`);
+			return helpers.path.join(outputDir, `screenshot-${randomUUID()}.png`);
 		}
 
 		const baseDir = activeSession?.workingDirectory ?? process.cwd();
