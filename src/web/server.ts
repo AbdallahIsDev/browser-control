@@ -901,12 +901,11 @@ export function createWebAppServer(
 	const events = new WebEventHub();
 
 	// Wire up real-time terminal output streaming to the dashboard event hub.
-	// NOTE: Terminal output is broadcast to ALL authenticated dashboard
-	// WebSocket clients via WebEventHub, not per-session subscribers. Events
-	// are redacted through redactObject() before broadcast. Raw output is
-	// never logged.
+	// Clients may subscribe with ?sessionId=... so terminal output only reaches
+	// matching subscribers. Events are redacted through redactObject() before
+	// broadcast. Raw output is never logged.
 	const termSub = api.terminal.onOutput((sessionId, data) => {
-		events.emit("terminal.output", { sessionId, data });
+		events.emit("terminal.output", { sessionId, data }, { sessionId });
 	});
 
 	const server = http.createServer();

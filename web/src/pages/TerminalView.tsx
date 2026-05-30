@@ -288,7 +288,9 @@ export function TerminalView() {
 	}, [loadSessions]);
 
 	useEffect(() => {
-		const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/events`;
+		if (!activeSessionId) return;
+		const params = new URLSearchParams({ sessionId: activeSessionId });
+		const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/events?${params.toString()}`;
 		const ws = new WebSocket(wsUrl, [getToken()]);
 		ws.onmessage = (event) => {
 			try {
@@ -306,7 +308,7 @@ export function TerminalView() {
 		};
 		ws.onerror = () => setNotice("Terminal event stream disconnected.");
 		return () => ws.close();
-	}, []);
+	}, [activeSessionId]);
 
 	useEffect(() => {
 		const node = viewportRef.current;

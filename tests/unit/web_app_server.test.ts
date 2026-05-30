@@ -2026,6 +2026,48 @@ test("terminal output WebSocket event uses correct payload shape", async (t) => 
 	assert.equal(event.payload.data, "hello\n");
 });
 
+test("terminal output WebSocket supports per-session subscription filtering", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+	const wsBase = `${baseUrl(address).replace("http", "ws")}/events?token=test-token`;
+
+	const socket = new WebSocket(`${wsBase}&sessionId=session-a`);
+	t.after(() => socket.close());
+	const replayEvent = once(socket, "message");
+	await once(socket, "open");
+	await replayEvent;
+
+	server.events.emit(
+		"terminal.output",
+		{ sessionId: "session-b", data: "secret-b\n" },
+		{ sessionId: "session-b" },
+	);
+
+	const leaked = await Promise.race([
+		once(socket, "message").then(() => true),
+		new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 150)),
+	]);
+	assert.equal(
+		leaked,
+		false,
+		"session-a subscriber must not receive session-b output",
+	);
+
+	server.events.emit(
+		"terminal.output",
+		{ sessionId: "session-a", data: "visible-a\n" },
+		{ sessionId: "session-a" },
+	);
+
+	const [msg] = await once(socket, "message");
+	const event = JSON.parse(msg.toString());
+	assert.equal(event.type, "terminal.output");
+	assert.equal(event.sessionId, "session-a");
+	assert.equal(event.payload.data, "visible-a\n");
+});
+
 // ── Regression 3: Subscription lifecycle ─────────────────────────────
 
 test("server.close() disposes terminal output subscription", async (_t) => {
