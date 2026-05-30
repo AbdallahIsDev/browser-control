@@ -1273,7 +1273,7 @@
     },
     {
       "category": "browser",
-      "description": "Compatibility alias for bc_generate_locator. Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
+      "description": "Compatibility alias for bc_generate_locator. Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4031,7 +4031,7 @@
     },
     {
       "category": "browser",
-      "description": "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css, xpath).",
+      "description": "Generate stable locator candidates for a target element. Returns ordered candidates by confidence (role/name, label, placeholder, text, testid, css).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

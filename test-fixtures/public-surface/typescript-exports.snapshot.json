@@ -74,7 +74,9 @@
         "resolve"
       ],
       "session": [
+        "cleanup",
         "create",
+        "destroy",
         "list",
         "status",
         "use"
@@ -214,7 +216,9 @@
         "resolve": "(options: { name: string; }): Promise<ActionResult<{ url: string; service?: ServiceEntry | undefined; }>>"
       },
       "SessionNamespace": {
+        "cleanup": "(): Promise<ActionResult<SessionCleanupSummary>>",
         "create": "(name: string, options?: { policyProfile?: string | undefined; workingDirectory?: string | undefined; } | undefined): Promise<ActionResult<SessionState>>",
+        "destroy": "(nameOrId: string): Promise<ActionResult<SessionCleanupSummary>>",
         "list": "(): ActionResult<SessionListEntry[]>",
         "status": "(nameOrId?: string | undefined): ActionResult<SessionState>",
         "use": "(nameOrId: string): ActionResult<SessionState>"
@@ -681,6 +685,13 @@
         "src/data_home.ts"
       ],
       "kind": "type",
+      "name": "CleanupMove"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
       "name": "CleanupResult"
     },
     {
@@ -955,6 +966,13 @@
       ],
       "kind": "type",
       "name": "DataExportResult"
+    },
+    {
+      "declarations": [
+        "src/data_home.ts"
+      ],
+      "kind": "type",
+      "name": "DataHomeDirectoryInventoryEntry"
     },
     {
       "declarations": [

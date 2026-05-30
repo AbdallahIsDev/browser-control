@@ -365,6 +365,10 @@
       "name": "BROWSER_CHROME_PATH"
     },
     {
+      "backedByConfigRegistry": false,
+      "name": "BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME"
+    },
+    {
       "backedByConfigRegistry": true,
       "name": "BROWSER_CONTROL_HOME"
     },

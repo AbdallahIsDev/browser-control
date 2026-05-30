@@ -8,6 +8,206 @@
       "entries": [
         {
           "commandPath": [
+            "package",
+            "record",
+            "start"
+          ],
+          "description": "Start a package recording session",
+          "flags": [
+            "domain",
+            "json",
+            "name"
+          ],
+          "jsonSupport": true,
+          "syntax": "package record start --name=<name> [--domain=<domain>] [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "record",
+            "action"
+          ],
+          "description": "Add an explicit action to the active recording",
+          "flags": [
+            "json",
+            "params"
+          ],
+          "jsonSupport": true,
+          "syntax": "package record action <kind> --params=<json> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "record",
+            "stop"
+          ],
+          "description": "Stop the active package recording",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package record stop [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "draft"
+          ],
+          "description": "Draft package files from a recording",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package draft <recording-id> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "materialize",
+            "Materialize"
+          ],
+          "description": "",
+          "flags": [
+            "install",
+            "json",
+            "overwrite"
+          ],
+          "jsonSupport": true,
+          "syntax": "package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft"
+        },
+        {
+          "commandPath": [
+            "package",
+            "install"
+          ],
+          "description": "Install a package from local directory",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package install <source> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "list"
+          ],
+          "description": "List installed packages",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package list [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "info"
+          ],
+          "description": "Show package info",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package info <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "grant"
+          ],
+          "description": "Grant a declared package permission",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package grant <name> <permission-kind-or-index> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "run"
+          ],
+          "description": "Run a package workflow",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package run <name> <workflow> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "eval"
+          ],
+          "description": "Evaluate a package",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package eval <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "review",
+            "Record"
+          ],
+          "description": "",
+          "flags": [
+            "by",
+            "json",
+            "reason"
+          ],
+          "jsonSupport": true,
+          "syntax": "package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review"
+        },
+        {
+          "commandPath": [
+            "package",
+            "review-history"
+          ],
+          "description": "Show package trust review history",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package review-history <name> [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "eval-history"
+          ],
+          "description": "Show package evaluation history",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "package eval-history [name] [--json]"
+        },
+        {
+          "commandPath": [
+            "package",
+            "sign",
+            "Compute"
+          ],
+          "description": "",
+          "flags": [
+            "json",
+            "private-key",
+            "signer"
+          ],
+          "jsonSupport": true,
+          "syntax": "package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature"
+        }
+      ],
+      "section": "Automation Packages (primary)"
+    },
+    {
+      "entries": [
+        {
+          "commandPath": [
             "doctor"
           ],
           "description": "Run operator diagnostics",
@@ -97,14 +297,30 @@
         {
           "commandPath": [
             "data",
-            "doctor|cleanup|export"
+            "doctor",
+            "|"
           ],
-          "description": "Inspect, clean, or export local data home",
+          "description": "",
           "flags": [
-            "json"
+            "cleanup",
+            "json",
+            "purge-profiles",
+            "purge-profiles",
+            "stale"
           ],
           "jsonSupport": true,
-          "syntax": "data doctor|cleanup|export [--json]"
+          "syntax": "data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]"
+        },
+        {
+          "commandPath": [
+            "Inspect,",
+            "clean,",
+            "or"
+          ],
+          "description": "",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "Inspect, clean, or export local data home"
         },
         {
           "commandPath": [
@@ -371,161 +587,6 @@
       "entries": [
         {
           "commandPath": [
-            "package",
-            "install"
-          ],
-          "description": "Install a package from local directory",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package install <source> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "list"
-          ],
-          "description": "List installed packages",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package list [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "info"
-          ],
-          "description": "Show package info",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package info <name> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "remove"
-          ],
-          "description": "Remove an installed package",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package remove <name> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "update"
-          ],
-          "description": "Update an installed package",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package update <name> [source] [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "grant"
-          ],
-          "description": "Grant a declared package permission",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package grant <name> <permission-kind-or-index> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "run"
-          ],
-          "description": "Run a package workflow",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package run <name> <workflow> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "eval"
-          ],
-          "description": "Evaluate a package",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package eval <name> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "review",
-            "Record"
-          ],
-          "description": "",
-          "flags": [
-            "by",
-            "json",
-            "reason"
-          ],
-          "jsonSupport": true,
-          "syntax": "package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review"
-        },
-        {
-          "commandPath": [
-            "package",
-            "review-history"
-          ],
-          "description": "Show package trust review history",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package review-history <name> [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "eval-history"
-          ],
-          "description": "Show package evaluation history",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "package eval-history [name] [--json]"
-        },
-        {
-          "commandPath": [
-            "package",
-            "sign",
-            "Compute"
-          ],
-          "description": "",
-          "flags": [
-            "json",
-            "private-key",
-            "signer"
-          ],
-          "jsonSupport": true,
-          "syntax": "package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature"
-        }
-      ],
-      "section": "Automation Packages (Section 30)"
-    },
-    {
-      "entries": [
-        {
-          "commandPath": [
             "open"
           ],
           "description": "Open a URL in the browser",
@@ -695,6 +756,26 @@
           "flags": [],
           "jsonSupport": false,
           "syntax": "session status"
+        },
+        {
+          "commandPath": [
+            "session",
+            "destroy"
+          ],
+          "description": "Destroy a session and release owned resources",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "session destroy <name-or-id>"
+        },
+        {
+          "commandPath": [
+            "session",
+            "cleanup"
+          ],
+          "description": "Remove idle sessions and enforce session cap",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "session cleanup"
         }
       ],
       "section": "Session"
