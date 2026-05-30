@@ -1,6 +1,15 @@
 const net = require("node:net");
 
+const SAFE_LISTEN_HOST = "127.0.0.1";
+
+function assertSafeListenHost(listenHost) {
+  if (listenHost !== SAFE_LISTEN_HOST) {
+    throw new Error("wsl_cdp_bridge must listen on 127.0.0.1 only");
+  }
+}
+
 function startTcpBridge({ listenHost, listenPort, targetHost, targetPort }) {
+  assertSafeListenHost(listenHost);
   return new Promise((resolve, reject) => {
     const server = net.createServer((clientSocket) => {
       const upstreamSocket = net.connect({ host: targetHost, port: targetPort });
@@ -60,6 +69,7 @@ function parseArgs(argv) {
       "Usage: node wsl_cdp_bridge.cjs --listen-host <host> --listen-port <port> --target-host <host> --target-port <port>",
     );
   }
+  assertSafeListenHost(options.listenHost);
 
   return options;
 }

@@ -547,17 +547,16 @@ async function startWslBridgeIfNeeded(
   bridgeScriptPath: string,
 ): Promise<void> {
   if (wslHostCandidates.length === 0) return;
+  const listenHost = "127.0.0.1";
 
   const bridgePidPath = getWslBridgePidPath(port);
 
   // Check if bridge is already working
-  for (const host of wslHostCandidates) {
-    try {
-      const response = await fetch(`http://${host}:${port}/json`, { signal: AbortSignal.timeout(2000) });
-      if (response.ok) return; // bridge already working
-    } catch {
-      // bridge not running on this candidate
-    }
+  try {
+    const response = await fetch(`http://${listenHost}:${port}/json`, { signal: AbortSignal.timeout(2000) });
+    if (response.ok) return; // bridge already working
+  } catch {
+    // bridge not running locally
   }
 
   if (fs.existsSync(bridgePidPath)) {
@@ -582,16 +581,8 @@ async function startWslBridgeIfNeeded(
     return;
   }
 
-  let listenHost: string | null = null;
-  for (const host of wslHostCandidates) {
-    if (await canListenOnHost(host, port)) {
-      listenHost = host;
-      break;
-    }
-  }
-
-  if (!listenHost) {
-    console.warn(`No WSL bridge candidate could bind port ${port}. Tried: ${wslHostCandidates.join(", ")}`);
+  if (!(await canListenOnHost(listenHost, port))) {
+    console.warn(`WSL CDP bridge could not bind ${listenHost}:${port}.`);
     return;
   }
 
