@@ -8,12 +8,16 @@
 
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 const CLI_PATH = path.resolve(__dirname, "..", "..", "cli.js");
+const PACKAGE_VERSION = JSON.parse(
+	fs.readFileSync(path.resolve(__dirname, "..", "..", "package.json"), "utf8"),
+) as { version: string };
 
 let child: ChildProcess | null = null;
 let buffer = "";
@@ -115,14 +119,17 @@ function waitForResponse(
 	});
 }
 
-function initializeAndWait(timeoutMs = 10000): Promise<void> {
+function initializeAndWait(
+	timeoutMs = 10000,
+): Promise<Record<string, unknown>> {
 	const initId = sendRequest("initialize", {
 		protocolVersion: "2024-11-05",
 		capabilities: {},
 		clientInfo: { name: "test", version: "1.0.0" },
 	});
-	return waitForResponse(initId, timeoutMs).then(() => {
+	return waitForResponse(initId, timeoutMs).then((response) => {
 		sendNotification("notifications/initialized", {});
+		return response;
 	});
 }
 
@@ -243,7 +250,11 @@ afterEach(async () => {
 });
 
 test("stdio MCP: initialize + tools/list includes bc_browser_launch with provider", async () => {
-	await initializeAndWait();
+	const initResp = await initializeAndWait();
+	const initResult = initResp.result as
+		| { serverInfo?: { version?: string } }
+		| undefined;
+	assert.equal(initResult?.serverInfo?.version, PACKAGE_VERSION.version);
 
 	const listId = sendRequest("tools/list", {});
 	const listResp = await waitForResponse(listId);

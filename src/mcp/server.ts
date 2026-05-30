@@ -10,6 +10,8 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import fs from "node:fs";
+import path from "node:path";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -25,7 +27,16 @@ const log = logger.withComponent("mcp_server");
 // ── Server Metadata ────────────────────────────────────────────────────
 
 const SERVER_NAME = "browser-control";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = readPackageVersion();
+
+function readPackageVersion(): string {
+  const packageJsonPath = path.resolve(__dirname, "..", "..", "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+  if (typeof packageJson.version !== "string" || packageJson.version.trim() === "") {
+    throw new Error(`Missing package version in ${packageJsonPath}`);
+  }
+  return packageJson.version;
+}
 
 // ── Server Factory ─────────────────────────────────────────────────────
 
