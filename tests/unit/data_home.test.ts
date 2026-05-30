@@ -220,6 +220,21 @@ test("fresh data home init creates only essential root directories", () => {
 	}
 });
 
+test("secrets README documents vault key exposure boundary", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-secrets-readme-"));
+	try {
+		ensureDataHomeAtPath(home);
+		const readme = fs.readFileSync(path.join(home, "secrets", "README.md"), "utf8");
+
+		assert.match(readme, /\.vault-key/);
+		assert.match(readme, /decryption key/);
+		assert.match(readme, /Never commit, sync, or back up/);
+		assert.match(readme, /Windows/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("data home v2 creates manifest, essential dirs, and non-destructive legacy aliases", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-"));
 	try {

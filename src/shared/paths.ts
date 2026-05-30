@@ -191,6 +191,11 @@ export function ensureDataHomeAtPath(home: string): string {
         "Provider keys and other secrets are stored separately from normal preferences.",
         "Values in this folder must be redacted from UI, logs, debug bundles, and exports.",
         "",
+        "The `.vault-key` file is the local fallback vault decryption key.",
+        "Never commit, sync, or back up `.vault-key` alongside vault contents.",
+        "Treat `.vault-key` like a password: file possession can decrypt local fallback vault entries.",
+        "On Windows, POSIX file modes are advisory; protect this folder with user/account-level access control.",
+        "",
       ].join("\n"),
       { mode: 0o600 },
     );

@@ -82,6 +82,8 @@ Runtime data is local:
 ~/.browser-control/
 ```
 
+Credential vault entries use OS protection when available. The local fallback uses AES-256-GCM with a key file at `~/.browser-control/secrets/.vault-key`. This fallback security model is file-permission-level: if `.vault-key` is copied with the vault data, all local fallback credentials should be treated as compromised. Never commit, sync, or back up `.vault-key` alongside vault contents. On Windows, POSIX-style file modes are advisory; rely on user/account-level folder access controls.
+
 ## Provider Tokens
 
 Remote provider configuration can include endpoint URLs and API keys. Provider registry data lives under the Browser Control data home. Local administrators and processes with filesystem access can read local secrets.
