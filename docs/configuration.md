@@ -14,6 +14,8 @@ Override data home:
 $env:BROWSER_CONTROL_HOME = Join-Path $env:USERPROFILE ".browser-control-dev"
 ```
 
+Browser Control refuses unsafe data-home paths such as your home directory, drive roots, visible user folders, and the repo root. For one-off recovery or controlled CI cases, set `BROWSER_CONTROL_ALLOW_UNSAFE_DATA_HOME=1` to bypass this guard. This is an unsafe escape hatch: prefer an isolated `BROWSER_CONTROL_HOME`, and never point production runs at folders that contain unrelated personal or source data.
+
 ## Inspect and Set
 
 ```powershell
