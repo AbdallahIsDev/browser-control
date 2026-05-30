@@ -791,6 +791,8 @@ test("bc policy import --json writes clean parseable JSON", async () => {
 				clipboardAllowed: true,
 				credentialSubmissionAllowed: false,
 				automationOnlyInExplicitSessions: true,
+				dialogHandling: "must_respond",
+				dialogTimeoutMs: 10000,
 			},
 			lowLevelPolicy: {
 				rawCdpAllowed: false,

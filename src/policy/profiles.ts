@@ -263,6 +263,57 @@ export function validateProfileName(name: string): { valid: boolean; error?: str
   return { valid: true };
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requireStringArray(
+  section: Record<string, unknown>,
+  sectionName: string,
+  field: string,
+  errors: string[],
+): void {
+  const value = section[field];
+  if (value === undefined) return;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    errors.push(`${sectionName}.${field} must be an array of strings.`);
+  }
+}
+
+function requireBoolean(
+  section: Record<string, unknown>,
+  sectionName: string,
+  field: string,
+  errors: string[],
+): void {
+  if (typeof section[field] !== "boolean") {
+    errors.push(`${sectionName}.${field} must be a boolean.`);
+  }
+}
+
+function requireFiniteNumber(
+  section: Record<string, unknown>,
+  sectionName: string,
+  field: string,
+  errors: string[],
+): void {
+  if (typeof section[field] !== "number" || !Number.isFinite(section[field])) {
+    errors.push(`${sectionName}.${field} must be a finite number.`);
+  }
+}
+
+function requireEnum(
+  section: Record<string, unknown>,
+  sectionName: string,
+  field: string,
+  allowed: readonly string[],
+  errors: string[],
+): void {
+  if (!allowed.includes(section[field] as string)) {
+    errors.push(`${sectionName}.${field} must be one of: ${allowed.join(", ")}.`);
+  }
+}
+
 export function getBuiltInProfile(name: string): PolicyProfile | null {
   return BUILT_IN_PROFILES.get(name) ?? null;
 }
@@ -293,38 +344,134 @@ export function getRiskDecisionMatrix(profileName: string): RiskDecisionMatrix |
 
 export function validateProfile(profile: PolicyProfile): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
+  const candidate = profile as unknown;
 
-  if (!profile.name || typeof profile.name !== "string") {
+  if (!isPlainRecord(candidate)) {
+    return { valid: false, errors: ["Profile must be an object."] };
+  }
+
+  if (!candidate.name || typeof candidate.name !== "string") {
     errors.push("Profile name is required and must be a string.");
   } else {
-    const nameValidation = validateProfileName(profile.name);
+    const nameValidation = validateProfileName(candidate.name);
     if (!nameValidation.valid) {
       errors.push(nameValidation.error ?? "Invalid profile name.");
     }
   }
 
-  if (!profile.commandPolicy || typeof profile.commandPolicy !== "object") {
+  const commandPolicy = candidate.commandPolicy;
+  if (!isPlainRecord(commandPolicy)) {
     errors.push("Profile must include commandPolicy.");
+  } else {
+    for (const field of [
+      "allowedCommands",
+      "deniedCommands",
+      "requireConfirmationCommands",
+      "restrictedWorkingDirectories",
+      "restrictedNetworkClasses",
+      "restrictedProcessClasses",
+      "restrictedServiceClasses",
+    ]) {
+      requireStringArray(commandPolicy, "commandPolicy", field, errors);
+    }
   }
 
-  if (!profile.filesystemPolicy || typeof profile.filesystemPolicy !== "object") {
+  const filesystemPolicy = candidate.filesystemPolicy;
+  if (!isPlainRecord(filesystemPolicy)) {
     errors.push("Profile must include filesystemPolicy.");
+  } else {
+    for (const field of ["allowedReadRoots", "allowedWriteRoots", "allowedDeleteRoots"]) {
+      requireStringArray(filesystemPolicy, "filesystemPolicy", field, errors);
+    }
+    requireEnum(
+      filesystemPolicy,
+      "filesystemPolicy",
+      "recursiveDeleteDefaultBehavior",
+      ["deny", "require_confirmation"],
+      errors,
+    );
+    requireEnum(
+      filesystemPolicy,
+      "filesystemPolicy",
+      "tempDirectoryDefaultBehavior",
+      ["allow", "require_confirmation"],
+      errors,
+    );
   }
 
-  if (!profile.browserPolicy || typeof profile.browserPolicy !== "object") {
+  const browserPolicy = candidate.browserPolicy;
+  if (!isPlainRecord(browserPolicy)) {
     errors.push("Profile must include browserPolicy.");
+  } else {
+    for (const field of ["allowedDomains", "blockedDomains"]) {
+      requireStringArray(browserPolicy, "browserPolicy", field, errors);
+    }
+    for (const field of [
+      "fileUploadAllowed",
+      "fileDownloadAllowed",
+      "screenshotAllowed",
+      "clipboardAllowed",
+      "credentialSubmissionAllowed",
+      "automationOnlyInExplicitSessions",
+    ]) {
+      requireBoolean(browserPolicy, "browserPolicy", field, errors);
+    }
+    requireEnum(
+      browserPolicy,
+      "browserPolicy",
+      "dialogHandling",
+      ["must_respond", "auto_accept", "auto_dismiss", "defer"],
+      errors,
+    );
+    requireFiniteNumber(browserPolicy, "browserPolicy", "dialogTimeoutMs", errors);
   }
 
-  if (!profile.lowLevelPolicy || typeof profile.lowLevelPolicy !== "object") {
+  const lowLevelPolicy = candidate.lowLevelPolicy;
+  if (!isPlainRecord(lowLevelPolicy)) {
     errors.push("Profile must include lowLevelPolicy.");
+  } else {
+    for (const field of [
+      "rawCdpAllowed",
+      "jsEvalAllowed",
+      "networkInterceptionAllowed",
+      "cookieExportImportAllowed",
+      "coordinateActionsAllowed",
+      "performanceTracesAllowed",
+    ]) {
+      requireBoolean(lowLevelPolicy, "lowLevelPolicy", field, errors);
+    }
   }
 
-  if (!profile.credentialPolicy || typeof profile.credentialPolicy !== "object") {
+  const credentialPolicy = candidate.credentialPolicy;
+  if (!isPlainRecord(credentialPolicy)) {
     errors.push("Profile must include credentialPolicy.");
+  } else {
+    requireEnum(
+      credentialPolicy,
+      "credentialPolicy",
+      "secretUseConfirmThreshold",
+      ["none", "cross-site", "all"],
+      errors,
+    );
+    for (const field of ["secretRevealAllowed", "secretAutoTypeAllowed", "secretAutoPasteAllowed"]) {
+      requireBoolean(credentialPolicy, "credentialPolicy", field, errors);
+    }
   }
 
-  if (!profile.privacyPolicy || typeof profile.privacyPolicy !== "object") {
+  const privacyPolicy = candidate.privacyPolicy;
+  if (!isPlainRecord(privacyPolicy)) {
     errors.push("Profile must include privacyPolicy.");
+  } else {
+    requireEnum(
+      privacyPolicy,
+      "privacyPolicy",
+      "profile",
+      ["strict", "balanced", "audit"],
+      errors,
+    );
+    for (const field of ["customBlockedDomains", "customAllowedDomains"]) {
+      requireStringArray(privacyPolicy, "privacyPolicy", field, errors);
+    }
   }
 
   return { valid: errors.length === 0, errors };
