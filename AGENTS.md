@@ -26,10 +26,10 @@ Default execution order:
 4. Use full MCP only when the user explicitly asks for MCP/full tool mode or the task needs a tool not exposed in Lite/CLI.
 5. Use debug/network/DOM fallback only when a11y state is insufficient.
 6. Respect Browser Control policy decisions and confirmations.
-7. When a11y snapshot cannot access page elements (canvas, shadow DOM, custom controls, iframes), first search `~\.browser-control\automation-helpers\` for existing helpers matching the site/task. Reuse if found; create a new helper if none exists.
-8. Before creating automation helper scripts, read `~\.browser-control\automation-helpers\registry.json` to find any relevant existing helpers for the required task.
+7. When a11y snapshot cannot access page elements (canvas, shadow DOM, custom controls, iframes), first search `~/.browser-control/helpers/` for existing helpers matching the site/task. Reuse if found; create a new helper if none exists.
+8. Before creating automation helper scripts, read `~/.browser-control/helpers/registry.json` to find any relevant existing helpers for the required task.
 9. If a matching helper is listed in the registry but its files are missing, recreate/update the helper under its registered folder, then update the registry.
-10. If you don't find any helpers that match the required task, create a new one for the required task. It should be registered in `~\.browser-control\automation-helpers\registry.json` with site, task tags, file paths, usage, and purpose.
+10. If you don't find any helpers that match the required task, create a new one for the required task. It should be registered in `~/.browser-control/helpers/registry.json` with site, task tags, file paths, usage, and purpose. On Windows, the same path may appear with backslashes.
 
 Do not use Playwright, generic web browsing, shell browser scripts, raw CDP, or client built-in browser tools before Browser Control CLI/MCP unless Browser Control cannot complete the task or user explicitly requests another tool.
 
@@ -40,7 +40,7 @@ For self-healing browser automation:
 - Search the helper registry before writing helper code.
 - If a matching helper is listed in the registry but its files are missing, recreate/update the helper under its registered folder, then update the registry.
 - Reuse existing helper scripts when they fit the current site/task/failure.
-- Create temporary helpers under `~\.browser-control\automation-helpers\`, not inside this repo/project, unless user explicitly asks to edit project code.
+- Create temporary helpers under `~/.browser-control/helpers/`, not inside this repo/project, unless user explicitly asks to edit project code. On Windows, this is typically `~\.browser-control\helpers\`.
 - Do not create workflow helper scripts, screenshots, recordings, runtime files, or scratch files inside `~\browser-control` during browser automation.
 - Do not patch Browser Control core mid-task to fix one target website.
 - Verify each browser action with URL, title, compact state, snapshot, visible state, or screenshot.
