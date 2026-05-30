@@ -406,6 +406,11 @@ async function getApiUrl(): Promise<string> {
 	return `http://127.0.0.1:${config.brokerPort}/api/v1`;
 }
 
+async function getBrokerAuthorizationHeader(): Promise<string> {
+	const { ensureBrokerAuthKey } = await import("./shared/config");
+	return `Bearer ${ensureBrokerAuthKey(process.env)}`;
+}
+
 async function apiRequest(
 	endpoint: string,
 	method = "GET",
@@ -415,7 +420,10 @@ async function apiRequest(
 	const url = `${apiUrl}${endpoint}`;
 	const options: RequestInit = {
 		method,
-		headers: { "Content-Type": "application/json" },
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: await getBrokerAuthorizationHeader(),
+		},
 	};
 	if (body) {
 		options.body = JSON.stringify(body);
@@ -435,6 +443,11 @@ async function apiRequest(
 	}
 	if (!response.ok) {
 		const errorBody = await response.text().catch(() => "Unknown error");
+		if (response.status === 401) {
+			throw new Error(
+				`API ${method} ${endpoint} failed with HTTP 401: broker rejected CLI authentication. Ensure BROKER_API_KEY matches the daemon's broker key, or unset BROKER_API_KEY and restart the daemon so both sides use the generated key. Response: ${errorBody}`,
+			);
+		}
 		throw new Error(
 			`API ${method} ${endpoint} failed with HTTP ${response.status}: ${errorBody}`,
 		);

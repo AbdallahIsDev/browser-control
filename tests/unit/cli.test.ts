@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
 import { resetStateStorage } from "../../src/state/index";
-import { parseArgs } from "../../src/cli";
+import { parseArgs, runCli as runCliInProcess } from "../../src/cli";
 
 function runCli(
   args: string[],
@@ -197,6 +197,108 @@ test("CLI unknown subcommands preserve command context", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Unknown config command: wat/);
   assert.doesNotMatch(result.stderr, /Command failed/);
+});
+
+test("bc run sends broker authorization from generated key file", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-auth-"));
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const previousPort = process.env.BROKER_PORT;
+  const previousApiKey = process.env.BROKER_API_KEY;
+  const previousSecret = process.env.BROKER_SECRET;
+  const previousFetch = globalThis.fetch;
+  const previousLog = console.log;
+  let authorization: string | undefined;
+
+  process.env.BROWSER_CONTROL_HOME = home;
+  process.env.BROKER_PORT = "59999";
+  delete process.env.BROKER_API_KEY;
+  delete process.env.BROKER_SECRET;
+  console.log = () => {};
+  globalThis.fetch = (async (_input, init) => {
+    const headers = init?.headers as Record<string, string> | undefined;
+    authorization = headers?.Authorization ?? headers?.authorization;
+    return new Response(JSON.stringify({ taskId: "task-1" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    await runCliInProcess([
+      "node",
+      "cli.ts",
+      "run",
+      "--skill",
+      "navigation",
+      "--action",
+      "open",
+      "--json",
+    ]);
+
+    assert.match(
+      authorization ?? "",
+      /^Bearer brk_/,
+      "CLI broker requests should use the persisted generated broker key",
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    console.log = previousLog;
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    if (previousPort === undefined) delete process.env.BROKER_PORT;
+    else process.env.BROKER_PORT = previousPort;
+    if (previousApiKey === undefined) delete process.env.BROKER_API_KEY;
+    else process.env.BROKER_API_KEY = previousApiKey;
+    if (previousSecret === undefined) delete process.env.BROKER_SECRET;
+    else process.env.BROKER_SECRET = previousSecret;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("bc run explains broker authentication failures", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-auth-fail-"));
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const previousPort = process.env.BROKER_PORT;
+  const previousFetch = globalThis.fetch;
+  const previousError = console.error;
+  const errors: string[] = [];
+
+  process.env.BROWSER_CONTROL_HOME = home;
+  process.env.BROKER_PORT = "59998";
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map((arg) => String(arg)).join(" "));
+  };
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ error: "Unauthorized." }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () =>
+        runCliInProcess([
+          "node",
+          "cli.ts",
+          "run",
+          "--skill",
+          "navigation",
+          "--action",
+          "open",
+          "--json",
+        ]),
+      /broker rejected CLI authentication/,
+    );
+    assert.match(errors.join("\n"), /BROKER_API_KEY matches the daemon's broker key/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    console.error = previousError;
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    if (previousPort === undefined) delete process.env.BROKER_PORT;
+    else process.env.BROKER_PORT = previousPort;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("parseArgs handles existing space-separated value flags", () => {
