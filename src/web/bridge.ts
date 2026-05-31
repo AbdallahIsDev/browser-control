@@ -4,10 +4,13 @@ import { redactObject, redactString } from "../observability/redaction";
 import { loadConfig } from "../shared/config";
 import { getLogsDir } from "../shared/paths";
 
+const DEFAULT_BROKER_FETCH_TIMEOUT_MS = 5_000;
+
 export interface BrokerFetchOptions {
 	env?: NodeJS.ProcessEnv;
 	method?: "GET" | "POST" | "DELETE";
 	body?: unknown;
+	timeoutMs?: number;
 }
 
 export async function fetchBrokerJson(
@@ -23,14 +26,38 @@ export async function fetchBrokerJson(
 	const token = env.BROKER_API_KEY || env.BROKER_SECRET;
 	if (token) headers.authorization = `Bearer ${token}`;
 
-	const response = await fetch(`${baseUrl}${endpoint}`, {
-		method: options.method ?? "GET",
-		headers,
-		...(options.body !== undefined
-			? { body: JSON.stringify(options.body) }
-			: {}),
-	});
-	const text = await response.text();
+	const timeoutMs =
+		typeof options.timeoutMs === "number" &&
+		Number.isFinite(options.timeoutMs) &&
+		options.timeoutMs > 0
+			? options.timeoutMs
+			: DEFAULT_BROKER_FETCH_TIMEOUT_MS;
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+	timeout.unref?.();
+	let response: Response;
+	let text: string;
+	try {
+		response = await fetch(`${baseUrl}${endpoint}`, {
+			method: options.method ?? "GET",
+			headers,
+			signal: controller.signal,
+			...(options.body !== undefined
+				? { body: JSON.stringify(options.body) }
+				: {}),
+		});
+		text = await response.text();
+	} catch (error: unknown) {
+		if (
+			controller.signal.aborted ||
+			(error instanceof Error && error.name === "AbortError")
+		) {
+			throw new Error(`Broker request timed out after ${timeoutMs}ms`);
+		}
+		throw error;
+	} finally {
+		clearTimeout(timeout);
+	}
 	const parsed = text ? (JSON.parse(text) as unknown) : {};
 	if (!response.ok) {
 		const error =
