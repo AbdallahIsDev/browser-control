@@ -52,6 +52,131 @@ test("allows changing the active profile", () => {
   assert.strictEqual(policyEngine.getActiveProfile(), "trusted");
 });
 
+test("loads custom profiles from disk by name", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-"));
+  process.env.BROWSER_CONTROL_HOME = home;
+
+  try {
+    saveCustomProfile({
+      ...TRUSTED_PROFILE,
+      name: "review_profile",
+      commandPolicy: {
+        ...TRUSTED_PROFILE.commandPolicy,
+        deniedCommands: ["blockedbin"],
+      },
+    });
+
+    const mockLogger = new Logger({ component: "test", level: "info" });
+    const policyEngine = new DefaultPolicyEngine({
+      profileName: "balanced",
+      logger: mockLogger,
+    });
+    policyEngine.setProfile("review_profile");
+
+    assert.strictEqual(policyEngine.getActiveProfile(), "review_profile");
+    const result = policyEngine.evaluate({
+      id: "custom-deny",
+      path: "command",
+      action: "execute_command",
+      params: { command: "blockedbin --danger" },
+      risk: "low",
+      sessionId: "test-session",
+    });
+    assert.equal(result.decision, "deny");
+    assert.equal(result.profile, "review_profile");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("initializes with a saved custom profile by name", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-"));
+  process.env.BROWSER_CONTROL_HOME = home;
+
+  try {
+    saveCustomProfile({
+      ...TRUSTED_PROFILE,
+      name: "saved_profile",
+      commandPolicy: {
+        ...TRUSTED_PROFILE.commandPolicy,
+        deniedCommands: ["blockedbin"],
+      },
+    });
+
+    const mockLogger = new Logger({ component: "test", level: "info" });
+    const policyEngine = new DefaultPolicyEngine({
+      profileName: "saved_profile",
+      logger: mockLogger,
+    });
+
+    assert.strictEqual(policyEngine.getActiveProfile(), "saved_profile");
+    const result = policyEngine.evaluate({
+      id: "saved-custom-deny",
+      path: "command",
+      action: "execute_command",
+      params: { command: "blockedbin --danger" },
+      risk: "low",
+      sessionId: "test-session",
+    });
+    assert.equal(result.decision, "deny");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("custom profiles resolve a risk matrix from their privacy profile", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-risk-"));
+  process.env.BROWSER_CONTROL_HOME = home;
+
+  try {
+    saveCustomProfile({
+      ...TRUSTED_PROFILE,
+      name: "strict_custom",
+      privacyPolicy: {
+        ...TRUSTED_PROFILE.privacyPolicy,
+        profile: "strict",
+      },
+    });
+
+    const policyEngine = new DefaultPolicyEngine({
+      profileName: "strict_custom",
+      logger: new Logger({ component: "test", level: "info" }),
+    });
+
+    const result = policyEngine.evaluate({
+      id: "custom-risk-matrix",
+      path: "command",
+      action: "execute_command",
+      params: { command: "echo ok" },
+      risk: "moderate",
+      sessionId: "test-session",
+    });
+
+    assert.equal(result.profile, "strict_custom");
+    assert.equal(result.decision, "require_confirmation");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("throws error when setting unknown profile", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
   const policyEngine = new DefaultPolicyEngine({
@@ -223,6 +348,7 @@ test("denies commands in the denied list", () => {
   assert.strictEqual(result.decision, "deny");
   assert.strictEqual(result.matchedRule, "deniedCommands");
 });
+
 test("denies commands in the denied list after shell operators", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
   const policyEngine = new DefaultPolicyEngine({
@@ -260,6 +386,7 @@ test("requires confirmation for commands in the confirmation list", () => {
   assert.strictEqual(result.decision, "require_confirmation");
   assert.strictEqual(result.matchedRule, "requireConfirmationCommands");
 });
+
 test("requires confirmation for confirmation-listed commands after shell operators", () => {
   const mockLogger = new Logger({ component: "test", level: "info" });
   const policyEngine = new DefaultPolicyEngine({

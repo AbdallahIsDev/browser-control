@@ -24,7 +24,7 @@ import type {
 } from "./types";
 import fs from "node:fs";
 import path from "node:path";
-import { getBuiltInProfile, getRiskDecisionMatrix } from "./profiles";
+import { getBuiltInProfile, getProfile, getRiskDecisionMatrix } from "./profiles";
 import { Logger } from "../shared/logger";
 
 // ─── Policy Evaluation Context ───────────────────────────────────────────
@@ -40,8 +40,9 @@ export interface PolicyEngineOptions {
 // ─── Policy Engine Implementation ───────────────────────────────────────
 
 export class DefaultPolicyEngine implements PolicyEngine {
-  private profile: PolicyProfile;
-  private profileName: string;
+  private profile!: PolicyProfile;
+  private profileName!: string;
+  private riskProfileName!: "safe" | "balanced" | "trusted";
   private confirmationHandler: ConfirmationHandler | null;
   private auditEnabled: boolean;
   private auditHandler?: (entry: PolicyAuditEntry) => void;
@@ -54,21 +55,17 @@ export class DefaultPolicyEngine implements PolicyEngine {
     this.confirmationHandler = null;
 
     if (options.customProfile) {
-      this.profile = options.customProfile;
-      this.profileName = options.customProfile.name;
+      this.applyProfile(options.customProfile, options.customProfile.name);
     } else if (options.profileName) {
-      const builtIn = getBuiltInProfile(options.profileName);
-      if (!builtIn) {
+      const profile = getProfile(options.profileName);
+      if (!profile) {
         this.logger.warn(`Profile "${options.profileName}" not found, degrading to "safe" for security`);
-        this.profile = getBuiltInProfile("safe")!;
-        this.profileName = "safe";
+        this.applyProfile(getBuiltInProfile("safe")!, "safe");
       } else {
-        this.profile = builtIn;
-        this.profileName = options.profileName;
+        this.applyProfile(profile, options.profileName);
       }
     } else {
-      this.profile = getBuiltInProfile("balanced")!;
-      this.profileName = "balanced";
+      this.applyProfile(getBuiltInProfile("balanced")!, "balanced");
     }
 
     this.logger.info(`Policy engine initialized with profile: ${this.profileName}`);
@@ -85,12 +82,11 @@ export class DefaultPolicyEngine implements PolicyEngine {
    * Set a new profile by name.
    */
   setProfile(profileName: string): void {
-    const profile = getBuiltInProfile(profileName);
+    const profile = getProfile(profileName);
     if (!profile) {
       throw new Error(`Profile "${profileName}" not found`);
     }
-    this.profile = profile;
-    this.profileName = profileName;
+    this.applyProfile(profile, profileName);
     this.logger.info(`Policy profile changed to: ${profileName}`);
   }
 
@@ -98,9 +94,32 @@ export class DefaultPolicyEngine implements PolicyEngine {
    * Set a custom profile.
    */
   setCustomProfile(profile: PolicyProfile): void {
-    this.profile = profile;
-    this.profileName = profile.name;
+    this.applyProfile(profile, profile.name);
     this.logger.info(`Custom policy profile set: ${profile.name}`);
+  }
+
+  private applyProfile(profile: PolicyProfile, profileName: string): void {
+    this.profile = profile;
+    this.profileName = profileName;
+    this.riskProfileName = this.resolveRiskProfileName(profile, profileName);
+  }
+
+  private resolveRiskProfileName(
+    profile: PolicyProfile,
+    profileName: string,
+  ): "safe" | "balanced" | "trusted" {
+    if (profileName === "safe" || profileName === "balanced" || profileName === "trusted") {
+      return profileName;
+    }
+    switch (profile.privacyPolicy.profile) {
+      case "strict":
+        return "safe";
+      case "audit":
+        return "trusted";
+      case "balanced":
+      default:
+        return "balanced";
+    }
   }
 
   /**
@@ -128,7 +147,7 @@ export class DefaultPolicyEngine implements PolicyEngine {
    * Evaluate a RoutedStep against the active policy profile.
    */
   evaluate(step: RoutedStep, context: ExecutionContext = {}): PolicyEvaluationResult {
-    const matrix = getRiskDecisionMatrix(this.profileName);
+    const matrix = getRiskDecisionMatrix(this.riskProfileName);
     if (!matrix) {
       this.logger.error(`No risk decision matrix found for profile: ${this.profileName}`);
       return {
