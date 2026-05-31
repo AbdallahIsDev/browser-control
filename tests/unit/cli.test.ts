@@ -77,7 +77,7 @@ test("session create warns when using trusted policy in human output", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-trusted-warn-"));
   const dataHome = path.join(cwd, "data");
   try {
-    const result = runCli(["session", "create", "trusted-warn", "--policy=trusted"], {
+    const result = runCli(["session", "create", "trusted-warn", "--policy=trusted", "--yes"], {
       cwd,
       env: { BROWSER_CONTROL_HOME: dataHome },
     });
@@ -92,12 +92,31 @@ test("session create warns when using trusted policy in human output", () => {
   }
 });
 
+test("session create requires confirmation before trusted policy escalation", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-trusted-deny-"));
+  const dataHome = path.join(cwd, "data");
+  try {
+    const result = runCli(["session", "create", "trusted-deny", "--policy=trusted"], {
+      cwd,
+      env: { BROWSER_CONTROL_HOME: dataHome },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /Policy profile "trusted" is less restrictive than default "balanced"/,
+    );
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("session create suppresses trusted policy warning in json output", () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-trusted-json-"));
   const dataHome = path.join(cwd, "data");
   try {
     const result = runCli(
-      ["session", "create", "trusted-json", "--policy=trusted", "--json"],
+      ["session", "create", "trusted-json", "--policy=trusted", "--yes", "--json"],
       {
         cwd,
         env: { BROWSER_CONTROL_HOME: dataHome },
@@ -1231,7 +1250,10 @@ test("formatActionResult produces correct JSON shape for term exec", async () =>
 
   const store = new MemoryStore({ filename: ":memory:" });
   const sm = new SessionManager({ memoryStore: store });
-  await sm.create("fmt-test", { policyProfile: "trusted" });
+  await sm.create("fmt-test", {
+    policyProfile: "trusted",
+    policyProfileEscalationConfirmed: true,
+  });
   const actions = new TerminalActions({ sessionManager: sm });
 
   const result = await actions.exec({ command: "echo format-test", timeoutMs: 5000 });
@@ -1260,7 +1282,10 @@ test("formatActionResult produces correct JSON shape for fs read", async () => {
 
   const store = new MemoryStore({ filename: ":memory:" });
   const sm = new SessionManager({ memoryStore: store });
-  await sm.create("fmt-fs-test", { policyProfile: "trusted" });
+  await sm.create("fmt-fs-test", {
+    policyProfile: "trusted",
+    policyProfileEscalationConfirmed: true,
+  });
   const actions = new FsActions({ sessionManager: sm });
 
   const session = sm.getActiveSession();
@@ -1292,7 +1317,10 @@ test("formatActionResult produces correct JSON shape for term list", async () =>
 
   const store = new MemoryStore({ filename: ":memory:" });
   const sm = new SessionManager({ memoryStore: store });
-  await sm.create("fmt-list-test", { policyProfile: "trusted" });
+  await sm.create("fmt-list-test", {
+    policyProfile: "trusted",
+    policyProfileEscalationConfirmed: true,
+  });
   const actions = new TerminalActions({ sessionManager: sm });
 
   const result = await actions.list();

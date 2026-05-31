@@ -2534,7 +2534,10 @@ describe("BrowserActions", () => {
 					memoryStore: isolatedStore,
 					browserManager: manager,
 				});
-				await sm.create("test", { policyProfile: "trusted" });
+				await sm.create("test", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
 				const actions = new BrowserActions({ sessionManager: sm });
 				const sessionId = sm.getActiveSession()?.id;
 				assert.ok(sessionId);
@@ -2582,7 +2585,10 @@ describe("BrowserActions", () => {
 					memoryStore: isolatedStore,
 					browserManager: manager,
 				});
-				await sm.create("test", { policyProfile: "trusted" });
+				await sm.create("test", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
 				const actions = new BrowserActions({ sessionManager: sm });
 
 				await (
@@ -2626,7 +2632,10 @@ describe("BrowserActions", () => {
 					memoryStore: isolatedStore,
 					browserManager: manager,
 				});
-				await sm.create("test", { policyProfile: "trusted" });
+				await sm.create("test", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
 				const actions = new BrowserActions({ sessionManager: sm });
 				const sessionId = sm.getActiveSession()?.id;
 				assert.ok(sessionId);
@@ -3913,6 +3922,7 @@ describe("BrowserActions", () => {
 				});
 				await sm.create("drop-test", {
 					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
 					workingDirectory: allowedRoot,
 				});
 				const actions = new BrowserActions({ sessionManager: sm });

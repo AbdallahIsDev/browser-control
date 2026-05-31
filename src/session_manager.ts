@@ -19,12 +19,14 @@ import { WebSocket } from "ws";
 import { BrowserConnectionManager } from "./browser/connection";
 import { DefaultPolicyEngine } from "./policy/engine";
 import { defaultRouter, type ExecutionRouter } from "./policy/execution_router";
+import { getProfile } from "./policy/profiles";
 import type {
 	ConfirmationHandler,
 	ExecutionContext,
 	ExecutionPath,
 	PolicyDecision,
 	PolicyEvaluationResult,
+	PolicyProfile,
 	PolicyTaskIntent,
 	RiskLevel,
 	RoutedStep,
@@ -47,6 +49,11 @@ const log = logger.withComponent("session_manager");
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_MAX_SESSIONS = 50;
 const DEFAULT_SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const BUILT_IN_PROFILE_RANK: Record<string, number> = {
+	safe: 0,
+	balanced: 1,
+	trusted: 2,
+};
 
 function readPositiveIntegerEnv(name: string, fallback: number): number {
 	const raw = process.env[name];
@@ -60,6 +67,65 @@ function readNonNegativeIntegerEnv(name: string, fallback: number): number {
 	if (!raw) return fallback;
 	const parsed = Number(raw);
 	return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function profileAllowsTrustedCapabilities(profile: PolicyProfile): boolean {
+	return (
+		profile.browserPolicy.credentialSubmissionAllowed ||
+		!profile.browserPolicy.automationOnlyInExplicitSessions ||
+		profile.browserPolicy.dialogHandling === "auto_accept" ||
+		profile.lowLevelPolicy.rawCdpAllowed ||
+		profile.lowLevelPolicy.jsEvalAllowed ||
+		profile.lowLevelPolicy.networkInterceptionAllowed ||
+		profile.lowLevelPolicy.cookieExportImportAllowed ||
+		profile.lowLevelPolicy.coordinateActionsAllowed ||
+		profile.credentialPolicy.secretUseConfirmThreshold === "none"
+	);
+}
+
+function policyProfilePrivilegeRank(profileName: string): number | null {
+	const builtInRank = BUILT_IN_PROFILE_RANK[profileName];
+	if (builtInRank !== undefined) {
+		return builtInRank;
+	}
+
+	const profile = getProfile(profileName);
+	if (!profile) {
+		return null;
+	}
+
+	if (profileAllowsTrustedCapabilities(profile)) {
+		return BUILT_IN_PROFILE_RANK.trusted;
+	}
+
+	if (
+		profile.privacyPolicy.profile === "audit" ||
+		profile.filesystemPolicy.recursiveDeleteDefaultBehavior === "require_confirmation" ||
+		profile.browserPolicy.clipboardAllowed ||
+		profile.browserPolicy.fileUploadAllowed ||
+		profile.browserPolicy.fileDownloadAllowed ||
+		profile.lowLevelPolicy.performanceTracesAllowed ||
+		profile.credentialPolicy.secretAutoTypeAllowed ||
+		profile.credentialPolicy.secretAutoPasteAllowed ||
+		profile.credentialPolicy.secretUseConfirmThreshold === "cross-site"
+	) {
+		return BUILT_IN_PROFILE_RANK.balanced;
+	}
+
+	return BUILT_IN_PROFILE_RANK.safe;
+}
+
+function isPolicyProfileLessRestrictive(
+	requestedProfile: string,
+	baselineProfile: string,
+): boolean {
+	if (requestedProfile === baselineProfile) {
+		return false;
+	}
+
+	const requestedRank = policyProfilePrivilegeRank(requestedProfile);
+	const baselineRank = policyProfilePrivilegeRank(baselineProfile);
+	return requestedRank !== null && baselineRank !== null && requestedRank > baselineRank;
 }
 
 // ── Session State ──────────────────────────────────────────────────────
@@ -753,6 +819,8 @@ export class SessionManager {
 	private readonly executionRouter: ExecutionRouter;
 	private readonly browserManager: BrowserConnectionManager;
 	private readonly terminalManager: TerminalSessionManager;
+	private readonly defaultPolicyProfile: string;
+	private readonly maxPolicyProfile?: string;
 	private readonly sessionIdleTimeoutMs: number;
 	private readonly maxSessions: number;
 	private readonly sessionSweepIntervalMs: number;
@@ -768,11 +836,19 @@ export class SessionManager {
 			sessionIdleTimeoutMs?: number;
 			maxSessions?: number;
 			sessionSweepIntervalMs?: number;
+			defaultPolicyProfile?: string;
+			maxPolicyProfile?: string;
 		} = {},
 	) {
 		const config = loadConfig({ validate: false });
 		this.memoryStore = options.memoryStore ?? new MemoryStore();
 		this.ownsMemoryStore = !options.memoryStore;
+		this.defaultPolicyProfile =
+			options.defaultPolicyProfile ??
+			options.policyEngine?.getActiveProfile() ??
+			config.policyProfile;
+		this.maxPolicyProfile =
+			options.maxPolicyProfile ?? process.env.BROWSER_CONTROL_MAX_POLICY_PROFILE;
 		this.sessionIdleTimeoutMs =
 			options.sessionIdleTimeoutMs ??
 			readPositiveIntegerEnv(
@@ -793,7 +869,7 @@ export class SessionManager {
 			);
 		this.policyEngine =
 			options.policyEngine ??
-			new DefaultPolicyEngine({ profileName: config.policyProfile });
+			new DefaultPolicyEngine({ profileName: this.defaultPolicyProfile });
 		this.executionRouter = defaultRouter;
 		this.browserManager =
 			options.browserManager ??
@@ -829,43 +905,83 @@ export class SessionManager {
 		options: {
 			policyProfile?: string;
 			workingDirectory?: string;
+			policyProfileEscalationConfirmed?: boolean;
 		} = {},
 	): Promise<ActionResult<SessionState>> {
 		const sessionId = crypto.randomUUID();
-		const config = loadConfig({ validate: false });
-		const policyProfile = options.policyProfile ?? config.policyProfile;
+		const policyProfile = options.policyProfile ?? this.defaultPolicyProfile;
 
 		// Validate the policy profile — save/restore so that creating a
 		// non-active session doesn't permanently mutate the engine state.
 		const previousProfile = this.policyEngine.getActiveProfile();
-		try {
-			this.policyEngine.setProfile(policyProfile);
-		} catch {
-			// Restore before returning so the engine isn't left in a bad state
+		const restorePolicyEngineAfterValidation = () => {
+			if (this.activeSessionId) {
+				const activeState = this.sessions.get(this.activeSessionId);
+				if (activeState) {
+					try {
+						this.policyEngine.setProfile(activeState.policyProfile);
+					} catch {
+						/* best-effort */
+					}
+					return;
+				}
+			}
 			try {
 				this.policyEngine.setProfile(previousProfile);
 			} catch {
 				/* best-effort */
 			}
+		};
+		try {
+			this.policyEngine.setProfile(policyProfile);
+		} catch {
+			// Restore before returning so the engine isn't left in a bad state
+			restorePolicyEngineAfterValidation();
 			return failureResult(`Invalid policy profile: ${policyProfile}`, {
 				path: "a11y",
 				sessionId,
 			});
 		}
+
+		if (
+			this.maxPolicyProfile &&
+			isPolicyProfileLessRestrictive(policyProfile, this.maxPolicyProfile)
+		) {
+			restorePolicyEngineAfterValidation();
+			return failureResult(
+				`Policy profile "${policyProfile}" exceeds maxPolicyProfile "${this.maxPolicyProfile}"`,
+				{
+					path: "a11y",
+					sessionId,
+					policyDecision: "deny",
+					risk: "high",
+				},
+			);
+		}
+
+		const profileEscalation = isPolicyProfileLessRestrictive(
+			policyProfile,
+			this.defaultPolicyProfile,
+		);
+		if (profileEscalation && !options.policyProfileEscalationConfirmed) {
+			restorePolicyEngineAfterValidation();
+			return failureResult(
+				`Policy profile "${policyProfile}" is less restrictive than default "${this.defaultPolicyProfile}"; pass --yes or policyProfileEscalationConfirmed to confirm.`,
+				{
+					path: "a11y",
+					sessionId,
+					policyDecision: "deny",
+					risk: "high",
+				},
+			);
+		}
+
 		// Restore: evaluateAction() handles per-eval profile switching; the
 		// engine's "resting" profile should reflect whichever session is active.
 		// Since this new session may not become active (if one already exists),
 		// we restore to avoid leaking profile state.
 		if (this.activeSessionId) {
-			// An active session already exists — restore its profile
-			const activeState = this.sessions.get(this.activeSessionId);
-			if (activeState) {
-				try {
-					this.policyEngine.setProfile(activeState.policyProfile);
-				} catch {
-					/* best-effort */
-				}
-			}
+			restorePolicyEngineAfterValidation();
 		} // else: this is the first session, it will become active, so leave the engine on its profile
 
 		const state: SessionState = {
@@ -884,6 +1000,13 @@ export class SessionManager {
 			lastActivityAt: new Date().toISOString(),
 			auditIds: [],
 		};
+		const auditId = this.recordSessionCreateAudit(state, {
+			defaultPolicyProfile: this.defaultPolicyProfile,
+			maxPolicyProfile: this.maxPolicyProfile,
+			profileEscalation,
+			profileEscalationConfirmed:
+				profileEscalation && options.policyProfileEscalationConfirmed === true,
+		});
 		state.runtimeDir = ensureStructuredSessionRuntimeDir({
 				id: state.id,
 				name: state.name,
@@ -915,8 +1038,36 @@ export class SessionManager {
 		return successResult(state, {
 			path: "a11y",
 			sessionId,
-			policyDecision: "allow",
+			auditId,
+			policyDecision: "allow_with_audit",
 		});
+	}
+
+	private recordSessionCreateAudit(
+		state: SessionState,
+		options: {
+			defaultPolicyProfile: string;
+			maxPolicyProfile?: string;
+			profileEscalation: boolean;
+			profileEscalationConfirmed: boolean;
+		},
+	): string {
+		const auditId = `session-create-${state.id}`;
+		const record = {
+			id: auditId,
+			type: "session.create",
+			sessionId: state.id,
+			name: state.name,
+			policyProfile: state.policyProfile,
+			defaultPolicyProfile: options.defaultPolicyProfile,
+			...(options.maxPolicyProfile ? { maxPolicyProfile: options.maxPolicyProfile } : {}),
+			profileEscalation: options.profileEscalation,
+			profileEscalationConfirmed: options.profileEscalationConfirmed,
+			createdAt: state.createdAt,
+		};
+		state.auditIds.push(auditId);
+		this.memoryStore.set(`audit:session:create:${auditId}`, record);
+		return auditId;
 	}
 
 	/**

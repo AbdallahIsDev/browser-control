@@ -395,7 +395,11 @@ export interface ServiceNamespace {
 export interface SessionNamespace {
 	create(
 		name: string,
-		options?: { policyProfile?: string; workingDirectory?: string },
+		options?: {
+			policyProfile?: string;
+			workingDirectory?: string;
+			policyProfileEscalationConfirmed?: boolean;
+		},
 	): Promise<ActionResult<SessionState>>;
 	list(): ActionResult<SessionListEntry[]>;
 	use(nameOrId: string): ActionResult<SessionState>;

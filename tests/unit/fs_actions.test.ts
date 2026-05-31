@@ -32,7 +32,10 @@ describe("FsActions", () => {
     process.env.BROWSER_CONTROL_HOME = dataHome;
     store = new MemoryStore({ filename: ":memory:" });
     sessionManager = new SessionManager({ memoryStore: store, browserManager: createUnavailableBrowserManager() });
-    await sessionManager.create("fs-test", { policyProfile: "trusted" });
+    await sessionManager.create("fs-test", {
+      policyProfile: "trusted",
+      policyProfileEscalationConfirmed: true,
+    });
     fsActions = new FsActions({ sessionManager });
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-test-"));
   });
@@ -138,6 +141,7 @@ describe("FsActions", () => {
       const workDir = fs.mkdtempSync(path.join(tempDir, "workspace-"));
       const session = await sessionManager.create("fs-workdir-write", {
         policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
         workingDirectory: workDir,
       });
       sessionManager.use(session.data!.id);
@@ -157,6 +161,7 @@ describe("FsActions", () => {
       const outsideDir = fs.mkdtempSync(path.join(tempDir, "outside-"));
       const session = await sessionManager.create("fs-workdir-block", {
         policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
         workingDirectory: workDir,
       });
       sessionManager.use(session.data!.id);

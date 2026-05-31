@@ -830,7 +830,7 @@ Browser Commands:
 
 Session:
   session list                                                       List sessions
-  session create <name> [--policy=balanced]                         Create a new session
+  session create <name> [--policy=balanced] [--yes]                  Create a new session
   session use <name-or-id>                                          Set the active session
   session status                                                     Show active session status
   session destroy <name-or-id>                                       Destroy a session and release owned resources
@@ -5996,6 +5996,8 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 				result = await _sessionManager.create(name, {
 					policyProfile: flags.policy,
 					workingDirectory: flags.cwd,
+					policyProfileEscalationConfirmed:
+						flags.yes === "true" || flags.confirm === "ALLOW_POLICY_PROFILE_ESCALATION",
 				});
 				break;
 			}

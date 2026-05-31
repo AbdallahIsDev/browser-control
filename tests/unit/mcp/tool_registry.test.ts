@@ -35,7 +35,10 @@ describe("MCP Tool Registry", () => {
     resetCredentialVault();
     api = createBrowserControl({ memoryStore: store });
     // Create a session so tools have an active session to work with
-    const session = await api.session.create("test-session", { policyProfile: "trusted" });
+    const session = await api.session.create("test-session", {
+      policyProfile: "trusted",
+      policyProfileEscalationConfirmed: true,
+    });
     sessionRuntimeDir = session.data?.runtimeDir ?? tempDir;
   });
 
@@ -375,6 +378,26 @@ describe("MCP Tool Registry", () => {
       assert.equal(result.success, true);
       assert.ok(result.data);
       assert.equal((result.data as Record<string, unknown>).name, "mcp-test");
+    });
+
+    it("bc_session_create requires explicit confirmation for trusted profile escalation", async () => {
+      const tools = buildToolRegistry(api);
+      const createTool = tools.find((t) => t.name === "bc_session_create")!;
+
+      const denied = await createTool.handler({
+        name: "mcp-trusted-denied",
+        policyProfile: "trusted",
+      });
+      assert.equal(denied.success, false);
+      assert.equal(denied.policyDecision, "deny");
+
+      const confirmed = await createTool.handler({
+        name: "mcp-trusted-confirmed",
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
+      assert.equal(confirmed.success, true, confirmed.error);
+      assert.equal((confirmed.data as Record<string, unknown>).policyProfile, "trusted");
     });
 
     it("bc_fs_read reads a file", async () => {

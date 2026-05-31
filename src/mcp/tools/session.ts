@@ -25,11 +25,13 @@ export function buildSessionTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         name: { type: "string", description: "Human-readable session name (e.g., 'trading-session-1')." },
         policyProfile: { type: "string", description: "Policy profile: 'safe', 'balanced', or 'trusted'. Default: from config.", default: "balanced" },
+        policyProfileEscalationConfirmed: { type: "boolean", description: "Required when creating a session with a less restrictive policy profile than the configured default.", default: false },
         workingDirectory: { type: "string", description: "Filesystem working directory for this session. Default: current working directory." },
       }, ["name"]),
       handler: async (params) => {
         const result = await api.session.create(params.name as string, {
           policyProfile: params.policyProfile as string | undefined,
+          policyProfileEscalationConfirmed: params.policyProfileEscalationConfirmed === true,
           workingDirectory: params.workingDirectory as string | undefined,
         });
         if (result.success && result.data?.id) {

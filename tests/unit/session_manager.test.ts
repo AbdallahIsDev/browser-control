@@ -71,6 +71,58 @@ describe("SessionManager", () => {
       assert.equal(result.data!.policyProfile, "safe");
     });
 
+    it("denies less restrictive policy profile without explicit confirmation", async () => {
+      const result = await manager.create("trusted-denied", {
+        policyProfile: "trusted",
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.policyDecision, "deny");
+      assert.match(
+        result.error ?? "",
+        /Policy profile "trusted" is less restrictive than default "balanced"/,
+      );
+    });
+
+    it("allows confirmed policy profile escalation and audits session creation", async () => {
+      const result = await manager.create("trusted-confirmed", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
+
+      assert.equal(result.success, true, result.error);
+      assert.equal(result.data!.policyProfile, "trusted");
+      assert.ok(result.auditId);
+      assert.ok(result.data!.auditIds.includes(result.auditId!));
+
+      const audit = store.get<Record<string, unknown>>(`audit:session:create:${result.auditId}`);
+      assert.equal(audit?.type, "session.create");
+      assert.equal(audit?.policyProfile, "trusted");
+      assert.equal(audit?.defaultPolicyProfile, "balanced");
+      assert.equal(audit?.profileEscalation, true);
+      assert.equal(audit?.profileEscalationConfirmed, true);
+    });
+
+    it("enforces maxPolicyProfile cap even with confirmation", async () => {
+      const cappedStore = new MemoryStore({ filename: ":memory:" });
+      const cappedManager = new SessionManager({
+        memoryStore: cappedStore,
+        maxPolicyProfile: "balanced",
+      });
+
+      const result = await cappedManager.create("trusted-capped", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
+
+      assert.equal(result.success, false);
+      assert.equal(result.policyDecision, "deny");
+      assert.match(result.error ?? "", /exceeds maxPolicyProfile "balanced"/);
+
+      cappedManager.close();
+      cappedStore.close();
+    });
+
     it("uses provided working directory", async () => {
       const result = await manager.create("cwd-session", {
         workingDirectory: "/tmp/test",
@@ -404,7 +456,10 @@ describe("SessionManager", () => {
     });
 
     it("status() by name works across separate manager instances", async () => {
-      await manager.create("status-persist", { policyProfile: "trusted" });
+      await manager.create("status-persist", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
 
       const manager2 = new SessionManager({ memoryStore: store });
       const status = manager2.status("status-persist");
@@ -436,7 +491,10 @@ describe("SessionManager", () => {
     it("trusted profile + fs_write returns real decision (allow_with_audit or allow)", async () => {
       const trustedStore = new MemoryStore({ filename: ":memory:" });
       const trustedManager = new SessionManager({ memoryStore: trustedStore });
-      await trustedManager.create("trusted-audit", { policyProfile: "trusted" });
+      await trustedManager.create("trusted-audit", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
 
       const result = trustedManager.evaluateAction("fs_write", { path: "/tmp/test.txt" });
 
@@ -514,7 +572,10 @@ describe("SessionManager", () => {
       // Now try with a trusted session
       const trustedStore = new MemoryStore({ filename: ":memory:" });
       const trustedManager = new SessionManager({ memoryStore: trustedStore });
-      await trustedManager.create("trusted-sess", { policyProfile: "trusted" });
+      await trustedManager.create("trusted-sess", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
 
       // fs_write is high risk → trusted profile allows high risk with audit
       const trustedResult = trustedManager.evaluateAction("fs_write", { path: "/tmp/test.txt" });
@@ -533,7 +594,10 @@ describe("SessionManager", () => {
       const sharedManager = new SessionManager({ memoryStore: sharedStore });
 
       await sharedManager.create("safe-sess", { policyProfile: "safe" });
-      await sharedManager.create("trusted-sess", { policyProfile: "trusted" });
+      await sharedManager.create("trusted-sess", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
 
       // Evaluate cdp_execute (high risk, low_level path) under safe session
       const safeResult = sharedManager.evaluateAction("cdp_execute", { expression: "document.cookie" }, "safe-sess");
@@ -560,7 +624,10 @@ describe("SessionManager", () => {
       const manager = new SessionManager({ memoryStore: store });
 
       // Create a trusted session — this sets the engine to "trusted"
-      await manager.create("trusted-first", { policyProfile: "trusted" });
+      await manager.create("trusted-first", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
 
       // The engine's active profile should reflect the last create
       const profileAfterCreate = manager.getPolicyEngine().getActiveProfile();
@@ -602,7 +669,10 @@ describe("SessionManager", () => {
       const profileAfterA = leakManager.getPolicyEngine().getActiveProfile();
 
       // Create session B with "trusted" profile — does NOT become active
-      await leakManager.create("session-b", { policyProfile: "trusted" });
+      await leakManager.create("session-b", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
       const profileAfterB = leakManager.getPolicyEngine().getActiveProfile();
 
       // The engine should still reflect the active session's profile ("safe"),
@@ -618,7 +688,10 @@ describe("SessionManager", () => {
       const syncStore = new MemoryStore({ filename: ":memory:" });
       const syncManager = new SessionManager({ memoryStore: syncStore });
 
-      await syncManager.create("trusted-first", { policyProfile: "trusted" });
+      await syncManager.create("trusted-first", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
       await syncManager.create("safe-second", { policyProfile: "safe" });
       syncManager.use("safe-second");
 
@@ -636,7 +709,10 @@ describe("SessionManager", () => {
       const dbPath = path.join(os.tmpdir(), `bc-session-profile-${Date.now()}-${Math.random()}.sqlite`);
       const firstStore = new MemoryStore({ filename: dbPath });
       const firstManager = new SessionManager({ memoryStore: firstStore });
-      await firstManager.create("trusted-persisted", { policyProfile: "trusted" });
+      await firstManager.create("trusted-persisted", {
+        policyProfile: "trusted",
+        policyProfileEscalationConfirmed: true,
+      });
       firstManager.close();
       firstStore.close();
 
