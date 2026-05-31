@@ -233,10 +233,12 @@ export {
 } from "./policy/execution_router";
 
 export {
+  POLICY_AUDIT_CLEAR_CONFIRMATION,
   PolicyAuditLogger,
   getDefaultAuditLogger,
   resetDefaultAuditLogger,
 } from "./policy/audit";
+export type { PolicyAuditClearOptions } from "./policy/audit";
 
 // Section 6: A11y Snapshot + Ref Layer
 export {

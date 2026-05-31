@@ -2670,10 +2670,24 @@
     },
     {
       "declarations": [
+        "src/policy/audit.ts"
+      ],
+      "kind": "value",
+      "name": "POLICY_AUDIT_CLEAR_CONFIRMATION"
+    },
+    {
+      "declarations": [
         "src/session_manager.ts"
       ],
       "kind": "type",
       "name": "PolicyAllowResult"
+    },
+    {
+      "declarations": [
+        "src/policy/audit.ts"
+      ],
+      "kind": "type",
+      "name": "PolicyAuditClearOptions"
     },
     {
       "declarations": [

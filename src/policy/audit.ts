@@ -14,6 +14,7 @@
 import type { PolicyAuditEntry } from "./types";
 import { getReportsDir } from "../shared/paths";
 import { logger } from "../shared/logger";
+import crypto from "node:crypto";
 import fs from "fs";
 import path from "path";
 import { StringDecoder } from "string_decoder";
@@ -25,6 +26,14 @@ export interface AuditLoggerOptions {
   maxFileSizeBytes?: number;
   maxFiles?: number;
   enabled?: boolean;
+}
+
+export const POLICY_AUDIT_CLEAR_CONFIRMATION = "CLEAR_POLICY_AUDIT_LOGS";
+
+export interface PolicyAuditClearOptions {
+  confirm: typeof POLICY_AUDIT_CLEAR_CONFIRMATION;
+  actor?: "human" | "agent" | "system";
+  reason?: string;
 }
 
 // ─── Audit Logger Class ─────────────────────────────────────────────────
@@ -235,6 +244,34 @@ export class PolicyAuditLogger {
     }
   }
 
+  private async writeClearMarker(files: string[], options: PolicyAuditClearOptions): Promise<void> {
+    const deletedFiles = [];
+    for (const file of files) {
+      const filePath = path.join(this.auditDir, file);
+      const stat = await fs.promises.stat(filePath);
+      const content = await fs.promises.readFile(filePath);
+      deletedFiles.push({
+        name: file,
+        sizeBytes: stat.size,
+        sha256: crypto.createHash("sha256").update(content).digest("hex"),
+      });
+    }
+
+    const marker = {
+      timestamp: new Date().toISOString(),
+      action: "policy_audit_clear",
+      actor: options.actor ?? "system",
+      reason: options.reason,
+      deletedFiles,
+    };
+
+    await fs.promises.appendFile(
+      path.join(this.auditDir, "audit-clear-events.jsonl"),
+      `${JSON.stringify(marker)}\n`,
+      { encoding: "utf-8" },
+    );
+  }
+
   /**
    * Log a policy decision.
    */
@@ -376,17 +413,30 @@ export class PolicyAuditLogger {
   /**
    * Clear all audit logs.
    */
-  clear(): void {
+  clear(options: PolicyAuditClearOptions): void {
     if (!this.enabled) {
       return;
     }
 
+    if (options?.confirm !== POLICY_AUDIT_CLEAR_CONFIRMATION) {
+      throw new Error(`Policy audit clear requires confirm=${POLICY_AUDIT_CLEAR_CONFIRMATION}`);
+    }
+
+    this.pendingWrite = this.pendingWrite.then(
+      () => this.clearConfirmed(options),
+      () => this.clearConfirmed(options),
+    );
+  }
+
+  private async clearConfirmed(options: PolicyAuditClearOptions): Promise<void> {
     try {
       const files = fs.readdirSync(this.auditDir)
         .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"));
 
+      await this.writeClearMarker(files, options);
+
       for (const file of files) {
-        fs.unlinkSync(path.join(this.auditDir, file));
+        await fs.promises.unlink(path.join(this.auditDir, file));
       }
 
       this.currentFileSize = 0;

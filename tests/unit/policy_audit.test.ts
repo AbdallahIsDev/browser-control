@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PolicyAuditLogger } from "../../src/policy/audit";
+import { POLICY_AUDIT_CLEAR_CONFIRMATION, PolicyAuditLogger } from "../../src/policy/audit";
 import type { PolicyAuditEntry, PolicyDecision } from "../../src/policy/types";
 
 function makeEntry(overrides: Partial<PolicyAuditEntry> = {}): PolicyAuditEntry {
@@ -90,6 +90,48 @@ test("PolicyAuditLogger queries scan JSONL without full-file readFileSync", asyn
     assert.equal(logger.getAll(1).length, 1);
   } finally {
     fs.readFileSync = originalReadFileSync;
+    await logger.close();
+    fs.rmSync(auditDir, { recursive: true, force: true });
+  }
+});
+
+test("PolicyAuditLogger clear requires confirmation and preserves a clear marker", async () => {
+  const auditDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-audit-"));
+  const logger = new PolicyAuditLogger({ auditDir });
+
+  try {
+    logger.log(makeEntry({ sessionId: "clear-session" }));
+    await logger.flush();
+
+    const auditFileBefore = fs.readdirSync(auditDir).find((file) => file.startsWith("policy-audit-"));
+    assert.ok(auditFileBefore);
+    assert.throws(
+      () => (logger as unknown as { clear: () => void }).clear(),
+      /Policy audit clear requires confirm=CLEAR_POLICY_AUDIT_LOGS/u,
+    );
+    assert.ok(fs.existsSync(path.join(auditDir, auditFileBefore)));
+
+    logger.clear({
+      confirm: POLICY_AUDIT_CLEAR_CONFIRMATION,
+      actor: "human",
+      reason: "unit-test",
+    });
+    await logger.flush();
+
+    assert.deepEqual(
+      fs.readdirSync(auditDir).filter((file) => file.startsWith("policy-audit-")),
+      [],
+    );
+    const markerPath = path.join(auditDir, "audit-clear-events.jsonl");
+    assert.ok(fs.existsSync(markerPath));
+    const marker = JSON.parse(fs.readFileSync(markerPath, "utf8").trim());
+    assert.equal(marker.action, "policy_audit_clear");
+    assert.equal(marker.actor, "human");
+    assert.equal(marker.reason, "unit-test");
+    assert.equal(marker.deletedFiles.length, 1);
+    assert.equal(marker.deletedFiles[0].name, auditFileBefore);
+    assert.match(marker.deletedFiles[0].sha256, /^[a-f0-9]{64}$/u);
+  } finally {
     await logger.close();
     fs.rmSync(auditDir, { recursive: true, force: true });
   }
