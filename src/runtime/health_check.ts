@@ -42,6 +42,8 @@ interface HealthCheckOptions {
   skillCheck?: () => Promise<{ healthy: boolean; loaded: number; details?: string }>;
   /** Optional: check config/policy validity */
   policyCheck?: () => Promise<{ valid: boolean; details?: string }>;
+  /** Optional: injectable CDP readiness probe for tests and embedded runtimes. */
+  debugPortReady?: (port: number) => Promise<boolean>;
 }
 
 function evaluateCritical(rule: CriticalRule, env: NodeJS.ProcessEnv): boolean {
@@ -59,11 +61,16 @@ export class HealthCheck {
 
   private readonly checks: RegisteredCheck[] = [];
 
+  private readonly debugPortReady: (port: number) => Promise<boolean>;
+
+  private cdpProbeCache?: Map<number, Promise<boolean>>;
+
   constructor(options: HealthCheckOptions = {}) {
     this.env = options.env ?? process.env;
     this.cwd = options.cwd ?? process.cwd();
     this.port = options.port;
     this.memoryStore = options.memoryStore;
+    this.debugPortReady = options.debugPortReady ?? isDebugPortReady;
 
     for (const check of options.checks ?? []) {
       this.checks.push(check);
@@ -82,10 +89,21 @@ export class HealthCheck {
   }
 
   async checkCdpConnection(port = this.port ?? 9222): Promise<HealthCheckResult> {
-    const ready = await isDebugPortReady(port);
+    const ready = await this.getCdpReady(port);
     return ready
       ? { status: "pass", details: `CDP port ${port} is reachable.` }
       : { status: "fail", details: `CDP port ${port} is not reachable.` };
+  }
+
+  private getCdpReady(port: number): Promise<boolean> {
+    if (!this.cdpProbeCache) return this.debugPortReady(port);
+
+    const cached = this.cdpProbeCache.get(port);
+    if (cached) return cached;
+
+    const probe = this.debugPortReady(port);
+    this.cdpProbeCache.set(port, probe);
+    return probe;
   }
 
   async checkMemoryStore(): Promise<HealthCheckResult> {
@@ -207,7 +225,7 @@ export class HealthCheck {
       const metadata = JSON.parse(fs.readFileSync(debugPath, "utf8")) as { port?: number; wslBridge?: boolean };
       const port = metadata.port ?? 9222;
 
-      const ready = await isDebugPortReady(port);
+      const ready = await this.getCdpReady(port);
       if (!ready) {
         return { status: "warn", details: `Chrome debug port ${port} is not reachable.` };
       }
@@ -340,20 +358,26 @@ export class HealthCheck {
     const checkResults: HealthReport["checks"] = [];
     let criticalFailure = false;
     let hasWarningOrNonCriticalFailure = false;
+    const previousCdpProbeCache = this.cdpProbeCache;
+    this.cdpProbeCache = new Map();
 
-    for (const check of checksToRun) {
-      const result = await check.run();
-      checkResults.push({
-        name: check.name,
-        status: result.status,
-        ...(result.details ? { details: result.details } : {}),
-      });
+    try {
+      for (const check of checksToRun) {
+        const result = await check.run();
+        checkResults.push({
+          name: check.name,
+          status: result.status,
+          ...(result.details ? { details: result.details } : {}),
+        });
 
-      if (result.status === "fail" && evaluateCritical(check.critical, this.env)) {
-        criticalFailure = true;
-      } else if (result.status !== "pass") {
-        hasWarningOrNonCriticalFailure = true;
+        if (result.status === "fail" && evaluateCritical(check.critical, this.env)) {
+          criticalFailure = true;
+        } else if (result.status !== "pass") {
+          hasWarningOrNonCriticalFailure = true;
+        }
       }
+    } finally {
+      this.cdpProbeCache = previousCdpProbeCache;
     }
 
     return {

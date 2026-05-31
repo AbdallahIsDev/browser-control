@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { MemoryStore } from "../../src/memory_store";
 import { HealthCheck } from "../../src/health_check";
+import { ensureDataHome, getChromeDebugPath } from "../../src/shared/paths";
 
 test("HealthCheck runAll derives healthy, degraded, and unhealthy states", async () => {
   const healthy = new HealthCheck({
@@ -82,4 +86,40 @@ test("HealthCheck checkMemoryStore writes, reads, and cleans up a reserved key",
   assert.equal(result.status, "pass");
   assert.deepEqual(store.keys("health_check:"), []);
   store.close();
+});
+
+test("HealthCheck reuses CDP readiness probe results within one run", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-health-check-"));
+  const originalHome = process.env.BROWSER_CONTROL_HOME;
+  let probeCount = 0;
+  let healthCheck!: HealthCheck;
+
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    ensureDataHome();
+    fs.mkdirSync(path.dirname(getChromeDebugPath()), { recursive: true });
+    fs.writeFileSync(getChromeDebugPath(), JSON.stringify({ port: 9222 }));
+
+    healthCheck = new HealthCheck({
+      debugPortReady: async (port) => {
+        probeCount += 1;
+        assert.equal(port, 9222);
+        return true;
+      },
+      checks: [
+        { name: "cdpConnection", critical: false, run: async () => healthCheck.checkCdpConnection(9222) },
+        { name: "browserState", critical: false, run: async () => healthCheck.checkBrowserState() },
+      ],
+    });
+
+    const report = await healthCheck.runAll();
+
+    assert.equal(report.overall, "healthy");
+    assert.equal(probeCount, 1);
+    assert.deepEqual(report.checks.map((check) => check.status), ["pass", "pass"]);
+  } finally {
+    if (originalHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = originalHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
