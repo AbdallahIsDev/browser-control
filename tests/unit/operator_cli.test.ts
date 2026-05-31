@@ -899,6 +899,37 @@ test("unknown browser command lists implemented recovery commands", () => {
 	}
 });
 
+test("skill CLI surface is removed in favor of package commands", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"skill",
+				"list",
+				"--json",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /Unknown command: skill/);
+		assert.match(result.stdout, /package list \[--json\]/);
+		assert.doesNotMatch(result.stdout, /\nskill\s/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("top-level browser shortcuts keep the first user argument", () => {
 	const fill = parseArgs([
 		"node",
