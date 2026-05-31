@@ -88,6 +88,10 @@ export interface BrowserControlConfig {
   captchaTimeoutMs: number;
 
   // ── AI Agent / OpenRouter ──────────────────────────────────────
+  modelProvider: "openrouter" | "ollama" | "openai-compatible";
+  modelEndpoint: string | undefined;
+  modelApiKey: string | undefined;
+  modelName: string | undefined;
   openrouterApiKey: string | undefined;
   openrouterModel: string;
   openrouterBaseUrl: string;
@@ -814,6 +818,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   }
 
   // ── AI / OpenRouter ────────────────────────────────────────────
+  const modelProvider = effective.modelProvider as "openrouter" | "ollama" | "openai-compatible";
+  const modelEndpoint = effective.modelEndpoint as string | undefined;
+  const modelApiKey = effective.modelApiKey as string | undefined;
+  const modelName = effective.modelName as string | undefined;
   const openrouterApiKey = effective.openrouterApiKey as string | undefined;
   const openrouterModel = effective.openrouterModel as string;
   const openrouterBaseUrl = effective.openrouterBaseUrl as string;
@@ -894,6 +902,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     captchaApiKey,
     captchaTimeoutMs,
 
+    modelProvider,
+    modelEndpoint,
+    modelApiKey,
+    modelName,
     openrouterApiKey,
     openrouterModel,
     openrouterBaseUrl,

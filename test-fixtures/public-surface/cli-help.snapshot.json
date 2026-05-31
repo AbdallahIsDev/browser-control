@@ -256,11 +256,31 @@
           "description": "",
           "flags": [
             "browserless-api-key",
+            "model-provider"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--browserless-api-key=<key>] [--model-provider=openrouter|ollama|openai-compatible]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
+            "model-api-key",
+            "model-endpoint",
+            "model-name"
+          ],
+          "jsonSupport": false,
+          "syntax": "[--model-name=<name>] [--model-endpoint=<url>] [--model-api-key=<key>]"
+        },
+        {
+          "commandPath": [],
+          "description": "",
+          "flags": [
             "skip-browser-test",
             "skip-terminal-test"
           ],
           "jsonSupport": false,
-          "syntax": "[--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]"
+          "syntax": "[--skip-browser-test] [--skip-terminal-test]"
         },
         {
           "commandPath": [

@@ -756,7 +756,9 @@ Operator:
   setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]
         [--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]
         [--terminal-shell=pwsh] [--browserless-endpoint=<url>]
-        [--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]
+        [--browserless-api-key=<key>] [--model-provider=openrouter|ollama|openai-compatible]
+        [--model-name=<name>] [--model-endpoint=<url>] [--model-api-key=<key>]
+        [--skip-browser-test] [--skip-terminal-test]
                                                                       Create/update user config
   config list|get|set|env                                            Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
@@ -1024,6 +1026,14 @@ async function handleSetup(args: ParsedArgs): Promise<void> {
 		terminalShell: args.flags["terminal-shell"] ?? args.flags.shell,
 		browserlessEndpoint: args.flags["browserless-endpoint"],
 		browserlessApiKey: args.flags["browserless-api-key"],
+		modelProvider: args.flags["model-provider"] as
+			| "openrouter"
+			| "ollama"
+			| "openai-compatible"
+			| undefined,
+		modelName: args.flags["model-name"],
+		modelEndpoint: args.flags["model-endpoint"],
+		modelApiKey: args.flags["model-api-key"],
 		skipBrowserTest: args.flags["skip-browser-test"] === "true",
 		skipTerminalTest: args.flags["skip-terminal-test"] === "true",
 	});

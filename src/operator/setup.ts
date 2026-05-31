@@ -20,6 +20,10 @@ export interface SetupOptions {
   terminalShell?: string;
   browserlessEndpoint?: string;
   browserlessApiKey?: string;
+  modelProvider?: "openrouter" | "ollama" | "openai-compatible";
+  modelEndpoint?: string;
+  modelApiKey?: string;
+  modelName?: string;
   generateMcpConfig?: boolean;
   skipBrowserTest?: boolean;
   skipTerminalTest?: boolean;
@@ -41,20 +45,32 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   const changed: string[] = [];
   const skipped: string[] = [];
   const warnings: string[] = [];
+  const current = loadConfig({ env, validate: false });
 
-  let profile = options.profile ?? "balanced";
-  let browserMode = options.browserMode ?? "attach";
-  let chromeDebugPort = options.chromeDebugPort ?? 9222;
-  let chromeBindAddress = options.chromeBindAddress ?? "127.0.0.1";
+  let profile = options.profile ?? current.policyProfile ?? "balanced";
+  let browserMode = options.browserMode ?? current.browserMode ?? "attach";
+  let chromeDebugPort = options.chromeDebugPort ?? current.chromeDebugPort ?? 9222;
+  let chromeBindAddress = options.chromeBindAddress ?? current.chromeBindAddress ?? "127.0.0.1";
+  let modelProvider = options.modelProvider ?? current.modelProvider ?? "openrouter";
+  let modelName = options.modelName ?? current.modelName ?? current.openrouterModel ?? "";
+  let modelEndpoint = options.modelEndpoint ?? current.modelEndpoint ?? "";
+  let modelApiKey = options.modelApiKey ?? "";
 
   if (!nonInteractive) {
     profile = await ask("Policy profile: safe, balanced, trusted", profile);
     browserMode = await ask("Browser mode: managed or attach", browserMode) as "managed" | "attach";
     chromeDebugPort = Number(await ask("Chrome debug port", String(chromeDebugPort)));
     chromeBindAddress = await ask("Chrome bind address", chromeBindAddress);
+    modelProvider = ((await ask(
+      "AI model provider: openrouter, ollama, openai-compatible",
+      modelProvider,
+    )) as SetupOptions["modelProvider"]) ?? "openrouter";
+    modelName = await ask("AI model name; leave blank for provider default", modelName);
+    modelEndpoint = await ask("AI model endpoint URL; leave blank for provider default", modelEndpoint);
+    modelApiKey = await ask("AI model API key; leave blank to skip storing a key", "");
   }
 
-  ensureDataHomeAtPath(loadConfig({ env, validate: false }).dataHome);
+  ensureDataHomeAtPath(current.dataHome);
 
   const shell = options.terminalShell ?? (() => {
     try {
@@ -73,10 +89,14 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     ["terminalShell", shell],
     ["terminalCols", 80],
     ["terminalRows", 24],
+    ["modelProvider", modelProvider],
   ];
 
   if (options.browserlessEndpoint) writes.push(["browserlessEndpoint", options.browserlessEndpoint]);
   if (options.browserlessApiKey) writes.push(["browserlessApiKey", options.browserlessApiKey]);
+  if (modelName.trim()) writes.push(["modelName", modelName.trim()]);
+  if (modelEndpoint.trim()) writes.push(["modelEndpoint", modelEndpoint.trim()]);
+  if (modelApiKey.trim()) writes.push(["modelApiKey", modelApiKey.trim()]);
 
   let configPath = "";
   for (const [key, value] of writes) {

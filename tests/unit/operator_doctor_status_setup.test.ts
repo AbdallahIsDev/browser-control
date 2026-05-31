@@ -106,6 +106,10 @@ test("setup non-interactive creates config and never waits for prompts", async (
         profile: "balanced",
         skipBrowserTest: true,
         skipTerminalTest: true,
+        modelProvider: "openai-compatible",
+        modelEndpoint: "http://127.0.0.1:11434/v1",
+        modelName: "local-model",
+        modelApiKey: "setup-model-key",
       }),
       timeout,
     ]);
@@ -121,6 +125,10 @@ test("setup non-interactive creates config and never waits for prompts", async (
     assert.equal(userConfig.browserMode, "attach");
     assert.equal(userConfig.chromeDebugPort, 9222);
     assert.equal(userConfig.chromeBindAddress, "127.0.0.1");
+    assert.equal(userConfig.modelProvider, "openai-compatible");
+    assert.equal(userConfig.modelEndpoint, "http://127.0.0.1:11434/v1");
+    assert.equal(userConfig.modelName, "local-model");
+    assert.equal(userConfig.modelApiKey, "setup-model-key");
     assert.deepEqual(result.mcpConfigSnippet, {
       mcpServers: {
         "browser-control": {
