@@ -54,7 +54,6 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const DEFAULT_MAX_OUTPUT = 1024 * 1024; // 1MB
 const PROMPT_READY_TIMEOUT = 8000; // ms to wait for prompt after spawn/exec
-const _OUTPUT_POLL_INTERVAL = 50; // ms between output reads during exec
 
 // ── PTY Session Implementation ───────────────────────────────────────
 
