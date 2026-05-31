@@ -602,6 +602,27 @@ test("web app server redacts status response secrets", async (t) => {
 	assert.match(body, /REDACTED/);
 });
 
+test("web app server reports uncaught API failures as redacted 500", async (t) => {
+	const api = mockApi();
+	api.status = async () => {
+		throw new Error("database exploded with password=super-secret");
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/api/status`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(response.status, 500);
+	const body = await response.text();
+	assert.match(body, /"code":"internal_error"/u);
+	assert.match(body, /"error":"Internal server error\."/u);
+	assert.doesNotMatch(body, /super-secret/u);
+	assert.doesNotMatch(body, /database exploded/u);
+});
+
 test("web app server requires auth for healthz", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());
@@ -1486,8 +1507,10 @@ test("web app server reports real debug bundle listing failures", async (t) => {
 		headers: { authorization: "Bearer test-token" },
 	});
 
-	assert.equal(listed.status, 400);
-	assert.match(await listed.text(), /debug bundle store unreadable/u);
+	assert.equal(listed.status, 500);
+	const body = await listed.text();
+	assert.match(body, /"code":"internal_error"/u);
+	assert.doesNotMatch(body, /debug bundle store unreadable/u);
 });
 
 test("web app server exposes service proxy status and controls", async (t) => {

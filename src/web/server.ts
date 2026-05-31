@@ -606,9 +606,14 @@ function text(
 	response.end(body);
 }
 
+class WebClientError extends Error {
+	readonly statusCode = 400;
+	readonly code = "bad_request";
+}
+
 function asString(value: unknown, name: string): string {
 	if (typeof value !== "string" || !value.trim())
-		throw new Error(`${name} is required.`);
+		throw new WebClientError(`${name} is required.`);
 	return value;
 }
 
@@ -690,7 +695,7 @@ function asOptionalNumber(value: unknown): number | undefined {
 
 function asNumber(value: unknown, name: string): number {
 	if (typeof value !== "number" || !Number.isFinite(value)) {
-		throw new Error(`"${name}" must be a finite number`);
+		throw new WebClientError(`"${name}" must be a finite number`);
 	}
 	return value;
 }
@@ -3075,7 +3080,10 @@ export function createWebAppServer(
 			const message = redactString(
 				error instanceof Error ? error.message : String(error),
 			);
-			if (error instanceof UnsupportedMediaTypeError) {
+			if (
+				error instanceof UnsupportedMediaTypeError ||
+				error instanceof WebClientError
+			) {
 				json(response, error.statusCode, {
 					success: false,
 					code: error.code,
@@ -3083,10 +3091,19 @@ export function createWebAppServer(
 				});
 				return;
 			}
-			json(response, 400, {
+			webLogger.error("Unhandled web request error", {
+				method: request.method,
+				path: requestUrl.pathname,
+				error: redactString(
+					error instanceof Error
+						? (error.stack ?? error.message)
+						: String(error),
+				),
+			});
+			json(response, 500, {
 				success: false,
-				code: "bad_request",
-				error: message,
+				code: "internal_error",
+				error: "Internal server error.",
 			});
 		}
 	});
