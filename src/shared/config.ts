@@ -509,6 +509,18 @@ function redactConfigValue(definition: ConfigDefinition, value: ConfigValue): Co
   return value;
 }
 
+export function redactConfigEntry(entry: ConfigEntry): ConfigEntry {
+  const definition = CONFIG_BY_KEY.get(entry.key);
+  if (!definition) return entry;
+  return {
+    ...entry,
+    sensitive: entry.sensitive || definition.sensitive === true,
+    envVars: [...entry.envVars],
+    value: redactConfigValue(definition, entry.value),
+    defaultValue: redactConfigValue(definition, entry.defaultValue),
+  };
+}
+
 function resolveUserConfigPath(env: NodeJS.ProcessEnv): string {
   return getUserConfigPath(getUserConfigBaseHome(env));
 }

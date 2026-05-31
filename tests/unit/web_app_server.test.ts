@@ -693,6 +693,38 @@ test("web app config mutation only allows dashboard-safe keys", async (t) => {
 	assert.deepEqual(setCalls, [{ key: "logLevel", value: "debug" }]);
 });
 
+test("web app config get redacts sensitive config values at route boundary", async (t) => {
+	const api = mockApi();
+	api.config = {
+		...api.config,
+		get: (key: string) =>
+			({
+				key,
+				category: "ai",
+				value: "super-secret-model-key",
+				defaultValue: "super-secret-model-key",
+				source: "user",
+				sensitive: true,
+				envVars: ["BROWSER_CONTROL_MODEL_API_KEY"],
+				description: "API key for the selected model provider.",
+			}) as never,
+	};
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/api/config/modelApiKey`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+
+	assert.equal(response.status, 200);
+	const text = await response.text();
+	assert.doesNotMatch(text, /super-secret-model-key/);
+	const body = JSON.parse(text) as { value: string; defaultValue: string };
+	assert.equal(body.value, "[redacted]");
+	assert.equal(body.defaultValue, "[redacted]");
+});
+
 test("auth token comparison uses timing-safe equality for same-length tokens", (t) => {
 	let calls = 0;
 	t.mock.method(

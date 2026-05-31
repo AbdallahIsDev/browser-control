@@ -17,7 +17,10 @@ import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
 import { formatActionResult } from "../shared/action_result";
 import { constantTimeTokenEqual } from "../shared/auth";
-import { getDashboardConfigMutationError } from "../shared/config";
+import {
+	getDashboardConfigMutationError,
+	redactConfigEntry,
+} from "../shared/config";
 import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { logger } from "../shared/logger";
 import { getDataHome } from "../shared/paths";
@@ -1599,7 +1602,7 @@ export function createWebAppServer(
 		const configKeyMatch = /^\/api\/config\/([^/]+)$/u.exec(pathname);
 		if (request.method === "GET" && configKeyMatch) {
 			const key = decodeURIComponent(configKeyMatch[1] ?? "");
-			json(response, 200, api.config.get(key));
+			json(response, 200, redactConfigEntry(api.config.get(key)));
 			return;
 		}
 
