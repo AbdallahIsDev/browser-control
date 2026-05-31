@@ -353,6 +353,10 @@
       "name": "BROKER_SECRET"
     },
     {
+      "backedByConfigRegistry": false,
+      "name": "BROWSER_ALLOW_DEBUG_FILE_READS"
+    },
+    {
       "backedByConfigRegistry": true,
       "name": "BROWSER_AUTO_LAUNCH"
     },

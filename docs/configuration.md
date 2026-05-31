@@ -63,6 +63,7 @@ Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run
 | `chromeBindAddress` | `BROWSER_BIND_ADDRESS` | `127.0.0.1` |
 | `chromePath` | `BROWSER_CHROME_PATH` | unset |
 | `browserDebugUrl` | `BROWSER_DEBUG_URL` | unset |
+| Debug file override gate | `BROWSER_ALLOW_DEBUG_FILE_READS` | `0` |
 | `browserMode` | `BROWSER_MODE` | `attach` |
 | `browserLaunchProfile` | `BROWSER_LAUNCH_PROFILE` | `system` |
 | `browserUserDataDir` | `BROWSER_USER_DATA_DIR` | unset |
@@ -85,6 +86,8 @@ Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run
 | `openrouterApiKey` | `OPENROUTER_API_KEY` | unset |
 
 Additional env-only settings include `BROKER_API_KEY`, `BROKER_SECRET`, `BROKER_ALLOWED_ORIGINS`, `BROKER_ALLOWED_DOMAINS`, `BROKER_RATE_LIMIT_WINDOW_MS`, `BROKER_RATE_LIMIT_MAX_REQUESTS`, `ENABLE_STEALTH`, `STEALTH_LOCALE`, `STEALTH_TIMEZONE_ID`, `STEALTH_FINGERPRINT_SEED`, `STEALTH_WEBGL_VENDOR`, `STEALTH_WEBGL_RENDERER`, `STEALTH_PLATFORM`, `STEALTH_HARDWARE_CONCURRENCY`, `STEALTH_DEVICE_MEMORY`, `PROXY_LIST`, `CAPTCHA_TIMEOUT_MS`, `AI_AGENT_COST_PER_TOKEN`, `STAGEHAND_MODEL`, `RESUME_POLICY`, `MEMORY_ALERT_MB`, `CHROME_TAB_LIMIT`, `TERMINAL_MAX_OUTPUT_BYTES`, `TERMINAL_MAX_SCROLLBACK_LINES`, and `TERMINAL_MAX_SERIALIZED_SESSIONS`.
+
+`BROWSER_DEBUG_RESOLV_CONF` and `BROWSER_DEBUG_ROUTE_TABLE` are advanced WSL troubleshooting overrides. They are ignored unless `BROWSER_ALLOW_DEBUG_FILE_READS=1`, and the referenced files must resolve under `runtime/debug/` inside the Browser Control data home.
 
 ## Daemon Visibility
 

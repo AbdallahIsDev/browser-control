@@ -22,7 +22,7 @@ import {
 import type { Telemetry } from "../runtime/telemetry";
 import { loadConfig } from "../shared/config";
 import { logger } from "../shared/logger";
-import { getChromeDebugPath } from "../shared/paths";
+import { getChromeDebugPath, getDataHome } from "../shared/paths";
 import { createStealthContext } from "../stealth";
 
 const log = logger.withComponent("browser_core");
@@ -82,6 +82,8 @@ interface ActionCaptchaOptions {
 const DEFAULT_DEBUG_HOST = "127.0.0.1";
 const DEFAULT_LOCALHOST = "localhost";
 const DEFAULT_CDP_CONNECT_TIMEOUT_MS = 5000;
+const DEBUG_FILE_READ_ALLOW_ENV = "BROWSER_ALLOW_DEBUG_FILE_READS";
+
 function logActionError(
 	action: string,
 	selector: string,
@@ -89,6 +91,84 @@ function logActionError(
 ): void {
 	const message = error instanceof Error ? error.message : String(error);
 	log.error(`${action} failed for "${selector}": ${message}`);
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+	return ["1", "true", "yes", "on"].includes(
+		value?.trim().toLowerCase() ?? "",
+	);
+}
+
+function isPathInside(childPath: string, parentPath: string): boolean {
+	const relative = path.relative(parentPath, childPath);
+	return (
+		relative === "" ||
+		(Boolean(relative) &&
+			!relative.startsWith("..") &&
+			!path.isAbsolute(relative))
+	);
+}
+
+function resolveExistingPath(filePath: string): string | null {
+	try {
+		if (!fs.existsSync(filePath)) {
+			return null;
+		}
+		return fs.realpathSync.native(filePath);
+	} catch {
+		return null;
+	}
+}
+
+function getDebugFileAllowedRoots(): string[] {
+	const debugRoot = path.join(getDataHome(), "runtime", "debug");
+	const resolved = resolveExistingPath(debugRoot);
+	return [resolved ?? path.resolve(debugRoot)];
+}
+
+function readFileIfExists(filePath: string): string {
+	try {
+		if (!fs.existsSync(filePath)) {
+			return "";
+		}
+
+		return fs.readFileSync(filePath, "utf8");
+	} catch {
+		return "";
+	}
+}
+
+function readLocalDebugFile(
+	env: NodeJS.ProcessEnv,
+	envName: "BROWSER_DEBUG_RESOLV_CONF" | "BROWSER_DEBUG_ROUTE_TABLE",
+	defaultPath: string,
+): string {
+	const overridePath = env[envName]?.trim();
+	if (!overridePath) {
+		return readFileIfExists(defaultPath);
+	}
+
+	if (!isTruthyEnv(env[DEBUG_FILE_READ_ALLOW_ENV])) {
+		log.warn(
+			`Ignoring ${envName}; set ${DEBUG_FILE_READ_ALLOW_ENV}=1 to use a debug file override.`,
+		);
+		return "";
+	}
+
+	const requestedPath = resolveExistingPath(overridePath);
+	if (!requestedPath) {
+		return "";
+	}
+
+	const allowedRoots = getDebugFileAllowedRoots();
+	if (!allowedRoots.some((root) => isPathInside(requestedPath, root))) {
+		log.warn(
+			`Ignoring ${envName}; debug file overrides must be under Browser Control runtime/debug.`,
+		);
+		return "";
+	}
+
+	return readFileIfExists(requestedPath);
 }
 
 function isLikelyWsl(
@@ -185,30 +265,19 @@ function readDebugInteropState(): DebugInteropState | null {
 }
 
 function readLocalResolvConf(env: NodeJS.ProcessEnv): string {
-	const resolvConfPath =
-		env.BROWSER_DEBUG_RESOLV_CONF?.trim() || "/etc/resolv.conf";
-	try {
-		if (!fs.existsSync(resolvConfPath)) {
-			return "";
-		}
-
-		return fs.readFileSync(resolvConfPath, "utf8");
-	} catch {
-		return "";
-	}
+	return readLocalDebugFile(
+		env,
+		"BROWSER_DEBUG_RESOLV_CONF",
+		"/etc/resolv.conf",
+	);
 }
 
 function readLocalRouteTable(env: NodeJS.ProcessEnv): string {
-	const routePath = env.BROWSER_DEBUG_ROUTE_TABLE?.trim() || "/proc/net/route";
-	try {
-		if (!fs.existsSync(routePath)) {
-			return "";
-		}
-
-		return fs.readFileSync(routePath, "utf8");
-	} catch {
-		return "";
-	}
+	return readLocalDebugFile(
+		env,
+		"BROWSER_DEBUG_ROUTE_TABLE",
+		"/proc/net/route",
+	);
 }
 
 function isPrivateIpv4(value: string): boolean {

@@ -184,6 +184,101 @@ test("getDebugEndpointCandidates falls back to the WSL default gateway when laun
   ]);
 });
 
+test("getDebugEndpointCandidates ignores debug file overrides without explicit file-read allow", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-debug-file-"));
+  const resolvPath = path.join(tempDir, "resolv.conf");
+  try {
+    fs.writeFileSync(resolvPath, "nameserver 172.30.10.1\n", "utf8");
+
+    const candidates = getDebugEndpointCandidates(9222, {
+      env: {
+        WSL_DISTRO_NAME: "Ubuntu",
+        BROWSER_DEBUG_RESOLV_CONF: resolvPath,
+      },
+      platform: "linux",
+      metadata: null,
+      routeTable: "",
+    });
+
+    assert.deepEqual(candidates, [
+      "http://localhost:9222",
+      "http://127.0.0.1:9222",
+    ]);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getDebugEndpointCandidates rejects route table overrides outside runtime debug root", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-debug-route-"));
+  const routePath = path.join(tempDir, "route");
+  try {
+    fs.writeFileSync(
+      routePath,
+      [
+        "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT",
+        "eth0\t00000000\t010A1EAC\t0003\t0\t0\t0\t00000000\t0\t0\t0",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const candidates = getDebugEndpointCandidates(9222, {
+      env: {
+        WSL_DISTRO_NAME: "Ubuntu",
+        BROWSER_ALLOW_DEBUG_FILE_READS: "1",
+        BROWSER_DEBUG_ROUTE_TABLE: routePath,
+      },
+      platform: "linux",
+      metadata: null,
+      resolvConf: "",
+    });
+
+    assert.deepEqual(candidates, [
+      "http://localhost:9222",
+      "http://127.0.0.1:9222",
+    ]);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("getDebugEndpointCandidates accepts explicitly allowed debug files under runtime debug root", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-debug-home-"));
+  const debugDir = path.join(home, "runtime", "debug");
+  const resolvPath = path.join(debugDir, "resolv.conf");
+
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    fs.mkdirSync(debugDir, { recursive: true });
+    fs.writeFileSync(resolvPath, "nameserver 172.30.10.1\n", "utf8");
+
+    const candidates = getDebugEndpointCandidates(9222, {
+      env: {
+        WSL_DISTRO_NAME: "Ubuntu",
+        BROWSER_ALLOW_DEBUG_FILE_READS: "1",
+        BROWSER_DEBUG_RESOLV_CONF: resolvPath,
+      },
+      platform: "linux",
+      metadata: null,
+      routeTable: "",
+    });
+
+    assert.deepEqual(candidates, [
+      "http://172.30.10.1:9222",
+      "http://localhost:9222",
+      "http://127.0.0.1:9222",
+    ]);
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("getDebugEndpointCandidates ignores public DNS resolvers when looking for the Windows host from WSL", () => {
   const candidates = getDebugEndpointCandidates(9222, {
     env: {
