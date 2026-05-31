@@ -17,7 +17,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createBrowserControl, type BrowserControlAPI } from "../browser_control";
-import { buildToolRegistry } from "./tool_registry";
+import { buildToolRegistry, filterToolRegistryForActivePolicy } from "./tool_registry";
 import { actionResultToMcpResult, normalizeError, mcpErrorResult, validateToolParams } from "./types";
 import type { McpTool } from "./types";
 import { logger } from "../shared/logger";
@@ -68,8 +68,9 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
 
   // ListTools handler — expose all registered tools with schemas
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const visibleTools = filterToolRegistryForActivePolicy(bc, tools);
     return {
-      tools: tools.map((tool) => ({
+      tools: visibleTools.map((tool) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema as unknown as Record<string, unknown>,

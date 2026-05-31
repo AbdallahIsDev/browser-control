@@ -1245,6 +1245,15 @@ export class SessionManager {
 		return this.sessions.get(this.activeSessionId) ?? null;
 	}
 
+	/** Get the policy profile that applies to a session-aware operation. */
+	getActivePolicyProfile(sessionOverride?: string): string {
+		const state = this.resolveSession(sessionOverride);
+		const activeState = this.activeSessionId
+			? (this.sessions.get(this.activeSessionId) ?? null)
+			: null;
+		return state?.policyProfile ?? activeState?.policyProfile ?? this.policyEngine.getActiveProfile();
+	}
+
 	/** Get a session by ID. */
 	getSession(id: string): SessionState | null {
 		return this.sessions.get(id) ?? null;

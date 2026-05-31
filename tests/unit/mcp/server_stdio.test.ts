@@ -116,6 +116,26 @@ describe("MCP stdio server", () => {
     assert.ok(result.tools.some((tool) => tool.name === "bc_session_status"));
   });
 
+  it("filters tools/list by the active safe policy profile", async () => {
+    const harness = createHarness();
+
+    await harness.client.connect(harness.transport);
+    const created = await harness.client.callTool({
+      name: "bc_session_create",
+      arguments: { name: "safe-session", policyProfile: "safe" },
+    }) as ToolCallResult;
+    assert.equal(created.isError, false);
+
+    const result = await harness.client.listTools();
+    const names = result.tools.map((tool) => tool.name);
+
+    assert.ok(names.includes("bc_open"));
+    assert.ok(names.includes("bc_session_status"));
+    assert.ok(!names.includes("bc_cdp"));
+    assert.ok(!names.includes("bc_fs_delete"));
+    assert.ok(!names.includes("bc_terminal_exec"));
+  });
+
   it("rejects unknown and invalid tool parameters before handlers run", async () => {
     const harness = createHarness();
 
