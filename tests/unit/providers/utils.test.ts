@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { generateConnectionId, getBrowserbaseApiBaseUrl } from "../../../src/providers/utils";
+import {
+  generateConnectionId,
+  getBrowserbaseApiBaseUrl,
+  getDefaultProviderProfileManager,
+} from "../../../src/providers/utils";
 
 describe("provider utils", () => {
   it("generates compact browser connection IDs", () => {
@@ -28,6 +32,10 @@ describe("provider utils", () => {
       }),
       "https://api.browserbase.com/v1",
     );
+  });
+
+  it("reuses one default profile manager for provider fallbacks", () => {
+    assert.equal(getDefaultProviderProfileManager(), getDefaultProviderProfileManager());
   });
 
   it("keeps connection ID generation centralized", () => {
@@ -64,6 +72,25 @@ describe("provider utils", () => {
         source,
         /replace\(\/\\\/\+\$\/u,\s*""\)/u,
         `${file} should not duplicate Browserbase API URL normalization`,
+      );
+    }
+  });
+
+  it("keeps provider profile manager construction centralized", () => {
+    const providersDir = path.resolve(__dirname, "../../../src/providers");
+    const providerFiles = [
+      "browserbase.ts",
+      "browserless.ts",
+      "custom.ts",
+      "local.ts",
+    ];
+
+    for (const file of providerFiles) {
+      const source = fs.readFileSync(path.join(providersDir, file), "utf8");
+      assert.doesNotMatch(
+        source,
+        /new BrowserProfileManager/u,
+        `${file} should receive a BrowserProfileManager instead of constructing one`,
       );
     }
   });

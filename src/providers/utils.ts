@@ -1,7 +1,9 @@
 import { redactString as redactStringCentral, redactUrl as redactUrlCentral } from "../observability/redaction";
+import { BrowserProfileManager } from "../browser/profiles";
 import type { ProviderConfig } from "./types";
 
 const BROWSERBASE_DEFAULT_API_BASE_URL = "https://api.browserbase.com/v1";
+let defaultProviderProfileManager: BrowserProfileManager | null = null;
 
 const SENSITIVE_PARAMS = new Set([
   "token",
@@ -45,6 +47,13 @@ function getProviderStringOption(config: ProviderConfig | undefined, key: string
 
 export function getBrowserbaseApiBaseUrl(config?: ProviderConfig): string {
   return (getProviderStringOption(config, "apiBaseUrl") ?? BROWSERBASE_DEFAULT_API_BASE_URL).replace(/\/+$/u, "");
+}
+
+export function getDefaultProviderProfileManager(): BrowserProfileManager {
+  if (!defaultProviderProfileManager) {
+    defaultProviderProfileManager = new BrowserProfileManager();
+  }
+  return defaultProviderProfileManager;
 }
 
 /**

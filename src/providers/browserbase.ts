@@ -9,11 +9,12 @@ import type {
 import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
 import { ensureContextHasPage, getAllPages } from "../browser/core";
-import { BrowserProfileManager } from "../browser/profiles";
+import type { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import {
   generateConnectionId,
   getBrowserbaseApiBaseUrl,
+  getDefaultProviderProfileManager,
   sanitizeString,
   stripSensitiveParams,
 } from "./utils";
@@ -54,8 +55,12 @@ export class BrowserbaseProvider implements BrowserProvider {
     nativeDialogs: "supported",
   };
 
-  private profileManager = new BrowserProfileManager();
+  private readonly profileManager: BrowserProfileManager;
   private readonly releaseConfigs = new WeakMap<ActiveConnection, ProviderConfig>();
+
+  constructor(profileManager: BrowserProfileManager = getDefaultProviderProfileManager()) {
+    this.profileManager = profileManager;
+  }
 
   async launch(options: ProviderLaunchOptions): Promise<ActiveConnection> {
     const session = options.cdpUrl || options.config?.endpoint

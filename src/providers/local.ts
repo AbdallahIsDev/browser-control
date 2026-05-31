@@ -22,10 +22,10 @@ import {
   stopWslBridge,
 } from "../runtime/launch_browser";
 import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveDebugEndpointUrl, getAllPages, getDebugEndpointCandidates } from "../browser/core";
-import { BrowserProfileManager } from "../browser/profiles";
+import type { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
-import { generateConnectionId } from "./utils";
+import { generateConnectionId, getDefaultProviderProfileManager } from "./utils";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,7 +52,11 @@ export class LocalBrowserProvider implements BrowserProvider {
     nativeDialogs: "supported",
   };
 
-  private profileManager = new BrowserProfileManager();
+  private readonly profileManager: BrowserProfileManager;
+
+  constructor(profileManager: BrowserProfileManager = getDefaultProviderProfileManager()) {
+    this.profileManager = profileManager;
+  }
 
   async launch(options: ProviderLaunchOptions): Promise<ActiveConnection> {
     const profile = options.profile ?? this.profileManager.getDefaultProfile();

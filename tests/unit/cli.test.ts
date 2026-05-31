@@ -699,6 +699,14 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 	assert.deepEqual(missing, []);
 });
 
+test("CLI reuses a single BrowserProfileManager helper", () => {
+	const cliPath = path.join(process.cwd(), "src", "cli.ts");
+	const source = fs.readFileSync(cliPath, "utf8");
+	const constructions = source.match(/new BrowserProfileManager/g) ?? [];
+	assert.equal(constructions.length, 1);
+	assert.match(source, /getCliBrowserProfileManager/);
+});
+
 test("parseArgs handles space-separated provider flag values", () => {
   const result = parseArgs([
     "node",

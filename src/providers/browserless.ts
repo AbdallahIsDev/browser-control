@@ -9,9 +9,14 @@ import type {
 import type { BrowserConnection } from "../browser/connection";
 import type { ProviderConfig } from "./types";
 import { createAutomationContext, ensureContextHasPage, getAllPages } from "../browser/core";
-import { BrowserProfileManager } from "../browser/profiles";
+import type { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
-import { generateConnectionId, sanitizeString, stripSensitiveParams } from "./utils";
+import {
+  generateConnectionId,
+  getDefaultProviderProfileManager,
+  sanitizeString,
+  stripSensitiveParams,
+} from "./utils";
 import { loadConfig } from "../shared/config";
 
 export class BrowserlessProvider implements BrowserProvider {
@@ -26,7 +31,11 @@ export class BrowserlessProvider implements BrowserProvider {
     nativeDialogs: "supported",
   };
 
-  private profileManager = new BrowserProfileManager();
+  private readonly profileManager: BrowserProfileManager;
+
+  constructor(profileManager: BrowserProfileManager = getDefaultProviderProfileManager()) {
+    this.profileManager = profileManager;
+  }
 
   private getConfig(providerConfig?: ProviderConfig): {
     endpoint?: string;

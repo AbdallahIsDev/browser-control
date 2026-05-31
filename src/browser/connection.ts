@@ -1387,13 +1387,13 @@ export class BrowserConnectionManager {
 		}
 		switch (config.type) {
 			case "local":
-				return new LocalBrowserProvider();
+				return new LocalBrowserProvider(this.profileManager);
 			case "custom":
-				return new CustomBrowserProvider();
+				return new CustomBrowserProvider(this.profileManager);
 			case "browserless":
-				return new BrowserlessProvider();
+				return new BrowserlessProvider(this.profileManager);
 			case "browserbase":
-				return new BrowserbaseProvider();
+				return new BrowserbaseProvider(this.profileManager);
 			case "e2b":
 				return new UnsupportedRemoteSandboxProvider("e2b");
 			case "cubesandbox":

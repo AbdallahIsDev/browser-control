@@ -8,9 +8,14 @@ import type {
 } from "./interface";
 import type { BrowserConnection } from "../browser/connection";
 import { getAllPages } from "../browser/core";
-import { BrowserProfileManager } from "../browser/profiles";
+import type { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
-import { generateConnectionId, sanitizeString, stripSensitiveParams } from "./utils";
+import {
+  generateConnectionId,
+  getDefaultProviderProfileManager,
+  sanitizeString,
+  stripSensitiveParams,
+} from "./utils";
 
 export class CustomBrowserProvider implements BrowserProvider {
   readonly name = "custom";
@@ -24,7 +29,11 @@ export class CustomBrowserProvider implements BrowserProvider {
     nativeDialogs: "unknown",
   };
 
-  private profileManager = new BrowserProfileManager();
+  private readonly profileManager: BrowserProfileManager;
+
+  constructor(profileManager: BrowserProfileManager = getDefaultProviderProfileManager()) {
+    this.profileManager = profileManager;
+  }
 
   async launch(_options: ProviderLaunchOptions): Promise<ActiveConnection> {
     throw new ProviderConfigError(

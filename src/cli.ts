@@ -2436,8 +2436,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 			switch (profileAction) {
 				case "list": {
-					const { BrowserProfileManager } = await import("./browser/profiles");
-					const pm = new BrowserProfileManager();
+					const pm = await getCliBrowserProfileManager();
 					const profiles = pm.listProfiles();
 					if (jsonOutput) {
 						outputJson(profiles, false);
@@ -2471,8 +2470,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						| "shared"
 						| "isolated"
 						| "named";
-					const { BrowserProfileManager } = await import("./browser/profiles");
-					const pm = new BrowserProfileManager();
+					const pm = await getCliBrowserProfileManager();
 					const profile = pm.createProfile(name, type);
 					if (jsonOutput) {
 						outputJson(profile, false);
@@ -2491,8 +2489,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error("Error: Profile name is required");
 						throw commandFailed();
 					}
-					const { BrowserProfileManager } = await import("./browser/profiles");
-					const pm = new BrowserProfileManager();
+					const pm = await getCliBrowserProfileManager();
 					const profile = pm.getProfileByName(name);
 					if (!profile) {
 						console.error(`Error: Profile "${name}" not found`);
@@ -2523,8 +2520,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						console.error("Error: Profile name is required");
 						throw commandFailed();
 					}
-					const { BrowserProfileManager } = await import("./browser/profiles");
-					const pm = new BrowserProfileManager();
+					const pm = await getCliBrowserProfileManager();
 					const deleted = pm.deleteProfileByName(name);
 					if (!deleted) {
 						console.error(
@@ -2582,9 +2578,6 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					);
 
 					try {
-						const { BrowserProfileManager } = await import(
-							"./browser/profiles"
-						);
 						const { BrowserConnectionManager } = await import(
 							"./browser/connection"
 						);
@@ -2597,8 +2590,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						const policyEngine = new DefaultPolicyEngine({
 							profileName: confirmed ? "trusted" : config.policyProfile,
 						});
-						const manager = new BrowserConnectionManager({ policyEngine });
-						const pm = new BrowserProfileManager();
+						const pm = await getCliBrowserProfileManager();
+						const manager = new BrowserConnectionManager({
+							policyEngine,
+							profileManager: pm,
+						});
 						const store = new MemoryStore();
 						const activeSession = store.get<StoredBrowserConnectionState>(
 							"browser_connection:active",
@@ -2735,9 +2731,6 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					try {
 						const content = fs.readFileSync(filePath, "utf-8");
 						const snapshot = JSON.parse(content);
-						const { BrowserProfileManager } = await import(
-							"./browser/profiles"
-						);
 						const { BrowserConnectionManager } = await import(
 							"./browser/connection"
 						);
@@ -2752,8 +2745,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						const policyEngine = new DefaultPolicyEngine({
 							profileName: confirmed ? "trusted" : config.policyProfile,
 						});
-						const manager = new BrowserConnectionManager({ policyEngine });
-						const pm = new BrowserProfileManager();
+						const pm = await getCliBrowserProfileManager();
+						const manager = new BrowserConnectionManager({
+							policyEngine,
+							profileManager: pm,
+						});
 						let profileId = snapshot.profileId ?? "default";
 						if (profileName) {
 							const profile = pm.getProfileByName(profileName);
@@ -3855,6 +3851,15 @@ async function handleMcp(args: ParsedArgs): Promise<void> {
 // ── Section 5 shared session manager singleton ────────────────────────
 
 let _sessionManager: import("./session_manager").SessionManager | null = null;
+let _browserProfileManager: import("./browser/profiles").BrowserProfileManager | null = null;
+
+async function getCliBrowserProfileManager(): Promise<import("./browser/profiles").BrowserProfileManager> {
+	if (!_browserProfileManager) {
+		const { BrowserProfileManager } = await import("./browser/profiles");
+		_browserProfileManager = new BrowserProfileManager();
+	}
+	return _browserProfileManager;
+}
 
 /**
  * Ensure the daemon is running and reachable for terminal session commands.
@@ -4722,7 +4727,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	const action = subcommand || "doctor";
 	const { cleanupDataHome, exportDataHome, formatDataHomeReport, inspectDataHome } =
 		await import("./data_home");
-	const runCleanup = (): void => {
+	const runCleanup = async (): Promise<void> => {
 		const dryRunRequested = flags["dry-run"] === "false";
 		const confirm = flags.confirm;
 		if (flags["purge-profiles"] === "true") {
@@ -4733,8 +4738,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 				);
 				throw commandFailed();
 			}
-			const { BrowserProfileManager } = require("./browser/profiles") as typeof import("./browser/profiles");
-			const manager = new BrowserProfileManager();
+			const manager = await getCliBrowserProfileManager();
 			const olderThanDays = flags.days ? Number(flags.days) : 30;
 			if (!Number.isFinite(olderThanDays) || olderThanDays < 0) {
 				console.error("Error: --days must be a non-negative number.");
@@ -4785,7 +4789,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	switch (action) {
 		case "doctor": {
 			if (flags.cleanup === "true") {
-				runCleanup();
+				await runCleanup();
 				return;
 			}
 			const report = inspectDataHome();
@@ -4794,7 +4798,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 			return;
 		}
 		case "cleanup": {
-			runCleanup();
+			await runCleanup();
 			return;
 		}
 		case "export": {
