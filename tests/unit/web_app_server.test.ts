@@ -495,6 +495,45 @@ async function startOpenAiFixture(): Promise<{
 	};
 }
 
+test("web app server persists reusable server info with restrictive permissions", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-record-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const originalWriteFileSync = fs.writeFileSync;
+	const originalChmodSync = fs.chmodSync;
+	const recordPath = path.join(tmpHome, "runtime", "web-server.json");
+	let recordWriteOptions: unknown;
+	let recordChmodMode: fs.Mode | undefined;
+
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	fs.writeFileSync = ((
+		filePath: fs.PathOrFileDescriptor,
+		data: string | NodeJS.ArrayBufferView,
+		options?: fs.WriteFileOptions,
+	) => {
+		if (filePath === recordPath) recordWriteOptions = options;
+		return originalWriteFileSync(filePath, data, options);
+	}) as typeof fs.writeFileSync;
+	fs.chmodSync = ((filePath: fs.PathLike, mode: fs.Mode) => {
+		if (filePath === recordPath) recordChmodMode = mode;
+		return originalChmodSync(filePath, mode);
+	}) as typeof fs.chmodSync;
+
+	try {
+		const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+		t.after(() => server.close());
+		await server.listen(0, "127.0.0.1");
+
+		assert.deepEqual(recordWriteOptions, { encoding: "utf8", mode: 0o600 });
+		assert.equal(recordChmodMode, 0o600);
+	} finally {
+		fs.writeFileSync = originalWriteFileSync;
+		fs.chmodSync = originalChmodSync;
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	}
+});
+
 test("web app server protects API routes and exposes status/capabilities", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());

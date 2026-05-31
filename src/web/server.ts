@@ -337,7 +337,11 @@ function writePersistedWebAppServerInfo(
 ): PersistedWebAppServerInfo {
 	const recordPath = webServerRecordPath();
 	fs.mkdirSync(path.dirname(recordPath), { recursive: true });
-	fs.writeFileSync(recordPath, `${JSON.stringify(info, null, 2)}\n`, "utf8");
+	fs.writeFileSync(recordPath, `${JSON.stringify(info, null, 2)}\n`, {
+		encoding: "utf8",
+		mode: 0o600,
+	});
+	fs.chmodSync(recordPath, 0o600);
 	return info;
 }
 
