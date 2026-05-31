@@ -29,6 +29,16 @@ async function waitForOpen(socket: WebSocket): Promise<void> {
   await once(socket, "open");
 }
 
+test("broker server reuses shared browser-origin request detection", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../../src/runtime/broker_server.ts"),
+    "utf8",
+  );
+
+  assert.match(source, /import \{ isBrowserOriginRequest \} from "\.\.\/web\/security";/u);
+  assert.doesNotMatch(source, /function isBrowserOriginRequest\(/u);
+});
+
 async function waitForMessage(socket: WebSocket): Promise<string> {
   const [payload] = await once(socket, "message");
   return payload.toString();

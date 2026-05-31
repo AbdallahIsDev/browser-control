@@ -20,6 +20,7 @@ import {
 } from "../shared/config";
 import { constantTimeTokenEqual } from "../shared/auth";
 import { Logger } from "../shared/logger";
+import { isBrowserOriginRequest } from "../web/security";
 import type { SkillManifest } from "../skill";
 import type {
 	BrokerRunTaskRequest,
@@ -678,13 +679,6 @@ function extractApiKey(request: IncomingMessage): string | null {
 
 	const match = /^Bearer\s+(.+)$/i.exec(authorization);
 	return match?.[1]?.trim() || null;
-}
-
-function isBrowserOriginRequest(request: IncomingMessage): boolean {
-	return (
-		typeof request.headers.origin === "string" &&
-		request.headers.origin.trim().length > 0
-	);
 }
 
 function isPolicyAllowed(decision: string): boolean {
