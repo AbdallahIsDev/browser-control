@@ -175,8 +175,8 @@ Built-in providers are `local`, `custom`, and `browserless`. `local` is the defa
 
 ```text
 package run <name> <workflow> [--json]
-run --package <name> --workflow <workflow> [--params JSON] [--priority] [--timeoutMs]
-schedule <id> --cron "*/5 * * * *" [--name] [--package] [--workflow] [--params JSON]
+run --skill <name> --action <action> [--params JSON] [--priority] [--timeoutMs]
+schedule <id> --cron "*/5 * * * *" [--name] [--skill] [--action] [--params JSON]
 schedule list
 schedule pause <id>
 schedule resume <id>

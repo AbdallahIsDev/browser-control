@@ -1223,18 +1223,16 @@
         },
         {
           "commandPath": [
-            "run",
-            "Run",
-            "an"
+            "run"
           ],
-          "description": "",
+          "description": "Submit a daemon task",
           "flags": [
-            "package",
+            "action",
             "params",
-            "workflow"
+            "skill"
           ],
           "jsonSupport": false,
-          "syntax": "run --package=<name> --workflow=<name> [--params='{\"key\":\"value\"}'] Run an Automation Package workflow"
+          "syntax": "run --skill=<name> --action=<name> [--params='{\"key\":\"value\"}']"
         },
         {
           "commandPath": [
@@ -1244,12 +1242,12 @@
           ],
           "description": "",
           "flags": [
+            "action",
             "cron",
-            "package",
-            "workflow"
+            "skill"
           ],
           "jsonSupport": false,
-          "syntax": "schedule <id> --cron=\"*/5 * * * *\" --package=<name> --workflow=<name> Schedule an Automation Package workflow"
+          "syntax": "schedule <id> --cron=\"*/5 * * * *\" --skill=<name> --action=<name> Schedule a daemon task"
         },
         {
           "commandPath": [

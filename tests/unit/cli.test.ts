@@ -693,6 +693,26 @@ test("parseArgs handles complex schedule command", () => {
   assert.equal(result.subcommand, "list");
 });
 
+test("top-level help documents implemented run and schedule flags", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-help-flags-"));
+  const home = path.join(cwd, "data");
+  try {
+    const result = runCli(["--help"], {
+      cwd,
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /package run <name> <workflow>/);
+    assert.match(result.stdout, /run --skill=<name> --action=<name>/);
+    assert.match(result.stdout, /schedule <id> .*--skill=<name> --action=<name>/);
+    assert.doesNotMatch(result.stdout, /run --package=<name> --workflow=<name>/);
+    assert.doesNotMatch(result.stdout, /schedule <id> .*--package=<name> --workflow=<name>/);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs handles proxy add with positional URL", () => {
   const result = parseArgs([
     "node", "cli.ts", "proxy", "add", "http://proxy.example.com:8080"

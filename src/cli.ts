@@ -807,8 +807,8 @@ Browser Lifecycle:
                                                                       Export auth state (cookies/storage)
   browser auth import <file> [--live | --stored] [--profile=default] [--yes]
                                                                       Import auth state from file
-  run --package=<name> --workflow=<name> [--params='{"key":"value"}'] Run an Automation Package workflow
-  schedule <id> --cron="*/5 * * * *" --package=<name> --workflow=<name> Schedule an Automation Package workflow
+  run --skill=<name> --action=<name> [--params='{"key":"value"}']    Submit a daemon task
+  schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<name> Schedule a daemon task
   schedule list                                                      List scheduled tasks
   schedule pause <id>                                                Pause a scheduled task
   schedule resume <id>                                               Resume a scheduled task
