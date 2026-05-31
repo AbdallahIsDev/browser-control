@@ -35,6 +35,22 @@ test("Telemetry records events, builds a summary, and exports reports", () => {
   assert.match(html, /Telemetry Report/);
 });
 
+test("Telemetry caps its in-memory event buffer and drops oldest events", () => {
+  const telemetry = new Telemetry({ maxEvents: 2 });
+
+  telemetry.record("first", "success", 10);
+  telemetry.record("second", "success", 20);
+  telemetry.record("third", "error", 30);
+
+  const report = JSON.parse(telemetry.exportReport("json")) as { events: Array<{ action: string }> };
+  const summary = telemetry.getSummary();
+
+  assert.deepEqual(report.events.map((event) => event.action), ["second", "third"]);
+  assert.equal(summary.totalSteps, 2);
+  assert.equal(summary.successCount, 1);
+  assert.equal(summary.errorCount, 1);
+});
+
 // ── Cross-platform PowerShell resolution ──────────────────────────────
 
 test("resolvePowershellCmd returns 'powershell' on Windows", () => {

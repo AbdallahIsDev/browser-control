@@ -36,6 +36,7 @@ export interface TelemetrySummary {
 
 interface TelemetryOptions {
   reportsDir?: string;
+  maxEvents?: number;
 }
 
 export class Telemetry {
@@ -45,8 +46,11 @@ export class Telemetry {
 
   private readonly alertHandlers: Array<(event: AlertEvent) => void> = [];
 
+  private readonly maxEvents: number;
+
   constructor(options: TelemetryOptions = {}) {
     this.reportsDir = options.reportsDir ?? getReportsDir();
+    this.maxEvents = resolveMaxEvents(options.maxEvents);
   }
 
   record(
@@ -64,6 +68,9 @@ export class Telemetry {
     };
 
     this.events.push(event);
+    if (this.events.length > this.maxEvents) {
+      this.events.splice(0, this.events.length - this.maxEvents);
+    }
     if (result === "error") {
       for (const handler of this.alertHandlers) {
         handler(event);
@@ -184,6 +191,17 @@ export class Telemetry {
   onAlert(callback: (event: AlertEvent) => void): void {
     this.alertHandlers.push(callback);
   }
+}
+
+function resolveMaxEvents(value: number | undefined): number {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  const fallback = Number(process.env.BROWSER_TELEMETRY_MAX_EVENTS ?? "");
+  if (Number.isInteger(fallback) && fallback > 0) {
+    return fallback;
+  }
+  return 10_000;
 }
 
 /**

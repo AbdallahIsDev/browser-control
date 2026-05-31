@@ -37,6 +37,8 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7788;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 100;
+const DEFAULT_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60_000;
+const DEFAULT_TASK_STATUS_RETENTION_MS = 60 * 60_000;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -172,7 +174,9 @@ export interface BrokerServerOptions {
 	rateLimit?: {
 		windowMs?: number;
 		maxRequests?: number;
+		bucketTtlMs?: number;
 	};
+	taskStatusRetentionMs?: number;
 	allowedDomainParamFields?: string[];
 	now?: () => number;
 }
@@ -198,11 +202,18 @@ interface BrokerResolvedConfig {
 	allowedDomainParamFields: string[];
 	rateLimitWindowMs: number;
 	rateLimitMaxRequests: number;
+	rateLimitBucketTtlMs: number;
+	taskStatusRetentionMs: number;
 	maxBodyBytes: number;
 }
 
 interface RateLimitBucket {
 	requests: number[];
+	lastAccessedAt: number;
+}
+
+interface BrokerTaskStatusRecord extends BrokerTaskStatusEntry {
+	updatedAt: number;
 }
 
 function isHealthPath(pathname: string): boolean {
@@ -317,6 +328,18 @@ function resolveBrokerConfig(
 			parsePositiveInteger(
 				env.BROKER_RATE_LIMIT_MAX_REQUESTS,
 				DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+			),
+		rateLimitBucketTtlMs:
+			options.rateLimit?.bucketTtlMs ??
+			parsePositiveInteger(
+				env.BROKER_RATE_LIMIT_BUCKET_TTL_MS,
+				DEFAULT_RATE_LIMIT_BUCKET_TTL_MS,
+			),
+		taskStatusRetentionMs:
+			options.taskStatusRetentionMs ??
+			parsePositiveInteger(
+				env.BROKER_TASK_STATUS_RETENTION_MS,
+				DEFAULT_TASK_STATUS_RETENTION_MS,
 			),
 		maxBodyBytes: parsePositiveInteger(
 			env.BROKER_MAX_BODY_BYTES,
@@ -932,14 +955,60 @@ export function createBrokerServer(
 		options.callbacks ?? createCallbacksFromDaemon(options.daemon);
 	const now = options.now ?? Date.now;
 	const rateLimitBuckets = new Map<string, RateLimitBucket>();
-	const taskStatuses = new Map<string, BrokerTaskStatusEntry>();
+	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
 	const webSocketServer = new WebSocketServer({ noServer: true });
+	const rateLimitPruneIntervalMs = Math.min(
+		config.rateLimitBucketTtlMs,
+		60_000,
+	);
+	let lastRateLimitPruneAt = 0;
+
+	const pruneRateLimitBuckets = (currentTime: number): void => {
+		if (currentTime - lastRateLimitPruneAt < rateLimitPruneIntervalMs) {
+			return;
+		}
+		lastRateLimitPruneAt = currentTime;
+		const windowStart = currentTime - config.rateLimitWindowMs;
+		const staleBefore = currentTime - config.rateLimitBucketTtlMs;
+		for (const [clientIp, bucket] of rateLimitBuckets) {
+			bucket.requests = bucket.requests.filter(
+				(timestamp) => timestamp > windowStart,
+			);
+			if (bucket.requests.length === 0 && bucket.lastAccessedAt <= staleBefore) {
+				rateLimitBuckets.delete(clientIp);
+			}
+		}
+	};
+
+	const pruneTaskStatuses = (): void => {
+		const staleBefore = now() - config.taskStatusRetentionMs;
+		for (const [taskId, entry] of taskStatuses) {
+			if (
+				(entry.status === "completed" || entry.status === "failed") &&
+				entry.updatedAt <= staleBefore
+			) {
+				taskStatuses.delete(taskId);
+			}
+		}
+	};
+
+	const stripTaskStatusRecord = (
+		entry: BrokerTaskStatusRecord,
+	): BrokerTaskStatusEntry => {
+		const { updatedAt: _updatedAt, ...publicEntry } = entry;
+		return publicEntry;
+	};
 
 	const consumeRateLimit = (request: IncomingMessage): boolean => {
 		const clientIp = normalizeClientIp(request.socket.remoteAddress);
-		const bucket = rateLimitBuckets.get(clientIp) ?? { requests: [] };
 		const currentTime = now();
+		pruneRateLimitBuckets(currentTime);
+		const bucket = rateLimitBuckets.get(clientIp) ?? {
+			requests: [],
+			lastAccessedAt: currentTime,
+		};
+		bucket.lastAccessedAt = currentTime;
 		const windowStart = currentTime - config.rateLimitWindowMs;
 		bucket.requests = bucket.requests.filter(
 			(timestamp) => timestamp > windowStart,
@@ -959,9 +1028,11 @@ export function createBrokerServer(
 		taskId: string,
 		patch: BrokerStatusPatch,
 	): BrokerTaskStatusEntry => {
-		const nextEntry: BrokerTaskStatusEntry = {
+		pruneTaskStatuses();
+		const nextEntry: BrokerTaskStatusRecord = {
 			id: taskId,
 			status: patch.status,
+			updatedAt: now(),
 			...(patch.result !== undefined ? { result: patch.result } : {}),
 			...(patch.error ? { error: patch.error } : {}),
 		};
@@ -979,7 +1050,7 @@ export function createBrokerServer(
 			});
 		}
 
-		return nextEntry;
+		return stripTaskStatusRecord(nextEntry);
 	};
 
 	const broadcast = (message: unknown): void => {
@@ -992,11 +1063,14 @@ export function createBrokerServer(
 	};
 
 	const getTaskStatus = (taskId: string): BrokerTaskStatusEntry | null => {
-		return taskStatuses.get(taskId) ?? null;
+		pruneTaskStatuses();
+		const entry = taskStatuses.get(taskId);
+		return entry ? stripTaskStatusRecord(entry) : null;
 	};
 
 	const listTaskStatuses = (): BrokerTaskStatusEntry[] => {
-		return Array.from(taskStatuses.values()).reverse();
+		pruneTaskStatuses();
+		return Array.from(taskStatuses.values()).reverse().map(stripTaskStatusRecord);
 	};
 
 	server.on("request", async (request, response) => {

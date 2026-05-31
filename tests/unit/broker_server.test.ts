@@ -647,6 +647,23 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   assert.equal(allowedResponse.status, 202);
 });
 
+test("createBrokerServer evicts completed task statuses after retention window", () => {
+  let now = 1_000;
+  const broker = createBrokerServer({
+    now: () => now,
+    taskStatusRetentionMs: 100,
+  });
+
+  broker.setTaskStatus("done-old", { status: "completed", result: { ok: true } });
+  broker.setTaskStatus("running-old", { status: "running" });
+  now += 101;
+  broker.setTaskStatus("done-new", { status: "completed", result: { ok: true } });
+
+  const taskIds = broker.listTaskStatuses().map((entry) => entry.id);
+
+  assert.deepEqual(taskIds, ["done-new", "running-old"]);
+});
+
 test("createBrokerServer /api/v1/stats returns enriched format when getStats callback provides it", async (t) => {
   const broker = createBrokerServer({
     env: {
