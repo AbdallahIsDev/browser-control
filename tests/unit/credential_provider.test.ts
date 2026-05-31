@@ -104,3 +104,44 @@ test("local credential provider rejects corrupted vault key instead of regenerat
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 });
+
+test("credential provider reports Windows DPAPI fallback to local encryption", () => {
+	const home = tempDataHome();
+
+	try {
+		const service = createCredentialProtectionService({
+			dataHome: home,
+			preferWindowsDpapi: true,
+		});
+		(service as unknown as {
+			windows: {
+				name: "windows-dpapi";
+				isAvailable: () => boolean;
+				protect: () => string;
+				unprotect: () => string;
+			};
+		}).windows = {
+			name: "windows-dpapi",
+			isAvailable: () => true,
+			protect: () => {
+				throw new Error("simulated DPAPI failure");
+			},
+			unprotect: () => {
+				throw new Error("not used");
+			},
+		};
+
+		const protectedValue = service.protect("secret");
+		assert.equal(service.unprotect(protectedValue), "secret");
+
+		const localStatus = service.status().find((provider) => provider.name === "local-aes-gcm");
+		assert.ok(localStatus);
+		assert.equal(localStatus.selected, true);
+		assert.match(localStatus.reason ?? "", /simulated DPAPI failure/u);
+		assert.equal(localStatus.fallback?.from, "windows-dpapi");
+		assert.equal(localStatus.fallback?.to, "local-aes-gcm");
+		assert.match(localStatus.fallback?.timestamp ?? "", /^\d{4}-\d{2}-\d{2}T/u);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});

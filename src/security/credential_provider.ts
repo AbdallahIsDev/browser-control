@@ -4,8 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getSecretsDir } from "../shared/paths";
+import { logger } from "../shared/logger";
 
 const LOCAL_VAULT_KEY_PBKDF2_ITERATIONS = 600_000;
+const log = logger.withComponent("credential-provider");
 
 export type CredentialProtectionProviderName =
 	| "windows-dpapi"
@@ -16,6 +18,14 @@ export interface CredentialProtectionProviderStatus {
 	available: boolean;
 	selected: boolean;
 	reason?: string;
+	fallback?: CredentialProtectionFallbackEvent;
+}
+
+export interface CredentialProtectionFallbackEvent {
+	from: CredentialProtectionProviderName;
+	to: CredentialProtectionProviderName;
+	reason: string;
+	timestamp: string;
 }
 
 interface CredentialEnvelope {
@@ -214,6 +224,7 @@ export class CredentialProtectionService {
 	private readonly local: LocalAesGcmProvider;
 	private readonly preferWindowsDpapi: boolean;
 	private lastSelected: CredentialProtectionProviderName | null = null;
+	private lastFallback: CredentialProtectionFallbackEvent | null = null;
 
 	constructor(options: CredentialProtectionServiceOptions = {}) {
 		this.preferWindowsDpapi = options.preferWindowsDpapi ?? true;
@@ -230,8 +241,17 @@ export class CredentialProtectionService {
 					provider: this.windows.name,
 					payload,
 				});
-			} catch {
-				// Fall back to local encryption. The caller never receives raw values.
+			} catch (error) {
+				const reason = error instanceof Error ? error.message : String(error);
+				this.lastFallback = {
+					from: this.windows.name,
+					to: this.local.name,
+					reason,
+					timestamp: new Date().toISOString(),
+				};
+				log.warn("Windows DPAPI protect failed; falling back to local AES-GCM", {
+					error: reason,
+				});
 			}
 		}
 
@@ -266,6 +286,12 @@ export class CredentialProtectionService {
 					this.lastSelected === this.local.name ||
 					(this.lastSelected === null &&
 						(!this.preferWindowsDpapi || !windowsAvailable)),
+				...(this.lastFallback && this.lastSelected === this.local.name
+					? {
+						reason: `Selected after ${this.lastFallback.from} failed: ${this.lastFallback.reason}`,
+						fallback: { ...this.lastFallback },
+					}
+					: {}),
 			},
 		];
 	}
