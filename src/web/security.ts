@@ -125,6 +125,36 @@ export class UnsupportedMediaTypeError extends Error {
 	}
 }
 
+export class RequestBodyTooLargeError extends Error {
+	readonly statusCode = 413;
+	readonly code = "request_body_too_large";
+
+	constructor(readonly maxBytes: number) {
+		super(`Request body too large. Maximum size is ${maxBytes} bytes.`);
+		this.name = "RequestBodyTooLargeError";
+	}
+}
+
+export function closeRequestStreamAfterResponse(
+	request: IncomingMessage,
+	response: ServerResponse,
+	error: unknown,
+): boolean {
+	if (!(error instanceof RequestBodyTooLargeError)) {
+		return false;
+	}
+
+	if (!response.headersSent) {
+		response.setHeader("Connection", "close");
+	}
+	response.once("finish", () => {
+		if (!request.destroyed) {
+			request.destroy();
+		}
+	});
+	return true;
+}
+
 function requestDeclaresBody(request: IncomingMessage): boolean {
 	const contentLength = request.headers["content-length"];
 	if (typeof contentLength === "string" && Number(contentLength) > 0) {
@@ -157,15 +187,18 @@ export async function readJsonBody(
 
 	let totalBytes = 0;
 
-	for await (const chunk of request) {
+	const bodyStream =
+		typeof request.iterator === "function"
+			? request.iterator({ destroyOnReturn: false })
+			: request;
+
+	for await (const chunk of bodyStream) {
 		const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
 		totalBytes += buffer.byteLength;
 
 		if (totalBytes > maxBytes) {
-			throw new Error(
-				`Request body too large. Maximum size is ${maxBytes} bytes.`,
-			);
+			throw new RequestBodyTooLargeError(maxBytes);
 		}
 
 		chunks.push(buffer);

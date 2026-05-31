@@ -36,9 +36,11 @@ import { fetchBrokerJson, listLogFiles, readRecentLogs } from "./bridge";
 import { WebEventHub } from "./events";
 import {
 	assertSafeBind,
+	closeRequestStreamAfterResponse,
 	createLocalToken,
 	extractAuthToken,
 	isAuthorizedRequest,
+	RequestBodyTooLargeError,
 	readJsonBody,
 	setCorsHeaders,
 	setSecurityHeaders,
@@ -3086,10 +3088,12 @@ export function createWebAppServer(
 				return;
 			text(response, 404, "Not found.");
 		} catch (error: unknown) {
+			closeRequestStreamAfterResponse(request, response, error);
 			const message = redactString(
 				error instanceof Error ? error.message : String(error),
 			);
 			if (
+				error instanceof RequestBodyTooLargeError ||
 				error instanceof UnsupportedMediaTypeError ||
 				error instanceof WebClientError
 			) {

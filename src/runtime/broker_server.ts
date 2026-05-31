@@ -20,7 +20,11 @@ import {
 } from "../shared/config";
 import { constantTimeTokenEqual } from "../shared/auth";
 import { Logger } from "../shared/logger";
-import { isBrowserOriginRequest } from "../web/security";
+import {
+	closeRequestStreamAfterResponse,
+	isBrowserOriginRequest,
+	RequestBodyTooLargeError,
+} from "../web/security";
 import type { SkillManifest } from "../skill";
 import type {
 	BrokerRunTaskRequest,
@@ -801,13 +805,16 @@ async function readJsonBody(
 	const chunks: Buffer[] = [];
 	let totalBytes = 0;
 
-	for await (const chunk of request) {
+	const bodyStream =
+		typeof request.iterator === "function"
+			? request.iterator({ destroyOnReturn: false })
+			: request;
+
+	for await (const chunk of bodyStream) {
 		const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 		totalBytes += buffer.byteLength;
 		if (totalBytes > maxBytes) {
-			throw new Error(
-				`Request body too large. Maximum size is ${maxBytes} bytes.`,
-			);
+			throw new RequestBodyTooLargeError(maxBytes);
 		}
 		chunks.push(buffer);
 	}
@@ -1708,6 +1715,7 @@ export function createBrokerServer(
 
 			writeJson(response, 404, { error: "Not found." });
 		} catch (error: unknown) {
+			closeRequestStreamAfterResponse(request, response, error);
 			const message = error instanceof Error ? error.message : String(error);
 			writeJson(response, 400, {
 				error: redactString(message),

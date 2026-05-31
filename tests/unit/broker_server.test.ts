@@ -36,7 +36,7 @@ test("broker server reuses shared browser-origin request detection", () => {
     "utf8",
   );
 
-  assert.match(source, /import \{ isBrowserOriginRequest \} from "\.\.\/web\/security";/u);
+  assert.match(source, /import \{[\s\S]*\bisBrowserOriginRequest\b[\s\S]*\} from "\.\.\/web\/security";/u);
   assert.doesNotMatch(source, /function isBrowserOriginRequest\(/u);
 });
 
