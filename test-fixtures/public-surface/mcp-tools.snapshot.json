@@ -5591,7 +5591,17 @@
             "type": "string"
           },
           "value": {
-            "description": "New state value (string, number, or boolean)",
+            "description": "New state value. Stored as a string unless valueType is set.",
+            "type": "string"
+          },
+          "valueType": {
+            "default": "string",
+            "description": "How to interpret value. Defaults to string to avoid corrupting numeric-looking IDs.",
+            "enum": [
+              "string",
+              "number",
+              "boolean"
+            ],
             "type": "string"
           }
         },

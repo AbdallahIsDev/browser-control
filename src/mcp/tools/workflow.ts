@@ -13,6 +13,26 @@ function useRequestedSession(api: BrowserControlAPI, params: Record<string, unkn
   if (params.sessionId) api.session.use(params.sessionId as string);
 }
 
+function parseWorkflowStateValue(rawValue: string, valueType: string | undefined): string | number | boolean {
+  switch (valueType ?? "string") {
+    case "string":
+      return rawValue;
+    case "number": {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) {
+        throw new Error("valueType 'number' requires a finite numeric value.");
+      }
+      return value;
+    }
+    case "boolean":
+      if (rawValue === "true") return true;
+      if (rawValue === "false") return false;
+      throw new Error("valueType 'boolean' requires value to be 'true' or 'false'.");
+    default:
+      throw new Error("valueType must be one of: string, number, boolean.");
+  }
+}
+
 export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
   return [
     {
@@ -95,16 +115,14 @@ export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         runId: { type: "string", description: "Workflow run ID" },
         key: { type: "string", description: "State key to edit" },
-        value: { type: "string", description: "New state value (string, number, or boolean)" },
+        value: { type: "string", description: "New state value. Stored as a string unless valueType is set." },
+        valueType: { type: "string", enum: ["string", "number", "boolean"], default: "string", description: "How to interpret value. Defaults to string to avoid corrupting numeric-looking IDs." },
         sessionId: sessionIdSchema,
       }, ["runId", "key", "value"]),
       handler: async (params) => {
         useRequestedSession(api, params);
         const rawValue = params.value as string;
-        let value: string | number | boolean = rawValue;
-        if (rawValue === "true") value = true;
-        else if (rawValue === "false") value = false;
-        else if (!Number.isNaN(Number(rawValue)) && rawValue.trim() !== "") value = Number(rawValue);
+        const value = parseWorkflowStateValue(rawValue, params.valueType as string | undefined);
         return api.workflow.editState(
           params.runId as string,
           params.key as string,

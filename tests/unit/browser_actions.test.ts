@@ -2888,6 +2888,90 @@ describe("BrowserActions", () => {
 				isolatedStore.close();
 			}
 		});
+
+		it("keeps state and snapshot actions on the switched tab", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const oldPage = createMockPage("https://old.example/", {
+				hasBrowserWindow: true,
+			});
+			const targetPage = createMockPage("https://target.example/", {
+				hasBrowserWindow: true,
+			});
+			const manager = createConnectedBrowserManager([oldPage, targetPage]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const switchResult = await isolatedActions.tabSwitch(targetPage.targetId);
+				const resumedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+				const stateResult = await resumedActions.browserState();
+
+				assert.equal(switchResult.success, true);
+				assert.equal(stateResult.success, true);
+				assert.equal(stateResult.data?.url, "https://target.example/");
+				assert.equal(stateResult.data?.tabId, targetPage.targetId);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("persists switched tabs for the default CLI session", async () => {
+			const storePath = path.join(dataHome, "active-tab-memory.sqlite");
+			const oldPage = createMockPage("https://old.example/", {
+				hasBrowserWindow: true,
+			});
+			const targetPage = createMockPage("https://target.example/", {
+				hasBrowserWindow: true,
+			});
+			const manager = createConnectedBrowserManager([oldPage, targetPage]);
+			const firstStore = new MemoryStore({ filename: storePath });
+			let secondStore: MemoryStore | undefined;
+
+			try {
+				const firstSessionManager = new SessionManager({
+					memoryStore: firstStore,
+					browserManager: manager,
+				});
+				const firstActions = new BrowserActions({
+					sessionManager: firstSessionManager,
+				});
+
+				const switchResult = await firstActions.tabSwitch(targetPage.targetId);
+				firstStore.close();
+				secondStore = new MemoryStore({ filename: storePath });
+				const secondSessionManager = new SessionManager({
+					memoryStore: secondStore,
+					browserManager: manager,
+				});
+				const resumedActions = new BrowserActions({
+					sessionManager: secondSessionManager,
+				});
+				const stateResult = await resumedActions.browserState();
+
+				assert.equal(switchResult.success, true);
+				assert.equal(stateResult.success, true);
+				assert.equal(stateResult.data?.url, "https://target.example/");
+				assert.equal(stateResult.data?.tabId, targetPage.targetId);
+			} finally {
+				try {
+					firstStore.close();
+				} catch {
+					/* already closed */
+				}
+				secondStore?.close();
+			}
+		});
 	});
 
 	// ── Screenshot Viewport Bug Tests ──────────────────────────────────

@@ -455,6 +455,7 @@ export class BrowserActions {
 	private readonly downloadRegistry: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
 	private readonly maxDownloadRegistryEntries: number;
 	private readonly trackedPages = new WeakSet<Page>();
+	private selectedPage?: Page;
 
 	constructor(context: BrowserActionContext) {
 		this.context = context;
@@ -535,6 +536,7 @@ export class BrowserActions {
 		if (context) {
 			const pages = context.pages();
 			this.trackContextPages(context, pages);
+			if (this.selectedPage && pages.includes(this.selectedPage)) return this.selectedPage;
 			if (pages.length > 0) return pages[0];
 		}
 		const browser = bm.getBrowser();
@@ -543,6 +545,7 @@ export class BrowserActions {
 			if (contexts.length > 0) {
 				const pages = contexts[0].pages();
 				this.trackContextPages(contexts[0], pages);
+				if (this.selectedPage && pages.includes(this.selectedPage)) return this.selectedPage;
 				if (pages.length > 0) return pages[0];
 			}
 		}
@@ -585,6 +588,7 @@ export class BrowserActions {
 			for (const [tabId, mappedPage] of this.tabIdMap.entries()) {
 				if (mappedPage === page) this.tabIdMap.delete(tabId);
 			}
+			if (this.selectedPage === page) this.selectedPage = undefined;
 			this.trackedPages.delete(page);
 		});
 		this.trackedPages.add(page);
@@ -725,9 +729,17 @@ export class BrowserActions {
 		const target = await this.getWindowTarget(page);
 		if (target) {
 			await this.activateWindowTarget(target);
+			this.selectedPage = page;
 			return;
 		}
 		await page.bringToFront().catch(() => undefined);
+		this.selectedPage = page;
+	}
+
+	private rememberActiveTab(tabId: string | undefined): void {
+		if (!tabId) return;
+		const sessionId = this.getSessionId();
+		this.context.sessionManager.setActiveBrowserTab(sessionId, tabId);
 	}
 
 	private async getWindowTargets(
@@ -982,19 +994,27 @@ export class BrowserActions {
 		if ("success" in pageOrErr) return pageOrErr as ActionResult<T>;
 
 		let page: Page;
-		if (tabId !== undefined) {
-			const resolved = await this.resolveTabId<T>(tabId, pageOrErr);
-			if ("success" in resolved) return resolved;
-			page = resolved;
+		const sessionId = this.getSessionId();
+		const requestedTabId = tabId ?? this.context.sessionManager.getActiveBrowserTab(sessionId) ?? undefined;
+		if (requestedTabId !== undefined) {
+			const resolved = await this.resolveTabId<T>(requestedTabId, pageOrErr);
+			if ("success" in resolved) {
+				if (tabId !== undefined) return resolved;
+				this.context.sessionManager.setActiveBrowserTab(sessionId, null);
+				page = await this.getBestVisiblePage(pageOrErr);
+			} else {
+				page = resolved;
+			}
 		} else {
 			page = await this.getBestVisiblePage(pageOrErr);
 		}
 
-		const sessionId = this.getSessionId();
 		await this.startObservability(page, sessionId);
 		await this.applyNetworkPrivacyRules(page, sessionId);
 		this.syncDialogHandlingMode();
 		this.dialogSupervisor.attachToPage(page, sessionId);
+		const activeTabId = await this.getTabIdForPage(page, requestedTabId ?? "0").catch(() => requestedTabId);
+		this.rememberActiveTab(activeTabId);
 		return page;
 	}
 
@@ -1584,6 +1604,7 @@ export class BrowserActions {
 			this.dialogSupervisor.attachToPage(page, sessionId);
 
 			const finalTabId = await this.getTabIdForPage(page, "0");
+			this.rememberActiveTab(finalTabId);
 
 			log.info("Opened URL", {
 				url: resolvedUrl,
@@ -1699,6 +1720,7 @@ export class BrowserActions {
 			const title = await page.title();
 			await this.persistObservability(sessionId, page);
 			const finalTabId = await this.getTabIdForPage(page, options.tabId ?? "0");
+			this.rememberActiveTab(finalTabId);
 
 			this.recordTimelineEvent({
 				action: "navigate",
@@ -4170,6 +4192,7 @@ export class BrowserActions {
 			const title = await targetPage.title().catch(() => undefined);
 			const readyState = await targetPage.evaluate(() => document.readyState).catch(() => undefined);
 			const resolvedTabId = await this.getTabIdForPage(targetPage, tabId);
+			this.rememberActiveTab(resolvedTabId);
 
 			return successResult(
 				{
@@ -4228,6 +4251,7 @@ export class BrowserActions {
 				.catch(() => options?.tabId);
 			await this.persistObservability(sessionId, page);
 			await this.closePage(page);
+			this.context.sessionManager.setActiveBrowserTab(sessionId, null);
 
 			return successResult(
 				{ closed: true, tabId: closedTabId },
@@ -4861,26 +4885,20 @@ export class BrowserActions {
 			status,
 		};
 
-		// Check browser is connected — try in-memory first, then attempt reconnect
+		// Check browser is connected and honor explicit/persisted active tab.
 		let page: Page | undefined;
 		try {
-			page = this.getPage();
-		} catch {
-			// No in-memory connection — try reconnecting to persisted browser
-			try {
-				const reconnected = await this.ensureBrowserConnected();
-				if (reconnected && !("success" in reconnected)) {
-					page = reconnected;
-				}
-			} catch {
-				// Reconnect failed too — report disconnected
-			}
+			const pageOrErr = await this.getConnectedPageForAction<BrowserStateResult>(options?.tabId);
+			if (!("success" in pageOrErr)) page = pageOrErr;
+			else warnings.push(pageOrErr.error ?? "No browser is connected or attached");
+		} catch (error: unknown) {
+			warnings.push(error instanceof Error ? error.message : String(error));
 		}
 		const connected = page != null;
 		result.browserConnected = connected;
 		status.browser = connected ? "ok" : "error";
 		if (!connected) {
-			warnings.push("No browser is connected or attached");
+			if (warnings.length === 0) warnings.push("No browser is connected or attached");
 			return successResult(result, { path: "a11y", sessionId });
 		}
 

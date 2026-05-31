@@ -637,7 +637,7 @@ describe("MCP Tool Registry", () => {
       }
     });
 
-    it("workflow edit-state MCP tool forwards parsed typed values", async () => {
+    it("workflow edit-state MCP tool defaults to string and supports explicit typed values", async () => {
       const edits: Array<{ key: string; value: unknown; valueType: string }> = [];
       api.workflow.editState = ((runId: string, key: string, value: string | number | boolean) => {
         edits.push({ key, value, valueType: typeof value });
@@ -653,20 +653,36 @@ describe("MCP Tool Registry", () => {
       const tools = buildToolRegistry(api);
       const editTool = tools.find((t) => t.name === "bc_workflow_edit_state")!;
 
+      const zipResult = await editTool.handler({
+        runId: "run-1",
+        key: "zip",
+        value: "02138",
+      });
+      const stringBooleanResult = await editTool.handler({
+        runId: "run-1",
+        key: "rawEnabled",
+        value: "true",
+      });
       const numberResult = await editTool.handler({
         runId: "run-1",
         key: "count",
         value: "2",
+        valueType: "number",
       });
       const booleanResult = await editTool.handler({
         runId: "run-1",
         key: "enabled",
         value: "true",
+        valueType: "boolean",
       });
 
+      assert.equal(zipResult.success, true);
+      assert.equal(stringBooleanResult.success, true);
       assert.equal(numberResult.success, true);
       assert.equal(booleanResult.success, true);
       assert.deepEqual(edits, [
+        { key: "zip", value: "02138", valueType: "string" },
+        { key: "rawEnabled", value: "true", valueType: "string" },
         { key: "count", value: 2, valueType: "number" },
         { key: "enabled", value: true, valueType: "boolean" },
       ]);
@@ -904,6 +920,16 @@ describe("MCP Tool Registry", () => {
           assert.ok(schema.description, `${tool.name}.${name} should have a description`);
         }
       }
+    });
+
+    it("bc_workflow_edit_state exposes explicit valueType without requiring it", () => {
+      const tools = buildToolRegistry(api);
+      const editTool = tools.find((tool) => tool.name === "bc_workflow_edit_state")!;
+      const valueType = editTool.inputSchema.properties.valueType;
+
+      assert.deepEqual(valueType.enum, ["string", "number", "boolean"]);
+      assert.equal(valueType.default, "string");
+      assert.ok(!editTool.inputSchema.required?.includes("valueType"));
     });
   });
 

@@ -139,6 +139,8 @@ export interface SessionState {
 	policyProfile: string;
 	/** Browser connection ID (if a browser is attached). */
 	browserConnectionId: string | null;
+	/** Last selected browser tab ID for cross-command tab continuity. */
+	activeTabId?: string | null;
 	/** Terminal session ID (if a terminal is bound). */
 	terminalSessionId: string | null;
 	/** Filesystem working directory. */
@@ -989,6 +991,7 @@ export class SessionManager {
 			name,
 			policyProfile,
 			browserConnectionId: null,
+			activeTabId: null,
 			terminalSessionId: null,
 			workingDirectory: "",
 			runtimeDir: "",
@@ -1782,14 +1785,40 @@ export class SessionManager {
 		const state = this.sessions.get(sessionId);
 		if (state) {
 			state.browserConnectionId = null;
+			state.activeTabId = null;
 			this.touchSession(sessionId);
 		}
+		this.memoryStore.delete(this.activeBrowserTabKey(sessionId));
+	}
+
+	/** Persist the selected browser tab for cross-process CLI continuity. */
+	setActiveBrowserTab(sessionId: string, tabId: string | null): void {
+		const state = this.sessions.get(sessionId);
+		if (state) {
+			state.activeTabId = tabId;
+			this.touchSession(sessionId);
+			this.memoryStore.delete(this.activeBrowserTabKey(sessionId));
+			return;
+		}
+		const key = this.activeBrowserTabKey(sessionId);
+		if (tabId) {
+			this.memoryStore.set(key, { tabId }, this.sessionIdleTimeoutMs);
+		} else {
+			this.memoryStore.delete(key);
+		}
+	}
+
+	getActiveBrowserTab(sessionId: string): string | null {
+		const stateTabId = this.sessions.get(sessionId)?.activeTabId;
+		if (stateTabId) return stateTabId;
+		return this.memoryStore.get<{ tabId?: string }>(this.activeBrowserTabKey(sessionId))?.tabId ?? null;
 	}
 
 	private unbindBrowserConnection(connectionId: string): void {
 		for (const state of this.sessions.values()) {
 			if (state.browserConnectionId === connectionId) {
 				state.browserConnectionId = null;
+				state.activeTabId = null;
 				this.touchSession(state.id);
 			}
 		}
@@ -1890,6 +1919,10 @@ export class SessionManager {
 				new Date(a.lastActivityAt).getTime(),
 		);
 		return latest?.id ?? null;
+	}
+
+	private activeBrowserTabKey(sessionId: string): string {
+		return `browser:active-tab:${sessionId}`;
 	}
 
 	private resolveSession(nameOrId?: string): SessionState | null {
