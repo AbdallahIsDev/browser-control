@@ -8,7 +8,11 @@ export function constantTimeTokenEqual(
 
 	const actualBuffer = Buffer.from(actual, "utf8");
 	const expectedBuffer = Buffer.from(expected, "utf8");
-	if (actualBuffer.length !== expectedBuffer.length) return false;
+	const actualDigest = crypto.createHash("sha256").update(actualBuffer).digest();
+	const expectedDigest = crypto.createHash("sha256").update(expectedBuffer).digest();
 
-	return crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+	return (
+		crypto.timingSafeEqual(actualDigest, expectedDigest) &&
+		actualBuffer.length === expectedBuffer.length
+	);
 }

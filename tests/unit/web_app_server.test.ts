@@ -763,7 +763,7 @@ test("web app config get redacts sensitive config values at route boundary", asy
 	assert.equal(body.defaultValue, "[redacted]");
 });
 
-test("auth token comparison uses timing-safe equality for same-length tokens", (t) => {
+test("auth token comparison uses timing-safe digest equality for mismatched token lengths", (t) => {
 	let calls = 0;
 	t.mock.method(
 		crypto,
@@ -780,9 +780,9 @@ test("auth token comparison uses timing-safe equality for same-length tokens", (
 	assert.equal(constantTimeTokenEqual("test-token", "xxxx-token"), false);
 	assert.equal(calls, 1);
 	assert.equal(constantTimeTokenEqual("short", "test-token"), false);
-	assert.equal(calls, 1);
+	assert.equal(calls, 2);
 	assert.equal(constantTimeTokenEqual(null, "test-token"), false);
-	assert.equal(calls, 1);
+	assert.equal(calls, 2);
 });
 
 test("web event hub protocol token auth uses constant-time comparison", () => {
