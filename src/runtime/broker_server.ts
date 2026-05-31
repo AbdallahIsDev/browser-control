@@ -137,6 +137,10 @@ export interface BrokerServerOptions {
 			getSummary(): TelemetrySummary;
 		};
 		getStats(): Record<string, unknown>;
+		getTaskStatus?(
+			taskId: string,
+		): MaybePromise<BrokerTaskStatusEntry | null>;
+		getRecentTasks?(): MaybePromise<BrokerTaskStatusEntry[]>;
 		termOpen?(
 			config?: Record<string, unknown>,
 		): Promise<Record<string, unknown>>;
@@ -453,8 +457,17 @@ function createCallbacksFromDaemon(
 		getHealth: async () => daemon.getHealthCheck().runAll(),
 		getStats: async () => daemon.getStats(),
 		getSchedulerQueue: async () => daemon.getScheduler().getQueue(),
-		getTaskStatus: async () => null,
-		listTasks: async () => [],
+		...(daemon.getTaskStatus
+			? {
+					getTaskStatus: async (taskId) =>
+						daemon.getTaskStatus?.(taskId) ?? null,
+				}
+			: {}),
+		...(daemon.getRecentTasks
+			? {
+					listTasks: async () => daemon.getRecentTasks?.() ?? [],
+				}
+			: {}),
 		handleTerminal: async (subcommand, payload) => {
 			switch (subcommand) {
 				case "open":

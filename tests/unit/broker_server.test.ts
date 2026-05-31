@@ -14,7 +14,10 @@ import {
   normalizeClientIp,
   type BrokerServer,
 } from "../../src/broker_server";
-import type { BrokerRunTaskRequest } from "../../src/broker_types";
+import type {
+  BrokerRunTaskRequest,
+  BrokerTaskStatusEntry,
+} from "../../src/broker_types";
 
 async function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) {
@@ -1243,6 +1246,99 @@ test("broker /api/v1/tasks/run with skill field routes through submitTask callba
   assert.equal(normalResponse.status, 202, "Normal task should be accepted");
   assert.equal(submitTaskCalls, 2, "submitTask callback should be called for normal tasks too");
   assert.ok(!lastRequest?.skill, "Normal task request should not have skill field");
+});
+
+test("createBrokerServer daemon callbacks expose daemon task status and task list", async (t) => {
+  const taskStatuses = new Map<string, BrokerTaskStatusEntry>();
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "daemon-task-key",
+    },
+    daemon: {
+      submitTask: async () => {
+        taskStatuses.set("daemon-task-1", {
+          id: "daemon-task-1",
+          status: "running",
+        });
+        return "daemon-task-1";
+      },
+      submitSkillTask: () => {},
+      getScheduler: () => ({
+        schedule: () => {},
+        pause: () => {},
+        resume: () => {},
+        unschedule: () => {},
+        getQueue: () => [],
+      }),
+      emergencyKill: async () => {},
+      getHealthCheck: () => ({
+        runAll: async () => ({
+          overall: "healthy",
+          checks: [],
+          timestamp: "2026-05-30T00:00:00.000Z",
+        }),
+      }),
+      getTelemetry: () => ({
+        getSummary: () => ({
+          totalSteps: 0,
+          successCount: 0,
+          errorCount: 0,
+          successRate: 0,
+          averageDurationMs: 0,
+          captchasSolved: 0,
+          screenshotsCaptured: 0,
+          proxyUsage: {},
+          actions: {},
+        }),
+      }),
+      getStats: () => ({}),
+      getTaskStatus: (taskId: string) => taskStatuses.get(taskId) ?? null,
+      getRecentTasks: () => Array.from(taskStatuses.values()),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const runResponse = await fetch(`${baseUrl}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "daemon-task-key",
+    },
+    body: JSON.stringify({
+      action: "visit",
+      params: { url: "https://example.com" },
+    }),
+  });
+  const runBody = await runResponse.json() as Record<string, unknown>;
+
+  assert.equal(runResponse.status, 202);
+  assert.equal(runBody.taskId, "daemon-task-1");
+
+  const statusResponse = await fetch(
+    `${baseUrl}/api/v1/tasks/daemon-task-1/status`,
+    {
+      headers: { "x-api-key": "daemon-task-key" },
+    },
+  );
+  const statusBody = await statusResponse.json() as Record<string, unknown>;
+
+  assert.equal(statusResponse.status, 200);
+  assert.equal(statusBody.id, "daemon-task-1");
+  assert.equal(statusBody.status, "running");
+
+  const listResponse = await fetch(`${baseUrl}/api/v1/tasks`, {
+    headers: { "x-api-key": "daemon-task-key" },
+  });
+  const listBody = await listResponse.json() as Array<Record<string, unknown>>;
+
+  assert.equal(listResponse.status, 200);
+  assert.deepEqual(listBody.map((task) => task.id), ["daemon-task-1"]);
 });
 
 test("createBrokerServer rate limits WebSocket upgrades from the same client", async (t) => {
