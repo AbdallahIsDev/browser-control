@@ -153,7 +153,30 @@ export class StagehandManager {
 
   async closeAll(): Promise<void> {
     const ids = this.listSessions();
-    await Promise.all(ids.map((id) => this.destroySession(id)));
+    const results = await Promise.allSettled(
+      ids.map(async (id) => {
+        await this.destroySession(id);
+        return id;
+      }),
+    );
+    const failures = results.flatMap((result, index) => {
+      if (result.status === "fulfilled") {
+        return [];
+      }
+      const id = ids[index] ?? "unknown";
+      const message = result.reason instanceof Error
+        ? result.reason.message
+        : String(result.reason);
+      log.warn(`Failed to close Stagehand session "${id}": ${message}`);
+      return [`${id}: ${message}`];
+    });
+
+    if (failures.length > 0) {
+      throw new Error(
+        `Failed to close ${failures.length} of ${ids.length} Stagehand session(s): ${failures.join("; ")}`,
+      );
+    }
+
     log.info(`All ${ids.length} session(s) closed.`);
   }
 

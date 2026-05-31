@@ -47,6 +47,40 @@ test("StagehandManager closeAll on empty manager does not throw", async () => {
   assert.deepEqual(manager.listSessions(), []);
 });
 
+test("StagehandManager closeAll waits for all sessions before reporting failures", async () => {
+  const manager = new StagehandManager();
+  const internals = manager as unknown as {
+    sessions: Map<string, { stagehand: { close: () => Promise<void> }; page: { url: () => string } }>;
+  };
+  let slowClosed = false;
+
+  internals.sessions.set("fails", {
+    stagehand: {
+      close: async () => {
+        throw new Error("close boom");
+      },
+    },
+    page: { url: () => "about:blank" },
+  });
+  internals.sessions.set("slow", {
+    stagehand: {
+      close: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        slowClosed = true;
+      },
+    },
+    page: { url: () => "about:blank" },
+  });
+
+  await assert.rejects(
+    () => manager.closeAll(),
+    /Failed to close 1 of 2 Stagehand session\(s\): fails: close boom/,
+  );
+
+  assert.equal(slowClosed, true);
+  assert.deepEqual(manager.listSessions(), ["fails"]);
+});
+
 test("StagehandManager session tracking — list, get, destroy", () => {
   // Test the internal session map behavior by accessing sessions via list/get
   const manager = new StagehandManager();
