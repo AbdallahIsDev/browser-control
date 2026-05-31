@@ -64,6 +64,7 @@ import {
 	getDebugEndpointCandidates,
 	resolveDebugEndpointUrl,
 } from "./core";
+import { formatLaunchBrowserCommand } from "./launch_help";
 import type { BrowserProfile, ProfileType } from "./profiles";
 import { BrowserProfileManager } from "./profiles";
 
@@ -654,7 +655,7 @@ export class BrowserConnectionManager {
 				`Failed to launch managed automation browser on port ${port}. ` +
 					(wslHelp
 						? `${wslHelp}`
-						: `Ensure Chrome can start or use 'bc browser launch' / 'launch_browser.bat ${port}'.`),
+						: `Ensure Chrome can start or use 'bc browser launch' / '${formatLaunchBrowserCommand(port)}'.`),
 			);
 		}
 	}

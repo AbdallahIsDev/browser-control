@@ -4,6 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { Browser } from "playwright";
 import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser_core";
+import { formatLaunchBrowserCommand } from "./browser/launch_help";
 import { connectStagehand, disconnectStagehand } from "./stagehand_core";
 import { publishSite } from "./skills/framer_skill";
 import { discoverSelectors, getSelectors } from "./selectors";
@@ -19,7 +20,7 @@ async function main(): Promise<void> {
   const setup = setupSchema.parse(JSON.parse(fs.readFileSync(path.join(process.cwd(), "setup.json"), "utf8")));
 
   if (!(await isDebugPortReady(setup.cdp_port))) {
-    throw new Error(`CDP port ${setup.cdp_port} is not responding. Run launch_browser.bat first.`);
+    throw new Error(`CDP port ${setup.cdp_port} is not responding. Run ${formatLaunchBrowserCommand(setup.cdp_port)} first.`);
   }
 
   let browser: Browser | null = null;

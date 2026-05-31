@@ -3,6 +3,7 @@ import net from "node:net";
 import path from "node:path";
 
 import { isDebugPortReady } from "../browser/core";
+import { formatLaunchBrowserCommand } from "../browser/launch_help";
 import { getConfigValue, loadConfig, loadUserConfig } from "../shared/config";
 import { MemoryStore } from "../runtime/memory_store";
 import { ProviderRegistry } from "../providers/registry";
@@ -148,7 +149,7 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
           "browser",
           "warn",
           `CDP port ${config.chromeDebugPort} is not reachable.`,
-          "Close Chrome and run launch_browser.bat, or configure BROWSER_DEBUG_URL when browser automation is needed.",
+          `Close Chrome and run ${formatLaunchBrowserCommand(config.chromeDebugPort)}, or configure BROWSER_DEBUG_URL when browser automation is needed.`,
           false,
         );
     },

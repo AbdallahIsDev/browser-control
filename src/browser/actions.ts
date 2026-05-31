@@ -68,6 +68,7 @@ import {
 } from "../security/network_rules";
 import type { PrivacyProfileName } from "../policy/types";
 import type { BrowserConnectionManager, BrowserDropResult } from "./connection";
+import { formatLaunchBrowserCommand } from "./launch_help";
 import { globalRefStore } from "./core";
 import {
 	type ExtendedDownloadResult,
@@ -767,7 +768,7 @@ export class BrowserActions {
 									? attachError.message
 									: String(attachError);
 							return this.failureWithDebug(
-								`No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach and auto-launch is disabled. Close all Chrome windows, run launch_browser.bat ${config.chromeDebugPort}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated, or enable auto-launch with BROWSER_AUTO_LAUNCH=true.`,
+								`No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach and auto-launch is disabled. Close all Chrome windows, run ${formatLaunchBrowserCommand(config.chromeDebugPort)}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated, or enable auto-launch with BROWSER_AUTO_LAUNCH=true.`,
 								attachError,
 								{
 									action: "browser_connect",
