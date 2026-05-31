@@ -6997,17 +6997,17 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open).",
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
           }
         },
         "required": [
-          "sessionId"
+          "terminalSessionId"
         ],
         "type": "object"
       },
@@ -7046,20 +7046,20 @@
     },
     {
       "category": "terminal",
-      "description": "Execute a command in a terminal session, or run a one-shot command. For one-shot execution, omit sessionId. For persistent session execution, provide the terminal session ID from bc_terminal_open.",
+      "description": "Execute a command in a terminal session, or run a one-shot command. For one-shot execution, omit terminalSessionId. For persistent session execution, provide the terminal session ID from bc_terminal_open.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "command": {
             "description": "Command to execute.",
             "type": "string"
           },
           "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open). If omitted, runs as one-shot.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open. If omitted, runs as one-shot.",
             "type": "string"
           },
           "timeoutMs": {
@@ -7111,17 +7111,17 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open).",
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
           }
         },
         "required": [
-          "sessionId"
+          "terminalSessionId"
         ],
         "type": "object"
       },
@@ -7164,7 +7164,7 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
@@ -7220,7 +7220,7 @@
             "type": "string"
           },
           "sessionId": {
-            "description": "Browser Control session ID to bind the terminal to. If omitted, uses the active session.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "shell": {
@@ -7270,21 +7270,21 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "maxBytes": {
             "description": "Maximum bytes to read.",
             "type": "number"
           },
           "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open).",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
           }
         },
         "required": [
-          "sessionId"
+          "terminalSessionId"
         ],
         "type": "object"
       },
@@ -7327,17 +7327,17 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
+          "terminalSessionId": {
             "description": "Terminal session ID to resume from persisted state.",
             "type": "string"
           }
         },
         "required": [
-          "sessionId"
+          "terminalSessionId"
         ],
         "type": "object"
       },
@@ -7380,12 +7380,12 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open). If omitted, snapshots all sessions.",
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open. If omitted, snapshots all terminal sessions.",
             "type": "string"
           }
         },
@@ -7431,17 +7431,17 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
+          "terminalSessionId": {
             "description": "Terminal session ID to inspect.",
             "type": "string"
           }
         },
         "required": [
-          "sessionId"
+          "terminalSessionId"
         ],
         "type": "object"
       },
@@ -7484,12 +7484,12 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "browserControlSessionId": {
+          "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Terminal session ID (from bc_terminal_open).",
+          "terminalSessionId": {
+            "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
           },
           "text": {
@@ -7498,7 +7498,7 @@
           }
         },
         "required": [
-          "sessionId",
+          "terminalSessionId",
           "text"
         ],
         "type": "object"

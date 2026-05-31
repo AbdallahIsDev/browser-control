@@ -562,8 +562,13 @@ describe("MCP Tool Registry", () => {
       assert.equal((result.data as Record<string, unknown>).name, "other-session");
     });
 
-    it("terminal resume/status MCP tools forward sessionId", async () => {
-      const calls: { resume?: string; status?: string } = {};
+    it("terminal resume/status MCP tools forward terminalSessionId", async () => {
+      const calls: { resume?: string; status?: string; selectedSession?: string } = {};
+      const originalUse = api.session.use;
+      api.session.use = ((sessionId: string) => {
+        calls.selectedSession = sessionId;
+        return { success: true, path: "command", sessionId, completedAt: new Date().toISOString() };
+      }) as typeof api.session.use;
       api.terminal.resume = async (options) => {
         calls.resume = options.sessionId;
         return {
@@ -589,13 +594,18 @@ describe("MCP Tool Registry", () => {
       const resumeTool = tools.find((t) => t.name === "bc_terminal_resume")!;
       const statusTool = tools.find((t) => t.name === "bc_terminal_status")!;
 
-      const resume = await resumeTool.handler({ sessionId: "term-1" });
-      const status = await statusTool.handler({ sessionId: "term-1" });
+      try {
+        const resume = await resumeTool.handler({ terminalSessionId: "term-1", sessionId: "bc-session-1" });
+        const status = await statusTool.handler({ terminalSessionId: "term-1" });
 
-      assert.equal(resume.success, true);
-      assert.equal(status.success, true);
-      assert.equal(calls.resume, "term-1");
-      assert.equal(calls.status, "term-1");
+        assert.equal(resume.success, true);
+        assert.equal(status.success, true);
+        assert.equal(calls.resume, "term-1");
+        assert.equal(calls.status, "term-1");
+        assert.equal(calls.selectedSession, "bc-session-1");
+      } finally {
+        api.session.use = originalUse;
+      }
     });
 
     it("workflow edit-state MCP tool forwards parsed typed values", async () => {
@@ -682,6 +692,31 @@ describe("MCP Tool Registry", () => {
       const tool = tools.find((t) => t.name === "bc_browser_drop")!;
       assert.ok(tool, "bc_browser_drop tool should exist");
       assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_drop should have tabId property");
+    });
+
+    it("terminal tools disambiguate Browser Control and terminal session IDs", () => {
+      const tools = buildToolRegistry(api);
+      const terminalTools = tools.filter((tool) => tool.name.startsWith("bc_terminal_"));
+
+      for (const tool of terminalTools) {
+        assert.ok("sessionId" in tool.inputSchema.properties, `${tool.name} should accept Browser Control sessionId`);
+        assert.ok(!("browserControlSessionId" in tool.inputSchema.properties), `${tool.name} should not expose browserControlSessionId`);
+      }
+
+      for (const name of [
+        "bc_terminal_exec",
+        "bc_terminal_read",
+        "bc_terminal_write",
+        "bc_terminal_interrupt",
+        "bc_terminal_snapshot",
+        "bc_terminal_close",
+        "bc_terminal_resume",
+        "bc_terminal_status",
+      ]) {
+        const tool = tools.find((candidate) => candidate.name === name)!;
+        assert.ok("terminalSessionId" in tool.inputSchema.properties, `${name} should expose terminalSessionId`);
+        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${name} should not require Browser Control sessionId`);
+      }
     });
   });
 
