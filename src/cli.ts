@@ -1411,7 +1411,7 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 async function handleProxy(args: ParsedArgs): Promise<void> {
 	const { subcommand, positional, flags } = args;
 	const jsonOutput = flags.json === "true";
-	const { loadProxyConfigs } = await import("./proxy_manager");
+	const { getDefaultProxyPath, loadProxyConfigs } = await import("./proxy_manager");
 
 	switch (subcommand) {
 		case "test": {
@@ -1456,7 +1456,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 						"Warning: proxy credentials were stored in the credential vault and were not written to proxies.json.",
 					);
 				}
-				const proxyPath = path.join(process.cwd(), "proxies.json");
+				const proxyPath = getDefaultProxyPath();
 				let configs = [];
 				if (fs.existsSync(proxyPath)) {
 					configs = JSON.parse(fs.readFileSync(proxyPath, "utf8"));
@@ -1481,6 +1481,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 					status: "active",
 					...(credentialRef ? { credentialRef } : {}),
 				});
+				fs.mkdirSync(path.dirname(proxyPath), { recursive: true });
 				fs.writeFileSync(proxyPath, JSON.stringify(configs, null, 2));
 				console.log(`Proxy added: ${sanitized.url}`);
 			} catch (error) {
@@ -1499,7 +1500,7 @@ async function handleProxy(args: ParsedArgs): Promise<void> {
 
 			try {
 				const sanitized = sanitizeProxyUrlForStorage(url).url;
-				const proxyPath = path.join(process.cwd(), "proxies.json");
+				const proxyPath = getDefaultProxyPath();
 				if (!fs.existsSync(proxyPath)) {
 					console.log("No proxies configured");
 					break;

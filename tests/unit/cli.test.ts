@@ -705,6 +705,7 @@ test("parseArgs handles proxy add with positional URL", () => {
 test("proxy add stores proxy credentials in the credential vault", async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-home-"));
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-cwd-"));
+  const otherCwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-other-cwd-"));
   const previousHome = process.env.BROWSER_CONTROL_HOME;
   const previousBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
 
@@ -719,7 +720,9 @@ test("proxy add stores proxy credentials in the credential vault", async () => {
     );
     assert.equal(added.status, 0, added.stderr);
 
-    const proxyFile = fs.readFileSync(path.join(cwd, "proxies.json"), "utf8");
+    assert.equal(fs.existsSync(path.join(cwd, "proxies.json")), false);
+    const proxyPath = path.join(home, "config", "proxies.json");
+    const proxyFile = fs.readFileSync(proxyPath, "utf8");
     assert.doesNotMatch(proxyFile, /user|pass/u);
     const proxies = JSON.parse(proxyFile) as Array<{
       url: string;
@@ -745,6 +748,14 @@ test("proxy add stores proxy credentials in the credential vault", async () => {
     assert.doesNotMatch(listed.stdout, /user|pass/u);
     const listedProxies = JSON.parse(listed.stdout) as Array<{ url: string }>;
     assert.equal(listedProxies[0]?.url, "http://proxy.example.test:8080/");
+
+    const listedFromOtherCwd = runCli(["proxy", "list", "--json"], {
+      cwd: otherCwd,
+      env,
+    });
+    assert.equal(listedFromOtherCwd.status, 0, listedFromOtherCwd.stderr);
+    const otherCwdProxies = JSON.parse(listedFromOtherCwd.stdout) as Array<{ url: string }>;
+    assert.equal(otherCwdProxies[0]?.url, "http://proxy.example.test:8080/");
   } finally {
     resetCredentialVault();
     resetStateStorage();
@@ -754,6 +765,7 @@ test("proxy add stores proxy credentials in the credential vault", async () => {
     else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
+    fs.rmSync(otherCwd, { recursive: true, force: true });
   }
 });
 

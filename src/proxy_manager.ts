@@ -6,6 +6,7 @@ import { request, type BrowserContextOptions } from "playwright";
 import type { Telemetry } from "./runtime/telemetry";
 import { ServiceRegistry, isValidServiceName, type ServiceEntry } from "./services/registry";
 import { getLocalhostCaStatus } from "./services/local_ca";
+import { getConfigDir } from "./shared/paths";
 
 export interface ProxyConfig {
   url: string;
@@ -111,8 +112,8 @@ function normalizeProxyConfig(input: ProxyConfigInput): ProxyConfig {
   };
 }
 
-export function getDefaultProxyPath(cwd = process.cwd()): string {
-  return path.join(cwd, "proxies.json");
+export function getDefaultProxyPath(dataHome?: string): string {
+  return path.join(getConfigDir(dataHome), "proxies.json");
 }
 
 function readProxyFile(filePath: string): ProxyConfig[] {
@@ -158,9 +159,9 @@ function normalizeProxyUrl(url: string): string {
 }
 
 export function loadProxyConfigs(options: LoadProxyConfigOptions = {}): ProxyConfig[] {
-  const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
-  const filePath = options.filePath ?? getDefaultProxyPath(cwd);
+  const filePath = options.filePath
+    ?? (options.cwd ? path.join(options.cwd, "proxies.json") : getDefaultProxyPath());
 
   return [
     ...readProxyFile(filePath),
