@@ -3,6 +3,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { MemoryStore } from "../../src/runtime/memory_store";
 import { WorkflowStore } from "../../src/workflows/store";
 import { WorkflowRuntime } from "../../src/workflows/runtime";
@@ -19,6 +20,24 @@ import { getStateStorage, resetStateStorage } from "../../src/state/index";
 
 function makeStore() {
   return new MemoryStore({ filename: ":memory:" });
+}
+
+function makeFileStore(): { store: MemoryStore; storePath: string; cleanup: () => void } {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-workflow-store-"));
+  const storePath = path.join(tmpDir, "memory.sqlite");
+  const store = new MemoryStore({ filename: storePath });
+  return {
+    store,
+    storePath,
+    cleanup: () => {
+      try {
+        store.close();
+      } catch {
+        // ignore cleanup errors
+      }
+      fs.rmSync(tmpDir, { force: true, recursive: true });
+    },
+  };
 }
 
 function makeGraph(overrides: Partial<WorkflowGraph> = {}): WorkflowGraph {
@@ -111,6 +130,68 @@ describe("Workflow Store", () => {
     assert.strictEqual(store.getGraph("test-graph"), null);
 
     ms.close();
+  });
+
+  it("persists graphs and runs without plaintext workflow state", () => {
+    const { store: ms, storePath, cleanup } = makeFileStore();
+    const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-workflow-secrets-"));
+    const store = new WorkflowStore(ms, {
+      credentialProtection: createCredentialProtectionService({
+        dataHome: secretsDir,
+        preferWindowsDpapi: false,
+      }),
+    });
+    const secretMarker = "workflow-marker-secret";
+    const graph = makeGraph({
+      id: "secret-graph",
+      nodes: [{ id: "step1", kind: "terminal", input: { command: `echo ${secretMarker}` } }],
+      edges: [],
+    });
+
+    store.saveGraph(graph);
+    store.saveRun({
+      id: "secret-run",
+      graphId: graph.id,
+      graphName: graph.name,
+      status: "completed",
+      state: { result: secretMarker },
+      nodeResults: {
+        step1: {
+          nodeId: "step1",
+          status: "completed",
+          output: { stdout: secretMarker },
+          retryCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      },
+      approvals: [],
+      artifacts: [],
+      failures: [],
+      events: [{ type: "workflow-completed", runId: "secret-run", timestamp: new Date().toISOString(), data: secretMarker }],
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    assert.strictEqual(store.getGraph("secret-graph")?.nodes[0].input.command, `echo ${secretMarker}`);
+    assert.strictEqual(store.getRun("secret-run")?.state.result, secretMarker);
+
+    ms.close();
+    const db = new DatabaseSync(storePath, { readOnly: true });
+    try {
+      const rows = db.prepare("SELECT value_json FROM memory_store WHERE key IN (?, ?)").all(
+        "wf:graph:v1:secret-graph",
+        "wf:run:v1:secret-run",
+      ) as Array<{ value_json: string }>;
+      assert.strictEqual(rows.length, 2);
+      for (const row of rows) {
+        assert.doesNotMatch(row.value_json, /workflow-marker-secret/);
+      }
+    } finally {
+      db.close();
+      fs.rmSync(secretsDir, { force: true, recursive: true });
+      cleanup();
+    }
   });
 });
 

@@ -6,9 +6,14 @@
  */
 
 import { MemoryStore } from "../runtime/memory_store";
+import {
+  type CredentialProtectionService,
+  createCredentialProtectionService,
+} from "../security/credential_provider";
 import type { TerminalBufferRecord } from "./resume_types";
 
 const DEFAULT_MAX_SCROLLBACK_LINES = 10_000;
+const PROTECTED_TERMINAL_BUFFER_VERSION = 1;
 
 /** Storage key prefix for terminal buffers. */
 export const TERMINAL_BUFFER_KEY = "terminal:buffer:";
@@ -21,6 +26,7 @@ export const TERMINAL_PENDING_KEY = "terminal:resume-pending:";
 
 export interface BufferStoreOptions {
   maxScrollbackLines?: number;
+  credentialProtection?: CredentialProtectionService;
 }
 
 interface PendingRecord {
@@ -28,13 +34,38 @@ interface PendingRecord {
   markedAt?: string;
 }
 
+interface ProtectedTerminalStoreRecord {
+  protected: true;
+  formatVersion: typeof PROTECTED_TERMINAL_BUFFER_VERSION;
+  recordType: "buffer" | "session";
+  sessionId: string;
+  capturedAt?: string;
+  encryption: "credential-protection-service";
+  encryptedPayload: string;
+}
+
+function isProtectedTerminalStoreRecord(value: unknown): value is ProtectedTerminalStoreRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { protected?: unknown }).protected === true &&
+    (value as { formatVersion?: unknown }).formatVersion === PROTECTED_TERMINAL_BUFFER_VERSION &&
+    ((value as { recordType?: unknown }).recordType === "buffer" ||
+      (value as { recordType?: unknown }).recordType === "session") &&
+    typeof (value as { sessionId?: unknown }).sessionId === "string" &&
+    typeof (value as { encryptedPayload?: unknown }).encryptedPayload === "string"
+  );
+}
+
 export class TerminalBufferStore {
   private readonly store: MemoryStore;
   private readonly maxScrollbackLines: number;
+  private readonly credentialProtection: CredentialProtectionService;
 
   constructor(store: MemoryStore, options: BufferStoreOptions = {}) {
     this.store = store;
     this.maxScrollbackLines = options.maxScrollbackLines ?? DEFAULT_MAX_SCROLLBACK_LINES;
+    this.credentialProtection = options.credentialProtection ?? createCredentialProtectionService();
   }
 
   /**
@@ -47,7 +78,7 @@ export class TerminalBufferStore {
       ...record,
       scrollback: this.truncateLines(record.scrollback),
     };
-    this.store.set(`${TERMINAL_BUFFER_KEY}${sessionId}`, truncated);
+    this.store.set(`${TERMINAL_BUFFER_KEY}${sessionId}`, this.protectBuffer(sessionId, truncated));
   }
 
   /**
@@ -55,9 +86,15 @@ export class TerminalBufferStore {
    */
   loadBuffer(sessionId: string): TerminalBufferRecord | null {
     try {
-      const record = this.store.get<TerminalBufferRecord>(`${TERMINAL_BUFFER_KEY}${sessionId}`);
-      if (!record || !Array.isArray(record.scrollback)) return null;
-      return record;
+      const record = this.store.get<TerminalBufferRecord | ProtectedTerminalStoreRecord>(
+        `${TERMINAL_BUFFER_KEY}${sessionId}`,
+      );
+      if (!record) return null;
+      const buffer = isProtectedTerminalStoreRecord(record)
+        ? this.unprotectValue<TerminalBufferRecord>(sessionId, "buffer", record)
+        : record;
+      if (!buffer || !Array.isArray(buffer.scrollback)) return null;
+      return buffer;
     } catch {
       return null;
     }
@@ -74,7 +111,7 @@ export class TerminalBufferStore {
    * Save serialized terminal session metadata.
    */
   saveSession(sessionId: string, data: unknown): void {
-    this.store.set(`${TERMINAL_METADATA_KEY}${sessionId}`, data);
+    this.store.set(`${TERMINAL_METADATA_KEY}${sessionId}`, this.protectValue(sessionId, "session", data));
   }
 
   /**
@@ -82,7 +119,9 @@ export class TerminalBufferStore {
    */
   loadSession(sessionId: string): unknown | null {
     try {
-      return this.store.get<unknown>(`${TERMINAL_METADATA_KEY}${sessionId}`);
+      const record = this.store.get<unknown>(`${TERMINAL_METADATA_KEY}${sessionId}`);
+      if (!isProtectedTerminalStoreRecord(record)) return record;
+      return this.unprotectValue(sessionId, "session", record);
     } catch {
       return null;
     }
@@ -168,6 +207,38 @@ export class TerminalBufferStore {
   private truncateLines(lines: string[]): string[] {
     if (lines.length <= this.maxScrollbackLines) return lines;
     return lines.slice(lines.length - this.maxScrollbackLines);
+  }
+
+  private protectBuffer(sessionId: string, record: TerminalBufferRecord): ProtectedTerminalStoreRecord {
+    return this.protectValue(sessionId, "buffer", record, record.capturedAt);
+  }
+
+  private protectValue(
+    sessionId: string,
+    recordType: ProtectedTerminalStoreRecord["recordType"],
+    value: unknown,
+    capturedAt?: string,
+  ): ProtectedTerminalStoreRecord {
+    const encrypted = this.credentialProtection.protect(JSON.stringify(value));
+    return {
+      protected: true,
+      formatVersion: PROTECTED_TERMINAL_BUFFER_VERSION,
+      recordType,
+      sessionId,
+      ...(capturedAt ? { capturedAt } : {}),
+      encryption: "credential-protection-service",
+      encryptedPayload: encrypted.toString("base64"),
+    };
+  }
+
+  private unprotectValue<T>(
+    sessionId: string,
+    recordType: ProtectedTerminalStoreRecord["recordType"],
+    record: ProtectedTerminalStoreRecord,
+  ): T | null {
+    if (record.sessionId !== sessionId || record.recordType !== recordType) return null;
+    const decrypted = this.credentialProtection.unprotect(Buffer.from(record.encryptedPayload, "base64"));
+    return JSON.parse(decrypted) as T;
   }
 
   private listPendingRecords(): PendingRecord[] {
