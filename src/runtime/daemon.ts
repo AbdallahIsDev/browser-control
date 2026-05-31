@@ -174,6 +174,10 @@ export class Daemon {
 
 	private readonly terminalManager = new TerminalSessionManager();
 
+	private terminalBufferStore: TerminalBufferStore | null = null;
+
+	private terminalBufferStoreMaxScrollbackLines: number | null = null;
+
 	private readonly skillRegistry = new SkillRegistry();
 
 	private readonly taskStatuses = new Map<string, RunningTaskRecord>();
@@ -1521,7 +1525,16 @@ export class Daemon {
 	private getTerminalBufferStore(): TerminalBufferStore {
 		const maxScrollbackLines =
 			this.appConfig?.terminalMaxScrollbackLines ?? 10_000;
-		return new TerminalBufferStore(this.memoryStore, { maxScrollbackLines });
+		if (
+			!this.terminalBufferStore ||
+			this.terminalBufferStoreMaxScrollbackLines !== maxScrollbackLines
+		) {
+			this.terminalBufferStore = new TerminalBufferStore(this.memoryStore, {
+				maxScrollbackLines,
+			});
+			this.terminalBufferStoreMaxScrollbackLines = maxScrollbackLines;
+		}
+		return this.terminalBufferStore;
 	}
 
 	private getTerminalResumePolicy(): "resume" | "metadata_only" | "abandon" {

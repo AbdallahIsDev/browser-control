@@ -181,6 +181,21 @@ test("Daemon start coalesces concurrent initialization calls", async () => {
   }
 });
 
+test("Daemon reuses terminal buffer store instance", () => {
+  const { tempDir, store, config } = createTestConfig();
+  const daemon = new Daemon(config);
+  const internals = daemon as unknown as {
+    getTerminalBufferStore: () => unknown;
+  };
+
+  try {
+    assert.equal(internals.getTerminalBufferStore(), internals.getTerminalBufferStore());
+  } finally {
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Daemon start fails fast when critical health checks fail", async () => {
   const daemon = new Daemon({
     healthCheck: {
