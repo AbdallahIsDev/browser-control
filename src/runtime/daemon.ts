@@ -190,6 +190,10 @@ export class Daemon {
 
 	private stopped = false;
 
+	private brokerStarted = false;
+
+	private schedulerStarted = false;
+
 	private taskCounter = 0;
 
 	private daemonStatus: DaemonStatus = "stopped";
@@ -239,6 +243,9 @@ export class Daemon {
 			return;
 		}
 
+		this.stopped = false;
+		this.storeClosed = false;
+		this.acceptNewTasks = true;
 		this.appConfig = loadConfig({ validate: false });
 		this.memoryStore = this.config.memoryStore ?? new MemoryStore();
 		this.state =
@@ -335,42 +342,58 @@ export class Daemon {
 			await this.submitTask(task, scheduledTask.id);
 		});
 
-		this.broker = this.config.brokerFactory
-			? await this.config.brokerFactory(this)
-			: await this.createDefaultBroker();
-		await this.broker.start();
+		try {
+			this.broker = this.config.brokerFactory
+				? await this.config.brokerFactory(this)
+				: await this.createDefaultBroker();
+			await this.broker.start();
+			this.brokerStarted = true;
 
-		this.writePidFile();
-		if (this.config.schedulerEnabled ?? true) {
-			this.scheduler.start();
+			this.writePidFile();
+			if (this.config.schedulerEnabled ?? true) {
+				this.scheduler.start();
+				this.schedulerStarted = true;
+			}
+			this.startHeartbeat();
+			this.startChromeWatchdog();
+			this.startSkillStatePersistence();
+			this.registerSignalHandlers();
+
+			// Mark daemon as running
+			this.startedAt = new Date().toISOString();
+			this.daemonStatus = "running";
+			this.writeDaemonStatus("running");
+
+			// Startup recovery: scan for interrupted tasks
+			await this.recoverInterruptedTasks();
+
+			// Startup recovery: restore terminal sessions from persisted state
+			await this.restoreTerminals();
+
+			// Restore skill state for registered skills that implement restoreState
+			await this.restoreSkillStates();
+
+			// Call onResume for skills that implement it (after restore + setup)
+			await this.resumeSkills();
+
+			this.started = true;
+		} catch (error: unknown) {
+			try {
+				await this.stop();
+			} catch (cleanupError: unknown) {
+				this.log.error("Daemon partial-start cleanup failed", {
+					error:
+						cleanupError instanceof Error
+							? cleanupError.message
+							: String(cleanupError),
+				});
+			}
+			throw error;
 		}
-		this.startHeartbeat();
-		this.startChromeWatchdog();
-		this.startSkillStatePersistence();
-		this.registerSignalHandlers();
-
-		// Mark daemon as running
-		this.startedAt = new Date().toISOString();
-		this.daemonStatus = "running";
-		this.writeDaemonStatus("running");
-
-		// Startup recovery: scan for interrupted tasks
-		await this.recoverInterruptedTasks();
-
-		// Startup recovery: restore terminal sessions from persisted state
-		await this.restoreTerminals();
-
-		// Restore skill state for registered skills that implement restoreState
-		await this.restoreSkillStates();
-
-		// Call onResume for skills that implement it (after restore + setup)
-		await this.resumeSkills();
-
-		this.started = true;
 	}
 
 	async stop(): Promise<void> {
-		if (!this.started || this.stopped) {
+		if (this.stopped || (!this.started && !this.hasStartedSubsystems())) {
 			return;
 		}
 
@@ -425,8 +448,14 @@ export class Daemon {
 		await this.pauseSkills();
 
 		// Stop subsystems
-		await this.scheduler.stop();
-		await this.broker.stop();
+		if (this.schedulerStarted) {
+			await this.scheduler.stop();
+			this.schedulerStarted = false;
+		}
+		if (this.brokerStarted) {
+			await this.broker.stop();
+			this.brokerStarted = false;
+		}
 
 		// Serialize terminal sessions BEFORE closing PTYs
 		await this.serializeTerminals();
@@ -476,6 +505,17 @@ export class Daemon {
 		this.removeSignalHandlers();
 		this.started = false;
 		this.log.info("Shutdown complete");
+	}
+
+	private hasStartedSubsystems(): boolean {
+		return (
+			this.brokerStarted ||
+			this.schedulerStarted ||
+			this.heartbeatHandle !== null ||
+			this.chromeWatchdogHandle !== null ||
+			this.skillStatePersistHandle !== null ||
+			this.signalHandler !== null
+		);
 	}
 
 	async submitTask(task: Task, externalId?: string): Promise<string> {

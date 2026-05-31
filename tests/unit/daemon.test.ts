@@ -96,6 +96,52 @@ test("Daemon start fails fast when critical health checks fail", async () => {
   );
 });
 
+test("Daemon cleans up partial startup when later recovery fails", async () => {
+  const brokerCalls = { start: 0, stop: 0 };
+  const { tempDir, pidPath, store, telemetry, config } = createTestConfig({
+    brokerFactory: async () => ({
+      start: async () => {
+        brokerCalls.start += 1;
+      },
+      stop: async () => {
+        brokerCalls.stop += 1;
+      },
+    }),
+  });
+  const daemon = new Daemon(config);
+  const internals = daemon as unknown as {
+    restoreTerminals: () => Promise<void>;
+    scheduler?: { stop: () => Promise<void> };
+    broker?: { stop: () => Promise<void> };
+    heartbeatHandle?: NodeJS.Timeout | null;
+    chromeWatchdogHandle?: NodeJS.Timeout | null;
+    skillStatePersistHandle?: NodeJS.Timeout | null;
+  };
+  internals.restoreTerminals = async () => {
+    throw new Error("restore exploded");
+  };
+
+  try {
+    await assert.rejects(() => daemon.start(), /restore exploded/);
+    await daemon.stop();
+
+    assert.equal(brokerCalls.start, 1);
+    assert.equal(brokerCalls.stop, 1);
+    assert.equal(fs.existsSync(pidPath), false);
+    assert.equal(daemon.getDaemonStatus(), "stopped");
+  } finally {
+    if (brokerCalls.stop === 0) {
+      await internals.broker?.stop().catch(() => {});
+    }
+    await internals.scheduler?.stop().catch(() => {});
+    if (internals.heartbeatHandle) clearInterval(internals.heartbeatHandle);
+    if (internals.chromeWatchdogHandle) clearInterval(internals.chromeWatchdogHandle);
+    if (internals.skillStatePersistHandle) clearInterval(internals.skillStatePersistHandle);
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 // ── Graceful shutdown without waiting for tasks ──────────────────────
 
 test("Daemon stop persists running task state without waiting for completion", async () => {
