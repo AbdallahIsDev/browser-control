@@ -9,6 +9,7 @@
  */
 
 import {
+  getKnowledgeDirectoryUsage,
   listAllKnowledge,
   listByKind,
   findByDomain,
@@ -169,8 +170,10 @@ export function getKnowledgeStats(): {
   domainSkills: number;
   totalEntries: number;
   verifiedEntries: number;
+  totalBytes: number;
 } {
   const all = listAllKnowledge();
+  const usage = getKnowledgeDirectoryUsage();
   const interactionSkills = all.filter((s) => s.kind === "interaction-skill").length;
   const domainSkills = all.filter((s) => s.kind === "domain-skill").length;
 
@@ -187,5 +190,6 @@ export function getKnowledgeStats(): {
     domainSkills,
     totalEntries,
     verifiedEntries,
+    totalBytes: usage.totalBytes,
   };
 }

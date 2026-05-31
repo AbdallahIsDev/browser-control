@@ -903,6 +903,9 @@ Browser Namespace (compatibility):
   knowledge show <name-or-domain>                                    Show knowledge for a domain or package
   knowledge validate [--all]                                         Validate knowledge files
   knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
+  knowledge prune --max-bytes=<n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
+                                                                      Enforce knowledge directory size quota
+  knowledge stats [--json]                                            Show knowledge directory usage
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
   knowledge backends [list|health|search|rank]                       Manage knowledge backends
   term open [--shell=<name>] [--cwd=<path>] [--name=<name>]           Open a terminal session
@@ -3493,6 +3496,8 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 		deleteArtifact,
 		pruneArtifact,
 		loadArtifact,
+		getKnowledgeDirectoryUsage,
+		pruneKnowledgeDirectoryBySize,
 	} = await import("./knowledge/store");
 	const { getKnowledgeStats } = await import("./knowledge/query");
 	const { validateArtifact } = await import("./knowledge/validator");
@@ -3524,8 +3529,24 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 				}
 				const stats = getKnowledgeStats();
 				console.log(
-					`\nTotal: ${stats.totalFiles} files, ${stats.totalEntries} entries (${stats.verifiedEntries} verified)`,
+					`\nTotal: ${stats.totalFiles} files, ${stats.totalEntries} entries (${stats.verifiedEntries} verified), ${stats.totalBytes} bytes`,
 				);
+			}
+			break;
+		}
+
+		case "stats": {
+			const stats = getKnowledgeStats();
+			const usage = getKnowledgeDirectoryUsage();
+			const payload = { ...stats, usage };
+
+			if (jsonOutput) {
+				outputJson(payload, true);
+			} else {
+				console.log(`Knowledge directory: ${usage.rootDir}`);
+				console.log(`Files: ${usage.fileCount}`);
+				console.log(`Bytes: ${usage.totalBytes}`);
+				console.log(`Entries: ${stats.totalEntries} (${stats.verifiedEntries} verified)`);
 			}
 			break;
 		}
@@ -3635,6 +3656,41 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 		case "prune": {
 			// Prune removes stale entries (not full delete)
+			if (flags["max-bytes"]) {
+				const maxBytes = Number(flags["max-bytes"]);
+				if (!Number.isFinite(maxBytes) || maxBytes < 0) {
+					console.error("Error: --max-bytes must be a non-negative number");
+					throw commandFailed();
+				}
+
+				const dryRunRequested = flags["dry-run"] === "false";
+				const confirmed = flags.confirm === "DELETE_OLD_KNOWLEDGE";
+				if (dryRunRequested && !confirmed) {
+					console.error("Error: knowledge quota pruning requires explicit confirmation.");
+					console.error(
+						"Use: knowledge prune --max-bytes=<n> --dry-run=false --confirm=DELETE_OLD_KNOWLEDGE",
+					);
+					throw commandFailed();
+				}
+
+				const result = pruneKnowledgeDirectoryBySize({
+					maxBytes,
+					dryRun: !dryRunRequested,
+				});
+
+				if (jsonOutput) {
+					outputJson(result);
+				} else {
+					console.log(
+						`${result.dryRun ? "Dry run" : "Pruned"}: ${result.removedFiles.length} files, ${result.removedBytes} bytes selected.`,
+					);
+					console.log(
+						`Knowledge usage: ${result.totalBytesBefore} -> ${result.totalBytesAfter} bytes (max ${result.maxBytes}).`,
+					);
+				}
+				break;
+			}
+
 			const nameOrDomain = positional[0];
 			if (!nameOrDomain) {
 				console.error("Error: Name or domain is required");

@@ -14,6 +14,8 @@ import {
   findByDomain,
   findByName,
   pruneArtifact,
+  getKnowledgeDirectoryUsage,
+  pruneKnowledgeDirectoryBySize,
 } from "../../src/knowledge_store";
 import {
   validateArtifact,
@@ -709,6 +711,46 @@ test("knowledge query: getKnowledgeStats", () => {
       assert.equal(stats.totalFiles, 2);
       assert.equal(stats.interactionSkills, 1);
       assert.equal(stats.domainSkills, 1);
+      assert.ok(stats.totalBytes > 0);
+    });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("knowledge store: tracks directory usage and prunes oldest files by size quota", () => {
+  const tmp = createTempKnowledgeHome();
+  try {
+    withTempHome(tmp, () => {
+      const oldFile = saveArtifact("domain-skill", "old.example", {
+        kind: "domain-skill", domain: "old.example", capturedAt: "2026-04-20T10:00:00Z",
+      }, `## Selectors\n- ${"old".repeat(100)}`);
+      const newFile = saveArtifact("domain-skill", "new.example", {
+        kind: "domain-skill", domain: "new.example", capturedAt: "2026-04-20T10:00:00Z",
+      }, `## Selectors\n- ${"new".repeat(100)}`);
+
+      const oldTime = new Date("2026-04-20T10:00:00Z");
+      const newTime = new Date("2026-04-21T10:00:00Z");
+      fs.utimesSync(oldFile, oldTime, oldTime);
+      fs.utimesSync(newFile, newTime, newTime);
+
+      const usage = getKnowledgeDirectoryUsage();
+      assert.equal(usage.fileCount, 2);
+      assert.ok(usage.totalBytes > 0);
+
+      const newestBytes = fs.statSync(newFile).size;
+      const dryRun = pruneKnowledgeDirectoryBySize({ maxBytes: newestBytes, dryRun: true });
+      assert.equal(dryRun.dryRun, true);
+      assert.equal(dryRun.removedFiles.length, 1);
+      assert.equal(dryRun.removedFiles[0].filePath, path.resolve(oldFile));
+      assert.equal(fs.existsSync(oldFile), true);
+
+      const pruned = pruneKnowledgeDirectoryBySize({ maxBytes: newestBytes, dryRun: false });
+      assert.equal(pruned.dryRun, false);
+      assert.equal(pruned.removedFiles.length, 1);
+      assert.equal(fs.existsSync(oldFile), false);
+      assert.equal(fs.existsSync(newFile), true);
+      assert.ok(getKnowledgeDirectoryUsage().totalBytes <= newestBytes);
     });
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

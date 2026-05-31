@@ -311,6 +311,8 @@ export {
   saveArtifact,
   deleteArtifact,
   pruneArtifact,
+  getKnowledgeDirectoryUsage,
+  pruneKnowledgeDirectoryBySize,
   listAllKnowledge,
   listByKind,
   findByDomain,

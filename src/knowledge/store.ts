@@ -542,6 +542,35 @@ interface PruneResult {
   filePath: string;
 }
 
+export interface KnowledgeDirectoryFileUsage {
+  filePath: string;
+  bytes: number;
+  mtimeMs: number;
+}
+
+export interface KnowledgeDirectoryUsage {
+  rootDir: string;
+  totalBytes: number;
+  fileCount: number;
+  files: KnowledgeDirectoryFileUsage[];
+}
+
+export interface KnowledgeQuotaPruneOptions {
+  maxBytes: number;
+  dryRun?: boolean;
+}
+
+export interface KnowledgeQuotaPruneResult {
+  rootDir: string;
+  maxBytes: number;
+  dryRun: boolean;
+  totalBytesBefore: number;
+  totalBytesAfter: number;
+  removedBytes: number;
+  removedFiles: KnowledgeDirectoryFileUsage[];
+  keptFiles: number;
+}
+
 /**
  * Prune stale entries from a knowledge artifact.
  * Returns how many entries were removed vs kept.
@@ -610,4 +639,73 @@ export function pruneArtifact(
   }
 
   return { removed, kept: filtered.length, filePath };
+}
+
+export function getKnowledgeDirectoryUsage(rootDir = getKnowledgeDir()): KnowledgeDirectoryUsage {
+  const resolvedRoot = path.resolve(rootDir);
+  const files: KnowledgeDirectoryFileUsage[] = [];
+
+  const visit = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stat = fs.statSync(entryPath);
+      files.push({
+        filePath: path.resolve(entryPath),
+        bytes: stat.size,
+        mtimeMs: stat.mtimeMs,
+      });
+    }
+  };
+
+  visit(resolvedRoot);
+
+  return {
+    rootDir: resolvedRoot,
+    totalBytes: files.reduce((sum, file) => sum + file.bytes, 0),
+    fileCount: files.length,
+    files: files.sort((a, b) => a.mtimeMs - b.mtimeMs || a.filePath.localeCompare(b.filePath)),
+  };
+}
+
+export function pruneKnowledgeDirectoryBySize(
+  options: KnowledgeQuotaPruneOptions,
+): KnowledgeQuotaPruneResult {
+  if (!Number.isFinite(options.maxBytes) || options.maxBytes < 0) {
+    throw new Error("maxBytes must be a non-negative finite number.");
+  }
+
+  const usage = getKnowledgeDirectoryUsage();
+  const dryRun = options.dryRun ?? true;
+  let projectedBytes = usage.totalBytes;
+  const removedFiles: KnowledgeDirectoryFileUsage[] = [];
+
+  for (const file of usage.files) {
+    if (projectedBytes <= options.maxBytes) break;
+    removedFiles.push(file);
+    projectedBytes -= file.bytes;
+    if (!dryRun) {
+      fs.unlinkSync(file.filePath);
+    }
+  }
+
+  const totalBytesAfter = dryRun
+    ? projectedBytes
+    : getKnowledgeDirectoryUsage(usage.rootDir).totalBytes;
+
+  return {
+    rootDir: usage.rootDir,
+    maxBytes: options.maxBytes,
+    dryRun,
+    totalBytesBefore: usage.totalBytes,
+    totalBytesAfter,
+    removedBytes: removedFiles.reduce((sum, file) => sum + file.bytes, 0),
+    removedFiles,
+    keptFiles: usage.fileCount - removedFiles.length,
+  };
 }
