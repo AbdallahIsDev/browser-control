@@ -475,7 +475,7 @@ export class Daemon {
 
 		// Close audit logger
 		if (this.auditLogger) {
-			this.auditLogger.close();
+			await this.auditLogger.close();
 			this.auditLogger = null;
 		}
 

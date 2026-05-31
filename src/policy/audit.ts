@@ -16,6 +16,7 @@ import { getReportsDir } from "../shared/paths";
 import { logger } from "../shared/logger";
 import fs from "fs";
 import path from "path";
+import { StringDecoder } from "string_decoder";
 
 // ─── Audit Logger Options ───────────────────────────────────────────────
 
@@ -35,8 +36,8 @@ export class PolicyAuditLogger {
   private maxFiles: number;
   private enabled: boolean;
   private currentLogFile: string | null = null;
-  private currentFileStream: fs.WriteStream | null = null;
   private currentFileSize: number = 0;
+  private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(options: AuditLoggerOptions = {}) {
     this.auditDir = options.auditDir ?? path.join(getReportsDir(), "policy-audit");
@@ -142,6 +143,14 @@ export class PolicyAuditLogger {
       return;
     }
 
+    const line = JSON.stringify(entry) + "\n";
+    this.pendingWrite = this.pendingWrite.then(
+      () => this.appendEntryLine(line),
+      () => this.appendEntryLine(line),
+    );
+  }
+
+  private async appendEntryLine(line: string): Promise<void> {
     this.rotateIfNeeded();
 
     if (!this.currentLogFile) {
@@ -149,14 +158,80 @@ export class PolicyAuditLogger {
     }
 
     try {
-      const line = JSON.stringify(entry) + "\n";
-      fs.appendFileSync(this.currentLogFile, line, { encoding: "utf-8" });
+      await fs.promises.appendFile(this.currentLogFile, line, { encoding: "utf-8" });
       this.currentFileSize += Buffer.byteLength(line, "utf-8");
     } catch (error: unknown) {
       this.auditLog.error("Failed to write audit entry", {
         error: error instanceof Error ? error.message : String(error),
         logFile: this.currentLogFile,
       });
+    }
+  }
+
+  private listAuditFiles(): string[] {
+    return fs.readdirSync(this.auditDir)
+      .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
+      .sort()
+      .reverse();
+  }
+
+  private scanAuditEntries(
+    visitor: (entry: PolicyAuditEntry) => boolean | void,
+  ): void {
+    const files = this.listAuditFiles();
+    for (const file of files) {
+      const filePath = path.join(this.auditDir, file);
+      const shouldContinue = this.scanAuditFile(filePath, visitor);
+      if (!shouldContinue) {
+        break;
+      }
+    }
+  }
+
+  private scanAuditFile(
+    filePath: string,
+    visitor: (entry: PolicyAuditEntry) => boolean | void,
+  ): boolean {
+    const fd = fs.openSync(filePath, "r");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    const decoder = new StringDecoder("utf8");
+    let pending = "";
+
+    try {
+      let bytesRead = 0;
+      while ((bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) {
+        const chunk = pending + decoder.write(buffer.subarray(0, bytesRead));
+        const lines = chunk.split("\n");
+        pending = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!this.visitAuditLine(line, visitor)) {
+            return false;
+          }
+        }
+      }
+
+      pending += decoder.end();
+      if (pending.trim() !== "") {
+        return this.visitAuditLine(pending, visitor);
+      }
+      return true;
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  private visitAuditLine(
+    line: string,
+    visitor: (entry: PolicyAuditEntry) => boolean | void,
+  ): boolean {
+    if (line.trim() === "") {
+      return true;
+    }
+    try {
+      const entry = JSON.parse(line) as PolicyAuditEntry;
+      return visitor(entry) !== false;
+    } catch {
+      return true;
     }
   }
 
@@ -177,27 +252,11 @@ export class PolicyAuditLogger {
 
     const entries: PolicyAuditEntry[] = [];
     try {
-      const files = fs.readdirSync(this.auditDir)
-        .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
-        .sort()
-        .reverse(); // Newest first
-
-      for (const file of files) {
-        const filePath = path.join(this.auditDir, file);
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(line => line.trim() !== "");
-
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as PolicyAuditEntry;
-            if (entry.sessionId === sessionId) {
-              entries.push(entry);
-            }
-          } catch {
-            // Skip malformed lines
-          }
+      this.scanAuditEntries((entry) => {
+        if (entry.sessionId === sessionId) {
+          entries.push(entry);
         }
-      }
+      });
     } catch (error: unknown) {
       this.auditLog.error("Failed to query audit entries by session", {
         error: error instanceof Error ? error.message : String(error),
@@ -218,27 +277,11 @@ export class PolicyAuditLogger {
 
     const entries: PolicyAuditEntry[] = [];
     try {
-      const files = fs.readdirSync(this.auditDir)
-        .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
-        .sort()
-        .reverse();
-
-      for (const file of files) {
-        const filePath = path.join(this.auditDir, file);
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(line => line.trim() !== "");
-
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as PolicyAuditEntry;
-            if (entry.actor === actor) {
-              entries.push(entry);
-            }
-          } catch {
-            // Skip malformed lines
-          }
+      this.scanAuditEntries((entry) => {
+        if (entry.actor === actor) {
+          entries.push(entry);
         }
-      }
+      });
     } catch (error: unknown) {
       this.auditLog.error("Failed to query audit entries by actor", {
         error: error instanceof Error ? error.message : String(error),
@@ -259,27 +302,11 @@ export class PolicyAuditLogger {
 
     const entries: PolicyAuditEntry[] = [];
     try {
-      const files = fs.readdirSync(this.auditDir)
-        .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
-        .sort()
-        .reverse();
-
-      for (const file of files) {
-        const filePath = path.join(this.auditDir, file);
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(line => line.trim() !== "");
-
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as PolicyAuditEntry;
-            if (entry.decision === decision) {
-              entries.push(entry);
-            }
-          } catch {
-            // Skip malformed lines
-          }
+      this.scanAuditEntries((entry) => {
+        if (entry.decision === decision) {
+          entries.push(entry);
         }
-      }
+      });
     } catch (error: unknown) {
       this.auditLog.error("Failed to query audit entries by decision", {
         error: error instanceof Error ? error.message : String(error),
@@ -303,28 +330,12 @@ export class PolicyAuditLogger {
     const entries: PolicyAuditEntry[] = [];
 
     try {
-      const files = fs.readdirSync(this.auditDir)
-        .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
-        .sort()
-        .reverse();
-
-      for (const file of files) {
-        const filePath = path.join(this.auditDir, file);
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(line => line.trim() !== "");
-
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as PolicyAuditEntry;
-            const entryTime = new Date(entry.timestamp).getTime();
-            if (entryTime >= startTime && entryTime <= endTime) {
-              entries.push(entry);
-            }
-          } catch {
-            // Skip malformed lines
-          }
+      this.scanAuditEntries((entry) => {
+        const entryTime = new Date(entry.timestamp).getTime();
+        if (entryTime >= startTime && entryTime <= endTime) {
+          entries.push(entry);
         }
-      }
+      });
     } catch (error: unknown) {
       this.auditLog.error("Failed to query audit entries by time range", {
         error: error instanceof Error ? error.message : String(error),
@@ -346,25 +357,12 @@ export class PolicyAuditLogger {
 
     const entries: PolicyAuditEntry[] = [];
     try {
-      const files = fs.readdirSync(this.auditDir)
-        .filter(f => f.startsWith("policy-audit-") && f.endsWith(".jsonl"))
-        .sort()
-        .reverse();
-
-      for (const file of files) {
-        const filePath = path.join(this.auditDir, file);
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(line => line.trim() !== "");
-
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as PolicyAuditEntry;
-            entries.push(entry);
-          } catch {
-            // Skip malformed lines
-          }
+      this.scanAuditEntries((entry) => {
+        entries.push(entry);
+        if (limit && entries.length >= limit) {
+          return false;
         }
-      }
+      });
     } catch (error: unknown) {
       this.auditLog.error("Failed to get audit entries", {
         error: error instanceof Error ? error.message : String(error),
@@ -413,13 +411,17 @@ export class PolicyAuditLogger {
   }
 
   /**
+   * Wait until queued audit writes are persisted.
+   */
+  async flush(): Promise<void> {
+    await this.pendingWrite;
+  }
+
+  /**
    * Close the audit logger.
    */
-  close(): void {
-    if (this.currentFileStream) {
-      this.currentFileStream.end();
-      this.currentFileStream = null;
-    }
+  async close(): Promise<void> {
+    await this.flush();
   }
 }
 
@@ -436,7 +438,7 @@ export function getDefaultAuditLogger(): PolicyAuditLogger {
 
 export function resetDefaultAuditLogger(): void {
   if (defaultAuditLogger) {
-    defaultAuditLogger.close();
+    void defaultAuditLogger.close();
     defaultAuditLogger = null;
   }
 }
