@@ -145,7 +145,7 @@ export class FsActions {
     if (session?.runtimeDir) {
       roots.push(session.runtimeDir);
     }
-    if (operation === "read" && session?.workingDirectory) {
+    if ((operation === "read" || operation === "write") && session?.workingDirectory) {
       roots.push(session.workingDirectory);
     }
     return roots.length > 0 ? roots : undefined;

@@ -771,7 +771,7 @@ test("bc package --help shows package-focused help", () => {
 	}
 });
 
-test("bc --help keeps browser shortcut guidance compact and current", () => {
+test("bc --help keeps promoted browser command guidance current", () => {
 	const home = makeHome();
 	try {
 		const result = spawnSync(
@@ -792,27 +792,25 @@ test("bc --help keeps browser shortcut guidance compact and current", () => {
 		);
 
 		assert.equal(result.status, 0, result.stderr || result.stdout);
-		assert.match(result.stdout, /Browser Shortcuts \(compatibility\):/);
-		assert.doesNotMatch(result.stdout, /\n\s+open <url>\s+/);
+		assert.match(result.stdout, /Browser Commands:/);
+		assert.match(result.stdout, /Browser Namespace \(compatibility\):/);
 		assert.doesNotMatch(result.stdout, /term view <sessionId>/);
-		for (const shortcut of [
+		assert.doesNotMatch(result.stdout, /Shortcut for:/);
+		for (const command of [
+			"open <url>",
 			"snapshot",
+			"state",
+			"act <action>",
+			"task run",
+			"provider list",
+			"downloads list",
 			"click <ref-or-target>",
 			"fill <ref-or-target> <text>",
-			"hover <ref-or-target>",
-			"type <text>",
-			"paste <text>",
-			"press <key>",
-			"scroll <direction>",
-			"screenshot",
-			"tab list",
-			"tab switch <id>",
-			"close",
 		]) {
 			assert.match(
 				result.stdout,
-				new RegExp(`${shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*Shortcut for:`),
-				`shortcut help missing compact guidance for ${shortcut}`,
+				new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+				`help missing promoted browser command ${command}`,
 			);
 		}
 		for (const browserCommand of [
@@ -840,31 +838,9 @@ test("bc --help keeps browser shortcut guidance compact and current", () => {
 	}
 });
 
-test("removed CLI aliases fail before browser or daemon work starts", () => {
+test("removed term view alias fails before daemon work starts", () => {
 	const home = makeHome();
 	try {
-		const openResult = spawnSync(
-			process.execPath,
-			[
-				"--require",
-				"ts-node/register",
-				"--require",
-				"tsconfig-paths/register",
-				"src/cli.ts",
-				"open",
-				"https://example.com",
-				"--json",
-			],
-			{
-				cwd: process.cwd(),
-				env: { ...process.env, BROWSER_CONTROL_HOME: home },
-				encoding: "utf8",
-			},
-		);
-
-		assert.notEqual(openResult.status, 0);
-		assert.match(openResult.stderr, /Unknown command: open/);
-
 		const termViewResult = spawnSync(
 			process.execPath,
 			[

@@ -177,6 +177,40 @@ test("data doctor --cleanup is an alias for data cleanup dry-run", () => {
   }
 });
 
+test("top-level list routes to browser list without browser namespace", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-top-list-"));
+  try {
+    const result = runCli(["list", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.success, true);
+    assert.ok(Array.isArray(parsed.data));
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("top-level provider list routes to browser provider list", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-top-provider-"));
+  try {
+    const result = runCli(["provider", "list", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(parsed.providers));
+    assert.equal(parsed.activeProvider, "local");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("data cleanup --stale moves legacy trading only with explicit confirmation", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-stale-cleanup-"));
   try {

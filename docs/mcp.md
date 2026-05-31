@@ -4,11 +4,11 @@ Browser Control exposes its action surface as an MCP stdio server.
 
 For terminal-capable agents working in this repo, prefer the CLI first (`bc status --json`, `bc browser state --json`, `bc browser act`, `bc browser task run`). CLI-first execution usually uses fewer LLM tool calls than MCP while preserving the same policy/audit `ActionResult` model. Use MCP Lite for MCP-native clients that need a reduced high-level surface; use full MCP when the full tool set is required.
 
-Browser Control exposes short tool aliases such as `status`, `open`, `snapshot`, `click`, `fill`, and `screenshot`. Legacy `bc_*` tool names remain supported.
+Browser Control exposes short tool names such as `status`, `open`, `snapshot`, `click`, `fill`, and `screenshot`. Canonical `bc_*` names remain supported for clients that prefer namespaced tools.
 
 Some clients prefix tool names with the MCP server name. In those clients, name the server `bc` if you want surfaced names like `mcp_bc_status` and `mcp_bc_open`.
 
-MCP tool inputs are strict. Unknown parameters are rejected before handlers run, for example `expression` on `bc_browser_scroll` fails closed instead of being ignored.
+MCP tool inputs are strict. Unknown parameters are rejected before handlers run, for example `expression` on `bc_scroll` fails closed instead of being ignored.
 
 ## Start Server
 
@@ -91,48 +91,48 @@ Browser:
 - `downloads_list`
 - `generate_locator`
 - `highlight`
-- `bc_attach` (`bc_browser_attach` compatibility alias)
-- `bc_detach` (`bc_browser_detach` compatibility alias)
-- `bc_launch` (`bc_browser_launch` compatibility alias)
-- `bc_open` (`bc_browser_open` compatibility alias)
-- `bc_open_many` (`bc_browser_open_many` compatibility alias)
-- `bc_navigate` (`bc_browser_navigate` compatibility alias)
-- `bc_list` (`bc_browser_list` compatibility alias)
-- `bc_snapshot` (`bc_browser_snapshot` compatibility alias)
-- `bc_click` (`bc_browser_click` compatibility alias)
-- `bc_fill` (`bc_browser_fill` compatibility alias)
-- `bc_fill_many` (`bc_browser_fill_many` compatibility alias)
-- `bc_hover` (`bc_browser_hover` compatibility alias)
-- `bc_type` (`bc_browser_type` compatibility alias)
-- `bc_press` (`bc_browser_press` compatibility alias)
-- `bc_scroll` (`bc_browser_scroll` compatibility alias)
-- `bc_screenshot` (`bc_browser_screenshot` compatibility alias)
-- `bc_tab_list` (`bc_browser_tab_list` compatibility alias)
-- `bc_tab_switch` (`bc_browser_tab_switch` compatibility alias)
-- `bc_tab_close` (`bc_browser_tab_close` compatibility alias)
-- `bc_close` (`bc_browser_close` compatibility alias)
-- `bc_downloads_list` (`bc_browser_downloads_list` compatibility alias)
-- `bc_drop` (`bc_browser_drop` compatibility alias)
-- `bc_generate_locator` (`bc_browser_generate_locator` compatibility alias)
-- `bc_highlight` (`bc_browser_highlight` compatibility alias)
-- `bc_screencast_start` (`bc_browser_screencast_start` compatibility alias)
-- `bc_screencast_status` (`bc_browser_screencast_status` compatibility alias)
-- `bc_screencast_stop` (`bc_browser_screencast_stop` compatibility alias)
-- `bc_paste` (`bc_browser_paste` compatibility alias)
-- `bc_browser_provider_catalog`
-- `bc_browser_provider_health`
-- `bc_dialog` (`bc_browser_dialog` compatibility alias)
-- `bc_cdp` (`bc_browser_cdp` compatibility alias)
-- `bc_capture` (`bc_browser_capture` compatibility alias)
-- `bc_capture_many` (`bc_browser_capture_many` compatibility alias)
-- `bc_state` (`bc_browser_state` compatibility alias)
-- `bc_act` (`bc_browser_act` compatibility alias)
+- `bc_attach`
+- `bc_detach`
+- `bc_launch`
+- `bc_open`
+- `bc_open_many`
+- `bc_navigate`
+- `bc_list`
+- `bc_snapshot`
+- `bc_click`
+- `bc_fill`
+- `bc_fill_many`
+- `bc_hover`
+- `bc_type`
+- `bc_press`
+- `bc_scroll`
+- `bc_screenshot`
+- `bc_tab_list`
+- `bc_tab_switch`
+- `bc_tab_close`
+- `bc_close`
+- `bc_downloads_list`
+- `bc_drop`
+- `bc_generate_locator`
+- `bc_highlight`
+- `bc_screencast_start`
+- `bc_screencast_status`
+- `bc_screencast_stop`
+- `bc_paste`
+- `bc_provider_catalog`
+- `bc_provider_health`
+- `bc_dialog`
+- `bc_cdp`
+- `bc_capture`
+- `bc_capture_many`
+- `bc_state`
+- `bc_act`
 - `bc_task_run`
 
 Provider:
 
-- `bc_browser_provider_list`
-- `bc_browser_provider_use`
+- `bc_provider_list`
+- `bc_provider_use`
 
 Terminal:
 
@@ -218,7 +218,7 @@ Packages:
 
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
 
-`bc_browser_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_browser_tab_close` to close the current tab.
+`bc_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_tab_close` to close the current tab.
 
 ## Compact Browser State
 
@@ -292,13 +292,11 @@ Use `bc_fs_write_output` to write a file under the active session runtime direct
 
 ## MCP Lite
 
-Set `BROWSER_CONTROL_MCP_MODE=lite` or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes the short primary browser tools and their legacy compatibility aliases:
+Set `BROWSER_CONTROL_MCP_MODE=lite` or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes the short primary browser tools:
 
 `bc_open`, `bc_open_many`, `bc_capture`, `bc_capture_many`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
 
-Compatibility names are also present in Lite mode: `bc_browser_open`, `bc_browser_open_many`, `bc_browser_capture`, `bc_browser_capture_many`, `bc_browser_snapshot`, `bc_browser_click`, `bc_browser_fill`, `bc_browser_state`, `bc_browser_act`, and `bc_browser_tab_list`.
-
-Full MCP mode (88 tools) preserves all existing tools.
+Full MCP mode exposes the complete Browser Control surface with canonical `bc_*` tool names.
 
 Browser Control intentionally does not expose an arbitrary JavaScript console/eval MCP tool. Use accessibility actions, snapshots, debug read tools, network/console capture, or registered helpers. Arbitrary JS can read page data and mutate logged-in sessions, so agents must not invent eval tools.
 
@@ -313,8 +311,8 @@ Most browser, filesystem, service, and session tools accept `sessionId` for Brow
 Terminal tools distinguish:
 
 - `bc_terminal_open` uses `sessionId` as an optional Browser Control session binding.
-- Most later terminal tools use `sessionId` as the terminal session ID returned by `bc_terminal_open`.
-- `browserControlSessionId`: Browser Control session ID for policy/session binding.
+- Later terminal tools use `terminalSessionId` for the PTY terminal session returned by `bc_terminal_open`.
+- `sessionId` consistently means the Browser Control session for policy/session binding.
 
 Browser targets can be refs such as `@e3`, CSS selectors, or semantic text. Prefer `bc_snapshot` before `bc_click` or `bc_fill`.
 
@@ -322,4 +320,4 @@ Browser targets can be refs such as `@e3`, CSS selectors, or semantic text. Pref
 
 MCP clients are powerful. Depending on policy, tools can run commands, read/write files, control browser pages with logged-in credentials, and retrieve debug evidence. Use `safe` or `balanced` policy for untrusted agents, scope working directories, and review destructive filesystem or terminal actions.
 
-Provider tools are special: `bc_browser_provider_use` changes the active provider in global provider registry state and is not scoped to one Browser Control session. Treat provider switching as trusted operator configuration.
+Provider tools are special: `bc_provider_use` changes the active provider in global provider registry state and is not scoped to one Browser Control session. Treat provider switching as trusted operator configuration.

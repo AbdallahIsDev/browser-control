@@ -413,6 +413,20 @@ function parseScreencastRetention(
 	);
 }
 
+function asTopLevelBrowserArgs(
+	args: ParsedArgs,
+	browserSubcommand = args.command,
+): ParsedArgs {
+	return {
+		...args,
+		command: "browser",
+		subcommand: browserSubcommand,
+		positional: args.subcommand
+			? [args.subcommand, ...args.positional]
+			: args.positional,
+	};
+}
+
 let jsonOutputWarningGuardInstalled = false;
 
 function installJsonOutputGuards(): void {
@@ -751,19 +765,46 @@ Self-Healing Harness (Section 29):
                                                                      Generate a helper
   harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
 
-Browser Shortcuts (compatibility):
-  snapshot                                                           Shortcut for: bc browser snapshot
-  click <ref-or-target>                                              Shortcut for: bc browser act click <target>
-  fill <ref-or-target> <text>                                        Shortcut for: bc browser act fill <target> <text>
-  hover <ref-or-target>                                             Shortcut for: bc browser act hover <target>
-  type <text>                                                        Shortcut for: bc browser act type --text=<text>
-  paste <text> [--target=<ref-or-target>]                            Shortcut for: bc browser act paste --text=<text>
-  press <key>                                                        Shortcut for: bc browser act press --key=<key>
-  scroll <direction>                                                 Shortcut for: bc browser act scroll --direction=<direction>
-  screenshot [--copy-to=<path>] [--full-page] [--target=<ref>]        Shortcut for: bc browser act screenshot
-  tab list                                                           Shortcut for: bc browser tab list
-  tab switch <id>                                                    Shortcut for: bc browser tab switch <id>
-  close                                                              Shortcut for: bc browser act tab-close
+Browser Commands:
+  attach [--port=9222] [--cdp-url=...] [--provider=<name>] [--yes]  Attach to running Chrome/Electron
+  launch [--port=9222] [--profile=default] [--provider=<name>]       Launch managed automation browser
+  list [--all] [--json]                                             List attachable browsers
+  detach [--json]                                                   Detach from the active browser
+  open <url> [--json]                                               Open/navigate browser tab
+  navigate <url> [--tab=<id>] [--json]                              Navigate current or selected tab
+  open-many --urls='<json>' [--json]                                Open multiple tabs
+  snapshot [--boxes] [--json]                                       Take accessibility snapshot
+  state [--snapshot] [--screenshot] [--downloads] [--json]          Return compact browser state
+  capture [--snapshot] [--screenshot] [--json]                      Capture current tab state
+  capture-many --tab-ids=<ids>|--urls='<json>' [--json]             Capture multiple tabs
+  act <action> [target] [text] [--text=<text>] [--url=<url>] [--json] Run one composite browser action
+  task run --steps='<json>'|--steps-file=<path> [--json]            Run multiple browser/fs-output steps
+  tab list [--json]                                                 List browser tabs
+  tab switch <id> [--json]                                          Switch to a browser tab
+  click <ref-or-target>                                             Click an element
+  fill <ref-or-target> <text>                                       Fill an element
+  hover <ref-or-target>                                             Hover an element
+  type <text>                                                       Type text
+  paste <text> [--target=<ref-or-target>]                           Paste text
+  press <key>                                                       Press a key
+  scroll <direction>                                                Scroll page
+  screenshot [--copy-to=<path>] [--full-page] [--target=<ref>]       Save screenshot to runtime artifact root
+  highlight <target> [--json]                                       Highlight an element
+  drop <target> --file=<path>|--data=<mime=value> [--json]          Drop files or data onto a page target
+  downloads list [--json]                                           List browser downloads
+  provider list                                                     List browser providers
+  provider catalog                                                  List supported browser provider types
+  provider use <name>                                               Set active browser provider
+  provider add <name> --type=<type> [--endpoint=<url>]              Add or configure a browser provider
+  provider remove <name>                                            Remove a configured browser provider
+  provider health [name]                                            Run provider health diagnostics
+  profile list                                                      List browser profiles
+  profile create <name> [--type=named]                              Create a browser profile
+  profile use <name>                                                Activate a browser profile
+  profile delete <name>                                             Delete a browser profile
+  auth export [--profile=default] [--output=<file>] [--yes]         Export auth state (cookies/storage)
+  auth import <file> [--profile=default] [--yes]                    Import auth state from file
+  close                                                             Close current tab
 
 Session:
   session list                                                       List sessions
@@ -773,7 +814,7 @@ Session:
   session destroy <name-or-id>                                       Destroy a session and release owned resources
   session cleanup                                                    Remove idle sessions and enforce session cap
 
-Browser Lifecycle:
+Browser Namespace (compatibility):
   browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
@@ -3271,6 +3312,30 @@ export async function runCli(argv = process.argv): Promise<void> {
 
 			case "policy":
 				await handlePolicy(args);
+				break;
+
+			case "attach":
+			case "list":
+			case "detach":
+			case "launch":
+			case "open":
+			case "navigate":
+			case "open-many":
+			case "state":
+			case "capture":
+			case "capture-many":
+			case "act":
+			case "highlight":
+			case "drop":
+				await handleBrowser(asTopLevelBrowserArgs(args));
+				break;
+
+			case "downloads":
+			case "provider":
+			case "profile":
+			case "auth":
+			case "task":
+				await handleBrowser(asTopLevelBrowserArgs(args));
 				break;
 
 			// ── Top-level browser shortcuts (Section 5) ───────────────────

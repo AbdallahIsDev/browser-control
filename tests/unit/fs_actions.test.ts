@@ -134,6 +134,42 @@ describe("FsActions", () => {
       );
     });
 
+    it("writes absolute paths under the active session working directory", async () => {
+      const workDir = fs.mkdtempSync(path.join(tempDir, "workspace-"));
+      const session = await sessionManager.create("fs-workdir-write", {
+        policyProfile: "trusted",
+        workingDirectory: workDir,
+      });
+      sessionManager.use(session.data!.id);
+
+      const filePath = path.join(workDir, "report.txt");
+      const writeResult = await fsActions.write({
+        path: filePath,
+        content: "workspace write",
+      });
+
+      assert.equal(writeResult.success, true, writeResult.error);
+      assert.equal(fs.readFileSync(filePath, "utf-8"), "workspace write");
+    });
+
+    it("blocks writes outside runtime and working directory roots", async () => {
+      const workDir = fs.mkdtempSync(path.join(tempDir, "workspace-"));
+      const outsideDir = fs.mkdtempSync(path.join(tempDir, "outside-"));
+      const session = await sessionManager.create("fs-workdir-block", {
+        policyProfile: "trusted",
+        workingDirectory: workDir,
+      });
+      sessionManager.use(session.data!.id);
+
+      const writeResult = await fsActions.write({
+        path: path.join(outsideDir, "report.txt"),
+        content: "outside write",
+      });
+
+      assert.equal(writeResult.success, false);
+      assert.match(writeResult.error ?? "", /allowed roots/i);
+    });
+
     it("writes task output under the active session runtime directory", async () => {
       const activeSession = sessionManager.getActiveSession();
       assert.ok(activeSession);

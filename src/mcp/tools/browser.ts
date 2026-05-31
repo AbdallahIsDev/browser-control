@@ -189,27 +189,16 @@ const BROWSER_STEP_SCHEMA = {
   ],
 } as any;
 
-function withShortAliases(tools: McpTool[]): McpTool[] {
-  const aliases = tools.flatMap((tool) => {
-    const alias = BROWSER_TOOL_ALIASES[tool.name];
-    if (!alias) return [];
-    return [{
-      ...tool,
-      name: alias,
-      description: tool.description,
-    }];
-  });
-
-  const legacyTools = tools.map((tool) => {
+function withCanonicalNames(tools: McpTool[]): McpTool[] {
+  return tools.map((tool) => {
     const alias = BROWSER_TOOL_ALIASES[tool.name];
     if (!alias) return tool;
     return {
       ...tool,
-      description: `Compatibility alias for ${alias}. ${tool.description}`,
+      name: alias,
+      description: tool.description,
     };
   });
-
-  return [...aliases, ...legacyTools];
 }
 
 /**
@@ -906,5 +895,5 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
     },
   ];
 
-  return withShortAliases(tools);
+  return withCanonicalNames(tools);
 }

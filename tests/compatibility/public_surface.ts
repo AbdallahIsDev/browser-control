@@ -384,7 +384,7 @@ function getMcpOutputShape(tool: McpTool): unknown {
       "risk",
       "completedAt",
     ],
-    handlerReturn: tool.name === "bc_status" || tool.name.startsWith("bc_browser_provider_")
+    handlerReturn: tool.name === "bc_status" || tool.name.startsWith("bc_provider_")
       ? "ActionResult-compatible object"
       : "ActionResult",
   };

@@ -587,18 +587,199 @@
       "entries": [
         {
           "commandPath": [
+            "attach"
+          ],
+          "description": "Attach to running Chrome/Electron",
+          "flags": [
+            "cdp-url",
+            "port",
+            "provider",
+            "yes"
+          ],
+          "jsonSupport": false,
+          "syntax": "attach [--port=9222] [--cdp-url=...] [--provider=<name>] [--yes]"
+        },
+        {
+          "commandPath": [
+            "launch"
+          ],
+          "description": "Launch managed automation browser",
+          "flags": [
+            "port",
+            "profile",
+            "provider"
+          ],
+          "jsonSupport": false,
+          "syntax": "launch [--port=9222] [--profile=default] [--provider=<name>]"
+        },
+        {
+          "commandPath": [
+            "list"
+          ],
+          "description": "List attachable browsers",
+          "flags": [
+            "all",
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "list [--all] [--json]"
+        },
+        {
+          "commandPath": [
+            "detach"
+          ],
+          "description": "Detach from the active browser",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "detach [--json]"
+        },
+        {
+          "commandPath": [
+            "open"
+          ],
+          "description": "Open/navigate browser tab",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "open <url> [--json]"
+        },
+        {
+          "commandPath": [
+            "navigate"
+          ],
+          "description": "Navigate current or selected tab",
+          "flags": [
+            "json",
+            "tab"
+          ],
+          "jsonSupport": true,
+          "syntax": "navigate <url> [--tab=<id>] [--json]"
+        },
+        {
+          "commandPath": [
+            "open-many"
+          ],
+          "description": "Open multiple tabs",
+          "flags": [
+            "json",
+            "urls"
+          ],
+          "jsonSupport": true,
+          "syntax": "open-many --urls='<json>' [--json]"
+        },
+        {
+          "commandPath": [
             "snapshot"
           ],
-          "description": "Shortcut for: bc browser snapshot",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "snapshot"
+          "description": "Take accessibility snapshot",
+          "flags": [
+            "boxes",
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "snapshot [--boxes] [--json]"
+        },
+        {
+          "commandPath": [
+            "state"
+          ],
+          "description": "Return compact browser state",
+          "flags": [
+            "downloads",
+            "json",
+            "screenshot",
+            "snapshot"
+          ],
+          "jsonSupport": true,
+          "syntax": "state [--snapshot] [--screenshot] [--downloads] [--json]"
+        },
+        {
+          "commandPath": [
+            "capture"
+          ],
+          "description": "Capture current tab state",
+          "flags": [
+            "json",
+            "screenshot",
+            "snapshot"
+          ],
+          "jsonSupport": true,
+          "syntax": "capture [--snapshot] [--screenshot] [--json]"
+        },
+        {
+          "commandPath": [
+            "capture-many"
+          ],
+          "description": "Capture multiple tabs",
+          "flags": [
+            "json",
+            "tab-ids",
+            "urls"
+          ],
+          "jsonSupport": true,
+          "syntax": "capture-many --tab-ids=<ids>|--urls='<json>' [--json]"
+        },
+        {
+          "commandPath": [
+            "act",
+            "Run",
+            "one"
+          ],
+          "description": "",
+          "flags": [
+            "json",
+            "text",
+            "url"
+          ],
+          "jsonSupport": true,
+          "syntax": "act <action> [target] [text] [--text=<text>] [--url=<url>] [--json] Run one composite browser action"
+        },
+        {
+          "commandPath": [
+            "task",
+            "run"
+          ],
+          "description": "Run multiple browser/fs-output steps",
+          "flags": [
+            "json",
+            "steps",
+            "steps-file"
+          ],
+          "jsonSupport": true,
+          "syntax": "task run --steps='<json>'|--steps-file=<path> [--json]"
+        },
+        {
+          "commandPath": [
+            "tab",
+            "list"
+          ],
+          "description": "List browser tabs",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "tab list [--json]"
+        },
+        {
+          "commandPath": [
+            "tab",
+            "switch"
+          ],
+          "description": "Switch to a browser tab",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "tab switch <id> [--json]"
         },
         {
           "commandPath": [
             "click"
           ],
-          "description": "Shortcut for: bc browser act click <target>",
+          "description": "Click an element",
           "flags": [],
           "jsonSupport": false,
           "syntax": "click <ref-or-target>"
@@ -607,7 +788,7 @@
           "commandPath": [
             "fill"
           ],
-          "description": "Shortcut for: bc browser act fill <target> <text>",
+          "description": "Fill an element",
           "flags": [],
           "jsonSupport": false,
           "syntax": "fill <ref-or-target> <text>"
@@ -616,7 +797,7 @@
           "commandPath": [
             "hover"
           ],
-          "description": "Shortcut for: bc browser act hover <target>",
+          "description": "Hover an element",
           "flags": [],
           "jsonSupport": false,
           "syntax": "hover <ref-or-target>"
@@ -625,7 +806,7 @@
           "commandPath": [
             "type"
           ],
-          "description": "Shortcut for: bc browser act type --text=<text>",
+          "description": "Type text",
           "flags": [],
           "jsonSupport": false,
           "syntax": "type <text>"
@@ -634,7 +815,7 @@
           "commandPath": [
             "paste"
           ],
-          "description": "Shortcut for: bc browser act paste --text=<text>",
+          "description": "Paste text",
           "flags": [
             "target"
           ],
@@ -645,7 +826,7 @@
           "commandPath": [
             "press"
           ],
-          "description": "Shortcut for: bc browser act press --key=<key>",
+          "description": "Press a key",
           "flags": [],
           "jsonSupport": false,
           "syntax": "press <key>"
@@ -654,7 +835,7 @@
           "commandPath": [
             "scroll"
           ],
-          "description": "Shortcut for: bc browser act scroll --direction=<direction>",
+          "description": "Scroll page",
           "flags": [],
           "jsonSupport": false,
           "syntax": "scroll <direction>"
@@ -663,7 +844,7 @@
           "commandPath": [
             "screenshot"
           ],
-          "description": "Shortcut for: bc browser act screenshot",
+          "description": "Save screenshot to runtime artifact root",
           "flags": [
             "copy-to",
             "full-page",
@@ -674,35 +855,183 @@
         },
         {
           "commandPath": [
-            "tab",
-            "list"
+            "highlight"
           ],
-          "description": "Shortcut for: bc browser tab list",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "tab list"
+          "description": "Highlight an element",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "highlight <target> [--json]"
         },
         {
           "commandPath": [
-            "tab",
-            "switch"
+            "drop"
           ],
-          "description": "Shortcut for: bc browser tab switch <id>",
+          "description": "Drop files or data onto a page target",
+          "flags": [
+            "data",
+            "file",
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "drop <target> --file=<path>|--data=<mime=value> [--json]"
+        },
+        {
+          "commandPath": [
+            "downloads",
+            "list"
+          ],
+          "description": "List browser downloads",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "downloads list [--json]"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "list"
+          ],
+          "description": "List browser providers",
           "flags": [],
           "jsonSupport": false,
-          "syntax": "tab switch <id>"
+          "syntax": "provider list"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "catalog"
+          ],
+          "description": "List supported browser provider types",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "provider catalog"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "use"
+          ],
+          "description": "Set active browser provider",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "provider use <name>"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "add"
+          ],
+          "description": "Add or configure a browser provider",
+          "flags": [
+            "endpoint",
+            "type"
+          ],
+          "jsonSupport": false,
+          "syntax": "provider add <name> --type=<type> [--endpoint=<url>]"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "remove"
+          ],
+          "description": "Remove a configured browser provider",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "provider remove <name>"
+        },
+        {
+          "commandPath": [
+            "provider",
+            "health"
+          ],
+          "description": "Run provider health diagnostics",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "provider health [name]"
+        },
+        {
+          "commandPath": [
+            "profile",
+            "list"
+          ],
+          "description": "List browser profiles",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "profile list"
+        },
+        {
+          "commandPath": [
+            "profile",
+            "create"
+          ],
+          "description": "Create a browser profile",
+          "flags": [
+            "type"
+          ],
+          "jsonSupport": false,
+          "syntax": "profile create <name> [--type=named]"
+        },
+        {
+          "commandPath": [
+            "profile",
+            "use"
+          ],
+          "description": "Activate a browser profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "profile use <name>"
+        },
+        {
+          "commandPath": [
+            "profile",
+            "delete"
+          ],
+          "description": "Delete a browser profile",
+          "flags": [],
+          "jsonSupport": false,
+          "syntax": "profile delete <name>"
+        },
+        {
+          "commandPath": [
+            "auth",
+            "export"
+          ],
+          "description": "Export auth state (cookies/storage)",
+          "flags": [
+            "output",
+            "profile",
+            "yes"
+          ],
+          "jsonSupport": false,
+          "syntax": "auth export [--profile=default] [--output=<file>] [--yes]"
+        },
+        {
+          "commandPath": [
+            "auth",
+            "import"
+          ],
+          "description": "Import auth state from file",
+          "flags": [
+            "profile",
+            "yes"
+          ],
+          "jsonSupport": false,
+          "syntax": "auth import <file> [--profile=default] [--yes]"
         },
         {
           "commandPath": [
             "close"
           ],
-          "description": "Shortcut for: bc browser act tab-close",
+          "description": "Close current tab",
           "flags": [],
           "jsonSupport": false,
           "syntax": "close"
         }
       ],
-      "section": "Browser Shortcuts (compatibility)"
+      "section": "Browser Commands"
     },
     {
       "entries": [
@@ -1700,7 +2029,7 @@
           "syntax": "fs stat <path>"
         }
       ],
-      "section": "Browser Lifecycle"
+      "section": "Browser Namespace (compatibility)"
     },
     {
       "entries": [

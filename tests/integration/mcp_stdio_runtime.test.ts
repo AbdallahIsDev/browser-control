@@ -2,7 +2,7 @@
  * Stdio MCP runtime regression test.
  *
  * Spawns `node cli.js mcp serve`, sends JSON-RPC initialize + tools/list,
- * asserts bc_browser_launch exists with provider, calls bc_status,
+ * asserts bc_launch exists with provider, calls bc_status,
  * and asserts the process stays alive.
  */
 
@@ -249,7 +249,7 @@ afterEach(async () => {
 	}
 });
 
-test("stdio MCP: initialize + tools/list includes bc_browser_launch with provider", async () => {
+test("stdio MCP: initialize + tools/list includes bc_launch with provider", async () => {
 	const initResp = await initializeAndWait();
 	const initResult = initResp.result as
 		| { serverInfo?: { version?: string } }
@@ -270,23 +270,17 @@ test("stdio MCP: initialize + tools/list includes bc_browser_launch with provide
 	const tools = listResult.tools;
 	const toolNames = tools.map((t) => t.name);
 	assert.ok(toolNames.includes("bc_status"), "should include bc_status");
-	assert.ok(
-		toolNames.includes("bc_browser_launch"),
-		"should include bc_browser_launch",
-	);
-	assert.ok(
-		toolNames.includes("bc_browser_open"),
-		"should include bc_browser_open",
-	);
+	assert.ok(toolNames.includes("bc_launch"), "should include bc_launch");
+	assert.ok(toolNames.includes("bc_open"), "should include bc_open");
 
-	const launchTool = tools.find((t) => t.name === "bc_browser_launch");
-	assert.ok(launchTool, "bc_browser_launch tool should exist");
+	const launchTool = tools.find((t) => t.name === "bc_launch");
+	assert.ok(launchTool, "bc_launch tool should exist");
 	const props = launchTool.inputSchema?.properties as
 		| Record<string, unknown>
 		| undefined;
 	assert.ok(
 		props && "provider" in props,
-		"bc_browser_launch should have provider parameter",
+		"bc_launch should have provider parameter",
 	);
 });
 
@@ -439,11 +433,11 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 
 		// Step 2: Open URL (triggers auto-launch from cold state)
 		const openId = sendRequest("tools/call", {
-			name: "bc_browser_open",
+			name: "bc_open",
 			arguments: { url: "https://example.com" },
 		});
 		const openResp = await waitForResponse(openId, 60000);
-		assert.equal(openResp.error, undefined, "bc_browser_open should not error");
+		assert.equal(openResp.error, undefined, "bc_open should not error");
 
 		const openResult = openResp.result as Record<string, unknown>;
 		assert.equal(openResult.isError, false, "open should not be error");
@@ -460,7 +454,7 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 
 		// Step 3: Snapshot
 		const snapId = sendRequest("tools/call", {
-			name: "bc_browser_snapshot",
+			name: "bc_snapshot",
 			arguments: { tabId: openParsed.data.tabId },
 		});
 		const snapResp = await waitForResponse(snapId, 30000);
@@ -496,7 +490,7 @@ test("stdio MCP: full browser flow (open -> snapshot -> close) from cold state",
 
 		// Step 4: Close browser
 		const closeId = sendRequest("tools/call", {
-			name: "bc_browser_close",
+			name: "bc_close",
 			arguments: {},
 		});
 		const closeResp = await waitForResponse(closeId);

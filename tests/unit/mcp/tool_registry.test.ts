@@ -71,26 +71,15 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_state"));
       assert.ok(names.includes("bc_act"));
       assert.ok(names.includes("bc_tab_list"));
-      assert.ok(names.includes("bc_browser_open"));
-      assert.ok(names.includes("bc_browser_open_many"));
-      assert.ok(names.includes("bc_browser_navigate"));
-      assert.ok(names.includes("bc_browser_capture"));
-      assert.ok(names.includes("bc_browser_capture_many"));
-      assert.ok(names.includes("bc_browser_snapshot"));
-      assert.ok(names.includes("bc_browser_click"));
-      assert.ok(names.includes("bc_browser_fill"));
-      assert.ok(names.includes("bc_browser_hover"));
-      assert.ok(names.includes("bc_browser_type"));
-      assert.ok(names.includes("bc_browser_paste"));
-      assert.ok(names.includes("bc_browser_press"));
-      assert.ok(names.includes("bc_browser_scroll"));
-      assert.ok(names.includes("bc_browser_screenshot"));
-      assert.ok(names.includes("bc_browser_tab_list"));
-      assert.ok(names.includes("bc_browser_tab_switch"));
-      assert.ok(names.includes("bc_browser_tab_close"));
-      assert.ok(names.includes("bc_browser_close"));
-      assert.ok(names.includes("bc_browser_dialog"));
-      assert.ok(names.includes("bc_browser_cdp"));
+      assert.ok(names.includes("bc_provider_list"));
+      assert.ok(names.includes("bc_provider_catalog"));
+      assert.ok(names.includes("bc_provider_use"));
+      assert.ok(names.includes("bc_provider_health"));
+      assert.deepEqual(
+        names.filter((name) => name.startsWith("bc_browser_")),
+        [],
+        "full registry should expose canonical short browser/provider names only",
+      );
 
       // Terminal tools
       assert.ok(names.includes("bc_terminal_open"));
@@ -211,12 +200,12 @@ describe("MCP Tool Registry", () => {
       assert.equal(JSON.parse(error.content[0].text).error, "Example failure");
     });
 
-    it("bc_browser_act.urls schema accepts string and object URL entries", () => {
+    it("bc_act.urls schema accepts string and object URL entries", () => {
       const tools = buildToolRegistry(api);
-      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+      const actTool = tools.find((t) => t.name === "bc_act")!;
       const urlsProp: any = actTool.inputSchema.properties.urls;
       if (!urlsProp || urlsProp.type !== "array") {
-        assert.fail("bc_browser_act should have urls property of type array");
+        assert.fail("bc_act should have urls property of type array");
       }
       const oneOf: any[] = urlsProp.items?.oneOf;
       assert.ok(oneOf, "urls items should have oneOf for string and object entries");
@@ -228,25 +217,21 @@ describe("MCP Tool Registry", () => {
       assert.ok((objectItem.required ?? []).includes("url"), "object item should require url");
     });
 
-    it("short browser aliases use the same handler and schema as compatibility names", () => {
+    it("browser tools expose canonical short names directly", () => {
       const tools = buildToolRegistry(api);
       const byName = new Map(tools.map((tool) => [tool.name, tool]));
-      for (const [legacyName, shortName] of [
-        ["bc_browser_open", "bc_open"],
-        ["bc_browser_snapshot", "bc_snapshot"],
-        ["bc_browser_click", "bc_click"],
-        ["bc_browser_fill", "bc_fill"],
-        ["bc_browser_state", "bc_state"],
-        ["bc_browser_act", "bc_act"],
-        ["bc_browser_tab_list", "bc_tab_list"],
+      for (const name of [
+        "bc_open",
+        "bc_snapshot",
+        "bc_click",
+        "bc_fill",
+        "bc_state",
+        "bc_act",
+        "bc_tab_list",
       ] as const) {
-        const legacy = byName.get(legacyName);
-        const short = byName.get(shortName);
-        assert.ok(legacy, `${legacyName} missing`);
-        assert.ok(short, `${shortName} missing`);
-        assert.deepEqual(short.inputSchema, legacy.inputSchema);
-        assert.equal(short.handler, legacy.handler);
-        assert.match(legacy.description, new RegExp(`Compatibility alias for ${shortName}`));
+        const tool = byName.get(name);
+        assert.ok(tool, `${name} missing`);
+        assert.doesNotMatch(tool.description, /Compatibility alias/);
       }
     });
 
@@ -287,8 +272,8 @@ describe("MCP Tool Registry", () => {
 
     it("screenshot tools expose copyTo and keep outputPath as deprecated shim", () => {
       const tools = buildToolRegistry(api);
-      const screenshotTool = tools.find((t) => t.name === "bc_browser_screenshot")!;
-      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+      const screenshotTool = tools.find((t) => t.name === "bc_screenshot")!;
+      const actTool = tools.find((t) => t.name === "bc_act")!;
 
       assert.match((screenshotTool.inputSchema.properties.copyTo as any).description, /Primary screenshot/);
       assert.match((screenshotTool.inputSchema.properties.outputPath as any).description, /Deprecated/);
@@ -298,13 +283,13 @@ describe("MCP Tool Registry", () => {
 
     it("screencast start exposes copyTo and keeps path as deprecated shim", () => {
       const tools = buildToolRegistry(api);
-      const screencastTool = tools.find((t) => t.name === "bc_browser_screencast_start")!;
+      const screencastTool = tools.find((t) => t.name === "bc_screencast_start")!;
 
       assert.match((screencastTool.inputSchema.properties.copyTo as any).description, /Primary screencast/);
       assert.match((screencastTool.inputSchema.properties.path as any).description, /Deprecated/);
     });
 
-    it("bc_browser_act handler preserves object URL entries", async () => {
+    it("bc_act handler preserves object URL entries", async () => {
       const browser = api.browser as unknown as {
         act: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
       };
@@ -319,7 +304,7 @@ describe("MCP Tool Registry", () => {
       };
 
       const tools = buildToolRegistry(api);
-      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+      const actTool = tools.find((t) => t.name === "bc_act")!;
       try {
         const result = await actTool.handler({
           action: "openMany",
@@ -494,7 +479,7 @@ describe("MCP Tool Registry", () => {
 
       try {
         const tools = buildToolRegistry(api);
-        const providerUseTool = tools.find((t) => t.name === "bc_browser_provider_use")!;
+        const providerUseTool = tools.find((t) => t.name === "bc_provider_use")!;
         const result = await providerUseTool.handler({ name: "browserless" });
 
         assert.equal(result.success, false);
@@ -508,7 +493,7 @@ describe("MCP Tool Registry", () => {
 
     it("provider health tool routes through policy and returns diagnostics", async () => {
       const tools = buildToolRegistry(api);
-      const providerHealthTool = tools.find((t) => t.name === "bc_browser_provider_health")!;
+      const providerHealthTool = tools.find((t) => t.name === "bc_provider_health")!;
 
       assert.ok(providerHealthTool);
       const result = await providerHealthTool.handler({ name: "local" });
@@ -520,7 +505,7 @@ describe("MCP Tool Registry", () => {
 
     it("provider catalog tool routes through policy and returns non-secret setup metadata", async () => {
       const tools = buildToolRegistry(api);
-      const providerCatalogTool = tools.find((t) => t.name === "bc_browser_provider_catalog")!;
+      const providerCatalogTool = tools.find((t) => t.name === "bc_provider_catalog")!;
 
       assert.ok(providerCatalogTool);
       const result = await providerCatalogTool.handler({});
@@ -668,7 +653,43 @@ describe("MCP Tool Registry", () => {
   describe("schema shape", () => {
     it("session-aware tools include sessionId in schema", () => {
       const tools = buildToolRegistry(api);
-      const browserTools = tools.filter((t) => t.name.startsWith("bc_browser_"));
+      const browserToolNames = new Set([
+        "bc_open",
+        "bc_open_many",
+        "bc_navigate",
+        "bc_capture",
+        "bc_capture_many",
+        "bc_snapshot",
+        "bc_click",
+        "bc_fill",
+        "bc_fill_many",
+        "bc_hover",
+        "bc_type",
+        "bc_paste",
+        "bc_press",
+        "bc_scroll",
+        "bc_screenshot",
+        "bc_highlight",
+        "bc_generate_locator",
+        "bc_tab_list",
+        "bc_tab_switch",
+        "bc_tab_close",
+        "bc_close",
+        "bc_screencast_start",
+        "bc_screencast_stop",
+        "bc_screencast_status",
+        "bc_list",
+        "bc_attach",
+        "bc_detach",
+        "bc_launch",
+        "bc_drop",
+        "bc_downloads_list",
+        "bc_dialog",
+        "bc_cdp",
+        "bc_state",
+        "bc_act",
+      ]);
+      const browserTools = tools.filter((t) => browserToolNames.has(t.name));
 
       for (const tool of browserTools) {
         assert.ok(
@@ -680,39 +701,39 @@ describe("MCP Tool Registry", () => {
 
     it("required fields are explicit", () => {
       const tools = buildToolRegistry(api);
-      const openTool = tools.find((t) => t.name === "bc_browser_open")!;
+      const openTool = tools.find((t) => t.name === "bc_open")!;
       assert.ok(openTool.inputSchema.required?.includes("url"));
     });
 
-    it("bc_browser_dialog schema requires action and has dialog_id", () => {
+    it("bc_dialog schema requires action and has dialog_id", () => {
       const tools = buildToolRegistry(api);
-      const tool = tools.find((t) => t.name === "bc_browser_dialog")!;
-      assert.ok(tool.inputSchema.required?.includes("action"), "bc_browser_dialog should require action");
-      assert.ok("dialog_id" in tool.inputSchema.properties, "bc_browser_dialog should have dialog_id property");
-      assert.ok("response" in tool.inputSchema.properties, "bc_browser_dialog should have response property");
-      assert.ok("text" in tool.inputSchema.properties, "bc_browser_dialog should have text property");
-      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_dialog should have tabId property");
-      assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_dialog should have sessionId property");
+      const tool = tools.find((t) => t.name === "bc_dialog")!;
+      assert.ok(tool.inputSchema.required?.includes("action"), "bc_dialog should require action");
+      assert.ok("dialog_id" in tool.inputSchema.properties, "bc_dialog should have dialog_id property");
+      assert.ok("response" in tool.inputSchema.properties, "bc_dialog should have response property");
+      assert.ok("text" in tool.inputSchema.properties, "bc_dialog should have text property");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_dialog should have tabId property");
+      assert.ok("sessionId" in tool.inputSchema.properties, "bc_dialog should have sessionId property");
     });
 
-    it("bc_browser_cdp schema requires method/timeoutMs and has params/targetId/frameId", () => {
+    it("bc_cdp schema requires method/timeoutMs and has params/targetId/frameId", () => {
       const tools = buildToolRegistry(api);
-      const tool = tools.find((t) => t.name === "bc_browser_cdp")!;
-      assert.ok(tool, "bc_browser_cdp tool should exist");
-      assert.ok(tool.inputSchema.required?.includes("method"), "bc_browser_cdp should require method");
-      assert.ok(tool.inputSchema.required?.includes("timeoutMs"), "bc_browser_cdp should require timeoutMs");
-      assert.ok("params" in tool.inputSchema.properties, "bc_browser_cdp should have params property");
-      assert.ok("targetId" in tool.inputSchema.properties, "bc_browser_cdp should have targetId property");
-      assert.ok("frameId" in tool.inputSchema.properties, "bc_browser_cdp should have frameId property");
-      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_cdp should have tabId property");
-      assert.ok("sessionId" in tool.inputSchema.properties, "bc_browser_cdp should have sessionId property");
+      const tool = tools.find((t) => t.name === "bc_cdp")!;
+      assert.ok(tool, "bc_cdp tool should exist");
+      assert.ok(tool.inputSchema.required?.includes("method"), "bc_cdp should require method");
+      assert.ok(tool.inputSchema.required?.includes("timeoutMs"), "bc_cdp should require timeoutMs");
+      assert.ok("params" in tool.inputSchema.properties, "bc_cdp should have params property");
+      assert.ok("targetId" in tool.inputSchema.properties, "bc_cdp should have targetId property");
+      assert.ok("frameId" in tool.inputSchema.properties, "bc_cdp should have frameId property");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_cdp should have tabId property");
+      assert.ok("sessionId" in tool.inputSchema.properties, "bc_cdp should have sessionId property");
     });
 
-    it("bc_browser_drop schema has tabId", () => {
+    it("bc_drop schema has tabId", () => {
       const tools = buildToolRegistry(api);
-      const tool = tools.find((t) => t.name === "bc_browser_drop")!;
-      assert.ok(tool, "bc_browser_drop tool should exist");
-      assert.ok("tabId" in tool.inputSchema.properties, "bc_browser_drop should have tabId property");
+      const tool = tools.find((t) => t.name === "bc_drop")!;
+      assert.ok(tool, "bc_drop tool should exist");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_drop should have tabId property");
     });
 
     it("terminal tools disambiguate Browser Control and terminal session IDs", () => {

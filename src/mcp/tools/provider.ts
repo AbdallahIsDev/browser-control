@@ -2,10 +2,10 @@
  * MCP Provider Tools — Browser provider management via MCP.
  *
  * Exposes:
- *   - bc_browser_provider_list
- *   - bc_browser_provider_catalog
- *   - bc_browser_provider_use
- *   - bc_browser_provider_health
+ *   - bc_provider_list
+ *   - bc_provider_catalog
+ *   - bc_provider_use
+ *   - bc_provider_health
  */
 
 import type { BrowserControlAPI } from "../../browser_control";
@@ -16,7 +16,7 @@ import { isPolicyAllowed } from "../../session_manager";
 export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
   return [
     {
-      name: "bc_browser_provider_list",
+      name: "bc_provider_list",
       description: "List available browser providers and the active provider.",
       inputSchema: buildSchema({ sessionId: sessionIdSchema }),
       handler: async () => {
@@ -31,7 +31,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       },
     },
     {
-      name: "bc_browser_provider_catalog",
+      name: "bc_provider_catalog",
       description: "List supported browser provider types, setup requirements, capabilities, and risk labels.",
       inputSchema: buildSchema({ sessionId: sessionIdSchema }),
       handler: async (params) => {
@@ -55,7 +55,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       },
     },
     {
-      name: "bc_browser_provider_use",
+      name: "bc_provider_use",
       description: "Set the active browser provider.",
       inputSchema: buildSchema({
         sessionId: sessionIdSchema,
@@ -90,7 +90,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       },
     },
     {
-      name: "bc_browser_provider_health",
+      name: "bc_provider_health",
       description: "Run browser provider health diagnostics and scoring.",
       inputSchema: buildSchema({
         sessionId: sessionIdSchema,
