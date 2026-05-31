@@ -250,8 +250,7 @@ policy import <file>
 knowledge list [--kind interaction-skill|domain-skill]
 knowledge show <name-or-domain>
 knowledge validate [--all]
-knowledge prune <name-or-domain>
-knowledge prune --max-bytes <n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
+knowledge prune <name-or-domain>|--max-bytes <n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
 knowledge stats [--json]
 knowledge delete <name-or-domain>
 memory stats|clear|get <key>|set <key> <value>

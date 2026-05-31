@@ -1830,10 +1830,24 @@
             "knowledge",
             "prune"
           ],
-          "description": "Remove stale entries (not full delete)",
-          "flags": [],
+          "description": "Remove stale entries or enforce size quota",
+          "flags": [
+            "max-bytes"
+          ],
           "jsonSupport": false,
-          "syntax": "knowledge prune <name-or-domain>"
+          "syntax": "knowledge prune <name-or-domain>|--max-bytes=<n>"
+        },
+        {
+          "commandPath": [
+            "knowledge",
+            "stats"
+          ],
+          "description": "Show knowledge directory usage",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "knowledge stats [--json]"
         },
         {
           "commandPath": [

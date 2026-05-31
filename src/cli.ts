@@ -902,9 +902,7 @@ Browser Namespace (compatibility):
   knowledge list [--kind=interaction-skill|domain-skill]             List internal knowledge artifacts
   knowledge show <name-or-domain>                                    Show knowledge for a domain or package
   knowledge validate [--all]                                         Validate knowledge files
-  knowledge prune <name-or-domain>                                   Remove stale entries (not full delete)
-  knowledge prune --max-bytes=<n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
-                                                                      Enforce knowledge directory size quota
+  knowledge prune <name-or-domain>|--max-bytes=<n>                   Remove stale entries or enforce size quota
   knowledge stats [--json]                                            Show knowledge directory usage
   knowledge delete <name-or-domain>                                  Delete entire knowledge artifact
   knowledge backends [list|health|search|rank]                       Manage knowledge backends
