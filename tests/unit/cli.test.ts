@@ -679,6 +679,7 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"purge-profiles",
 		"recursive",
 		"rotate",
+		"same-tab",
 		"skip-browser-test",
 		"skip-terminal-test",
 		"stale",
@@ -764,7 +765,7 @@ test("top-level help documents implemented run and schedule flags", () => {
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /package run <name> <workflow>/);
+    assert.match(result.stdout, /package run <name> \[workflow\]/);
     assert.match(result.stdout, /run --skill=<name> --action=<name>/);
     assert.match(result.stdout, /schedule <id> .*--skill=<name> --action=<name>/);
     assert.doesNotMatch(result.stdout, /run --package=<name> --workflow=<name>/);
