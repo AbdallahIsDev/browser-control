@@ -459,6 +459,41 @@ describe("MCP Tool Registry", () => {
       }
     });
 
+    it("debug health and bundle tools honor explicit sessionId", async () => {
+      const calls: Array<{ action: string; sessionId?: string }> = [];
+      const originalEvaluate = api.sessionManager.evaluateAction.bind(api.sessionManager);
+      api.sessionManager.evaluateAction = ((action: string, params: Record<string, unknown>, sessionId?: string) => {
+        calls.push({ action, sessionId });
+        return {
+          allowed: true,
+          policyDecision: "allow",
+          risk: "low",
+          path: "command",
+        };
+      }) as typeof api.sessionManager.evaluateAction;
+
+      try {
+        const tools = buildToolRegistry(api);
+        const healthTool = tools.find((t) => t.name === "bc_debug_health")!;
+        const bundleTool = tools.find((t) => t.name === "bc_debug_failure_bundle")!;
+
+        const health = await healthTool.handler({ sessionId: "debug-session-a" });
+        const missingBundle = await bundleTool.handler({
+          bundleId: "bundle-missing",
+          sessionId: "debug-session-b",
+        });
+
+        assert.equal(health.sessionId, "debug-session-a");
+        assert.equal(missingBundle.sessionId, "debug-session-b");
+        assert.deepEqual(calls, [
+          { action: "debug_health", sessionId: "debug-session-a" },
+          { action: "debug_bundle_export", sessionId: "debug-session-b" },
+        ]);
+      } finally {
+        api.sessionManager.evaluateAction = originalEvaluate as typeof api.sessionManager.evaluateAction;
+      }
+    });
+
     it("debug evidence tools honor policy denial", async () => {
       const originalEvaluate = api.sessionManager.evaluateAction.bind(api.sessionManager);
       api.sessionManager.evaluateAction = (() => ({
@@ -885,6 +920,16 @@ describe("MCP Tool Registry", () => {
         const tool = tools.find((candidate) => candidate.name === name)!;
         assert.ok("terminalSessionId" in tool.inputSchema.properties, `${name} should expose terminalSessionId`);
         assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${name} should not require Browser Control sessionId`);
+      }
+    });
+
+    it("debug health and failure bundle tools expose optional sessionId", () => {
+      const tools = buildToolRegistry(api);
+      for (const name of ["bc_debug_health", "bc_debug_failure_bundle"]) {
+        const tool = tools.find((candidate) => candidate.name === name)!;
+        assert.ok("sessionId" in tool.inputSchema.properties, `${name} should expose sessionId`);
+        assert.equal(tool.inputSchema.properties.sessionId.default, "system");
+        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${name} should not require sessionId`);
       }
     });
 

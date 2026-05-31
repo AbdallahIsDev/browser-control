@@ -619,6 +619,11 @@
           "bundleId": {
             "description": "The debug bundle ID to retrieve.",
             "type": "string"
+          },
+          "sessionId": {
+            "default": "system",
+            "description": "Session ID for policy context. Defaults to 'system'.",
+            "type": "string"
           }
         },
         "required": [],
@@ -763,6 +768,11 @@
             "default": 9222,
             "description": "CDP port to check. Default: 9222.",
             "type": "number"
+          },
+          "sessionId": {
+            "default": "system",
+            "description": "Session ID for policy context. Defaults to 'system'.",
+            "type": "string"
           }
         },
         "required": [],

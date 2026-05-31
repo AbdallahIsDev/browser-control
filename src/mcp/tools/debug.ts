@@ -38,9 +38,11 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       description: "Run health checks on the Browser Control runtime: CDP connectivity, memory store, proxy pool, CAPTCHA config, OpenRouter config, disk space, browser state, data directories, config validity, daemon broker, and system memory. Returns an overall health status and per-check results.",
       inputSchema: buildSchema({
         port: { type: "number", description: "CDP port to check. Default: 9222.", default: 9222 },
+        sessionId: { type: "string", description: "Session ID for policy context. Defaults to 'system'.", default: "system" },
       }),
       handler: async (params) => {
-        const policyEval = evaluateDebugPolicy(api, "debug_health", params, "system");
+        const sessionId = (params.sessionId as string | undefined) ?? "system";
+        const policyEval = evaluateDebugPolicy(api, "debug_health", params, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
         const healthCheck = new HealthCheck({
@@ -52,7 +54,7 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
         return {
           success: report.overall !== "unhealthy",
           path: policyEval.path,
-          sessionId: "system",
+          sessionId,
           data: report,
           policyDecision: policyEval.policyDecision,
           risk: policyEval.risk,
@@ -66,20 +68,22 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       description: "Retrieve a debug bundle by ID. Debug bundles contain structured evidence about failed actions including browser state, terminal output, console logs, network events, and recovery guidance.",
       inputSchema: buildSchema({
         bundleId: { type: "string", description: "The debug bundle ID to retrieve." },
+        sessionId: { type: "string", description: "Session ID for policy context. Defaults to 'system'.", default: "system" },
       }),
       handler: async (params) => {
         const bundleId = params.bundleId as string;
+        const sessionId = (params.sessionId as string | undefined) ?? "system";
         if (!bundleId) {
           return {
             success: false,
             path: "command" as const,
-            sessionId: "system",
+            sessionId,
             error: "bundleId is required",
             completedAt: new Date().toISOString(),
           };
         }
 
-        const policyEval = evaluateDebugPolicy(api, "debug_bundle_export", { bundleId }, "system");
+        const policyEval = evaluateDebugPolicy(api, "debug_bundle_export", { bundleId, sessionId }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
         const bundle = loadDebugBundle(bundleId, api.sessionManager.getMemoryStore());
@@ -87,7 +91,7 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
           return {
             success: false,
             path: policyEval.path,
-            sessionId: "system",
+            sessionId,
             error: `Bundle "${bundleId}" not found`,
             policyDecision: policyEval.policyDecision,
             risk: policyEval.risk,
