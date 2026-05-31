@@ -1282,10 +1282,10 @@ export class Daemon {
 	}
 
 	async emergencyKill(): Promise<void> {
+		if (this.stopped) {
+			return;
+		}
 		this.acceptNewTasks = false;
-		await this.scheduler.stop();
-		await this.serializeTerminals();
-		await this.terminalManager.closeAll();
 		for (const queued of this.taskQueue.splice(0)) {
 			const record = this.taskStatuses.get(queued.id);
 			if (record) {
@@ -1293,6 +1293,7 @@ export class Daemon {
 				record.error = "Killed before execution.";
 			}
 		}
+		await this.stop();
 	}
 
 	// ── Daemon Status Persistence ──────────────────────────────────────

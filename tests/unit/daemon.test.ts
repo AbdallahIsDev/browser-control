@@ -78,6 +78,43 @@ test("Daemon start and stop manage pid lifecycle and daemon-status.json", async 
   }
 });
 
+test("Daemon emergencyKill stops broker and clears daemon lifecycle state", async () => {
+  const brokerCalls = { start: 0, stop: 0 };
+  const { tempDir, pidPath, store, telemetry, config } = createTestConfig({
+    brokerFactory: async () => ({
+      start: async () => {
+        brokerCalls.start += 1;
+      },
+      stop: async () => {
+        brokerCalls.stop += 1;
+      },
+    }),
+  });
+
+  let daemon: Daemon | null = null;
+  try {
+    daemon = new Daemon(config);
+    await daemon.start();
+    assert.equal(fs.existsSync(pidPath), true);
+
+    await daemon.emergencyKill();
+
+    assert.equal(brokerCalls.start, 1);
+    assert.equal(brokerCalls.stop, 1);
+    assert.equal(fs.existsSync(pidPath), false);
+    assert.equal(daemon.getDaemonStatus(), "stopped");
+
+    await daemon.stop();
+    assert.equal(brokerCalls.stop, 1);
+  } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Daemon start fails fast when critical health checks fail", async () => {
   const daemon = new Daemon({
     healthCheck: {
