@@ -543,6 +543,35 @@ test("elevates risk to high for state-changing verbs like publish, submit, confi
   
   const deleteStep = router.buildRoutedStep(intent, "delete_item", {}, context);
   assert.strictEqual(deleteStep.risk, "high");
+
+  const placeTradeStep = router.buildRoutedStep(intent, "place_trade", {}, context);
+  assert.strictEqual(placeTradeStep.risk, "high");
+
+  const executeOrderStep = router.buildRoutedStep(intent, "execute_order", {}, context);
+  assert.strictEqual(executeOrderStep.risk, "high");
+});
+
+test("matches risk verbs as whole action tokens only", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "inspect action names",
+    actor: "agent",
+    sessionId: "test-session",
+  };
+
+  const context: ExecutionContext = {
+    actor: "agent",
+    sessionId: "test-session",
+  };
+
+  const unpublishStep = router.buildRoutedStep(intent, "unpublish_content", {}, context);
+  assert.strictEqual(unpublishStep.risk, "moderate");
+
+  const undeleteStep = router.buildRoutedStep(intent, "undelete_item", {}, context);
+  assert.strictEqual(undeleteStep.risk, "moderate");
+
+  const preauthorizeStep = router.buildRoutedStep(intent, "preauthorize_card", {}, context);
+  assert.strictEqual(preauthorizeStep.risk, "moderate");
 });
 
 test("no longer reduces risk for human actor - risk determined by action", () => {

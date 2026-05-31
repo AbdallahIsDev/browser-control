@@ -32,8 +32,8 @@ export class ExecutionRouter {
     pathRules: PathInferenceRule[] = DEFAULT_PATH_RULES,
     riskRules: RiskAdjustmentRule[] = DEFAULT_RISK_RULES,
   ) {
-    this.pathRules = pathRules;
-    this.riskRules = riskRules;
+    this.pathRules = [...pathRules];
+    this.riskRules = [...riskRules];
   }
 
   /**

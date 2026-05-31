@@ -136,6 +136,27 @@ function containsDangerousSystemCommand(command: string, depth = 0): boolean {
   );
 }
 
+function tokenizeActionName(action: string): string[] {
+  return action.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function actionContainsTokenSequence(action: string, pattern: string): boolean {
+  const actionTokens = tokenizeActionName(action);
+  const patternTokens = tokenizeActionName(pattern);
+
+  if (patternTokens.length === 0 || patternTokens.length > actionTokens.length) {
+    return false;
+  }
+
+  for (let index = 0; index <= actionTokens.length - patternTokens.length; index++) {
+    if (patternTokens.every((token, offset) => actionTokens[index + offset] === token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // ── Path Inference Rules ────────────────────────────────────────────────
 
 export interface PathInferenceRule {
@@ -573,7 +594,7 @@ export const DEFAULT_RISK_RULES: RiskAdjustmentRule[] = [
         "upload", "download", "place_trade", "execute_order", "transfer", "payment", "checkout",
         "sign", "authorize", "grant", "revoke", "install", "deploy", "ship", "release",
       ];
-      return stateChangingActions.some(verb => action.toLowerCase().includes(verb));
+      return stateChangingActions.some((verb) => actionContainsTokenSequence(action, verb));
     },
     adjustment: () => "high",
   },
