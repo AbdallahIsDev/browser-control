@@ -19,7 +19,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { getDataHome, getInteropDir, getLegacyInteropDir } from "../shared/paths";
 
+const WINDOWS_PID_REUSE_TOLERANCE_MS = 60_000;
+
 // ── PID / process helpers ───────────────────────────────────────────
+
+interface WindowsProcessIdentity {
+  commandLine: string;
+  creationTimeMs?: number;
+}
+
+interface KillProcessTreeOptions {
+  expectedStartedAt?: string;
+}
 
 /**
  * Check whether a specific PID is still alive.
@@ -55,11 +66,17 @@ export function isPidAlive(pid: number): boolean {
  * If taskkill fails for a real reason ("access denied"), verifies
  * the PID is actually dead before swallowing the error.
  */
-export function killProcessTree(pid: number): void {
+export function killProcessTree(pid: number, options: KillProcessTreeOptions = {}): void {
   if (!pid || pid <= 0) return;
 
   try {
     if (process.platform === "win32") {
+      if (!verifyWindowsProcessIdentityBeforeKill(pid, options)) {
+        console.warn(
+          `[daemon_cleanup] Refusing to kill PID ${pid}: process identity no longer matches daemon status.`,
+        );
+        return;
+      }
       try {
         execSync(`taskkill /T /F /PID ${pid}`, { stdio: "ignore" });
       } catch (tkErr) {
@@ -87,6 +104,111 @@ export function killProcessTree(pid: number): void {
       process.kill(pid, "SIGTERM");
     }
   } catch { /* process may already be gone */ }
+}
+
+function verifyWindowsProcessIdentityBeforeKill(
+  pid: number,
+  options: KillProcessTreeOptions,
+): boolean {
+  if (!options.expectedStartedAt) {
+    return true;
+  }
+
+  const processIdentity = readWindowsProcessIdentity(pid);
+  if (!processIdentity) {
+    return !isPidAlive(pid);
+  }
+
+  return isWindowsProcessStartConsistentWithDaemonStatus(
+    processIdentity.creationTimeMs,
+    options.expectedStartedAt,
+  );
+}
+
+function readWindowsProcessIdentity(pid: number): WindowsProcessIdentity | null {
+  try {
+    const output = execSync(
+      `wmic process where "ProcessId=${pid}" get CommandLine,CreationDate,ProcessId /format:csv 2>nul`,
+      { encoding: "utf8", timeout: 5000 },
+    );
+    return parseWindowsProcessIdentity(output, pid);
+  } catch {
+    return null;
+  }
+}
+
+export function parseWindowsProcessIdentity(
+  wmicOutput: string,
+  expectedPid: number,
+): WindowsProcessIdentity | null {
+  for (const line of wmicOutput.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.toLowerCase().startsWith("node,")) {
+      continue;
+    }
+
+    const pidSeparator = trimmed.lastIndexOf(",");
+    if (pidSeparator < 0) continue;
+    const pid = Number(trimmed.slice(pidSeparator + 1).trim());
+    if (pid !== expectedPid) continue;
+
+    const beforePid = trimmed.slice(0, pidSeparator);
+    const creationSeparator = beforePid.lastIndexOf(",");
+    if (creationSeparator < 0) continue;
+
+    const nodeAndCommand = beforePid.slice(0, creationSeparator);
+    const nodeSeparator = nodeAndCommand.indexOf(",");
+    const commandLine =
+      nodeSeparator >= 0 ? nodeAndCommand.slice(nodeSeparator + 1) : nodeAndCommand;
+    const creationTimeMs = parseWmicCreationTimeMs(
+      beforePid.slice(creationSeparator + 1).trim(),
+    );
+
+    return {
+      commandLine,
+      ...(creationTimeMs !== null ? { creationTimeMs } : {}),
+    };
+  }
+
+  return null;
+}
+
+export function parseWmicCreationTimeMs(value: string): number | null {
+  const match = value.match(
+    /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.\d+)?([+-]\d{3})?$/u,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day, hour, minute, second, offset] = match;
+  const localTimeMs = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
+  if (!offset) {
+    return localTimeMs;
+  }
+
+  return localTimeMs - Number(offset) * 60_000;
+}
+
+export function isWindowsProcessStartConsistentWithDaemonStatus(
+  processCreationTimeMs: number | undefined,
+  daemonStartedAt: string,
+): boolean {
+  if (processCreationTimeMs === undefined) {
+    return false;
+  }
+  const daemonStartedAtMs = Date.parse(daemonStartedAt);
+  if (!Number.isFinite(daemonStartedAtMs)) {
+    return false;
+  }
+  return processCreationTimeMs <= daemonStartedAtMs + WINDOWS_PID_REUSE_TOLERANCE_MS;
 }
 
 // ── Automation browser cleanup ───────────────────────────────────────
@@ -251,6 +373,18 @@ function cleanupDaemonFilesInDir(interopDir: string): void {
   }
 }
 
+function readDaemonStartedAtForPidFile(pidFile: string): string | undefined {
+  const statusFile = path.join(path.dirname(pidFile), "daemon-status.json");
+  try {
+    const record = JSON.parse(fs.readFileSync(statusFile, "utf8")) as {
+      startedAt?: unknown;
+    };
+    return typeof record.startedAt === "string" ? record.startedAt : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Main cleanup function ────────────────────────────────────────────
 
 /**
@@ -307,7 +441,9 @@ export async function stopDaemon(options: {
       if (!fs.existsSync(pidFile)) continue;
       const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
       if (!isNaN(pid) && pid > 0) {
-        killProcessTree(pid);
+        killProcessTree(pid, {
+          expectedStartedAt: readDaemonStartedAtForPidFile(pidFile),
+        });
       }
       try { fs.unlinkSync(pidFile); } catch { /* best-effort */ }
     } catch { /* best-effort */ }
