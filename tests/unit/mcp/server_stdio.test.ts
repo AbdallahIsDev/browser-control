@@ -1,11 +1,13 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { bindMcpShutdownHandlers } from "../../../src/mcp/server";
 
 interface Harness {
   homeDir: string;
@@ -73,6 +75,56 @@ afterEach(async () => {
 });
 
 describe("MCP stdio server", () => {
+  it("cleans Browser Control resources when stdio transport closes", async () => {
+    const signals = new EventEmitter();
+    const stdin = new EventEmitter();
+    let browserControlClosed = 0;
+    let serverClosed = 0;
+    let transportClosed = 0;
+    let exitCode: number | undefined;
+
+    const transport = {
+      onclose: undefined as (() => void) | undefined,
+      async close() {
+        transportClosed += 1;
+        this.onclose?.();
+      },
+    };
+
+    const server = {
+      onclose: undefined as (() => void) | undefined,
+      async close() {
+        serverClosed += 1;
+        transport.onclose?.();
+      },
+    };
+
+    bindMcpShutdownHandlers({
+      bc: {
+        close() {
+          browserControlClosed += 1;
+        },
+      },
+      exit(code) {
+        exitCode = code;
+      },
+      server,
+      signalTarget: signals,
+      stdin,
+      transport,
+    });
+
+    transport.onclose?.();
+    stdin.emit("end");
+    signals.emit("SIGTERM");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(browserControlClosed, 1);
+    assert.equal(serverClosed, 1);
+    assert.equal(transportClosed, 1);
+    assert.equal(exitCode, 0);
+  });
+
   it("does not write plain log lines to stdout on startup", async () => {
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-mcp-raw-"));
     const port = String(30000 + Math.floor(Math.random() * 10000));

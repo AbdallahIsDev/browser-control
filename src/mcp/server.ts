@@ -29,6 +29,30 @@ const log = logger.withComponent("mcp_server");
 const SERVER_NAME = "browser-control";
 const SERVER_VERSION = readPackageVersion();
 
+type EventTargetLike = {
+  once(event: string, listener: () => void): unknown;
+  off?(event: string, listener: () => void): unknown;
+  removeListener?(event: string, listener: () => void): unknown;
+};
+
+type McpLifecycleServer = Pick<Server, "close"> & {
+  onclose?: () => void;
+};
+
+type McpLifecycleTransport = {
+  close(): Promise<void>;
+  onclose?: () => void;
+};
+
+type McpShutdownOptions = {
+  bc: Pick<BrowserControlAPI, "close">;
+  server: McpLifecycleServer;
+  transport: McpLifecycleTransport;
+  stdin?: EventTargetLike;
+  signalTarget?: EventTargetLike;
+  exit?: (code?: number) => unknown;
+};
+
 function readPackageVersion(): string {
   const packageJsonPath = path.resolve(__dirname, "..", "..", "package.json");
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
@@ -36,6 +60,108 @@ function readPackageVersion(): string {
     throw new Error(`Missing package version in ${packageJsonPath}`);
   }
   return packageJson.version;
+}
+
+function removeOnce(
+  target: EventTargetLike,
+  event: string,
+  listener: () => void,
+): void {
+  if (typeof target.off === "function") {
+    target.off(event, listener);
+    return;
+  }
+  target.removeListener?.(event, listener);
+}
+
+function addOnce(
+  target: EventTargetLike,
+  event: string,
+  listener: () => void,
+): () => void {
+  target.once(event, listener);
+  return () => removeOnce(target, event, listener);
+}
+
+export function bindMcpShutdownHandlers({
+  bc,
+  exit = (code?: number) => process.exit(code ?? 0),
+  server,
+  signalTarget = process,
+  stdin = process.stdin,
+  transport,
+}: McpShutdownOptions): () => void {
+  let cleanupPromise: Promise<void> | undefined;
+  let cleanupExitCode: number | undefined;
+
+  const cleanup = (reason: string, exitCode = 0): Promise<void> => {
+    cleanupExitCode ??= exitCode;
+    cleanupPromise ??= Promise.resolve().then(async () => {
+      log.info("MCP server shutting down", { reason });
+      try {
+        bc.close();
+      } catch (error: unknown) {
+        log.error("Browser Control cleanup failed during MCP shutdown", {
+          error: normalizeError(error),
+        });
+      }
+      try {
+        await server.close();
+      } catch (error: unknown) {
+        log.error("MCP server transport cleanup failed", {
+          error: normalizeError(error),
+        });
+      }
+      exit(cleanupExitCode);
+    });
+    return cleanupPromise;
+  };
+
+  const previousServerOnClose = server.onclose;
+  server.onclose = () => {
+    try {
+      previousServerOnClose?.();
+    } catch (error: unknown) {
+      log.error("Previous MCP server close handler failed", {
+        error: normalizeError(error),
+      });
+    }
+    void cleanup("transport disconnect");
+  };
+
+  const previousTransportOnClose = transport.onclose;
+  transport.onclose = () => {
+    try {
+      previousTransportOnClose?.();
+    } catch (error: unknown) {
+      log.error("Previous MCP transport close handler failed", {
+        error: normalizeError(error),
+      });
+    }
+    void cleanup("transport disconnect");
+  };
+
+  const closeTransport = () => {
+    void transport.close().catch((error: unknown) => {
+      log.error("MCP stdio transport close failed", {
+        error: normalizeError(error),
+      });
+      void cleanup("stdio closed");
+    });
+  };
+
+  const disposers = [
+    addOnce(signalTarget, "SIGINT", () => void cleanup("SIGINT")),
+    addOnce(signalTarget, "SIGTERM", () => void cleanup("SIGTERM")),
+    addOnce(stdin, "end", closeTransport),
+    addOnce(stdin, "close", closeTransport),
+  ];
+
+  return () => {
+    for (const dispose of disposers) dispose();
+    server.onclose = previousServerOnClose;
+    transport.onclose = previousTransportOnClose;
+  };
 }
 
 // ── Server Factory ─────────────────────────────────────────────────────
@@ -123,20 +249,19 @@ export async function startMcpServer(): Promise<void> {
   try {
     const server = createMcpServer(bc);
     const transport = new StdioServerTransport();
+    const disposeShutdownHandlers = bindMcpShutdownHandlers({
+      bc,
+      server,
+      transport,
+    });
 
-    // Graceful shutdown on SIGINT / SIGTERM
-    const cleanup = async () => {
-      log.info("MCP server shutting down...");
-      bc.close();
-      await server.close();
-      process.exit(0);
-    };
-
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-
-    await server.connect(transport);
-    log.info("Browser Control MCP server started", { name: SERVER_NAME, version: SERVER_VERSION });
+    try {
+      await server.connect(transport);
+      log.info("Browser Control MCP server started", { name: SERVER_NAME, version: SERVER_VERSION });
+    } catch (error: unknown) {
+      disposeShutdownHandlers();
+      throw error;
+    }
   } catch (error: unknown) {
     log.error("Failed to start MCP server", { error: normalizeError(error) });
     bc.close();
