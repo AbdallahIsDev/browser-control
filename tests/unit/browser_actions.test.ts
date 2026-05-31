@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { BrowserActions } from "../../src/browser_actions";
+import { BrowserActions, type BrowserStateResult } from "../../src/browser_actions";
 import type { BrowserConnectionManager } from "../../src/browser_connection";
 import { MemoryStore } from "../../src/memory_store";
 import {
@@ -2827,6 +2827,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.browserConnected, true);
 				assert.equal(result.data!.snapshot, undefined, "snapshot should be undefined by default");
 				assert.ok(result.data!.tabs);
+				assert.equal(result.data!.tabCount, 1);
 				assert.ok(result.data!.url);
 				assert.ok(result.data!.status.tabs === "ok");
 				assert.ok(result.data!.status.snapshot === "skipped");
@@ -2862,6 +2863,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.title, "Mock Title");
 				assert.equal(result.data!.tabId, page.targetId);
 				assert.ok(Array.isArray(result.data!.dialogs));
+				assert.equal(result.data!.dialogCount, 0);
 				assert.equal(result.data!.snapshot, undefined);
 			} finally {
 				isolatedStore.close();
@@ -2983,6 +2985,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.browserConnected, true);
 				assert.equal(result.data!.snapshot, undefined, "snapshot should be undefined by default");
 				assert.ok(result.data!.tabs);
+				assert.equal(result.data!.tabCount, 1);
 				assert.ok(result.data!.url);
 				assert.ok(result.data!.status.tabs === "ok");
 				assert.ok(result.data!.status.snapshot === "skipped");
@@ -3016,6 +3019,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.title, "Mock Title");
 				assert.equal(result.data!.tabId, page.targetId);
 				assert.ok(Array.isArray(result.data!.dialogs));
+				assert.equal(result.data!.dialogCount, 0);
 				assert.equal(result.data!.snapshot, undefined);
 			} finally {
 				isolatedStore.close();
@@ -3312,6 +3316,40 @@ describe("BrowserActions", () => {
 					typeof result.data!.state === "object" &&
 						result.data!.state !== null,
 				);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes compact state after a successful action by default", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "press",
+					key: "Tab",
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				const state = result.data!.state as BrowserStateResult | undefined;
+				assert.ok(state);
+				assert.equal(state.browserConnected, true);
+				assert.equal(state.url, "https://example.test/");
+				assert.equal(state.tabCount, 1);
+				assert.equal(state.dialogCount, 0);
+				assert.equal(state.snapshot, undefined);
+				assert.equal(state.screenshot, undefined);
+				assert.equal(state.status.snapshot, "skipped");
 			} finally {
 				isolatedStore.close();
 			}

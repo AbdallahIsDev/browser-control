@@ -1300,14 +1300,13 @@
           ],
           "description": "",
           "flags": [
-            "capture-on-success",
             "json",
             "text",
             "timeout",
             "url"
           ],
           "jsonSupport": true,
-          "syntax": "browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]"
+          "syntax": "browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--json]"
         },
         {
           "commandPath": [

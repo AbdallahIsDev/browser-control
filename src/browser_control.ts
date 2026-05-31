@@ -988,31 +988,54 @@ export function createBrowserControl(
 		};
 	};
 
+	const attachCompactBrowserState = async <T>(
+		result: ActionResult<T>,
+		tabId?: string,
+	): Promise<ActionResult<T>> => {
+		if (!result.success) return result;
+		const state = await browserActions.browserState({
+			tabId,
+			snapshot: false,
+			screenshot: false,
+		});
+		if (!state.success || !state.data) return result;
+
+		const data = result.data;
+		const dataWithState =
+			data !== null && typeof data === "object" && !Array.isArray(data)
+				? { ...(data as Record<string, unknown>), state: state.data }
+				: { result: data, state: state.data };
+		return {
+			...result,
+			data: dataWithState as T,
+		};
+	};
+
 	return {
 		browser: {
-			open: (o) => browserActions.open(o),
-			navigate: (o) => browserActions.navigate(o),
-			openMany: (items) => browserActions.openMany(items),
-			capture: (o) => browserActions.capture(o),
-			captureMany: (ids, o) => browserActions.captureMany(ids, o),
+			open: async (o) => attachCompactBrowserState(await browserActions.open(o)),
+			navigate: async (o) => attachCompactBrowserState(await browserActions.navigate(o), o.tabId),
+			openMany: async (items) => attachCompactBrowserState(await browserActions.openMany(items)),
+			capture: async (o) => attachCompactBrowserState(await browserActions.capture(o), o?.tabId),
+			captureMany: async (ids, o) => attachCompactBrowserState(await browserActions.captureMany(ids, o)),
 			snapshot: (o) => browserActions.takeSnapshot(o),
-			click: (o) => browserActions.click(o),
-			fill: (o) => browserActions.fill(o),
-			fillMany: (fields, options) => browserActions.fillMany(fields, options),
-			hover: (o) => browserActions.hover(o),
-			type: (o) => browserActions.type(o),
-			paste: (o) => browserActions.paste(o),
-			press: (o) => browserActions.press(o),
-			scroll: (o) => browserActions.scroll(o),
-			screenshot: (o) => browserActions.screenshot(o),
-			highlight: (o) => browserActions.highlight(o),
+			click: async (o) => attachCompactBrowserState(await browserActions.click(o), o.tabId),
+			fill: async (o) => attachCompactBrowserState(await browserActions.fill(o), o.tabId),
+			fillMany: async (fields, options) => attachCompactBrowserState(await browserActions.fillMany(fields, options), options?.tabId),
+			hover: async (o) => attachCompactBrowserState(await browserActions.hover(o), o.tabId),
+			type: async (o) => attachCompactBrowserState(await browserActions.type(o), o.tabId),
+			paste: async (o) => attachCompactBrowserState(await browserActions.paste(o), o.tabId),
+			press: async (o) => attachCompactBrowserState(await browserActions.press(o), o.tabId),
+			scroll: async (o) => attachCompactBrowserState(await browserActions.scroll(o), o.tabId),
+			screenshot: async (o) => attachCompactBrowserState(await browserActions.screenshot(o), o?.tabId),
+			highlight: async (o) => attachCompactBrowserState(await browserActions.highlight(o), o.tabId),
 			generateLocator: (target, options) => browserActions.generateLocator(target, options),
-			dialog: (o) => browserActions.dialog(o),
-			cdp: (o) => browserActions.cdp(o),
+			dialog: async (o) => attachCompactBrowserState(await browserActions.dialog(o), o.tabId),
+			cdp: async (o) => attachCompactBrowserState(await browserActions.cdp(o), o.tabId),
 			tabList: () => browserActions.tabList(),
-			tabSwitch: (id) => browserActions.tabSwitch(id),
-			tabClose: () => browserActions.tabClose(),
-			close: () => browserActions.close(),
+			tabSwitch: async (id) => attachCompactBrowserState(await browserActions.tabSwitch(id), id),
+			tabClose: async () => attachCompactBrowserState(await browserActions.tabClose()),
+			close: async () => attachCompactBrowserState(await browserActions.close()),
 			provider: providerNamespace,
 			screencast: screencastNamespace,
 			// Section 27: Browser discovery and attach UX
@@ -1082,7 +1105,7 @@ export function createBrowserControl(
 					completedAt: new Date().toISOString(),
 				};
 			},
-			drop: (options) => browserActions.drop(options),
+			drop: async (options) => attachCompactBrowserState(await browserActions.drop(options), options.tabId),
 			downloads: {
 				list: () => browserActions.downloadsList(),
 			},

@@ -29,7 +29,7 @@ bc status --json
 bc browser state --json
 bc browser open https://example.com --json
 bc browser snapshot --json
-bc browser act click "@e3" --capture-on-success --json
+bc browser act click "@e3" --json
 bc browser task run --steps-file .\steps.json --json
 ```
 
@@ -98,7 +98,7 @@ browser snapshot [--root-selector] [--boxes] [--json]
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
 browser capture [--snapshot] [--screenshot] [--json]
 browser capture-many --tab-ids <ids>|--urls <json> [--snapshot] [--screenshot] [--json]
-browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
+browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--snapshot] [--screenshot] [--json]
 browser task run --steps <json>|--steps-file <path> [--timeout] [--continue-on-failure] [--json]
 browser tab list [--json]
 browser tab switch <id> [--json]
@@ -110,6 +110,8 @@ browser downloads list [--json]
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
 
 `browser state` returns compact browser state by default: tabs, active URL/title, dialogs, warnings, and per-section status. Snapshot, screenshot, and downloads are opt-in.
+
+Successful `browser act` calls automatically include compact post-action state. Use `browser snapshot` explicitly when you need the full accessibility tree.
 
 `browser act` supports `click`, `fill`, `press`, `hover`, `scroll`, `type`, `paste`, `screenshot`, `tab-close`, `open`, `navigate`, `openMany`, `capture`, `captureMany`, `fillMany`, and `state`.
 

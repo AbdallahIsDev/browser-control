@@ -856,7 +856,7 @@ Browser Namespace (compatibility):
   browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
   browser capture [--snapshot] [--screenshot] [--json]               Capture current tab state
   browser capture-many --tab-ids=<ids>|--urls='<json>' [--json]      Capture multiple tabs
-  browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
+  browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--json]
                                                                       Run one composite browser action
   browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser tab list [--json]                                          List browser tabs

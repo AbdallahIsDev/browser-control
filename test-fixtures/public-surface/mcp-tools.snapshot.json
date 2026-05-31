@@ -3,7 +3,7 @@
   "tools": [
     {
       "category": "browser",
-      "description": "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state) with optional post-action capture. Pre-validates required fields. Returns policy metadata.",
+      "description": "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). Auto-returns compact page state; call bc_snapshot explicitly for the full accessibility tree.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -36,11 +36,6 @@
           "boxes": {
             "default": false,
             "description": "Include element bounds for capture/state.",
-            "type": "boolean"
-          },
-          "captureOnSuccess": {
-            "default": false,
-            "description": "Automatically capture snapshot/screenshot after the action.",
             "type": "boolean"
           },
           "commit": {
@@ -113,7 +108,7 @@
           },
           "screenshot": {
             "default": false,
-            "description": "Include screenshot in post-action capture. Default: false.",
+            "description": "Include screenshot for capture/state actions. Default: false.",
             "type": "boolean"
           },
           "sessionId": {
@@ -122,7 +117,7 @@
           },
           "snapshot": {
             "default": false,
-            "description": "Include snapshot in post-action capture. Default: false (compact).",
+            "description": "Include snapshot for capture/state actions. Default: false (compact state only after other actions).",
             "type": "boolean"
           },
           "tabId": {
@@ -4566,10 +4561,6 @@
                   "description": "Scroll amount in pixels.",
                   "type": "number"
                 },
-                "captureOnSuccess": {
-                  "description": "Capture page state after successful step.",
-                  "type": "boolean"
-                },
                 "commit": {
                   "description": "Commit typed text with Enter when supported.",
                   "type": "boolean"
@@ -4634,11 +4625,11 @@
                   "type": "string"
                 },
                 "screenshot": {
-                  "description": "Include screenshot in post-action capture.",
+                  "description": "Include screenshot for capture/state steps.",
                   "type": "boolean"
                 },
                 "snapshot": {
-                  "description": "Include accessibility snapshot in post-action capture.",
+                  "description": "Include accessibility snapshot for capture/state steps.",
                   "type": "boolean"
                 },
                 "tabId": {

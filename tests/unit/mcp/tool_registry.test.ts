@@ -282,6 +282,7 @@ describe("MCP Tool Registry", () => {
       assert.match((actTool.inputSchema.properties.copyTo as any).description, /Primary save remains/);
       assert.equal(screenshotTool.inputSchema.properties.outputPath, undefined);
       assert.equal(actTool.inputSchema.properties.outputPath, undefined);
+      assert.equal(actTool.inputSchema.properties.captureOnSuccess, undefined);
     });
 
     it("screencast start exposes copyTo and keeps path as deprecated shim", () => {
@@ -312,7 +313,6 @@ describe("MCP Tool Registry", () => {
         const result = await actTool.handler({
           action: "openMany",
           urls: [{ url: "https://example.com", label: "test", waitUntil: "domcontentloaded" }],
-          captureOnSuccess: false,
         });
 
         assert.equal(result.success, true);

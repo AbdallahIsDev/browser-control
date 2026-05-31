@@ -108,11 +108,14 @@ export interface BrowserStateResult {
 	url?: string;
 	title?: string;
 	tabId?: string;
+	tabCount: number;
 	tabs?: Array<{ id: string; url: string; title: string }>;
+	dialogCount: number;
 	dialogs?: DialogInfo[];
 	downloads?: ExtendedDownloadResult[];
 	snapshot?: A11ySnapshot;
 	screenshot?: ScreenshotResult;
+	activeElementHint?: string;
 	warnings: string[];
 	status: Record<string, "ok" | "error" | "skipped">;
 }
@@ -4816,6 +4819,8 @@ export class BrowserActions {
 		const status: Record<string, "ok" | "error" | "skipped"> = {};
 		const result: BrowserStateResult = {
 			browserConnected: false,
+			tabCount: 0,
+			dialogCount: 0,
 			warnings,
 			status,
 		};
@@ -4850,6 +4855,7 @@ export class BrowserActions {
 			const tabListRes = await this.tabList();
 			if (tabListRes.success && tabListRes.data) {
 				result.tabs = tabListRes.data;
+				result.tabCount = tabListRes.data.length;
 				// Find active tab by matching current page URL instead of assuming tabs[0]
 				const pageUrl = currentPage.url();
 				const active = tabListRes.data.find(t => t.url === pageUrl) ?? tabListRes.data[0];
@@ -4873,7 +4879,9 @@ export class BrowserActions {
 			try {
 				const dialogRes = await this.dialog({ action: "list" });
 				if (dialogRes.success && dialogRes.data) {
-					result.dialogs = (dialogRes.data as { dialogs: DialogInfo[] }).dialogs;
+					const dialogs = (dialogRes.data as { dialogs: DialogInfo[] }).dialogs;
+					result.dialogs = dialogs;
+					result.dialogCount = dialogs.length;
 					status.dialogs = "ok";
 				} else {
 					status.dialogs = "error";
@@ -5119,29 +5127,13 @@ export class BrowserActions {
 		const actPath = actResult.path;
 		const actTabId = actResult.data?.tabId as string | undefined ?? options.tabId;
 
-		if (options.captureOnSuccess) {
-			const state = await this.browserState({
-				tabId: options.tabId,
-				snapshot: options.snapshot === true,
-				screenshot: options.screenshot === true,
+		const state = options.action === "state"
+			? { success: true, data: actResult.data as unknown as BrowserStateResult }
+			: await this.browserState({
+				tabId: actTabId ?? options.tabId,
+				snapshot: options.captureOnSuccess === true && options.snapshot === true,
+				screenshot: options.captureOnSuccess === true && options.screenshot === true,
 			});
-			if (state.success && state.data) {
-				return successResult({
-					action: options.action,
-					result: actResult.data ?? {},
-					policy,
-					auditId,
-					path: actPath,
-					tabId: actTabId,
-					state: state.data,
-				}, {
-					path: actPath ?? "a11y",
-					sessionId,
-					policyDecision: policy,
-					auditId,
-				});
-			}
-		}
 
 		return successResult({
 			action: options.action,
@@ -5150,6 +5142,7 @@ export class BrowserActions {
 			auditId,
 			path: actPath,
 			tabId: actTabId,
+			...(state.success && state.data ? { state: state.data } : {}),
 		}, {
 			path: actPath ?? "a11y",
 			sessionId,

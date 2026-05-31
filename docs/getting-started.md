@@ -97,7 +97,7 @@ For Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, Claude Code, an
 ```powershell
 bc status --json
 bc browser state --json
-bc browser act click "@e3" --capture-on-success --json
+bc browser act click "@e3" --json
 bc browser task run --steps='[{"action":"open","url":"https://example.com"},{"action":"state"}]' --json
 ```
 

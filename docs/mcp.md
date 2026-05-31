@@ -240,7 +240,7 @@ Returns `browserConnected`, `url`, `title`, `tabId`, `tabs`, `dialogs`, `warning
 
 ## Unified Action
 
-Use `bc_act` to perform any action and optionally capture state in one call. Supports all actions: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state.
+Use `bc_act` to perform any action and automatically receive compact post-action state. Supports all actions: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state.
 
 ```json
 {
@@ -248,13 +248,12 @@ Use `bc_act` to perform any action and optionally capture state in one call. Sup
   "arguments": {
     "action": "click",
     "target": "@e3",
-    "captureOnSuccess": true,
     "snapshot": false
   }
 }
 ```
 
-Pre-validates required fields per action before dispatch. Post-action capture snapshot defaults `false` (compact). Set `snapshot: true` explicitly to include snapshot in post-capture state.
+Pre-validates required fields per action before dispatch. Full accessibility snapshots are not automatic; call `bc_snapshot` explicitly when you need refs or the full DOM-derived tree.
 
 ## Multi-Step Task Runner
 

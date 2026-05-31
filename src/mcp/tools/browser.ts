@@ -156,9 +156,8 @@ const BROWSER_STEP_PROPERTIES = {
   waitUntil: WAIT_UNTIL_SCHEMA,
   fields: FIELDS_SCHEMA,
   continueOnFailure: { type: "boolean", description: "Continue within fillMany after an individual field failure." },
-  captureOnSuccess: { type: "boolean", description: "Capture page state after successful step." },
-  snapshot: { type: "boolean", description: "Include accessibility snapshot in post-action capture." },
-  screenshot: { type: "boolean", description: "Include screenshot in post-action capture." },
+  snapshot: { type: "boolean", description: "Include accessibility snapshot for capture/state steps." },
+  screenshot: { type: "boolean", description: "Include screenshot for capture/state steps." },
   content: { type: "string", description: "Reserved for future filesystem-output steps." },
   filename: { type: "string", description: "Reserved output filename for future filesystem-output steps." },
 };
@@ -838,7 +837,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_act",
-      description: "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state) with optional post-action capture. Pre-validates required fields. Returns policy metadata.",
+      description: "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). Auto-returns compact page state; call bc_snapshot explicitly for the full accessibility tree.",
       inputSchema: buildSchema({
         action: { type: "string", description: "Action to perform.", enum: ["click", "fill", "press", "hover", "scroll", "type", "paste", "screenshot", "tab-close", "open", "navigate", "openMany", "capture", "captureMany", "fillMany", "state"] },
         target: { type: "string", description: "Element ref (@e3), CSS selector, or text match. Required for click/fill/hover/paste/screenshot." },
@@ -853,9 +852,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         tabId: { type: "string", description: "Optional tab ID." },
         copyTo: { type: "string", description: "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime." },
         fullPage: { type: "boolean", description: "Full-page screenshot (screenshot action only).", default: false },
-        captureOnSuccess: { type: "boolean", description: "Automatically capture snapshot/screenshot after the action.", default: false },
-        snapshot: { type: "boolean", description: "Include snapshot in post-action capture. Default: false (compact).", default: false },
-        screenshot: { type: "boolean", description: "Include screenshot in post-action capture. Default: false.", default: false },
+        snapshot: { type: "boolean", description: "Include snapshot for capture/state actions. Default: false (compact state only after other actions).", default: false },
+        screenshot: { type: "boolean", description: "Include screenshot for capture/state actions. Default: false.", default: false },
         url: { type: "string", description: "URL for open/navigate actions." },
         urls: URLS_SCHEMA,
         waitUntil: WAIT_UNTIL_SCHEMA,
@@ -882,7 +880,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           tabId: params.tabId as string | undefined,
           copyTo: params.copyTo as string | undefined,
           fullPage: params.fullPage as boolean | undefined,
-          captureOnSuccess: params.captureOnSuccess as boolean | undefined,
           snapshot: params.snapshot as boolean | undefined,
           screenshot: params.screenshot as boolean | undefined,
           url: params.url as string | undefined,
