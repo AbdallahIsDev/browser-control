@@ -316,6 +316,32 @@
         },
         {
           "commandPath": [
+            "network",
+            "rules",
+            "list|add|remove"
+          ],
+          "description": "Manage network privacy rules",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "network rules list|add|remove [--json]"
+        },
+        {
+          "commandPath": [
+            "network",
+            "proxy",
+            "list|add|remove|test"
+          ],
+          "description": "Manage outbound proxy inventory",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "network proxy list|add|remove|test [--json]"
+        },
+        {
+          "commandPath": [
             "data",
             "doctor",
             "|"

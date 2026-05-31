@@ -767,6 +767,8 @@ Operator:
                                                                       Create/update user config
   config list|get|set|env                                            Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
+  network rules list|add|remove [--json]                             Manage network privacy rules
+  network proxy list|add|remove|test [--json]                        Manage outbound proxy inventory
   data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]
                                                                       Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
@@ -5702,9 +5704,17 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 async function handleNetwork(args: ParsedArgs): Promise<void> {
 	const { subcommand, positional, flags } = args;
 	const jsonOutput = flags.json === "true";
+	if (subcommand === "proxy") {
+		await handleProxy({
+			...args,
+			subcommand: positional[0] ?? "list",
+			positional: positional.slice(1),
+		});
+		return;
+	}
 	if (subcommand !== "rules") {
 		console.error(`Unknown network command: ${subcommand}`);
-		console.error("Available: rules");
+		console.error("Available: rules, proxy");
 		throw commandFailed();
 	}
 	const rulesAction = positional[0] ?? "list";

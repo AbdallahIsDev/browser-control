@@ -1499,6 +1499,23 @@ test("bc workflow exposes events and typed state edit operator commands", async 
 	}
 });
 
+test("bc network proxy list delegates to proxy inventory", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const output = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "network", "proxy", "list", "--json"]);
+		});
+		const parsed = JSON.parse(output);
+		assert.deepEqual(parsed, []);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc dashboard open starts local web server", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;

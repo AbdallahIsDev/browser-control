@@ -54,6 +54,8 @@ doctor [--json]
 setup [--json] [--non-interactive] [--profile] [--browser-mode] [--chrome-debug-port] [--chrome-bind-address] [--terminal-shell|--shell] [--browserless-endpoint] [--browserless-api-key] [--skip-browser-test] [--skip-terminal-test]
 config list|get <key>|set <key> <value> [--json]
 status [--json]
+network rules list|add|remove [--json]
+network proxy list|add|remove|test [--json]
 ```
 
 Useful setup:
