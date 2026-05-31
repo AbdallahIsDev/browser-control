@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Locator, Page } from "playwright";
@@ -66,6 +67,25 @@ function getSelectorCacheValidationError(value: unknown, requireRequiredFields: 
   return null;
 }
 
+function writeSelectorCacheAtomically(jsonPath: string, contents: string): void {
+  const tempPath = path.join(
+    path.dirname(jsonPath),
+    `.${path.basename(jsonPath)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  );
+
+  try {
+    fs.writeFileSync(tempPath, contents);
+    fs.renameSync(tempPath, jsonPath);
+  } catch (error) {
+    try {
+      fs.rmSync(tempPath, { force: true });
+    } catch {
+      // Best-effort cleanup only; preserve the original write/rename failure.
+    }
+    throw error;
+  }
+}
+
 /** Load a selector cache file and merge it with defaults. */
 export function loadSelectorCache<T extends SelectorCacheRecord>(defaults: T, jsonPath = getDefaultSelectorsPath()): T {
   if (!fs.existsSync(jsonPath)) {
@@ -96,7 +116,7 @@ export function saveSelectorCache<T extends SelectorCacheRecord>(selectors: T, j
     throw new Error(`Invalid selector cache: ${validationError}`);
   }
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
-  fs.writeFileSync(jsonPath, JSON.stringify(selectors, null, 2));
+  writeSelectorCacheAtomically(jsonPath, JSON.stringify(selectors, null, 2));
 }
 
 /** Merge non-null selector values into an existing cache object. */
