@@ -881,6 +881,55 @@ test("parseArgs handles captcha test with --json", () => {
   assert.equal(result.flags.json, "true");
 });
 
+test("captcha test reports configuration status instead of pretending to solve", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-captcha-test-"));
+  const dataHome = path.join(cwd, "data");
+  try {
+    const result = runCli(["captcha", "test", "--json"], {
+      cwd,
+      env: {
+        BROWSER_CONTROL_HOME: dataHome,
+        CAPTCHA_PROVIDER: "2captcha",
+        CAPTCHA_API_KEY: "captcha-key",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const body = JSON.parse(result.stdout) as Record<string, unknown>;
+    assert.equal(body.status, "configured");
+    assert.equal(body.provider, "2captcha");
+    assert.match(String(body.note), /browser page context/i);
+
+    const source = fs.readFileSync(
+      path.join(process.cwd(), "src", "cli.ts"),
+      "utf8",
+    );
+    assert.doesNotMatch(source, /new\s+CaptchaSolver/u);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("captcha test fails with actionable configuration guidance", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-captcha-missing-"));
+  const dataHome = path.join(cwd, "data");
+  try {
+    const result = runCli(["captcha", "test"], {
+      cwd,
+      env: {
+        BROWSER_CONTROL_HOME: dataHome,
+        CAPTCHA_PROVIDER: "",
+        CAPTCHA_API_KEY: "",
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /CAPTCHA_PROVIDER is not configured/i);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs handles flags with equals in value", () => {
   const result = parseArgs([
     "node", "cli.ts", "run",
