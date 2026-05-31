@@ -103,3 +103,41 @@ test("Scheduler killzone helper uses UTC session windows", () => {
   assert.equal(scheduler.isWithinKillzone("ny"), false);
   assert.equal(scheduler.isWithinKillzone("asia"), false);
 });
+
+test("Scheduler reuses timezone formatter while finding next run", () => {
+  const OriginalDateTimeFormat = Intl.DateTimeFormat;
+  let formatterCreations = 0;
+
+  Intl.DateTimeFormat = function countedDateTimeFormat(
+    ...args: ConstructorParameters<typeof Intl.DateTimeFormat>
+  ) {
+    formatterCreations += 1;
+    return new OriginalDateTimeFormat(...args);
+  } as typeof Intl.DateTimeFormat;
+
+  try {
+    const scheduler = new Scheduler({
+      now: () => new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    scheduler.schedule({
+      id: "monthly-report",
+      name: "Monthly Report",
+      cronExpression: "0 0 1 2 *",
+      enabled: true,
+      timezone: "America/New_York",
+    });
+
+    assert.deepEqual(scheduler.getQueue(), [
+      {
+        id: "monthly-report",
+        name: "Monthly Report",
+        nextRun: new Date("2026-02-01T05:00:00.000Z"),
+        enabled: true,
+      },
+    ]);
+    assert.equal(formatterCreations, 1);
+  } finally {
+    Intl.DateTimeFormat = OriginalDateTimeFormat;
+  }
+});

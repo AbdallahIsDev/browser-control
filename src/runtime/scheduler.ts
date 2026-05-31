@@ -40,6 +40,14 @@ type TaskDueHandler = (task: ScheduledTask) => void | Promise<void>;
 
 const SCHEDULE_PREFIX = "schedule:";
 
+interface DateParts {
+  minute: number;
+  hour: number;
+  dayOfMonth: number;
+  month: number;
+  dayOfWeek: number;
+}
+
 function parseCronField(field: string, min: number, max: number): Set<number | "*"> {
   const trimmed = field.trim();
   if (trimmed === "*") {
@@ -103,21 +111,15 @@ function getMinuteStamp(date: Date): string {
   return date.toISOString().slice(0, 16);
 }
 
-function getDateParts(date: Date, timezone?: string): {
-  minute: number;
-  hour: number;
-  dayOfMonth: number;
-  month: number;
-  dayOfWeek: number;
-} {
+function createDatePartsReader(timezone?: string): (date: Date) => DateParts {
   if (!timezone) {
-    return {
+    return (date: Date) => ({
       minute: date.getUTCMinutes(),
       hour: date.getUTCHours(),
       dayOfMonth: date.getUTCDate(),
       month: date.getUTCMonth() + 1,
       dayOfWeek: date.getUTCDay(),
-    };
+    });
   }
 
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -130,8 +132,6 @@ function getDateParts(date: Date, timezone?: string): {
     weekday: "short",
     hour12: false,
   });
-  const parts = formatter.formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const weekdayMap: Record<string, number> = {
     Sun: 0,
     Mon: 1,
@@ -142,17 +142,54 @@ function getDateParts(date: Date, timezone?: string): {
     Sat: 6,
   };
 
-  return {
-    minute: Number(values.minute),
-    hour: Number(values.hour),
-    dayOfMonth: Number(values.day),
-    month: Number(values.month),
-    dayOfWeek: weekdayMap[values.weekday as keyof typeof weekdayMap] ?? 0,
+  return (date: Date) => {
+    let minute = 0;
+    let hour = 0;
+    let dayOfMonth = 1;
+    let month = 1;
+    let dayOfWeek = 0;
+
+    for (const part of formatter.formatToParts(date)) {
+      switch (part.type) {
+        case "minute":
+          minute = Number(part.value);
+          break;
+        case "hour":
+          hour = Number(part.value);
+          break;
+        case "day":
+          dayOfMonth = Number(part.value);
+          break;
+        case "month":
+          month = Number(part.value);
+          break;
+        case "weekday":
+          dayOfWeek = weekdayMap[part.value as keyof typeof weekdayMap] ?? 0;
+          break;
+      }
+    }
+
+    return {
+      minute,
+      hour,
+      dayOfMonth,
+      month,
+      dayOfWeek,
+    };
   };
 }
 
 function fieldMatches(set: Set<number | "*">, value: number): boolean {
   return set.has("*") || set.has(value);
+}
+
+function minutesUntilNextLocalHour(parts: DateParts): number {
+  return Math.max(1, 60 - parts.minute);
+}
+
+function minutesUntilNextLocalDay(parts: DateParts, timezone?: string): number {
+  const minutes = Math.max(1, (23 - parts.hour) * 60 + minutesUntilNextLocalHour(parts));
+  return timezone ? Math.min(minutes, 60) : minutes;
 }
 
 export function parseCron(expression: string): ParsedCronExpression {
@@ -174,20 +211,36 @@ function getNextRunDate(parsed: ParsedCronExpression, now: Date, timezone?: stri
   const candidate = new Date(now.getTime());
   candidate.setUTCSeconds(0, 0);
   candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);
+  const readDateParts = createDatePartsReader(timezone);
 
-  for (let minutesAhead = 0; minutesAhead < 366 * 24 * 60; minutesAhead += 1) {
-    const parts = getDateParts(candidate, timezone);
+  for (let minutesAhead = 0; minutesAhead < 366 * 24 * 60;) {
+    const parts = readDateParts(candidate);
+    if (
+      !fieldMatches(parsed.months, parts.month)
+      || !fieldMatches(parsed.daysOfMonth, parts.dayOfMonth)
+      || !fieldMatches(parsed.daysOfWeek, parts.dayOfWeek)
+    ) {
+      const skipMinutes = minutesUntilNextLocalDay(parts, timezone);
+      candidate.setUTCMinutes(candidate.getUTCMinutes() + skipMinutes);
+      minutesAhead += skipMinutes;
+      continue;
+    }
+
+    if (!fieldMatches(parsed.hours, parts.hour)) {
+      const skipMinutes = minutesUntilNextLocalHour(parts);
+      candidate.setUTCMinutes(candidate.getUTCMinutes() + skipMinutes);
+      minutesAhead += skipMinutes;
+      continue;
+    }
+
     if (
       fieldMatches(parsed.minutes, parts.minute)
-      && fieldMatches(parsed.hours, parts.hour)
-      && fieldMatches(parsed.daysOfMonth, parts.dayOfMonth)
-      && fieldMatches(parsed.months, parts.month)
-      && fieldMatches(parsed.daysOfWeek, parts.dayOfWeek)
     ) {
       return new Date(candidate);
     }
 
     candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);
+    minutesAhead += 1;
   }
 
   return null;
