@@ -3645,7 +3645,7 @@ export class BrowserActions {
 	}
 
 	private escapeString(str: string, options?: { maxLength?: number | null }): string {
-		const escaped = str.replace(/"/g, '\\"').replace(/\n/g, " ").trim();
+		const escaped = str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ").trim();
 		if (options?.maxLength === null) return escaped;
 		return escaped.slice(0, options?.maxLength ?? 100);
 	}

@@ -650,6 +650,21 @@ describe("BrowserActions", () => {
 			);
 		});
 
+		it("escapes backslashes in generated JavaScript string locators", () => {
+			const candidates = generateCandidates({
+				ref: "e1",
+				role: "button",
+				name: "C:\\Users\\Admin\\file",
+			});
+
+			const roleCandidate = candidates.find((candidate) => candidate.kind === "role");
+
+			assert.equal(
+				roleCandidate?.value,
+				'getByRole("button", { name: "C:\\\\Users\\\\Admin\\\\file", exact: true })',
+			);
+		});
+
 		it("escapes CSS IDs when synthesizing element selectors", async () => {
 			const element = await (
 				browserActions as unknown as {
