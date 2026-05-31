@@ -62,6 +62,8 @@ import { Scheduler } from "./scheduler";
 import { type Task, TaskEngine } from "./task_engine";
 import { createTelegramAlertHandler, Telemetry } from "./telemetry";
 
+const DEFAULT_TASK_STATUS_RETENTION_MS = 10 * 60 * 1000;
+
 // ── Daemon Status Model ─────────────────────────────────────────────
 
 export type DaemonStatus = "running" | "degraded" | "stopped";
@@ -125,6 +127,7 @@ interface RunningTaskRecord {
 	params?: Record<string, unknown>;
 	/** Captured at intent-creation time so completion handlers never read from a closed store. */
 	startedAt: string;
+	finishedAtMs?: number;
 }
 
 // ── Daemon Configuration ────────────────────────────────────────────
@@ -141,6 +144,7 @@ export interface DaemonConfig {
 	resumePolicy?: ResumePolicy;
 	memoryAlertMb?: number;
 	chromeTabLimit?: number;
+	taskStatusRetentionMs?: number;
 	healthCheck?: HealthCheckLike;
 	memoryStore?: MemoryStore;
 	telemetry?: Telemetry;
@@ -182,6 +186,10 @@ export class Daemon {
 
 	private readonly taskStatuses = new Map<string, RunningTaskRecord>();
 
+	private readonly taskStatusRetentionMs: number;
+
+	private taskStatusCleanupHandle: NodeJS.Timeout | null = null;
+
 	private readonly taskQueue: Array<{ id: string; task: Task }> = [];
 
 	private readonly runningTaskIds = new Set<string>();
@@ -201,6 +209,10 @@ export class Daemon {
 	private schedulerStarted = false;
 
 	private taskCounter = 0;
+
+	private completedTaskCount = 0;
+
+	private failedTaskCount = 0;
 
 	private daemonStatus: DaemonStatus = "stopped";
 
@@ -235,6 +247,12 @@ export class Daemon {
 
 	constructor(config: DaemonConfig = {}) {
 		this.config = config;
+		this.taskStatusRetentionMs =
+			typeof config.taskStatusRetentionMs === "number" &&
+			Number.isFinite(config.taskStatusRetentionMs) &&
+			config.taskStatusRetentionMs >= 0
+				? config.taskStatusRetentionMs
+				: DEFAULT_TASK_STATUS_RETENTION_MS;
 		this.log = logger.withComponent("daemon");
 	}
 
@@ -458,8 +476,9 @@ export class Daemon {
 		for (const queued of this.taskQueue.splice(0)) {
 			const record = this.taskStatuses.get(queued.id);
 			if (record) {
-				record.status = "failed";
-				record.error = "Cancelled by daemon shutdown";
+				this.setTerminalTaskStatus(record, "failed", {
+					error: "Cancelled by daemon shutdown",
+				});
 			}
 		}
 
@@ -504,6 +523,7 @@ export class Daemon {
 			clearInterval(this.heartbeatHandle);
 			this.heartbeatHandle = null;
 		}
+		this.clearTaskStatusCleanupTimer();
 		if (this.chromeWatchdogHandle) {
 			clearInterval(this.chromeWatchdogHandle);
 			this.chromeWatchdogHandle = null;
@@ -535,14 +555,97 @@ export class Daemon {
 			this.heartbeatHandle !== null ||
 			this.chromeWatchdogHandle !== null ||
 			this.skillStatePersistHandle !== null ||
+			this.taskStatusCleanupHandle !== null ||
 			this.signalHandler !== null
 		);
+	}
+
+	private setTerminalTaskStatus(
+		record: RunningTaskRecord,
+		status: "completed" | "failed",
+		options: { result?: unknown; error?: string } = {},
+	): void {
+		const previousStatus = record.status;
+		record.status = status;
+		record.finishedAtMs = Date.now();
+
+		if ("result" in options) {
+			record.result = options.result;
+		}
+		if (options.error !== undefined) {
+			record.error = options.error;
+		}
+
+		if (previousStatus === status) {
+			this.scheduleTaskStatusCleanup();
+			return;
+		}
+		if (previousStatus === "completed") {
+			this.completedTaskCount = Math.max(0, this.completedTaskCount - 1);
+		} else if (previousStatus === "failed") {
+			this.failedTaskCount = Math.max(0, this.failedTaskCount - 1);
+		}
+
+		if (status === "completed") {
+			this.completedTaskCount += 1;
+		} else {
+			this.failedTaskCount += 1;
+		}
+
+		this.scheduleTaskStatusCleanup();
+	}
+
+	private purgeExpiredTaskStatuses(now = Date.now()): void {
+		for (const [taskId, record] of this.taskStatuses) {
+			if (
+				record.finishedAtMs !== undefined &&
+				now - record.finishedAtMs >= this.taskStatusRetentionMs
+			) {
+				this.taskStatuses.delete(taskId);
+			}
+		}
+	}
+
+	private scheduleTaskStatusCleanup(): void {
+		this.clearTaskStatusCleanupTimer();
+
+		let nextDelayMs: number | null = null;
+		const now = Date.now();
+		for (const record of this.taskStatuses.values()) {
+			if (record.finishedAtMs === undefined) {
+				continue;
+			}
+			const delayMs = Math.max(
+				0,
+				record.finishedAtMs + this.taskStatusRetentionMs - now,
+			);
+			nextDelayMs = nextDelayMs === null ? delayMs : Math.min(nextDelayMs, delayMs);
+		}
+
+		if (nextDelayMs === null) {
+			return;
+		}
+
+		this.taskStatusCleanupHandle = setTimeout(() => {
+			this.taskStatusCleanupHandle = null;
+			this.purgeExpiredTaskStatuses();
+			this.scheduleTaskStatusCleanup();
+		}, nextDelayMs);
+		this.taskStatusCleanupHandle.unref?.();
+	}
+
+	private clearTaskStatusCleanupTimer(): void {
+		if (this.taskStatusCleanupHandle) {
+			clearTimeout(this.taskStatusCleanupHandle);
+			this.taskStatusCleanupHandle = null;
+		}
 	}
 
 	async submitTask(task: Task, externalId?: string): Promise<string> {
 		if (!this.acceptNewTasks) {
 			throw new Error("Daemon is shutting down — not accepting new tasks.");
 		}
+		this.purgeExpiredTaskStatuses();
 
 		const taskId = externalId ?? `task-${Date.now()}-${++this.taskCounter}`;
 		const startedAt = new Date().toISOString();
@@ -598,12 +701,12 @@ export class Daemon {
 					action,
 					reason: evaluation.reason,
 				});
-				this.taskStatuses.set(taskId, {
-					id: taskId,
-					status: "failed",
-					startedAt,
-					error: `Policy denied: ${evaluation.reason}`,
-				});
+				const record = this.taskStatuses.get(taskId);
+				if (record) {
+					this.setTerminalTaskStatus(record, "failed", {
+						error: `Policy denied: ${evaluation.reason}`,
+					});
+				}
 				return taskId;
 			}
 
@@ -617,12 +720,12 @@ export class Daemon {
 						reason: evaluation.reason,
 					},
 				);
-				this.taskStatuses.set(taskId, {
-					id: taskId,
-					status: "failed",
-					startedAt,
-					error: `Policy requires confirmation: ${evaluation.reason}`,
-				});
+				const record = this.taskStatuses.get(taskId);
+				if (record) {
+					this.setTerminalTaskStatus(record, "failed", {
+						error: `Policy requires confirmation: ${evaluation.reason}`,
+					});
+				}
 				return taskId;
 			}
 
@@ -655,6 +758,7 @@ export class Daemon {
 			});
 			return;
 		}
+		this.purgeExpiredTaskStatuses();
 
 		// Build a RoutedStep for policy evaluation
 		const taskIntent: PolicyTaskIntent = {
@@ -701,13 +805,16 @@ export class Daemon {
 					action,
 					reason: evaluation.reason,
 				});
-				this.taskStatuses.set(taskId, {
+				const record: RunningTaskRecord = {
 					id: taskId,
-					status: "failed",
+					status: "pending",
 					skill: skillName,
 					action,
 					params,
 					startedAt: new Date().toISOString(),
+				};
+				this.taskStatuses.set(taskId, record);
+				this.setTerminalTaskStatus(record, "failed", {
 					error: `Policy denied: ${evaluation.reason}`,
 				});
 				return;
@@ -724,13 +831,16 @@ export class Daemon {
 						reason: evaluation.reason,
 					},
 				);
-				this.taskStatuses.set(taskId, {
+				const record: RunningTaskRecord = {
 					id: taskId,
-					status: "failed",
+					status: "pending",
 					skill: skillName,
 					action,
 					params,
 					startedAt: new Date().toISOString(),
+				};
+				this.taskStatuses.set(taskId, record);
+				this.setTerminalTaskStatus(record, "failed", {
 					error: `Policy requires confirmation: ${evaluation.reason}`,
 				});
 				return;
@@ -778,6 +888,7 @@ export class Daemon {
 		result?: unknown;
 		error?: string;
 	} | null {
+		this.purgeExpiredTaskStatuses();
 		const record = this.taskStatuses.get(taskId);
 		if (!record) {
 			return null;
@@ -1226,6 +1337,7 @@ export class Daemon {
 		status: "pending" | "running" | "completed" | "failed";
 		result?: unknown;
 	}> {
+		this.purgeExpiredTaskStatuses();
 		return Array.from(this.taskStatuses.values()).map((record) => ({
 			id: record.id,
 			status: record.status,
@@ -1248,6 +1360,7 @@ export class Daemon {
 
 	/** Get enriched stats for /api/v1/stats. */
 	getStats(): Record<string, unknown> {
+		this.purgeExpiredTaskStatuses();
 		const telemetrySummary = this.telemetry.getSummary();
 		const memoryUsage = process.memoryUsage();
 
@@ -1271,12 +1384,8 @@ export class Daemon {
 			tasks: {
 				running: this.runningTaskIds.size,
 				queued: this.taskQueue.length,
-				totalCompleted: Array.from(this.taskStatuses.values()).filter(
-					(r) => r.status === "completed",
-				).length,
-				totalFailed: Array.from(this.taskStatuses.values()).filter(
-					(r) => r.status === "failed",
-				).length,
+				totalCompleted: this.completedTaskCount,
+				totalFailed: this.failedTaskCount,
 			},
 			scheduler: {
 				paused: this.schedulerPaused,
@@ -1294,8 +1403,9 @@ export class Daemon {
 		for (const queued of this.taskQueue.splice(0)) {
 			const record = this.taskStatuses.get(queued.id);
 			if (record) {
-				record.status = "failed";
-				record.error = "Killed before execution.";
+				this.setTerminalTaskStatus(record, "failed", {
+					error: "Killed before execution.",
+				});
 			}
 		}
 		await this.stop();
@@ -2284,8 +2394,7 @@ export class Daemon {
 
 			const record = this.taskStatuses.get(taskId);
 			if (record) {
-				record.status = "completed";
-				record.result = result;
+				this.setTerminalTaskStatus(record, "completed", { result });
 			}
 
 			// Update intent — startedAt was captured on the record before async work
@@ -2307,8 +2416,9 @@ export class Daemon {
 
 			const record = this.taskStatuses.get(taskId);
 			if (record) {
-				record.status = "failed";
-				record.error = error instanceof Error ? error.message : String(error);
+				this.setTerminalTaskStatus(record, "failed", {
+					error: error instanceof Error ? error.message : String(error),
+				});
 			}
 
 			// Call onError lifecycle hook if the skill implements it
@@ -2404,14 +2514,14 @@ export class Daemon {
 					if (this.stopped) {
 						return;
 					}
-					record.status = context.failures.length > 0 ? "failed" : "completed";
-					record.result = queued.task.id
+					const result = queued.task.id
 						? context.data[queued.task.id]
 						: context.data;
 
 					// Update intent on completion — use captured startedAt from record, not from store
 					const finalStatus =
 						context.failures.length > 0 ? "failed" : "completed";
+					this.setTerminalTaskStatus(record, finalStatus, { result });
 					this.persistTaskIntent(queued.id, {
 						taskId: queued.id,
 						status: finalStatus,
@@ -2431,8 +2541,9 @@ export class Daemon {
 					if (this.stopped) {
 						return;
 					}
-					record.status = "failed";
-					record.error = error instanceof Error ? error.message : String(error);
+					this.setTerminalTaskStatus(record, "failed", {
+						error: error instanceof Error ? error.message : String(error),
+					});
 
 					// Update intent on failure — use captured startedAt from record, not from store
 					this.persistTaskIntent(queued.id, {

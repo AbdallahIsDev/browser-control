@@ -41,6 +41,21 @@ function createTestConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  message: string,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(message);
+}
+
 // ── Basic lifecycle ──────────────────────────────────────────────────
 
 test("Daemon start and stop manage pid lifecycle and daemon-status.json", async () => {
@@ -741,6 +756,51 @@ test("Daemon submitTask runs tasks, tracks status, and persists intent", async (
     assert.deepEqual(status?.result, { ok: true });
 
     await daemon.stop();
+  } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("Daemon evicts retained terminal task statuses without losing totals", async () => {
+  const { tempDir, store, telemetry, config } = createTestConfig({
+    schedulerEnabled: false,
+    taskStatusRetentionMs: 100,
+  });
+
+  let daemon: Daemon | null = null;
+  try {
+    daemon = new Daemon(config);
+    await daemon.start();
+
+    const taskId = await daemon.submitTask({
+      id: "evicted-task",
+      name: "Evicted Task",
+      action: async () => ({
+        success: true,
+        data: { ok: true },
+      }),
+    });
+
+    await waitFor(
+      () => daemon?.getTaskStatus(taskId)?.status === "completed",
+      "task did not complete before retention check",
+    );
+
+    await waitFor(
+      () => daemon?.getTaskStatus(taskId) === null,
+      "terminal task status was not evicted after retention",
+    );
+
+    const stats = daemon.getStats().tasks as {
+      totalCompleted: number;
+      totalFailed: number;
+    };
+    assert.equal(stats.totalCompleted, 1);
+    assert.equal(stats.totalFailed, 0);
   } finally {
     if (daemon) {
       await daemon.stop().catch(() => {});
