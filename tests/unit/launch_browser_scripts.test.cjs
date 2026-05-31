@@ -32,6 +32,13 @@ test("launch_browser.ps1 uses Windows PowerShell 5.1-compatible nested Join-Path
   assert.doesNotMatch(ps1, /Join-Path \$scriptDir "scripts" "launch_browser\.cjs"/);
 });
 
+test("launch_browser.ps1 does not mutate caller BROWSER_BIND_ADDRESS", () => {
+  const ps1 = fs.readFileSync(path.join(repoRoot, "launch_browser.ps1"), "utf8");
+
+  assert.doesNotMatch(ps1, /\$env:BROWSER_BIND_ADDRESS\s*=/);
+  assert.match(ps1, /& \$nodeCmd\.Source \$launcherShim "\$Port" "\$BindAddress"/);
+});
+
 test("scripts/launch_browser.sh invokes the .cjs shim, not the raw .ts file", () => {
   const sh = fs.readFileSync(path.join(repoRoot, "scripts", "launch_browser.sh"), "utf8");
 

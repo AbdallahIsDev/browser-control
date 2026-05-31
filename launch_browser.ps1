@@ -33,7 +33,5 @@ if (($BindAddress -eq "0.0.0.0" -or $BindAddress -eq "::") -and $env:BROWSER_ALL
   exit 1
 }
 
-$env:BROWSER_BIND_ADDRESS = $BindAddress
-
 & $nodeCmd.Source $launcherShim "$Port" "$BindAddress"
 exit $LASTEXITCODE
