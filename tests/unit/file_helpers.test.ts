@@ -83,6 +83,33 @@ describe.describe("file_helpers", () => {
       }
     });
 
+    describe.it("waitForDownload rejects traversal filenames before saving", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fh-wfd-traversal-"));
+      const outsidePath = path.join(path.dirname(tmpDir), `escape-${Date.now()}.txt`);
+
+      try {
+        const dm = new DownloadManager(tmpDir);
+        const page = {
+          waitForEvent: async () => ({
+            suggestedFilename: () => `..\\${path.basename(outsidePath)}`,
+            saveAs: async (destPath: string) => {
+              fs.mkdirSync(path.dirname(destPath), { recursive: true });
+              fs.writeFileSync(destPath, "escaped");
+            },
+          }),
+        };
+
+        await assert.rejects(
+          () => dm.waitForDownload(page as unknown as Parameters<typeof dm.waitForDownload>[0], 5000),
+          /Unsafe download filename/,
+        );
+        assert.equal(fs.existsSync(outsidePath), false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(outsidePath, { force: true });
+      }
+    });
+
     describe.it("captureDownloads sets up page listener", async () => {
       const tmpDir = path.join(os.tmpdir(), `fh-cd-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
@@ -103,6 +130,36 @@ describe.describe("file_helpers", () => {
         assert.equal(listeners["download"].length, 1);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    describe.it("captureDownloads rejects traversal filenames before saving", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fh-cd-traversal-"));
+      const outsidePath = path.join(path.dirname(tmpDir), `capture-escape-${Date.now()}.txt`);
+
+      try {
+        const dm = new DownloadManager(tmpDir);
+        const listeners: Record<string, Array<(...args: unknown[]) => Promise<void>>> = {};
+        const mockPage = {
+          on: (event: string, listener: (...args: unknown[]) => Promise<void>) => {
+            if (!listeners[event]) listeners[event] = [];
+            listeners[event].push(listener);
+          },
+        } as unknown as Parameters<typeof dm.captureDownloads>[0];
+
+        await dm.captureDownloads(mockPage, tmpDir);
+        await listeners.download![0]!({
+          suggestedFilename: () => `../${path.basename(outsidePath)}`,
+          saveAs: async (destPath: string) => {
+            fs.mkdirSync(path.dirname(destPath), { recursive: true });
+            fs.writeFileSync(destPath, "escaped");
+          },
+        });
+
+        assert.equal(fs.existsSync(outsidePath), false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(outsidePath, { force: true });
       }
     });
 
@@ -127,6 +184,37 @@ describe.describe("file_helpers", () => {
         assert.ok(fs.existsSync(result.filePath));
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    describe.it("downloadFromPage rejects traversal filenames before saving", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fh-dfp-traversal-"));
+      const outsidePath = path.join(path.dirname(tmpDir), `download-escape-${Date.now()}.txt`);
+
+      try {
+        const dm = new DownloadManager(tmpDir);
+        const page = {
+          waitForEvent: async () => ({
+            suggestedFilename: () => `..\\${path.basename(outsidePath)}`,
+            saveAs: async (destPath: string) => {
+              fs.mkdirSync(path.dirname(destPath), { recursive: true });
+              fs.writeFileSync(destPath, "escaped");
+            },
+          }),
+        };
+
+        await assert.rejects(
+          () => dm.downloadFromPage(
+            page as unknown as Parameters<typeof dm.downloadFromPage>[0],
+            async () => {},
+            { timeoutMs: 5000 },
+          ),
+          /Unsafe download filename/,
+        );
+        assert.equal(fs.existsSync(outsidePath), false);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(outsidePath, { force: true });
       }
     });
 

@@ -70,6 +70,7 @@ import { globalRefStore } from "./core";
 import {
 	type ExtendedDownloadResult,
 	getFileSize,
+	resolveDownloadFilePath,
 	validateFilePath,
 } from "./file_helpers";
 import {
@@ -560,16 +561,39 @@ export class BrowserActions {
 		fs.mkdirSync(downloadsDir, { recursive: true });
 		const createdAt = new Date().toISOString();
 		const id = `download-${Date.now()}-${this.downloadRegistry.length + 1}`;
-		const suggestedFilename = download.suggestedFilename() || id;
-		const filePath = path.join(downloadsDir, suggestedFilename);
+		const rawSuggestedFilename = download.suggestedFilename() || id;
+		const tabId = await this.getTabIdForPage(page, "0").catch(() => undefined);
+		let fileName: string;
+		let filePath: string;
+		try {
+			({ fileName, filePath } = resolveDownloadFilePath(
+				downloadsDir,
+				rawSuggestedFilename,
+				id,
+			));
+		} catch (error: unknown) {
+			this.downloadRegistry.unshift({
+				id,
+				url: download.url(),
+				suggestedFilename: id,
+				status: "failed",
+				error: error instanceof Error ? error.message : String(error),
+				createdAt,
+				completedAt: new Date().toISOString(),
+				tabId,
+				source: "playwright",
+				sortTimeMs: Date.now(),
+			});
+			return;
+		}
 		const record: ExtendedDownloadResult & { sortTimeMs: number } = {
 			id,
 			url: download.url(),
-			suggestedFilename,
+			suggestedFilename: fileName,
 			path: filePath,
 			status: "pending",
 			createdAt,
-			tabId: await this.getTabIdForPage(page, "0").catch(() => undefined),
+			tabId,
 			source: "playwright",
 			sortTimeMs: Date.now(),
 		};

@@ -13,6 +13,51 @@ export interface DownloadResult {
   sizeBytes: number;
 }
 
+const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
+
+export function sanitizeDownloadFileName(
+  suggestedFilename: string | undefined,
+  fallbackName: string,
+): string {
+  const rawName = suggestedFilename?.trim() || fallbackName;
+  const normalized = rawName.replace(/\\/gu, "/");
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error(`Unsafe download filename: ${suggestedFilename ?? fallbackName}`);
+  }
+
+  const leafName = segments.at(-1)?.trim() || fallbackName;
+  if (leafName === "." || leafName === "..") {
+    throw new Error(`Unsafe download filename: ${suggestedFilename ?? fallbackName}`);
+  }
+
+  const sanitized = leafName
+    .replace(/[^A-Za-z0-9._ -]+/gu, "_")
+    .replace(/[ .]+$/gu, "")
+    .slice(0, 180);
+
+  if (!sanitized || sanitized === "." || sanitized === ".." || WINDOWS_RESERVED_BASENAME.test(sanitized)) {
+    return fallbackName;
+  }
+
+  return sanitized;
+}
+
+export function resolveDownloadFilePath(
+  dir: string,
+  suggestedFilename: string | undefined,
+  fallbackName: string,
+): { fileName: string; filePath: string } {
+  const absoluteDir = path.resolve(dir);
+  const fileName = sanitizeDownloadFileName(suggestedFilename, fallbackName);
+  const filePath = path.resolve(absoluteDir, fileName);
+  const relative = path.relative(absoluteDir, filePath);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Unsafe download filename: ${suggestedFilename ?? fallbackName}`);
+  }
+  return { fileName, filePath };
+}
+
 // ── Section 27: Extended Download Result ───────────────────────────────
 
 /**
@@ -54,12 +99,16 @@ export class DownloadManager {
 
   /** Wait for the next download triggered by the page, with optional timeout. */
   async waitForDownload(page: Page, timeoutMs?: number): Promise<DownloadResult> {
-    const dir = this.defaultDir;
+    const dir = path.resolve(this.defaultDir);
     fs.mkdirSync(dir, { recursive: true });
 
     const download = await page.waitForEvent("download", { timeout: timeoutMs ?? 30_000 });
-    const fileName = download.suggestedFilename() ?? `download-${Date.now()}`;
-    const filePath = path.join(dir, fileName);
+    const fallbackName = `download-${Date.now()}`;
+    const { fileName, filePath } = resolveDownloadFilePath(
+      dir,
+      download.suggestedFilename(),
+      fallbackName,
+    );
     await download.saveAs(filePath);
 
     const stats = fs.statSync(filePath);
@@ -73,10 +122,15 @@ export class DownloadManager {
     this.capturedDirs.push(absoluteDir);
 
     page.on("download", async (download: Download) => {
-      const fileName = download.suggestedFilename() ?? `download-${Date.now()}`;
-      const filePath = path.join(absoluteDir, fileName);
+      const suggestedFilename = download.suggestedFilename();
+      const fallbackName = `download-${Date.now()}`;
       const key = `${Date.now()}-${Math.random()}`;
       const promise = (async (): Promise<DownloadResult> => {
+        const { fileName, filePath } = resolveDownloadFilePath(
+          absoluteDir,
+          suggestedFilename,
+          fallbackName,
+        );
         await download.saveAs(filePath);
         const stats = fs.statSync(filePath);
         return { filePath, fileName, sizeBytes: stats.size };
@@ -84,7 +138,7 @@ export class DownloadManager {
       this.pendingDownloads.set(key, promise);
       promise.finally(() => {
         this.pendingDownloads.delete(key);
-      });
+      }).catch(() => undefined);
     });
   }
 
@@ -99,7 +153,7 @@ export class DownloadManager {
     triggerAction: () => Promise<void>,
     options: DownloadOptions = {},
   ): Promise<DownloadResult> {
-    const targetDir = options.targetDir ?? this.defaultDir;
+    const targetDir = path.resolve(options.targetDir ?? this.defaultDir);
     fs.mkdirSync(targetDir, { recursive: true });
 
     const [download] = await Promise.all([
@@ -107,8 +161,12 @@ export class DownloadManager {
       triggerAction(),
     ]);
 
-    const fileName = download.suggestedFilename() ?? `download-${Date.now()}`;
-    const filePath = path.join(targetDir, fileName);
+    const fallbackName = `download-${Date.now()}`;
+    const { fileName, filePath } = resolveDownloadFilePath(
+      targetDir,
+      download.suggestedFilename(),
+      fallbackName,
+    );
 
     await download.saveAs(filePath);
 

@@ -2497,6 +2497,55 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("rejects traversal filenames from Playwright download events", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/download");
+			const manager = createConnectedBrowserManager([page]);
+			const outsidePath = path.join(
+				path.dirname(dataHome),
+				`browser-download-escape-${Date.now()}.txt`,
+			);
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "trusted" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				await (
+					actions as unknown as {
+						recordDownload: (
+							page: MockPage,
+							download: {
+								suggestedFilename: () => string;
+								url: () => string;
+								saveAs: (destPath: string) => Promise<void>;
+								failure: () => Promise<null>;
+							},
+						) => Promise<void>;
+					}
+				).recordDownload(page, {
+					suggestedFilename: () => `..\\${path.basename(outsidePath)}`,
+					url: () => "https://example.test/download",
+					saveAs: async (destPath: string) => {
+						fs.mkdirSync(path.dirname(destPath), { recursive: true });
+						fs.writeFileSync(destPath, "escaped");
+					},
+					failure: async () => null,
+				});
+
+				assert.equal(fs.existsSync(outsidePath), false);
+				const result = await actions.downloadsList();
+				assert.equal(result.success, true, JSON.stringify(result, null, 2));
+				assert.equal(result.data?.[0]?.status, "failed");
+				assert.match(result.data?.[0]?.error ?? "", /Unsafe download filename/);
+			} finally {
+				isolatedStore.close();
+				fs.rmSync(outsidePath, { force: true });
+			}
+		});
+
 		it("labels filesystem entries as fallback when registry is empty", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const manager = createConnectedBrowserManager([createMockPage()]);
