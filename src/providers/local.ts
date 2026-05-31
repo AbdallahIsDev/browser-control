@@ -25,7 +25,7 @@ import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveD
 import type { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
-import { generateConnectionId, getDefaultProviderProfileManager } from "./utils";
+import { closeBrowserResources, generateConnectionId, getDefaultProviderProfileManager } from "./utils";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -161,21 +161,7 @@ export class LocalBrowserProvider implements BrowserProvider {
   }
 
   async disconnect(result: ActiveConnection): Promise<void> {
-    if (result.context && result.connection.mode !== "attached") {
-      try {
-        await result.context.close();
-      } catch {
-        // ignore
-      }
-    }
-
-    if (result.browser) {
-      try {
-        await result.browser.close();
-      } catch {
-        // ignore
-      }
-    }
+    await closeBrowserResources(result, { closeContext: result.connection.mode !== "attached" });
 
     if (result.managedProcess && result.connection.mode !== "attached") {
       const port = result.connection.cdpEndpoint

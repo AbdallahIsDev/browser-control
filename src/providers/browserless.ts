@@ -12,6 +12,7 @@ import { createAutomationContext, ensureContextHasPage, getAllPages } from "../b
 import type { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import {
+  closeBrowserResources,
   generateConnectionId,
   getDefaultProviderProfileManager,
   sanitizeString,
@@ -187,19 +188,6 @@ export class BrowserlessProvider implements BrowserProvider {
   }
 
   async disconnect(result: ActiveConnection): Promise<void> {
-    if (result.context) {
-      try {
-        await result.context.close();
-      } catch {
-        // ignore
-      }
-    }
-    if (result.browser) {
-      try {
-        await result.browser.close();
-      } catch {
-        // ignore
-      }
-    }
+    await closeBrowserResources(result);
   }
 }

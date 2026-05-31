@@ -1,5 +1,6 @@
 import { redactString as redactStringCentral, redactUrl as redactUrlCentral } from "../observability/redaction";
 import { BrowserProfileManager } from "../browser/profiles";
+import type { ActiveConnection } from "./interface";
 import type { ProviderConfig } from "./types";
 
 const BROWSERBASE_DEFAULT_API_BASE_URL = "https://api.browserbase.com/v1";
@@ -54,6 +55,27 @@ export function getDefaultProviderProfileManager(): BrowserProfileManager {
     defaultProviderProfileManager = new BrowserProfileManager();
   }
   return defaultProviderProfileManager;
+}
+
+export async function closeBrowserResources(
+  result: Pick<ActiveConnection, "browser" | "context">,
+  options: { closeContext?: boolean } = {},
+): Promise<void> {
+  if (result.context && options.closeContext !== false) {
+    try {
+      await result.context.close();
+    } catch {
+      // ignore
+    }
+  }
+
+  if (result.browser) {
+    try {
+      await result.browser.close();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /**

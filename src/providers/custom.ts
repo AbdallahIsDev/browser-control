@@ -11,6 +11,7 @@ import { getAllPages } from "../browser/core";
 import type { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
 import {
+  closeBrowserResources,
   generateConnectionId,
   getDefaultProviderProfileManager,
   sanitizeString,
@@ -102,19 +103,6 @@ export class CustomBrowserProvider implements BrowserProvider {
   }
 
   async disconnect(result: ActiveConnection): Promise<void> {
-    if (result.context) {
-      try {
-        await result.context.close();
-      } catch {
-        // ignore
-      }
-    }
-    if (result.browser) {
-      try {
-        await result.browser.close();
-      } catch {
-        // ignore
-      }
-    }
+    await closeBrowserResources(result);
   }
 }
