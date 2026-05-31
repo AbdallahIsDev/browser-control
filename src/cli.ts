@@ -1429,26 +1429,24 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 		}
 
 		case "status": {
-			if (!fs.existsSync(getPidFilePath())) {
-				// No PID file — daemon is not running. Also clean up stale
-				// daemon-status.json that may claim "running" from a previous
-				// crash/force-kill.
-				await cleanupStaleDaemonStatus();
-				console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
-				break;
-			}
-
-			const pid = Number(fs.readFileSync(getPidFilePath(), "utf8").trim());
-			try {
-				process.kill(pid, 0); // Check if process exists
-				const status = { running: true, pid };
-				outputJson(status, !jsonOutput);
-			} catch {
-				// PID file exists but process is dead — stale state.
-				// Remove both the PID file and the stale daemon-status.json.
-				fs.unlinkSync(getPidFilePath());
-				await cleanupStaleDaemonStatus();
-				console.log(jsonOutput ? '{"running":false}' : "Daemon is not running");
+			await cleanupStaleDaemonStatus();
+			const { collectStatus } = await import("./operator/status");
+			const status = await collectStatus();
+			const daemonStatus = {
+				running: status.daemon.state === "running" || status.daemon.state === "degraded",
+				...status.daemon,
+				broker: status.broker,
+				tasks: status.tasks,
+				health: status.health,
+				timestamp: status.timestamp,
+			};
+			if (jsonOutput) {
+				outputJson(daemonStatus, false);
+			} else if (daemonStatus.running) {
+				console.log(`Daemon is ${daemonStatus.state}${daemonStatus.pid ? ` (PID: ${daemonStatus.pid})` : ""}`);
+				console.log(`Broker: ${status.broker.reachable ? "reachable" : "unreachable"} (${status.broker.url})`);
+			} else {
+				console.log("Daemon is not running");
 			}
 			break;
 		}

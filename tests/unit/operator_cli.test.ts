@@ -1516,6 +1516,27 @@ test("bc network proxy list delegates to proxy inventory", async () => {
 	}
 });
 
+test("bc daemon status --json uses status daemon data shape", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const output = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "daemon", "status", "--json"]);
+		});
+		const parsed = JSON.parse(output);
+		assert.equal(parsed.running, false);
+		assert.equal(parsed.state, "stopped");
+		assert.ok(parsed.broker);
+		assert.equal(parsed.broker.reachable, false);
+		assert.ok(parsed.health);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc dashboard open starts local web server", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
