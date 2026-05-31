@@ -83,21 +83,6 @@ export function verifyProofOfWork(
   return ok ? { ok, hash } : { ok, hash, error: "Proof-of-work difficulty target not met." };
 }
 
-export function solveProofOfWorkForTest(
-  challenge: ProofOfWorkChallenge,
-  options: { maxAttempts?: number } = {},
-): ProofOfWorkSolution {
-  const maxAttempts = options.maxAttempts ?? 1_000_000;
-  const difficulty = normalizeDifficulty(challenge.difficulty);
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const nonce = String(attempt);
-    if (hashProofOfWork(challenge.challenge, difficulty, nonce).startsWith("0".repeat(difficulty))) {
-      return { challenge: challenge.challenge, nonce };
-    }
-  }
-  throw new Error(`Unable to solve proof-of-work challenge within ${maxAttempts} attempts.`);
-}
-
 function hashProofOfWork(challenge: string, difficulty: number, nonce: string): string {
   return crypto
     .createHash("sha256")

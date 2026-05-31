@@ -3650,13 +3650,6 @@
     },
     {
       "declarations": [
-        "src/security/proof_of_work.ts"
-      ],
-      "kind": "value",
-      "name": "solveProofOfWorkForTest"
-    },
-    {
-      "declarations": [
         "src/browser/stagehand_core.ts"
       ],
       "kind": "type+value",

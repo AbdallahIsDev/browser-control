@@ -786,7 +786,6 @@ export type {
 } from "./knowledge/backends";
 export {
   createProofOfWorkChallenge,
-  solveProofOfWorkForTest,
   verifyProofOfWork,
 } from "./security/proof_of_work";
 export type {

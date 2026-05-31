@@ -3,9 +3,9 @@ import { describe, it } from "node:test";
 
 import {
   createProofOfWorkChallenge,
-  solveProofOfWorkForTest,
   verifyProofOfWork,
 } from "../../src/security/proof_of_work";
+import { solveProofOfWorkForTest } from "./helpers/proof_of_work";
 
 describe("proof-of-work anti-abuse primitive", () => {
   it("creates bounded sha256 challenges and verifies solved nonces", () => {
