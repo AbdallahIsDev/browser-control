@@ -17,7 +17,7 @@ Browser Control keeps product implementation under `src/`, tests under `tests/`,
 - `src/operator/` owns human/operator CLI support such as doctor, setup, status, config formatting, and summaries.
 - `src/providers/` owns browser provider abstractions and adapters.
 - `src/services/` owns stable local service URL registry, resolver, and detector.
-- `src/skills/` owns built-in skill implementations.
+- `src/skills/` is the production skill discovery root. Example/reference skills live under `src/skills/examples/` and are not auto-loaded by the daemon.
 - `tests/unit/` owns unit and integration-style node tests.
 - `tests/e2e/` owns golden workflow tests and e2e fixtures/support.
 - `tests/compatibility/` owns public API, CLI, MCP, persisted-format, and package import compatibility snapshots.

@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
-import type { Skill, SkillContext, SkillManifest } from "../skill";
-import { logger } from "../shared/logger";
+import type { Skill, SkillContext, SkillManifest } from "../../skill";
+import { logger } from "../../shared/logger";
 
 const manifest: SkillManifest = {
   name: "adobe_stock",

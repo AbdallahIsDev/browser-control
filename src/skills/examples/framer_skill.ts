@@ -1,10 +1,10 @@
 import type { Page } from "playwright";
-import { retryAction, waitForAny, waitForElement } from "../browser_core";
-import { act } from "../stagehand_core";
-import { resolveSelector } from "../selector_store";
-import { getSelectors, getSelectorsPath, selectorDescriptions } from "../selectors";
-import type { Skill, SkillContext, SkillManifest } from "../skill";
-import { logger } from "../shared/logger";
+import { retryAction, waitForAny, waitForElement } from "../../browser_core";
+import { act } from "../../stagehand_core";
+import { resolveSelector } from "../../selector_store";
+import { getSelectors, getSelectorsPath, selectorDescriptions } from "../../selectors";
+import type { Skill, SkillContext, SkillManifest } from "../../skill";
+import { logger } from "../../shared/logger";
 
 export interface FramerSkillResult {
   success: boolean;

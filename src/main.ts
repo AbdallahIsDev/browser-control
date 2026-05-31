@@ -6,7 +6,7 @@ import type { Browser } from "playwright";
 import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser_core";
 import { formatLaunchBrowserCommand } from "./browser/launch_help";
 import { connectStagehand, disconnectStagehand } from "./stagehand_core";
-import { publishSite } from "./skills/framer_skill";
+import { publishSite } from "./skills/examples/framer_skill";
 import { discoverSelectors, getSelectors } from "./selectors";
 import { TaskEngine } from "./task_engine";
 import { Telemetry, createTelegramAlertHandler } from "./telemetry";

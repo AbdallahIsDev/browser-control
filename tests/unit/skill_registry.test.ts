@@ -259,16 +259,11 @@ describe.describe("SkillRegistry", () => {
       assert.deepEqual(skills, []);
     });
 
-    describe.it("loads skills from the skills/ directory", async () => {
+    describe.it("does not load example skills from the production skills directory", async () => {
       const registry = new SkillRegistry();
       const skills = await registry.loadFromDirectory("./src/skills");
-      // Should load the three built-in skills
-      assert.ok(skills.length >= 1, "Expected at least 1 skill to be loaded");
-      const names = registry.listNames();
-      // The built-in skills should be registered
-      for (const skill of skills) {
-        assert.ok(names.includes(skill.manifest.name), `Expected ${skill.manifest.name} to be registered`);
-      }
+      assert.equal(skills.length, 0);
+      assert.deepEqual(registry.listNames(), []);
     });
 
     describe.it("does not double-load the same directory", async () => {
@@ -320,7 +315,7 @@ describe.describe("SkillRegistry", () => {
 
     describe.it("loads a skill from a file", async () => {
       const registry = new SkillRegistry();
-      const skills = await registry.loadFromFile("./src/skills/framer_skill.ts");
+      const skills = await registry.loadFromFile("./src/skills/examples/framer_skill.ts");
       assert.ok(skills.length >= 1);
       assert.ok(registry.has("framer"));
     });
@@ -330,7 +325,7 @@ describe.describe("SkillRegistry", () => {
     describe.it("tracks loaded files", async () => {
       const registry = new SkillRegistry();
       assert.deepEqual(registry.getLoadedFiles(), []);
-      await registry.loadFromFile("./src/skills/framer_skill.ts");
+      await registry.loadFromFile("./src/skills/examples/framer_skill.ts");
       const files = registry.getLoadedFiles();
       assert.equal(files.length, 1);
       assert.ok(files[0].includes("framer_skill.ts"));
@@ -811,19 +806,17 @@ describe.describe("SkillRegistry", () => {
       assert.deepEqual(registry.getActions("legacy"), []);
     });
 
-    describe.it("built-in skills load successfully and have actions", async () => {
+    describe.it("example skills are not auto-loaded as built-in production skills", async () => {
       const registry = new SkillRegistry();
-      await registry.loadFromDirectory("./skills");
+      await registry.loadFromDirectory(path.resolve(__dirname, "../../src/skills"));
 
-      // Check each built-in skill has actions defined
-      for (const name of registry.listNames()) {
-        const actions = registry.getActions(name);
-        assert.ok(actions.length > 0, `Built-in skill "${name}" should have actions defined`);
-      }
+      assert.equal(registry.has("adobe_stock"), false);
+      assert.equal(registry.has("exness"), false);
+      assert.equal(registry.has("framer"), false);
     });
 
-    describe.it("built-in skills use the shared logger instead of raw console output", () => {
-      const skillsDir = path.resolve(__dirname, "../../src/skills");
+    describe.it("example skills use the shared logger instead of raw console output", () => {
+      const skillsDir = path.resolve(__dirname, "../../src/skills/examples");
       const skillFiles = [
         "adobe_stock_skill.ts",
         "exness_skill.ts",
