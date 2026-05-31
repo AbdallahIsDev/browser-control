@@ -562,7 +562,6 @@ export class Daemon {
 				goal: task.name,
 				actor: "agent" as const,
 				sessionId: "default",
-				requestedPath: task.policyMeta?.path,
 				metadata: { taskType: "generic" },
 			};
 
@@ -577,22 +576,7 @@ export class Daemon {
 				},
 			);
 
-			// Apply explicit overrides from policyMeta if provided
-			let finalStep = routedStep;
-			if (task.policyMeta?.path) {
-				finalStep = this.executionRouter.overridePath(
-					finalStep,
-					task.policyMeta.path,
-				);
-			}
-			if (task.policyMeta?.risk) {
-				finalStep = this.executionRouter.overrideRisk(
-					finalStep,
-					task.policyMeta.risk,
-				);
-			}
-
-			const evaluation = this.policyEngine.evaluate(finalStep, {
+			const evaluation = this.policyEngine.evaluate(routedStep, {
 				sessionId: "default",
 				actor: "agent",
 				internalTask: true,

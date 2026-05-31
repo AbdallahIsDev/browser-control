@@ -181,7 +181,7 @@ test("infers low_level path for CDP actions", () => {
   assert.strictEqual(step.risk, "high");
 });
 
-test("uses requested path from intent", () => {
+test("ignores requested path when it conflicts with inferred action path", () => {
   const router = new ExecutionRouter();
   const intent: PolicyTaskIntent = {
     goal: "click button",
@@ -190,6 +190,18 @@ test("uses requested path from intent", () => {
     requestedPath: "command",
   };
   const step = router.buildRoutedStep(intent, "click", { selector: "button" });
+  assert.strictEqual(step.path, "a11y");
+});
+
+test("ignores requested path for filesystem actions so policy roots still apply", () => {
+  const router = new ExecutionRouter();
+  const intent: PolicyTaskIntent = {
+    goal: "read file",
+    actor: "agent",
+    sessionId: "test-session",
+    requestedPath: "a11y",
+  };
+  const step = router.buildRoutedStep(intent, "fs_read", { path: "/tmp/secret.txt" });
   assert.strictEqual(step.path, "command");
 });
 

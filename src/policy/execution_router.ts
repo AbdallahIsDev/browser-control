@@ -84,7 +84,7 @@ export class ExecutionRouter {
 
     const step: RoutedStep = {
       id: crypto.randomUUID(),
-      path: intent.requestedPath ?? path,
+      path,
       action,
       params,
       risk,
