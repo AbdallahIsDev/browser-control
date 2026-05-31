@@ -4,6 +4,7 @@ import test from "node:test";
 import { Daemon } from "../../src/daemon";
 import { MemoryStore } from "../../src/memory_store";
 import { TerminalBufferStore } from "../../src/terminal_buffer_store";
+import type { SerializedTerminalSession } from "../../src/terminal_resume_types";
 
 test("daemon terminal resume lifecycle persists and restores metadata/buffer without redacted env", async () => {
   const memoryStore = new MemoryStore({ filename: ":memory:" });
@@ -92,5 +93,51 @@ test("daemon terminal resume lifecycle persists and restores metadata/buffer wit
     reconstructedAt: (restoredSession.resumeMetadata as { reconstructedAt: string }).reconstructedAt,
   });
 
+  memoryStore.close();
+});
+
+test("daemon terminal resume respects DaemonConfig autoRestoreSession override", async () => {
+  const memoryStore = new MemoryStore({ filename: ":memory:" });
+  const store = new TerminalBufferStore(memoryStore);
+  const now = new Date().toISOString();
+  const serialized: SerializedTerminalSession = {
+    sessionId: "term-resume-disabled",
+    name: "disabled-resume-test",
+    shell: process.platform === "win32" ? "powershell" : "bash",
+    cwd: process.cwd(),
+    env: {},
+    history: [],
+    scrollbackBuffer: ["previous output"],
+    runningCommand: undefined,
+    status: "idle",
+    resumeLevel: 2,
+    serializedAt: now,
+    createdAt: now,
+    lastActivityAt: now,
+  };
+
+  store.saveSession(serialized.sessionId, serialized);
+  store.saveBuffer(serialized.sessionId, {
+    sessionId: serialized.sessionId,
+    scrollback: ["previous output"],
+    visibleContent: "previous output",
+    capturedAt: now,
+  });
+  store.markPending(serialized.sessionId);
+
+  const daemon = new Daemon({ memoryStore, autoRestoreSession: false });
+  (daemon as unknown as { appConfig: { terminalAutoResume: boolean; terminalResumePolicy: "resume" } }).appConfig = {
+    terminalAutoResume: true,
+    terminalResumePolicy: "resume",
+  };
+  (daemon as unknown as { terminalManager: { create: () => Promise<never> } }).terminalManager = {
+    create: async () => {
+      throw new Error("terminal restore should be skipped");
+    },
+  };
+
+  await (daemon as unknown as { restoreTerminals: () => Promise<void> }).restoreTerminals();
+
+  assert.deepEqual(store.listPending(), [serialized.sessionId]);
   memoryStore.close();
 });

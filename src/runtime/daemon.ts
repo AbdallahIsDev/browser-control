@@ -1507,6 +1507,10 @@ export class Daemon {
 	}
 
 	private getTerminalResumePolicy(): "resume" | "metadata_only" | "abandon" {
+		if (this.config.autoRestoreSession === false) return "abandon";
+		if (this.config.autoRestoreSession === true) {
+			return this.appConfig?.terminalResumePolicy ?? "resume";
+		}
 		if (this.appConfig?.terminalAutoResume === false) return "abandon";
 		return this.appConfig?.terminalResumePolicy ?? "resume";
 	}
