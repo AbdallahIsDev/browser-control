@@ -14,6 +14,10 @@
 import type { ActionResult } from "../shared/action_result";
 import { redactString } from "../observability/redaction";
 
+function stringifyMcpJson(value: unknown): string {
+  return JSON.stringify(value);
+}
+
 // ── MCP Tool Definition ────────────────────────────────────────────────
 
 /**
@@ -85,7 +89,7 @@ export function actionResultToMcpContent(result: ActionResult): {
   return [
     {
       type: "text",
-      text: JSON.stringify(structured, null, 2),
+      text: stringifyMcpJson(structured),
     },
   ];
 }
@@ -189,7 +193,7 @@ export function mcpErrorResult(error: string): {
     content: [
       {
         type: "text",
-        text: JSON.stringify({ success: false, error: redactString(error) }, null, 2),
+        text: stringifyMcpJson({ success: false, error: redactString(error) }),
       },
     ],
     isError: true,

@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildToolRegistry, getToolCategories } from "../../../src/mcp/tool_registry";
+import { actionResultToMcpResult, mcpErrorResult } from "../../../src/mcp/types";
 import { createBrowserControl, type BrowserControlAPI } from "../../../src/browser_control";
 import { MemoryStore } from "../../../src/memory_store";
 import * as os from "node:os";
@@ -190,6 +191,24 @@ describe("MCP Tool Registry", () => {
         assert.ok(typeof tool.inputSchema.properties === "object", `Tool ${tool.name} must have properties`);
         assert.equal(tool.inputSchema.additionalProperties, false, `Tool ${tool.name} must reject unknown params`);
       }
+    });
+
+    it("MCP result content uses compact JSON to reduce token overhead", () => {
+      const result = actionResultToMcpResult(
+        successResult(
+          { nested: { value: true }, items: [1, 2] },
+          { path: "command", sessionId: "compact-json" },
+        ),
+      );
+      const error = mcpErrorResult("Example failure");
+
+      assert.doesNotMatch(result.content[0].text, /\n\s+"/);
+      assert.doesNotMatch(error.content[0].text, /\n\s+"/);
+      assert.deepEqual(JSON.parse(result.content[0].text).data, {
+        nested: { value: true },
+        items: [1, 2],
+      });
+      assert.equal(JSON.parse(error.content[0].text).error, "Example failure");
     });
 
     it("bc_browser_act.urls schema accepts string and object URL entries", () => {
