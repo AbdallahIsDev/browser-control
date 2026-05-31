@@ -899,6 +899,67 @@ test("unknown browser command lists implemented recovery commands", () => {
 	}
 });
 
+test("unknown schedule command is not treated as a schedule id", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"schedule",
+				"lst",
+				"--json",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /Unknown schedule command: lst/);
+		assert.match(result.stdout, /schedule list/);
+		assert.doesNotMatch(result.stderr, /--cron is required/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("empty schedule command prints schedule usage", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"schedule",
+				"--json",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /schedule command or task ID is required/);
+		assert.match(result.stdout, /Usage: bc schedule/);
+		assert.match(result.stdout, /schedule list/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("skill CLI surface is removed in favor of package commands", () => {
 	const home = makeHome();
 	try {

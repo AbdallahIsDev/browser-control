@@ -913,6 +913,19 @@ Flags:
 `);
 }
 
+function printScheduleHelp(): void {
+	console.log(`
+Usage: bc schedule <command|id> [options]
+
+Commands:
+  schedule list                                                      List scheduled tasks
+  schedule pause <id>                                                Pause a scheduled task
+  schedule resume <id>                                               Resume a scheduled task
+  schedule remove <id>                                               Remove a scheduled task
+  schedule <id> --cron="*/5 * * * *" --skill=<name> --action=<name> Schedule a task
+`);
+}
+
 async function handleDoctor(args: ParsedArgs): Promise<void> {
 	const jsonOutput = args.flags.json === "true";
 	const [{ runDoctor }, { formatDoctor }] = await Promise.all([
@@ -1102,7 +1115,20 @@ async function handleSchedule(args: ParsedArgs): Promise<void> {
 			// Schedule a new task: schedule <id> --cron=... --skill=... --action=...
 			const id = subcommand;
 			if (!id) {
-				console.error("Error: Task ID is required");
+				console.error("Error: schedule command or task ID is required");
+				printScheduleHelp();
+				throw commandFailed();
+			}
+			const hasScheduleCreateFlag = Boolean(
+				flags.cron ||
+					flags.name ||
+					flags.skill ||
+					flags.action ||
+					flags.params,
+			);
+			if (!hasScheduleCreateFlag) {
+				console.error(`Unknown schedule command: ${id}`);
+				printScheduleHelp();
 				throw commandFailed();
 			}
 			if (!flags.cron) {
@@ -3117,6 +3143,10 @@ export async function runCli(argv = process.argv): Promise<void> {
 	if (args.flags.help || args.flags.h || args.command === "help") {
 		if (args.command === "package") {
 			printPackageHelp();
+			return;
+		}
+		if (args.command === "schedule") {
+			printScheduleHelp();
 			return;
 		}
 		printHelp();
