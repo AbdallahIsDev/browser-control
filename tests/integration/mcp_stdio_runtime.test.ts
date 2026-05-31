@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
 
@@ -24,6 +25,7 @@ let buffer = "";
 let messageId = 0;
 let stdoutHandler: ((data: Buffer) => void) | null = null;
 let errorListener: ((err: Error) => void) | null = null;
+let testHome: string | null = null;
 
 function nextId(): number {
 	return ++messageId;
@@ -196,12 +198,15 @@ beforeEach(async () => {
 	messageId = 0;
 	stdoutHandler = null;
 	errorListener = null;
+	testHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-mcp-stdio-"));
+	const brokerPort = await getFreePort();
 
 	child = spawn("node", [CLI_PATH, "mcp", "serve"], {
 		env: {
 			...process.env,
-			BROWSER_CONTROL_HOME: process.env.BROWSER_CONTROL_HOME ?? "",
+			BROWSER_CONTROL_HOME: testHome,
 			BROWSER_CONTROL_STDIO_MODE: "mcp",
+			BROKER_PORT: String(brokerPort),
 		},
 		stdio: ["pipe", "pipe", "pipe"],
 	});
@@ -246,6 +251,15 @@ afterEach(async () => {
 	if (child) {
 		await killChildAndWait(child);
 		child = null;
+	}
+
+	if (testHome) {
+		try {
+			fs.rmSync(testHome, { recursive: true, force: true });
+		} catch {
+			// best effort
+		}
+		testHome = null;
 	}
 });
 
