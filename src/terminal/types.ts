@@ -6,6 +6,8 @@
  * will build on.
  */
 
+import type { TerminalResumeMetadata } from "./resume_types";
+
 // ── Execution Options ────────────────────────────────────────────────
 
 export interface ExecOptions {
@@ -71,17 +73,7 @@ export interface TerminalSnapshot {
 	createdAt: string;
 	lastActivityAt: string;
 	/** Resume metadata if this session was restored from persisted state. */
-	resumeMetadata?: {
-		restored: boolean;
-		resumeLevel?: 1 | 2;
-		status?: "fresh" | "resumed" | "reconstructed";
-		preserved?: { metadata: boolean; buffer: boolean };
-		lost?: string[];
-		priorStatus?: "idle" | "running" | "interrupted" | "closed";
-		priorRunningCommand?: string;
-		originalCreatedAt?: string;
-		reconstructedAt?: string;
-	};
+	resumeMetadata?: TerminalResumeMetadata;
 }
 
 export interface TerminalWriteOptions {
