@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import { redactObject } from "../observability/redaction";
+import { constantTimeTokenEqual } from "../shared/auth";
 import type { WebAppEvent, WebEventKind } from "./types";
 
 const MAX_RECENT_EVENTS = 200;
@@ -61,7 +62,11 @@ export class WebEventHub {
 			const protocol = request.headers["sec-websocket-protocol"];
 			if (typeof protocol === "string") {
 				const protocols = protocol.split(",").map((s) => s.trim());
-				if (protocols.includes(token)) {
+				if (
+					protocols.some((candidate) =>
+						constantTimeTokenEqual(candidate, token),
+					)
+				) {
 					authorized = true;
 				}
 			}

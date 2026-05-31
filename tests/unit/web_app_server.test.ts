@@ -785,6 +785,16 @@ test("auth token comparison uses timing-safe equality for same-length tokens", (
 	assert.equal(calls, 1);
 });
 
+test("web event hub protocol token auth uses constant-time comparison", () => {
+	const source = fs.readFileSync(
+		path.resolve(__dirname, "../../src/web/events.ts"),
+		"utf8",
+	);
+
+	assert.match(source, /constantTimeTokenEqual/u);
+	assert.doesNotMatch(source, /protocols\.includes\(token\)/u);
+});
+
 test("web app JSON endpoints reject missing or wrong content type", async (t) => {
 	const api = mockApi();
 	const setCalls: Array<{ key: string; value: unknown }> = [];
