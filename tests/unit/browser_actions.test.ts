@@ -541,6 +541,13 @@ describe("BrowserActions", () => {
 	});
 
 	describe("highlight", () => {
+		it("requires a target unless hide is true", async () => {
+			const result = await browserActions.highlight({});
+
+			assert.equal(result.success, false);
+			assert.match(result.error ?? "", /target.*required/u);
+		});
+
 		it("removes CSS fetch and script-like values from custom overlay style", async () => {
 			const page = createMockPage("https://example.test/");
 			let injectedStyle = "";

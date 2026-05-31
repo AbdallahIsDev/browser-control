@@ -830,7 +830,7 @@ test("bc --help keeps promoted browser command guidance current", () => {
 			"browser capture-many",
 			"browser tab list",
 			"browser tab switch <id>",
-			"browser highlight <target>",
+			"browser highlight [target]",
 			"browser drop <target>",
 			"browser downloads list",
 		]) {

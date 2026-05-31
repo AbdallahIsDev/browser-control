@@ -728,6 +728,39 @@ describe("MCP Tool Registry", () => {
       assert.ok(openTool.inputSchema.required?.includes("url"));
     });
 
+    it("bc_highlight does not require target when hiding highlights", async () => {
+      const tools = buildToolRegistry(api);
+      const highlightTool = tools.find((t) => t.name === "bc_highlight")!;
+
+      assert.equal(highlightTool.inputSchema.required?.includes("target"), false);
+      assert.equal(
+        validateToolParams(highlightTool.name, highlightTool.inputSchema, { hide: true }, highlightTool.validation),
+        null,
+      );
+
+      const browser = api.browser as unknown as {
+        highlight: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
+      };
+      const originalHighlight = browser.highlight;
+      let capturedOptions: Record<string, unknown> | undefined;
+      browser.highlight = async (options) => {
+        capturedOptions = options;
+        return successResult(
+          { highlighted: options.target ?? "all", tabId: "tab-1" },
+          { path: "a11y", sessionId: "test-session" },
+        );
+      };
+
+      try {
+        const result = await highlightTool.handler({ hide: true });
+
+        assert.equal(result.success, true);
+        assert.deepEqual(capturedOptions, { target: undefined, style: undefined, persist: undefined, hide: true, tabId: undefined });
+      } finally {
+        browser.highlight = originalHighlight;
+      }
+    });
+
     it("bc_dialog schema requires action and has dialog_id", () => {
       const tools = buildToolRegistry(api);
       const tool = tools.find((t) => t.name === "bc_dialog")!;

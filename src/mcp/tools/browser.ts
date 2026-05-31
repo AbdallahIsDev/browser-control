@@ -534,11 +534,11 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         hide: { type: "boolean", description: "Whether to hide the highlight (if true, removes all highlights)." },
         tabId: { type: "string", description: "Optional tab ID." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
-      }, ["target"]),
+      }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.highlight({
-          target: params.target as string,
+          target: params.target as string | undefined,
           style: params.style as string | undefined,
           persist: params.persist as boolean | undefined,
           hide: params.hide as boolean | undefined,

@@ -821,7 +821,7 @@ Browser Commands:
   press <key>                                                       Press a key
   scroll <direction>                                                Scroll page
   screenshot [--copy-to=<path>] [--full-page] [--target=<ref>]       Save screenshot to runtime artifact root
-  highlight <target> [--json]                                       Highlight an element
+  highlight [target] [--hide] [--json]                              Highlight an element or hide existing highlights
   drop <target> --file=<path>|--data=<mime=value> [--json]          Drop files or data onto a page target
   downloads list [--json]                                           List browser downloads
   provider list                                                     List browser providers
@@ -866,7 +866,7 @@ Browser Namespace (compatibility):
   browser tab list [--json]                                          List browser tabs
   browser tab switch <id> [--json]                                   Switch to a browser tab
   browser tab close [--tab-id=<id>] [--json]                         Close current or selected browser tab
-  browser highlight <target> [--json]                                Highlight an element
+  browser highlight [target] [--hide] [--json]                       Highlight an element or hide existing highlights
   browser drop <target> --file=<path>|--data=<mime=value> [--json]   Drop files or data onto a page target
   browser downloads list [--json]                                    List browser downloads
   browser provider list                                              List browser providers
@@ -2852,13 +2852,14 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 		case "highlight": {
 			const target = positional[0];
-			if (!target) {
-				console.error("Error: Target (ref, selector, or text) is required");
+			const hide = flags.hide === "true";
+			if (!target && !hide) {
+				console.error("Error: Target (ref, selector, or text) is required unless --hide is set");
 				throw commandFailed();
 			}
 			await requireCliPolicy(
 				"browser_highlight",
-				{ target },
+				{ target: target ?? "all", hide },
 				jsonOutput,
 				flags.yes === "true" || flags.confirm === "true",
 			);
@@ -2866,25 +2867,38 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const { createBrowserControl } = await import("./browser_control");
 				const { formatActionResult } = await import("./shared/action_result");
 				const bc = createBrowserControl();
-				const result = await bc.browser.highlight({
-					target,
-					style: flags.style,
-					persist: flags.persist === "true",
-					hide: flags.hide === "true",
-				});
+				const timeoutMs = flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.highlight({
+						target,
+						style: flags.style,
+						persist: flags.persist === "true",
+						hide,
+					}),
+					timeoutMs ? Number(timeoutMs) : 60_000,
+					"browser highlight",
+				);
+				const actionResult = result as ActionResult<{ highlighted: string; tabId: string }>;
 				if (jsonOutput) {
-					outputJson(formatActionResult(result), false);
+					outputJson(formatActionResult(actionResult), false);
 				} else {
-					if (result.success) {
-						console.log(`Highlighted: ${target}`);
-						if (result.warning) console.warn(`Warning: ${result.warning}`);
+					let failed = false;
+					if (actionResult.success) {
+						console.log(hide ? "Highlights hidden" : `Highlighted: ${target}`);
+						if (actionResult.warning) console.warn(`Warning: ${actionResult.warning}`);
 					} else {
-						console.error(`Error: ${result.error}`);
-						if (result.policyDecision)
-							console.error(`Policy: ${result.policyDecision}`);
-						throw commandFailed();
+						console.error(`Error: ${actionResult.error}`);
+						if (actionResult.policyDecision)
+							console.error(`Policy: ${actionResult.policyDecision}`);
+						failed = true;
 					}
+					await cleanupBrowserSession(bc, timedOut);
+					await finishTimedCliResult(timedOut);
+					if (failed) throw commandFailed();
+					break;
 				}
+				await cleanupBrowserSession(bc, timedOut);
+				await finishTimedCliResult(timedOut);
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw commandFailed();

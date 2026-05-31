@@ -383,7 +383,7 @@ export interface ScreenshotResult {
 
 export interface HighlightOptions {
 	/** Target: ref (@e3), selector, or semantic description. */
-	target: string;
+	target?: string;
 	/** Custom CSS for highlight overlay. */
 	style?: string;
 	/** Whether to persist the highlight (default: false). */
@@ -3102,6 +3102,13 @@ export class BrowserActions {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
+		if (!options.hide && !options.target) {
+			return failureResult("'target' is required unless hide is true", {
+				path: "a11y",
+				sessionId,
+			});
+		}
+
 		// Highlight is low-risk but still routes through policy
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"browser_highlight",
@@ -3147,7 +3154,7 @@ export class BrowserActions {
 					success: true,
 				});
 				return successResult(
-					{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
+					{ highlighted: options.target ?? "all", tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 					{
 						path: policyEval.path,
 						sessionId,
@@ -3159,14 +3166,15 @@ export class BrowserActions {
 			}
 
 			// Resolve target to get element bounds
-			const resolved = await this.resolveTarget(options.target, page);
+			const target = options.target as string;
+			const resolved = await this.resolveTarget(target, page);
 			if (!resolved) {
 				// Try to take a snapshot first to populate refs
 				const snap = await snapshot(page, { sessionId, boxes: true });
 				const pageId = getPageId(page.url(), sessionId);
 				this.refStore.setSnapshot(pageId, snap);
 
-				const retry = await this.resolveTarget(options.target, page);
+				const retry = await this.resolveTarget(target, page);
 				if (!retry) {
 					this.recordTimelineEvent({
 						action: "highlight",
@@ -3208,7 +3216,7 @@ export class BrowserActions {
 					success: true,
 				});
 				return successResult(
-					{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
+					{ highlighted: target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 					{
 						path: policyEval.path,
 						sessionId,
@@ -3243,7 +3251,7 @@ export class BrowserActions {
 			});
 
 			return successResult(
-				{ highlighted: options.target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
+				{ highlighted: target, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
 				{
 					path: policyEval.path,
 					sessionId,
