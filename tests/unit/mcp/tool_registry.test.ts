@@ -688,6 +688,26 @@ describe("MCP Tool Registry", () => {
       ]);
     });
 
+    it("harness generate rejects malformed files JSON without creating a helper", async () => {
+      let generated = false;
+      api.harness.generate = (async () => {
+        generated = true;
+        return successResult({ id: "bad-helper" }, { path: "a11y", sessionId: "test-session" });
+      }) as typeof api.harness.generate;
+      const tools = buildToolRegistry(api);
+      const generateTool = tools.find((t) => t.name === "bc_harness_generate")!;
+
+      const result = await generateTool.handler({
+        id: "bad-helper",
+        purpose: "test invalid json",
+        files: "{not json",
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.error ?? "", /Invalid files JSON/u);
+      assert.equal(generated, false);
+    });
+
     it("package tools honor explicit sessionId", async () => {
       const tools = buildToolRegistry(api);
       const listTool = tools.find((t) => t.name === "bc_package_list")!;

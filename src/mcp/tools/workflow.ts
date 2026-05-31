@@ -6,6 +6,7 @@
  */
 
 import type { BrowserControlAPI } from "../../browser_control";
+import { failureResult } from "../../shared/action_result";
 import type { McpTool } from "../types";
 import { buildSchema, sessionIdSchema } from "../types";
 
@@ -31,6 +32,36 @@ function parseWorkflowStateValue(rawValue: string, valueType: string | undefined
     default:
       throw new Error("valueType must be one of: string, number, boolean.");
   }
+}
+
+function getCurrentSessionId(api: BrowserControlAPI): string {
+  const status = api.session.status();
+  return status.sessionId || "default";
+}
+
+function parseHarnessFiles(rawFiles: string): Array<{ path: string; content: string }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawFiles);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid files JSON: ${message}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("files must be a JSON array of {path, content} objects.");
+  }
+  for (const [index, file] of parsed.entries()) {
+    if (
+      typeof file !== "object" ||
+      file === null ||
+      typeof (file as { path?: unknown }).path !== "string" ||
+      typeof (file as { content?: unknown }).content !== "string"
+    ) {
+      throw new Error(`files[${index}] must include string path and content fields.`);
+    }
+  }
+  return parsed as Array<{ path: string; content: string }>;
 }
 
 export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
@@ -205,9 +236,12 @@ export function buildWorkflowTools(api: BrowserControlAPI): McpTool[] {
         useRequestedSession(api, params);
         let files: Array<{ path: string; content: string }>;
         try {
-          files = JSON.parse(params.files as string);
-        } catch {
-          files = [{ path: "helper.js", content: "" }];
+          files = parseHarnessFiles(params.files as string);
+        } catch (error: unknown) {
+          return failureResult(error instanceof Error ? error.message : String(error), {
+            path: "a11y",
+            sessionId: getCurrentSessionId(api),
+          });
         }
         return api.harness.generate({
           id: params.id as string,
