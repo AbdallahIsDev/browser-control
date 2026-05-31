@@ -1,6 +1,6 @@
 import "dotenv/config";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { redactString } from "../observability/redaction";
@@ -42,6 +42,7 @@ const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 100;
 const DEFAULT_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60_000;
 const DEFAULT_TASK_STATUS_RETENTION_MS = 60 * 60_000;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const DEFAULT_CLOSE_TIMEOUT_MS = 5_000;
 const MAX_DOMAIN_PARAM_DEPTH = 10;
 const MAX_SUBSCRIPTION_CHANNELS = 100;
 const MAX_SUBSCRIPTION_CHANNEL_LENGTH = 128;
@@ -192,6 +193,7 @@ export interface BrokerServerOptions {
 	allowedDomainParamFields?: string[];
 	memoryStore?: BrokerMemoryStore;
 	policyEngine?: PolicyEngine;
+	closeTimeoutMs?: number;
 	now?: () => number;
 }
 
@@ -219,6 +221,7 @@ interface BrokerResolvedConfig {
 	rateLimitBucketTtlMs: number;
 	taskStatusRetentionMs: number;
 	maxBodyBytes: number;
+	closeTimeoutMs: number;
 }
 
 interface RateLimitBucket {
@@ -390,6 +393,12 @@ function resolveBrokerConfig(
 			env.BROKER_MAX_BODY_BYTES,
 			DEFAULT_MAX_BODY_BYTES,
 		),
+		closeTimeoutMs:
+			options.closeTimeoutMs ??
+			parsePositiveInteger(
+				env.BROKER_CLOSE_TIMEOUT_MS,
+				DEFAULT_CLOSE_TIMEOUT_MS,
+			),
 	};
 }
 
@@ -1035,12 +1044,19 @@ export function createBrokerServer(
 	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
 	const webSocketServer = new WebSocketServer({ noServer: true });
+	const sockets = new Set<Socket>();
 	const clientSubscriptions = new WeakMap<WebSocket, Set<string>>();
 	const rateLimitPruneIntervalMs = Math.min(
 		config.rateLimitBucketTtlMs,
 		60_000,
 	);
 	let lastRateLimitPruneAt = 0;
+	let webSocketClosed = false;
+
+	server.on("connection", (socket) => {
+		sockets.add(socket);
+		socket.once("close", () => sockets.delete(socket));
+	});
 
 	const taskStatusKey = (taskId: string): string =>
 		`${BROKER_TASK_STATUS_STORE_PREFIX}${taskId}`;
@@ -1724,22 +1740,62 @@ export function createBrokerServer(
 			return address;
 		},
 		async close(): Promise<void> {
-			await new Promise<void>((resolve) => {
-				for (const client of webSocketServer.clients) client.close();
-				webSocketServer.close(() => resolve());
-			});
+			if (!webSocketClosed) {
+				await new Promise<void>((resolve) => {
+					let settled = false;
+					const finish = () => {
+						if (settled) return;
+						settled = true;
+						webSocketClosed = true;
+						clearTimeout(timer);
+						resolve();
+					};
+					const timer = setTimeout(() => {
+						brokerLog.warn("Timed out closing broker WebSocket clients", {
+							timeoutMs: config.closeTimeoutMs,
+							openClients: webSocketServer.clients.size,
+						});
+						for (const client of webSocketServer.clients) client.terminate();
+						finish();
+					}, config.closeTimeoutMs);
+					timer.unref?.();
+					for (const client of webSocketServer.clients) client.close();
+					webSocketServer.close(() => finish());
+				});
+			}
 
 			if (!server.listening) {
 				return;
 			}
 
 			await new Promise<void>((resolve, reject) => {
-				server.close((error) => {
+				let settled = false;
+				const finish = (error?: Error) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
 					if (error) {
 						reject(error);
 						return;
 					}
 					resolve();
+				};
+				const timer = setTimeout(() => {
+					brokerLog.warn("Timed out closing broker HTTP server", {
+						timeoutMs: config.closeTimeoutMs,
+						openConnections: sockets.size,
+					});
+					for (const socket of sockets) socket.destroy();
+					server.closeAllConnections?.();
+					finish();
+				}, config.closeTimeoutMs);
+				timer.unref?.();
+				server.close((error) => {
+					if (error) {
+						finish(error);
+						return;
+					}
+					finish();
 				});
 			});
 		},

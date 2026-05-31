@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -1605,4 +1606,35 @@ test("createBrokerServer WebSocket accepts dynamic task subscriptions", async (t
     status: "completed",
     result: { visible: true },
   });
+});
+
+test("broker close returns after timeout when HTTP close callback stalls", async () => {
+  const originalClose = http.Server.prototype.close;
+  let stalledCloseCalls = 0;
+  http.Server.prototype.close = function patchedClose(
+    this: http.Server,
+    callback?: Parameters<typeof originalClose>[0],
+  ): ReturnType<typeof originalClose> {
+    stalledCloseCalls += 1;
+    if (stalledCloseCalls === 1) {
+      return this;
+    }
+    return originalClose.call(this, callback);
+  } as typeof http.Server.prototype.close;
+
+  const broker = createBrokerServer({ closeTimeoutMs: 25 });
+  await broker.listen(0, "127.0.0.1");
+
+  try {
+    const result = await Promise.race([
+      broker.close().then(() => "closed"),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 100),
+      ),
+    ]);
+    assert.equal(result, "closed");
+  } finally {
+    http.Server.prototype.close = originalClose;
+    await broker.close().catch(() => undefined);
+  }
 });
