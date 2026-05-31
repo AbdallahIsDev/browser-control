@@ -247,6 +247,37 @@ describe("Automation Packages - Hardened", () => {
       assert.ok(runResult.error?.includes("Permission denied"));
     });
 
+    it("denies Windows terminal expansion vectors even when the command prefix is granted", async () => {
+      const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
+      await bc.package.install(fixturePath);
+      const grantResult = bc.package.grantPermission("basic-test-package", "terminal");
+      assert.strictEqual(grantResult.success, true);
+
+      const installedWorkflowPath = path.join(
+        tmpDataHome,
+        "packages",
+        "installed",
+        "basic-test-package",
+        "workflows",
+        "test-workflow.json",
+      );
+      const workflow = JSON.parse(fs.readFileSync(installedWorkflowPath, "utf8"));
+      const dangerousCommands = [
+        "echo %COMSPEC% /c del /f /q *",
+        "echo !USERPROFILE!",
+        "echo caret ^ escape",
+      ];
+
+      for (const command of dangerousCommands) {
+        workflow.nodes[0].input.command = command;
+        fs.writeFileSync(installedWorkflowPath, JSON.stringify(workflow, null, 2));
+
+        const runResult = await bc.package.run("basic-test-package", "test-workflow");
+        assert.strictEqual(runResult.success, false, `Expected command to be denied: ${command}`);
+        assert.ok(runResult.error?.includes("Permission denied"));
+      }
+    });
+
     it("requires permission index when a kind is ambiguous", () => {
       registry.install(fixturePath);
       const pkgs = registry.list();

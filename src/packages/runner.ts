@@ -176,7 +176,12 @@ export class PackageRunner {
     switch (node.kind) {
       case "terminal": {
         const command = String(node.input.command ?? "").trim();
-        if (/[;&|<>`]/.test(command) || command.includes("$(")) {
+        if (
+          /[;&|<>`^]/.test(command) ||
+          command.includes("$(") ||
+          /%[A-Za-z_][A-Za-z0-9_]*%/.test(command) ||
+          /![\w@$!]+!/.test(command)
+        ) {
           return null;
         }
         return candidates.find(p => {
