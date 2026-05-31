@@ -95,6 +95,53 @@ test("loads custom profiles from disk by name", () => {
   }
 });
 
+test("denies restricted working directories after resolving dot components", () => {
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-restricted-"));
+  process.env.BROWSER_CONTROL_HOME = home;
+
+  try {
+    const restrictedDir = path.join(home, "sensitive");
+    fs.mkdirSync(restrictedDir, { recursive: true });
+
+    saveCustomProfile({
+      ...TRUSTED_PROFILE,
+      name: "restricted_cwd_profile",
+      commandPolicy: {
+        ...TRUSTED_PROFILE.commandPolicy,
+        restrictedWorkingDirectories: [restrictedDir],
+      },
+    });
+
+    const policyEngine = new DefaultPolicyEngine({
+      profileName: "restricted_cwd_profile",
+      logger: new Logger({ component: "test", level: "info" }),
+    });
+
+    const result = policyEngine.evaluate({
+      id: "restricted-dot-cwd",
+      path: "command",
+      action: "execute_command",
+      params: {
+        command: "pwd",
+        cwd: path.join(home, ".", "sensitive"),
+      },
+      risk: "low",
+      sessionId: "test-session",
+    });
+
+    assert.equal(result.decision, "deny");
+    assert.equal(result.matchedRule, "restrictedWorkingDirectories");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.BROWSER_CONTROL_HOME;
+    } else {
+      process.env.BROWSER_CONTROL_HOME = previousHome;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("initializes with a saved custom profile by name", () => {
   const previousHome = process.env.BROWSER_CONTROL_HOME;
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-"));

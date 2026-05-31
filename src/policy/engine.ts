@@ -810,10 +810,10 @@ export class DefaultPolicyEngine implements PolicyEngine {
    * Check if a path is within any restricted directory.
    */
   private isInRestrictedPath(path: string, restrictedDirs: string[]): boolean {
-    const normalized = path.replace(/\\/g, "/");
+    const normalized = this.normalizeFilesystemPath(path);
     return restrictedDirs.some(dir => {
-      const normalizedDir = dir.replace(/\\/g, "/");
-      return normalized.startsWith(normalizedDir) || normalized.startsWith(normalizedDir + "/");
+      const normalizedDir = this.normalizeFilesystemPath(dir);
+      return normalized === normalizedDir || normalized.startsWith(`${normalizedDir}/`);
     });
   }
 
