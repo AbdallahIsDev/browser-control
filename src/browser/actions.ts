@@ -69,6 +69,7 @@ import type { BrowserConnectionManager, BrowserDropResult } from "./connection";
 import { globalRefStore } from "./core";
 import {
 	type ExtendedDownloadResult,
+	type UploadOptions,
 	getFileSize,
 	resolveDownloadFilePath,
 	validateFilePath,
@@ -831,6 +832,18 @@ export class BrowserActions {
 	private getSessionId(): string {
 		const session = this.context.sessionManager.getActiveSession();
 		return session?.id ?? "default";
+	}
+
+	private getUploadPathOptions(): UploadOptions {
+		const session = this.context.sessionManager.getActiveSession();
+		const roots = [
+			session?.runtimeDir,
+			session?.workingDirectory,
+		].filter((root): root is string => Boolean(root));
+		return {
+			cwd: session?.workingDirectory || undefined,
+			allowedRoots: roots.length > 0 ? Array.from(new Set(roots)) : undefined,
+		};
 	}
 
 	private getNetworkPrivacyProfile(): PrivacyProfileName {
@@ -4557,10 +4570,11 @@ export class BrowserActions {
 
 			// Handle file drop - use locator directly
 			if (hasFiles && options.files) {
+				const uploadPathOptions = this.getUploadPathOptions();
 				for (const filePath of options.files) {
 					try {
-						const absolutePath = validateFilePath(filePath);
-						const sizeBytes = getFileSize(filePath);
+						const absolutePath = validateFilePath(filePath, uploadPathOptions);
+						const sizeBytes = getFileSize(absolutePath, uploadPathOptions);
 						// Use Playwright's setInputFiles for file inputs
 						await targetResult.locator.setInputFiles(absolutePath);
 						droppedFiles.push({ path: absolutePath, sizeBytes });

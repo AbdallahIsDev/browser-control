@@ -94,6 +94,7 @@ type MockLocator = {
 	fill?: (text: string, options?: { timeout?: number }) => Promise<void>;
 	press?: (key: string) => Promise<void>;
 	hover?: (options?: { timeout?: number }) => Promise<void>;
+	setInputFiles?: (files: string | string[]) => Promise<void>;
 };
 
 type BrowserActionsInternals = {
@@ -3814,6 +3815,60 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.results[0].path, "command");
 			} finally {
 				isolatedStore.close();
+			}
+		});
+	});
+
+	describe("drop", () => {
+		it("rejects file drops outside the active session roots before setting files", async () => {
+			const allowedRoot = fs.mkdtempSync(
+				path.join(os.tmpdir(), "bc-drop-allowed-"),
+			);
+			const outsideRoot = fs.mkdtempSync(
+				path.join(os.tmpdir(), "bc-drop-outside-"),
+			);
+			const outsideFile = path.join(outsideRoot, "secret.txt");
+			fs.writeFileSync(outsideFile, "secret");
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+			const calls = { setInputFiles: 0 };
+			let sm: SessionManager | undefined;
+
+			try {
+				sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("drop-test", {
+					policyProfile: "trusted",
+					workingDirectory: allowedRoot,
+				});
+				const actions = new BrowserActions({ sessionManager: sm });
+				const testActions = actions as unknown as BrowserActionsInternals;
+				testActions.resolveTarget = async () => ({
+					description: "file input",
+					locator: {
+						scrollIntoViewIfNeeded: async () => undefined,
+						setInputFiles: async () => {
+							calls.setInputFiles += 1;
+						},
+					},
+				});
+
+				const result = await actions.drop({
+					target: "#file-input",
+					files: [outsideFile],
+				});
+
+				assert.equal(result.success, false);
+				assert.match(result.error ?? "", /allowed roots/i);
+				assert.equal(calls.setInputFiles, 0);
+			} finally {
+				sm?.close();
+				isolatedStore.close();
+				fs.rmSync(allowedRoot, { recursive: true, force: true });
+				fs.rmSync(outsideRoot, { recursive: true, force: true });
 			}
 		});
 	});

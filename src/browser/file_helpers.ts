@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Download, Page } from "playwright";
+import { resolvePathSafe } from "../filesystem/operations";
 
 export interface DownloadOptions {
   timeoutMs?: number;
@@ -11,6 +12,11 @@ export interface DownloadResult {
   filePath: string;
   fileName: string;
   sizeBytes: number;
+}
+
+export interface UploadOptions {
+  cwd?: string;
+  allowedRoots?: string[];
 }
 
 const WINDOWS_RESERVED_BASENAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
@@ -211,11 +217,9 @@ export async function uploadFile(
   page: Page,
   selector: string,
   filePath: string,
+  options: UploadOptions = {},
 ): Promise<void> {
-  const absolutePath = path.resolve(filePath);
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error(`File does not exist: ${absolutePath}`);
-  }
+  const absolutePath = resolveUploadFilePath(filePath, options);
 
   const fileInput = page.locator(selector);
   await fileInput.setInputFiles(absolutePath);
@@ -226,14 +230,9 @@ export async function uploadFiles(
   page: Page,
   selector: string,
   filePaths: string[],
+  options: UploadOptions = {},
 ): Promise<void> {
-  const absolutePaths = filePaths.map((filePath) => {
-    const absolutePath = path.resolve(filePath);
-    if (!fs.existsSync(absolutePath)) {
-      throw new Error(`File does not exist: ${absolutePath}`);
-    }
-    return absolutePath;
-  });
+  const absolutePaths = filePaths.map((filePath) => resolveUploadFilePath(filePath, options));
 
   const fileInput = page.locator(selector);
   await fileInput.setInputFiles(absolutePaths);
@@ -244,12 +243,9 @@ export async function uploadWithDragDrop(
   page: Page,
   targetSelector: string,
   filePath: string,
+  options: UploadOptions = {},
 ): Promise<void> {
-  const absolutePath = path.resolve(filePath);
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error(`File does not exist: ${absolutePath}`);
-  }
-
+  const absolutePath = resolveUploadFilePath(filePath, options);
   // Strategy 1: If the target is or contains a file input, use setInputFiles directly
   const fileInputSelector = await page.evaluate((sel) => {
     const el = document.querySelector(sel);
@@ -343,9 +339,13 @@ export async function uploadWithDragDrop(
   }
 }
 
+function resolveUploadFilePath(filePath: string, options: UploadOptions = {}): string {
+  return validateFilePath(filePath, options);
+}
+
 /** Validate that a file exists at the given absolute path. */
-export function validateFilePath(filePath: string): string {
-  const absolutePath = path.resolve(filePath);
+export function validateFilePath(filePath: string, options: UploadOptions = {}): string {
+  const absolutePath = resolvePathSafe(filePath, options);
   if (!path.isAbsolute(absolutePath)) {
     throw new Error(`Path must be absolute: ${filePath}`);
   }
@@ -356,8 +356,8 @@ export function validateFilePath(filePath: string): string {
 }
 
 /** Get file size in bytes. */
-export function getFileSize(filePath: string): number {
-  const absolutePath = validateFilePath(filePath);
+export function getFileSize(filePath: string, options: UploadOptions = {}): number {
+  const absolutePath = validateFilePath(filePath, options);
   const stats = fs.statSync(absolutePath);
   return stats.size;
 }

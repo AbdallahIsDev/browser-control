@@ -3,7 +3,15 @@ import describe from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DownloadManager, validateFilePath, getFileSize, listFiles, uploadFile, uploadFiles } from "../../src/file_helpers";
+import {
+  DownloadManager,
+  validateFilePath,
+  getFileSize,
+  listFiles,
+  uploadFile,
+  uploadFiles,
+  uploadWithDragDrop,
+} from "../../src/file_helpers";
 
 /** Create a minimal mock page that supports waitForEvent("download") and click. */
 function createMockPageWithDownload(downloadFile: { name: string; content: string; dir: string }) {
@@ -368,6 +376,68 @@ describe.describe("file_helpers", () => {
         assert.equal(last.files.length, 2);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    describe.it("uploadFile rejects files outside allowed roots", async () => {
+      const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-up-allowed-"));
+      const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-up-outside-"));
+      const outsideFile = path.join(outsideRoot, "secret.txt");
+      fs.writeFileSync(outsideFile, "secret");
+
+      try {
+        const page = createMockPageWithDownload({ name: "", content: "", dir: "" });
+        await assert.rejects(
+          () => uploadFile(page as Parameters<typeof uploadFile>[0], "#file-input", outsideFile, { allowedRoots: [allowedRoot] }),
+          /allowed roots/i,
+        );
+      } finally {
+        fs.rmSync(allowedRoot, { recursive: true, force: true });
+        fs.rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    });
+
+    describe.it("uploadFiles rejects any file outside allowed roots before setting files", async () => {
+      const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-upm-allowed-"));
+      const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-upm-outside-"));
+      const allowedFile = path.join(allowedRoot, "safe.txt");
+      const outsideFile = path.join(outsideRoot, "secret.txt");
+      fs.writeFileSync(allowedFile, "safe");
+      fs.writeFileSync(outsideFile, "secret");
+
+      try {
+        delete (globalThis as unknown as Record<string, unknown>).__lastSetInputFiles;
+        const page = createMockPageWithDownload({ name: "", content: "", dir: "" });
+        await assert.rejects(
+          () => uploadFiles(page as Parameters<typeof uploadFiles>[0], "#file-input", [allowedFile, outsideFile], { allowedRoots: [allowedRoot] }),
+          /allowed roots/i,
+        );
+        assert.equal((globalThis as unknown as Record<string, unknown>).__lastSetInputFiles, undefined);
+      } finally {
+        fs.rmSync(allowedRoot, { recursive: true, force: true });
+        fs.rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    });
+
+    describe.it("uploadWithDragDrop rejects files outside allowed roots before page interaction", async () => {
+      const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-dnd-allowed-"));
+      const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fh-dnd-outside-"));
+      const outsideFile = path.join(outsideRoot, "secret.txt");
+      fs.writeFileSync(outsideFile, "secret");
+      const page = {
+        evaluate: async () => {
+          throw new Error("page should not be touched");
+        },
+      } as unknown as Parameters<typeof uploadWithDragDrop>[0];
+
+      try {
+        await assert.rejects(
+          () => uploadWithDragDrop(page, "#drop-zone", outsideFile, { allowedRoots: [allowedRoot] }),
+          /allowed roots/i,
+        );
+      } finally {
+        fs.rmSync(allowedRoot, { recursive: true, force: true });
+        fs.rmSync(outsideRoot, { recursive: true, force: true });
       }
     });
   });
