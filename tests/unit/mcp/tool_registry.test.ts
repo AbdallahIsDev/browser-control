@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildToolRegistry, getToolCategories } from "../../../src/mcp/tool_registry";
-import { actionResultToMcpResult, mcpErrorResult } from "../../../src/mcp/types";
+import { actionResultToMcpResult, mcpErrorResult, validateToolParams } from "../../../src/mcp/types";
 import { createBrowserControl, type BrowserControlAPI } from "../../../src/browser_control";
 import { MemoryStore } from "../../../src/memory_store";
 import * as os from "node:os";
@@ -782,6 +782,43 @@ describe("MCP Tool Registry", () => {
         assert.ok("terminalSessionId" in tool.inputSchema.properties, `${name} should expose terminalSessionId`);
         assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${name} should not require Browser Control sessionId`);
       }
+    });
+
+    it("bc_act validation rejects action-specific missing parameters before handler execution", () => {
+      const tools = buildToolRegistry(api);
+      const actTool = tools.find((t) => t.name === "bc_act")!;
+
+      const missingClickTarget = validateToolParams(actTool.name, actTool.inputSchema, { action: "click" }, actTool.validation);
+      const emptyOpenMany = validateToolParams(actTool.name, actTool.inputSchema, { action: "openMany", urls: [] }, actTool.validation);
+      const duplicateScreenshotOutput = validateToolParams(actTool.name, actTool.inputSchema, { action: "screenshot", copyTo: "a.png", outputPath: "b.png" }, actTool.validation);
+
+      assert.ok(missingClickTarget);
+      assert.match(missingClickTarget, /target/);
+      assert.ok(emptyOpenMany);
+      assert.match(emptyOpenMany, /urls/);
+      assert.ok(duplicateScreenshotOutput);
+      assert.match(duplicateScreenshotOutput, /mutually exclusive/);
+      assert.equal(
+        validateToolParams(actTool.name, actTool.inputSchema, { action: "fill", target: "#name", text: "" }, actTool.validation),
+        null,
+      );
+    });
+
+    it("bc_task_run validation rejects invalid step parameter combinations before handler execution", () => {
+      const tools = buildToolRegistry(api);
+      const taskTool = tools.find((t) => t.name === "bc_task_run")!;
+
+      const missingFillTarget = validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "fill", text: "Ada" }] }, taskTool.validation);
+      const missingPressKey = validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "press" }] }, taskTool.validation);
+
+      assert.ok(missingFillTarget);
+      assert.match(missingFillTarget, /steps\[0\]\.target/);
+      assert.ok(missingPressKey);
+      assert.match(missingPressKey, /steps\[0\]\.key/);
+      assert.equal(
+        validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "press", key: "Enter" }] }, taskTool.validation),
+        null,
+      );
     });
   });
 

@@ -142,5 +142,12 @@ describe("MCP stdio server", () => {
     }) as ToolCallResult;
     assert.equal(invalid.isError, true);
     assert.match(invalid.content[0].text, /Invalid value 'sideways' for parameter 'direction' on tool 'bc_scroll'/);
+
+    const conditional = await harness.client.callTool({
+      name: "bc_act",
+      arguments: { action: "click" },
+    }) as ToolCallResult;
+    assert.equal(conditional.isError, true);
+    assert.match(conditional.content[0].text, /Missing required parameter 'target'.*action.*click/);
   });
 });

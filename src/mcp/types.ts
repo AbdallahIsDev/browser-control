@@ -36,6 +36,28 @@ export interface JSONSchema {
   additionalProperties?: false;
 }
 
+export type RequiredParameter =
+  | string
+  | {
+      parameter: string;
+      allowEmptyString?: boolean;
+      nonEmptyArray?: boolean;
+    };
+
+export interface ConditionalRequiredRule {
+  when: {
+    parameter: string;
+    equals: string | string[];
+  };
+  requires: RequiredParameter[];
+}
+
+export interface ToolParameterValidation {
+  conditionalRequired?: ConditionalRequiredRule[];
+  mutuallyExclusive?: string[][];
+  arrayItems?: Record<string, ToolParameterValidation>;
+}
+
 /**
  * A single MCP tool: name, description, input schema, and handler.
  */
@@ -46,6 +68,8 @@ export interface McpTool {
   description: string;
   /** JSON Schema for tool inputs. */
   inputSchema: JSONSchema;
+  /** Internal cross-field validation rules that are enforced before handlers run. */
+  validation?: ToolParameterValidation;
   /** Handler that calls the Browser Control action surface. */
   handler: (params: Record<string, unknown>) => Promise<ActionResult>;
 }
@@ -139,7 +163,64 @@ export function buildSchema(
   };
 }
 
-export function validateToolParams(toolName: string, schema: JSONSchema, params: Record<string, unknown>): string | null {
+function isMissingRequired(value: unknown, required: RequiredParameter): boolean {
+  const rule = typeof required === "string" ? { parameter: required } : required;
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string" && value === "" && rule.allowEmptyString !== true) return true;
+  if (Array.isArray(value) && rule.nonEmptyArray === true && value.length === 0) return true;
+  return false;
+}
+
+function requiredParameterName(required: RequiredParameter): string {
+  return typeof required === "string" ? required : required.parameter;
+}
+
+function ruleMatches(params: Record<string, unknown>, rule: ConditionalRequiredRule): boolean {
+  const actual = params[rule.when.parameter];
+  const expected = Array.isArray(rule.when.equals) ? rule.when.equals : [rule.when.equals];
+  return expected.includes(String(actual));
+}
+
+function validateRules(toolName: string, params: Record<string, unknown>, validation: ToolParameterValidation | undefined, path = ""): string | null {
+  if (!validation) return null;
+  const prefix = path ? `${path}.` : "";
+
+  for (const group of validation.mutuallyExclusive ?? []) {
+    const present = group.filter((key) => !isMissingRequired(params[key], key));
+    if (present.length > 1) {
+      return `Parameters '${present.join("' and '")}' are mutually exclusive for tool '${toolName}'.`;
+    }
+  }
+
+  for (const rule of validation.conditionalRequired ?? []) {
+    if (!ruleMatches(params, rule)) continue;
+    for (const required of rule.requires) {
+      const key = requiredParameterName(required);
+      if (isMissingRequired(params[key], required)) {
+        return `Missing required parameter '${prefix}${key}' for tool '${toolName}' when '${prefix}${rule.when.parameter}' is '${String(params[rule.when.parameter])}'.`;
+      }
+    }
+  }
+
+  for (const [key, itemValidation] of Object.entries(validation.arrayItems ?? {})) {
+    const value = params[key];
+    if (value === undefined || value === null) continue;
+    if (!Array.isArray(value)) continue;
+
+    for (let index = 0; index < value.length; index += 1) {
+      const item = value[index];
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return `Invalid item '${key}[${index}]' for tool '${toolName}': expected object.`;
+      }
+      const nestedError = validateRules(toolName, item as Record<string, unknown>, itemValidation, `${key}[${index}]`);
+      if (nestedError) return nestedError;
+    }
+  }
+
+  return null;
+}
+
+export function validateToolParams(toolName: string, schema: JSONSchema, params: Record<string, unknown>, validation?: ToolParameterValidation): string | null {
   const allowed = Object.keys(schema.properties);
 
   for (const key of Object.keys(params)) {
@@ -168,6 +249,9 @@ export function validateToolParams(toolName: string, schema: JSONSchema, params:
       return `Invalid type for parameter '${key}' on tool '${toolName}': expected ${property.type}, got ${actualType}.`;
     }
   }
+
+  const ruleError = validateRules(toolName, params, validation);
+  if (ruleError) return ruleError;
 
   return null;
 }

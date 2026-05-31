@@ -28,6 +28,7 @@
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
 import { buildSchema } from "../types";
+import type { ToolParameterValidation } from "../types";
 import type { ActionResult } from "../../shared/action_result";
 import type { A11ySnapshot } from "../../a11y_snapshot";
 import type { LocatorCandidate } from "../../browser/actions";
@@ -188,6 +189,28 @@ const BROWSER_STEP_SCHEMA = {
     { properties: { action: { const: "state" } }, required: ["action"] },
   ],
 } as any;
+
+const BROWSER_ACT_VALIDATION: ToolParameterValidation = {
+  mutuallyExclusive: [["copyTo", "outputPath"]],
+  conditionalRequired: [
+    { when: { parameter: "action", equals: "click" }, requires: ["target"] },
+    { when: { parameter: "action", equals: "fill" }, requires: ["target", { parameter: "text", allowEmptyString: true }] },
+    { when: { parameter: "action", equals: "press" }, requires: ["key"] },
+    { when: { parameter: "action", equals: "hover" }, requires: ["target"] },
+    { when: { parameter: "action", equals: "type" }, requires: [{ parameter: "text", allowEmptyString: true }] },
+    { when: { parameter: "action", equals: "paste" }, requires: [{ parameter: "text", allowEmptyString: true }] },
+    { when: { parameter: "action", equals: ["open", "navigate"] }, requires: ["url"] },
+    { when: { parameter: "action", equals: "openMany" }, requires: [{ parameter: "urls", nonEmptyArray: true }] },
+    { when: { parameter: "action", equals: "captureMany" }, requires: [{ parameter: "urls", nonEmptyArray: true }] },
+    { when: { parameter: "action", equals: "fillMany" }, requires: [{ parameter: "fields", nonEmptyArray: true }] },
+  ],
+};
+
+const BROWSER_TASK_RUN_VALIDATION: ToolParameterValidation = {
+  arrayItems: {
+    steps: BROWSER_ACT_VALIDATION,
+  },
+};
 
 function withCanonicalNames(tools: McpTool[]): McpTool[] {
   return tools.map((tool) => {
@@ -846,6 +869,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         rootSelector: { type: "string", description: "Root CSS selector for scoped snapshot." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["action"]),
+      validation: BROWSER_ACT_VALIDATION,
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.act({
@@ -885,6 +909,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         continueOnFailure: { type: "boolean", description: "Continue to next step if one fails. Default: false.", default: false },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["steps"]),
+      validation: BROWSER_TASK_RUN_VALIDATION,
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.taskRun({

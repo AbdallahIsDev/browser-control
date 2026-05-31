@@ -88,7 +88,7 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
 
     try {
       const params = (args ?? {}) as Record<string, unknown>;
-      const validationError = validateToolParams(name, tool.inputSchema, params);
+      const validationError = validateToolParams(name, tool.inputSchema, params, tool.validation);
       if (validationError) {
         return mcpErrorResult(validationError);
       }
