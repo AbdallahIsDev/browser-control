@@ -141,3 +141,50 @@ test("SkillMemoryStore TTL is passed through to the raw store", () => {
     store.close();
   }
 });
+
+test("SkillMemoryStore rejects values over the per-skill byte quota", () => {
+  const store = new MemoryStore({ filename: ":memory:" });
+  try {
+    const scoped = new SkillMemoryStore(store, "quota-test", { maxBytes: 20 });
+
+    assert.throws(
+      () => scoped.set("large", "x".repeat(64)),
+      /Skill memory quota exceeded/,
+    );
+    assert.equal(scoped.get("large"), null);
+  } finally {
+    store.close();
+  }
+});
+
+test("SkillMemoryStore enforces total scoped key count quota", () => {
+  const store = new MemoryStore({ filename: ":memory:" });
+  try {
+    const scoped = new SkillMemoryStore(store, "key-quota-test", { maxKeys: 1 });
+    scoped.set("first", "ok");
+
+    assert.throws(
+      () => scoped.set("second", "blocked"),
+      /Skill memory key quota exceeded/,
+    );
+    assert.deepEqual(scoped.keys(), ["first"]);
+  } finally {
+    store.close();
+  }
+});
+
+test("SkillMemoryStore prunes expired scoped keys before enforcing quotas", () => {
+  let now = 0;
+  const store = new MemoryStore({ filename: ":memory:", now: () => now });
+  try {
+    const scoped = new SkillMemoryStore(store, "ttl-quota-test", { maxKeys: 1 });
+    scoped.set("expired", "old", 10);
+
+    now = 20;
+    scoped.set("fresh", "new");
+
+    assert.deepEqual(scoped.keys(), ["fresh"]);
+  } finally {
+    store.close();
+  }
+});
