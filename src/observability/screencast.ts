@@ -24,11 +24,8 @@ import type {
 import type { MemoryStore } from "../runtime/memory_store";
 import { OBSERVABILITY_KEYS } from "./types";
 import {
-  getSessionScreencastDir,
   ensureSessionScreencastDir,
-  getSessionReceiptDir,
   ensureSessionReceiptDir,
-  isSafeArtifactPath,
   getDataHome,
 } from "../shared/paths";
 import { logger } from "../shared/logger";
@@ -56,6 +53,7 @@ export class ScreencastRecorder {
     browserSessionId: string;
     pageId: string;
     options?: ScreencastOptions;
+    artifactRoot?: string;
     page?: {
       url(): string;
       title(): Promise<string>;
@@ -73,21 +71,14 @@ export class ScreencastRecorder {
       throw new Error("Screencast already in progress. Stop current recording first.");
     }
 
-    const { browserSessionId, pageId, options: screencastOptions = {}, page } = options;
+    const { browserSessionId, pageId, options: screencastOptions = {}, artifactRoot, page } = options;
     const sessionId = browserSessionId;
 
-    // Validate and resolve output path
-    let outputPath: string;
-    if (screencastOptions.path) {
-      if (!isSafeArtifactPath(screencastOptions.path)) {
-        throw new Error(`Unsafe screencast path: ${screencastOptions.path}`);
-      }
-      outputPath = screencastOptions.path;
-    } else {
-      const dir = ensureSessionScreencastDir(sessionId);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-      outputPath = path.join(dir, `trace-${timestamp}.zip`);
-    }
+    const dir = artifactRoot ?? ensureSessionScreencastDir(sessionId);
+    fs.mkdirSync(dir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+    const outputPath = path.join(dir, `trace-${timestamp}.zip`);
+    const copyPath = this.resolveCopyPath(screencastOptions.copyTo ?? screencastOptions.path);
 
     // Ensure output directory exists
     const outputDir = path.dirname(outputPath);
@@ -158,6 +149,8 @@ export class ScreencastRecorder {
       browserSessionId,
       pageId,
       path: outputPath,
+      runtimePath: outputPath,
+      ...(copyPath && path.resolve(copyPath) !== path.resolve(outputPath) ? { copyPath } : {}),
       startedAt: new Date().toISOString(),
       status: "recording",
       actionAnnotations: screencastOptions.showActions ?? false,
@@ -213,6 +206,8 @@ export class ScreencastRecorder {
       clearInterval(this.frameCaptureInterval);
       this.frameCaptureInterval = null;
     }
+
+    this.copyRequestedArtifact(session);
 
     // Remove action annotations if present
     if (session.actionAnnotations) {
@@ -414,6 +409,23 @@ export class ScreencastRecorder {
       }
     }, 500);
     this.frameCaptureInterval.unref?.();
+  }
+
+  private resolveCopyPath(requestedPath: string | undefined): string | undefined {
+    if (!requestedPath) return undefined;
+    const resolvedPath = path.isAbsolute(requestedPath)
+      ? path.resolve(requestedPath)
+      : path.resolve(process.cwd(), requestedPath);
+    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+    return resolvedPath;
+  }
+
+  private copyRequestedArtifact(session: ScreencastSession): void {
+    if (!session.copyPath) return;
+    if (path.resolve(session.copyPath) === path.resolve(session.runtimePath)) return;
+    if (!fs.existsSync(session.runtimePath)) return;
+    fs.mkdirSync(path.dirname(session.copyPath), { recursive: true });
+    fs.copyFileSync(session.runtimePath, session.copyPath);
   }
 
   private async saveTimeline(session: ScreencastSession): Promise<string> {

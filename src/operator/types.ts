@@ -83,6 +83,7 @@ export interface SystemStatus {
   };
   policyProfile: string;
   dataHome: string;
+  sessionArtifactsPath: string;
   health: {
     overall: "healthy" | "degraded" | "unhealthy" | "unknown";
     pass: number;

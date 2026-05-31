@@ -169,7 +169,7 @@
         "press": "(options: { key: string; tabId?: string | undefined; }): Promise<ActionResult<{ pressed: string; tabId: string; }>>",
         "provider": "ProviderNamespace",
         "screencast": "ScreencastNamespace",
-        "screenshot": "(options?: { outputPath?: string | undefined; fullPage?: boolean | undefined; target?: string | undefined; annotate?: boolean | undefined; refs?: string[] | undefined; tabId?: string | undefined; } | undefined): Promise<...>",
+        "screenshot": "(options?: { copyTo?: string | undefined; outputPath?: string | undefined; fullPage?: boolean | undefined; target?: string | undefined; annotate?: boolean | undefined; refs?: string[] | undefined; tabId?: string | undefined; } | undefined): Promise<...>",
         "scroll": "(options: { direction: \"up\" | \"down\" | \"left\" | \"right\"; amount?: number | undefined; tabId?: string | undefined; }): Promise<ActionResult<{ scrolled: string; tabId: string; }>>",
         "snapshot": "(options?: { rootSelector?: string | undefined; boxes?: boolean | undefined; tabId?: string | undefined; } | undefined): Promise<ActionResult<A11ySnapshot>>",
         "state": "(options?: { tabId?: string | undefined; snapshot?: boolean | undefined; screenshot?: boolean | undefined; fullPage?: boolean | undefined; dialog?: boolean | undefined; downloads?: boolean | undefined; } | undefined): Promise<...>",

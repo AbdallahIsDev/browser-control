@@ -276,12 +276,12 @@
         {
           "commandPath": [
             "config",
-            "list|get|set"
+            "list|get|set|env"
           ],
           "description": "Inspect or update effective config",
           "flags": [],
           "jsonSupport": false,
-          "syntax": "config list|get|set"
+          "syntax": "config list|get|set|env"
         },
         {
           "commandPath": [
@@ -665,12 +665,12 @@
           ],
           "description": "Shortcut for: bc browser act screenshot",
           "flags": [
+            "copy-to",
             "full-page",
-            "output",
             "target"
           ],
           "jsonSupport": false,
-          "syntax": "screenshot [--output=<path>] [--full-page] [--target=<ref>]"
+          "syntax": "screenshot [--copy-to=<path>] [--full-page] [--target=<ref>]"
         },
         {
           "commandPath": [

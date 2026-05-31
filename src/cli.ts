@@ -113,6 +113,7 @@ export const VALUE_FLAGS = new Set([
 	"command",
 	"confirm",
 	"content",
+	"copy-to",
 	"cron",
 	"cwd",
 	"data",
@@ -227,6 +228,7 @@ const FLAG_ALIASES: Record<string, string> = {
 	continueOnFailure: "continue-on-failure",
 	delayMs: "delay",
 	fullPage: "full-page",
+	copyTo: "copy-to",
 	outputPath: "output-path",
 	tabId: "tab-id",
 	timeoutMs: "timeout",
@@ -758,7 +760,7 @@ Browser Shortcuts (compatibility):
   paste <text> [--target=<ref-or-target>]                            Shortcut for: bc browser act paste --text=<text>
   press <key>                                                        Shortcut for: bc browser act press --key=<key>
   scroll <direction>                                                 Shortcut for: bc browser act scroll --direction=<direction>
-  screenshot [--output=<path>] [--full-page] [--target=<ref>]         Shortcut for: bc browser act screenshot
+  screenshot [--copy-to=<path>] [--full-page] [--target=<ref>]        Shortcut for: bc browser act screenshot
   tab list                                                           Shortcut for: bc browser tab list
   tab switch <id>                                                    Shortcut for: bc browser tab switch <id>
   close                                                              Shortcut for: bc browser act tab-close
@@ -3048,6 +3050,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					tabId: flags.tab ?? flags["tab-id"],
 					captureOnSuccess:
 						flags.capture === "true" || flags["capture-on-success"] === "true",
+					copyTo: flags["copy-to"],
 					outputPath: flags.output ?? flags["output-path"],
 					url: flags.url,
 					urls,
@@ -5738,6 +5741,7 @@ async function handleBrowserAction(
 					? (flags.refs as string).split(",").map((r) => r.trim())
 					: undefined;
 				result = await browserActions.screenshot({
+					copyTo: flags["copy-to"],
 					outputPath: flags.output,
 					fullPage: flags["full-page"] === "true",
 					target: flags.target,
@@ -5777,6 +5781,7 @@ async function handleBrowserAction(
 				const screencastAction = args.subcommand;
 				if (screencastAction === "start") {
 					const options: ScreencastOptions = {};
+					if (flags["copy-to"]) options.copyTo = flags["copy-to"] as string;
 					if (flags.path) options.path = flags.path as string;
 					if (flags["show-actions"] === "true") options.showActions = true;
 					options.annotationPosition = parseAnnotationPosition(
@@ -5956,6 +5961,9 @@ async function handleSession(args: ParsedArgs): Promise<void> {
 							?.policyProfile === "trusted"
 					) {
 						console.warn(`\x1b[33mWarning: ${TRUSTED_SESSION_WARNING}\x1b[0m`);
+					}
+					if (subcommand === "create") {
+						console.warn("Artifacts: Browser Control saves primary browser artifacts to session runtime. Use copyTo only for explicit extra copies; do not duplicate with shell/file-write tools.");
 					}
 					if (result.warning) console.warn(`Warning: ${result.warning}`);
 				} else {

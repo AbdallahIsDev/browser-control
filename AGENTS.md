@@ -42,8 +42,18 @@ For self-healing browser automation:
 - Reuse existing helper scripts when they fit the current site/task/failure.
 - Create temporary helpers under `~/.browser-control/helpers/`, not inside this repo/project, unless user explicitly asks to edit project code. On Windows, this is typically `~\.browser-control\helpers\`.
 - Do not create workflow helper scripts, screenshots, recordings, runtime files, or scratch files inside `~\browser-control` during browser automation.
+- **Screenshots: NEVER pass `outputPath` unless the user explicitly requests a custom save location.** Omit `outputPath` so Browser Control auto-saves to `~\.browser-control\runtime\{date}\screenshots\`. Do not invent paths like `~/screenshots/`, `~/Desktop/`, or project folders. This rule has zero exceptions.
 - Do not patch Browser Control core mid-task to fix one target website.
 - Verify each browser action with URL, title, compact state, snapshot, visible state, or screenshot.
+
+## File Artifact Save Behavior
+
+- Browser Control saves browser artifacts to the session runtime directory by default. The active session artifact root is `runtime\{date-or-session}\`; screenshots go under `screenshots\`, and non-media artifacts stay under the session root or their typed artifact subfolder.
+- NEVER use shell commands (`cp`, `mv`, `Copy-Item`, `robocopy`, `scp`) to copy, move, or duplicate browser artifacts after Browser Control creates them.
+- NEVER use built-in file-write tools or ad hoc scripts to re-save browser artifacts.
+- Browser artifact responses include `runtimePath` when a primary runtime file is created. Use that path instead of guessing a cwd path.
+- If the user explicitly asks for an extra copy somewhere specific, pass `copyTo` to the Browser Control tool. `copyTo` creates an auxiliary copy while the primary file remains in Browser Control runtime.
+- `outputPath` is legacy/deprecated for browser artifacts. Do not use it in new automation.
 
 For browser games or complex apps:
 

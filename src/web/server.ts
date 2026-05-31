@@ -2670,6 +2670,7 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/browser/screenshot") {
 			const body = await readJsonBody(request);
 			const params = {
+				copyTo: asOptionalString(body.copyTo),
 				outputPath: asOptionalString(body.outputPath),
 				fullPage: body.fullPage === true,
 				target: asOptionalString(body.target),

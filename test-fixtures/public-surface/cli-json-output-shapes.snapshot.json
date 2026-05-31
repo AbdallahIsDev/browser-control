@@ -88,6 +88,7 @@
         "services": {
           "count": "number"
         },
+        "sessionArtifactsPath": "string",
         "tasks": {
           "queued": "number",
           "running": "number"

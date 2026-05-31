@@ -51,7 +51,9 @@ import { loadConfig } from "../shared/config";
 import { logger } from "../shared/logger";
 import {
 	ensureStructuredSessionRuntimeDir,
+	getDataHome,
 	getSessionDownloadsDir,
+	getSessionRuntimeDir,
 } from "../shared/paths";
 import {
 	CredentialVault,
@@ -100,7 +102,7 @@ export interface BrowserStateResult {
 	dialogs?: DialogInfo[];
 	downloads?: ExtendedDownloadResult[];
 	snapshot?: A11ySnapshot;
-	screenshot?: { path: string; sizeBytes: number };
+	screenshot?: ScreenshotResult;
 	warnings: string[];
 	status: Record<string, "ok" | "error" | "skipped">;
 }
@@ -124,6 +126,7 @@ export interface BrowserActOptions {
 	amount?: number;
 	delayMs?: number;
 	tabId?: string;
+	copyTo?: string;
 	outputPath?: string;
 	fullPage?: boolean;
 	captureOnSuccess?: boolean;
@@ -158,6 +161,7 @@ export interface TaskStep {
 	amount?: number;
 	delayMs?: number;
 	tabId?: string;
+	copyTo?: string;
 	outputPath?: string;
 	fullPage?: boolean;
 	captureOnSuccess?: boolean;
@@ -234,7 +238,7 @@ export interface CaptureResult {
 	url: string;
 	title?: string;
 	snapshot?: A11ySnapshot;
-	screenshot?: { path: string; sizeBytes: number };
+	screenshot?: ScreenshotResult;
 }
 
 export interface FillField {
@@ -325,7 +329,9 @@ export interface ScrollOptions {
 }
 
 export interface ScreenshotOptions {
-	/** Output file path. */
+	/** Optional auxiliary copy destination. Primary save remains in the session runtime directory. */
+	copyTo?: string;
+	/** Deprecated. Use copyTo. Primary save remains in the session runtime directory. */
 	outputPath?: string;
 	/** Screenshot timeout in ms. */
 	timeoutMs?: number;
@@ -338,6 +344,14 @@ export interface ScreenshotOptions {
 	/** Specific refs to annotate (if annotate is true). */
 	refs?: string[];
 	tabId?: string;
+}
+
+export interface ScreenshotResult {
+	path: string;
+	runtimePath: string;
+	copyPath?: string;
+	sizeBytes: number;
+	tabId: string;
 }
 
 export interface HighlightOptions {
@@ -1212,7 +1226,6 @@ export class BrowserActions {
 	}
 
 	private resolveScreenshotOutputPath(
-		requestedPath: string | undefined,
 		helpers: {
 			path: typeof import("node:path");
 			fs: typeof import("node:fs");
@@ -1232,34 +1245,23 @@ export class BrowserActions {
 				)
 			: helpers.getSessionScreenshotsDir(sessionId);
 
-		if (!requestedPath) {
-			helpers.fs.mkdirSync(outputDir, { recursive: true });
-			return helpers.path.join(outputDir, `screenshot-${randomUUID()}.png`);
-		}
+		helpers.fs.mkdirSync(outputDir, { recursive: true });
+		return helpers.path.join(outputDir, `screenshot-${randomUUID()}.png`);
+	}
 
-		const dataHome = helpers.path.resolve(helpers.getDataHome());
+	private resolveScreenshotCopyPath(
+		requestedPath: string | undefined,
+		helpers: {
+			path: typeof import("node:path");
+			fs: typeof import("node:fs");
+		},
+	): string | undefined {
+		if (!requestedPath) return undefined;
 		const resolvedPath = helpers.path.isAbsolute(requestedPath)
 			? helpers.path.resolve(requestedPath)
-			: helpers.path.resolve(dataHome, requestedPath);
-
-		if (!this.isPathInside(resolvedPath, dataHome, helpers.path)) {
-			throw new Error(
-				`Refusing to write screenshot outside the data home: ${resolvedPath}. ` +
-					`Use the default runtime screenshots directory under ${outputDir}.`,
-			);
-		}
-
+			: helpers.path.resolve(process.cwd(), requestedPath);
 		const parentDir = helpers.path.dirname(resolvedPath);
 		helpers.fs.mkdirSync(parentDir, { recursive: true });
-		const realDataHome = helpers.fs.realpathSync(dataHome);
-		const realParentDir = helpers.fs.realpathSync(parentDir);
-		if (!this.isPathInside(realParentDir, realDataHome, helpers.path)) {
-			throw new Error(
-				`Refusing to write screenshot outside the data home: ${resolvedPath}. ` +
-					`Use the default runtime screenshots directory under ${outputDir}.`,
-			);
-		}
-
 		return resolvedPath;
 	}
 
@@ -3687,7 +3689,7 @@ export class BrowserActions {
 	 */
 	async screenshot(
 		options: ScreenshotOptions = {},
-	): Promise<ActionResult<{ path: string; sizeBytes: number; tabId: string }>> {
+	): Promise<ActionResult<ScreenshotResult>> {
 		const sessionId = this.getSessionId();
 		const startTime = Date.now();
 
@@ -3696,14 +3698,10 @@ export class BrowserActions {
 			{},
 		);
 		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ path: string; sizeBytes: number; tabId: string }>;
+			return policyEval as ActionResult<ScreenshotResult>;
 
 		try {
-			const pageOrErr = await this.getConnectedPageForAction<{
-				path: string;
-				sizeBytes: number;
-				tabId: string;
-			}>(options.tabId);
+			const pageOrErr = await this.getConnectedPageForAction<ScreenshotResult>(options.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 			const fs = await import("node:fs");
@@ -3712,12 +3710,14 @@ export class BrowserActions {
 				"../shared/paths"
 			);
 
-			const outputPath = this.resolveScreenshotOutputPath(options.outputPath, {
+			const outputPath = this.resolveScreenshotOutputPath({
 				path,
 				fs,
 				getDataHome,
 				getSessionScreenshotsDir,
 			});
+			const requestedCopyPath = options.copyTo ?? options.outputPath;
+			const copyPath = this.resolveScreenshotCopyPath(requestedCopyPath, { path, fs });
 			fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 			const tempPath = `${outputPath}.tmp-${process.pid}-${Date.now()}.png`;
 			const restoreOverlays = await this.hideBrowserControlScreenshotOverlays(
@@ -3767,6 +3767,9 @@ export class BrowserActions {
 
 			if (fs.existsSync(outputPath)) fs.rmSync(outputPath, { force: true });
 			fs.renameSync(tempPath, outputPath);
+			if (copyPath && path.resolve(copyPath) !== path.resolve(outputPath)) {
+				fs.copyFileSync(outputPath, copyPath);
+			}
 			const stats = fs.statSync(outputPath);
 			await this.persistObservability(sessionId, page);
 
@@ -3782,11 +3785,21 @@ export class BrowserActions {
 				artifactPath: outputPath,
 			});
 
+			const warning = options.outputPath
+				? "outputPath is deprecated; Browser Control saved the primary screenshot to runtimePath and copied it to copyPath. Use copyTo for auxiliary copies."
+				: undefined;
 			const result = successResult(
-				{ path: outputPath, sizeBytes: stats.size, tabId: await this.getTabIdForPage(page, options.tabId ?? "0") },
+				{
+					path: outputPath,
+					runtimePath: outputPath,
+					...(copyPath && path.resolve(copyPath) !== path.resolve(outputPath) ? { copyPath } : {}),
+					sizeBytes: stats.size,
+					tabId: await this.getTabIdForPage(page, options.tabId ?? "0"),
+				},
 				{
 					path: policyEval.path,
 					sessionId,
+					warning,
 					policyDecision: policyEval.policyDecision,
 					risk: policyEval.risk,
 					auditId: policyEval.auditId,
@@ -3795,7 +3808,8 @@ export class BrowserActions {
 			this.recordPackageAction(
 				"browser-screenshot",
 				{
-					outputPath: options.outputPath,
+					copyTo: options.copyTo ?? options.outputPath,
+					deprecatedOutputPath: options.outputPath !== undefined,
 					fullPage: options.fullPage,
 					target: options.target,
 					tabId: options.tabId,
@@ -4357,11 +4371,16 @@ export class BrowserActions {
 			const pageId = getPageId(page.url(), sessionId);
 			const store = this.context.sessionManager.getMemoryStore();
 			const recorder = getGlobalScreencastRecorder(store);
+			const activeSession = this.context.sessionManager.getActiveSession();
+			const artifactRoot = activeSession
+				? ensureStructuredSessionRuntimeDir(activeSession, getDataHome())
+				: getSessionRuntimeDir(sessionId);
 
 			const session = await recorder.start({
 				browserSessionId,
 				pageId,
 				options,
+				artifactRoot,
 				page: {
 					url: () => page.url(),
 					title: () => page.title(),
@@ -4375,6 +4394,9 @@ export class BrowserActions {
 				{
 					path: policyEval.path,
 					sessionId,
+					warning: options.path
+						? "path is deprecated; Browser Control saved the primary screencast to runtimePath and copied it to copyPath. Use copyTo for auxiliary copies."
+						: undefined,
 					policyDecision: policyEval.policyDecision,
 					risk: policyEval.risk,
 					auditId: policyEval.auditId,
@@ -4993,7 +5015,14 @@ export class BrowserActions {
 				break;
 			}
 			case "screenshot": {
-				const r = await this.screenshot({ outputPath: options.outputPath, timeoutMs: options.timeoutMs, fullPage: options.fullPage, target: options.target, tabId: options.tabId });
+				const r = await this.screenshot({
+					copyTo: options.copyTo,
+					outputPath: options.outputPath,
+					timeoutMs: options.timeoutMs,
+					fullPage: options.fullPage,
+					target: options.target,
+					tabId: options.tabId,
+				});
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;
 			}
@@ -5205,6 +5234,7 @@ export class BrowserActions {
 				amount: step.amount,
 				delayMs: step.delayMs,
 				tabId: step.tabId,
+				copyTo: step.copyTo,
 				outputPath: step.outputPath,
 				fullPage: step.fullPage,
 				captureOnSuccess: step.captureOnSuccess,

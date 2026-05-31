@@ -180,6 +180,8 @@ export interface ScreencastSession {
   browserSessionId: string;
   pageId: string;
   path: string;
+  runtimePath: string;
+  copyPath?: string;
   startedAt: string;
   stoppedAt?: string;
   status: ScreencastStatus;
@@ -189,6 +191,8 @@ export interface ScreencastSession {
 }
 
 export interface ScreencastOptions {
+  copyTo?: string;
+  /** Deprecated. Use copyTo. Primary save remains in the session runtime directory. */
   path?: string;
   showActions?: boolean;
   annotationPosition?: "top-left" | "top" | "top-right" | "bottom-left" | "bottom" | "bottom-right";

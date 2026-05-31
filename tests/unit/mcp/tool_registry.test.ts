@@ -276,11 +276,32 @@ describe("MCP Tool Registry", () => {
       assert.deepEqual(stepItems.properties.direction.enum, ["up", "down", "left", "right"]);
       assert.match(stepItems.properties.action.description, /click|fill|scroll/);
       assert.match(stepItems.properties.target.description, /click|fill|hover/);
+      assert.match(stepItems.properties.copyTo.description, /Primary save remains/);
+      assert.match(stepItems.properties.outputPath.description, /Deprecated/);
 
       const fieldsItems = stepItems.properties.fields.items;
       assert.equal(fieldsItems.properties.target.type, "string");
       assert.equal(fieldsItems.properties.text.type, "string");
       assert.deepEqual(fieldsItems.required, ["target", "text"]);
+    });
+
+    it("screenshot tools expose copyTo and keep outputPath as deprecated shim", () => {
+      const tools = buildToolRegistry(api);
+      const screenshotTool = tools.find((t) => t.name === "bc_browser_screenshot")!;
+      const actTool = tools.find((t) => t.name === "bc_browser_act")!;
+
+      assert.match((screenshotTool.inputSchema.properties.copyTo as any).description, /Primary screenshot/);
+      assert.match((screenshotTool.inputSchema.properties.outputPath as any).description, /Deprecated/);
+      assert.match((actTool.inputSchema.properties.copyTo as any).description, /Primary save remains/);
+      assert.match((actTool.inputSchema.properties.outputPath as any).description, /Deprecated/);
+    });
+
+    it("screencast start exposes copyTo and keeps path as deprecated shim", () => {
+      const tools = buildToolRegistry(api);
+      const screencastTool = tools.find((t) => t.name === "bc_browser_screencast_start")!;
+
+      assert.match((screencastTool.inputSchema.properties.copyTo as any).description, /Primary screencast/);
+      assert.match((screencastTool.inputSchema.properties.path as any).description, /Deprecated/);
     });
 
     it("bc_browser_act handler preserves object URL entries", async () => {

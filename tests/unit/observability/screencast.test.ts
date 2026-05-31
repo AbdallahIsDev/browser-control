@@ -81,6 +81,52 @@ describe("ScreencastRecorder", () => {
     }
   });
 
+  it("keeps legacy path as copy only while primary screencast stays in runtime", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-trace-copy-"));
+    const previousHome = process.env.BROWSER_CONTROL_HOME;
+    const copyPath = path.join(home, "..", "copied-trace.zip");
+    const artifactRoot = path.join(home, "runtime", "session-artifacts");
+    const page = {
+      context: () => ({
+        tracing: {
+          start: async () => undefined,
+          stop: async (options?: { path?: string }) => {
+            fs.writeFileSync(options!.path!, "trace");
+          },
+        },
+      }),
+      title: async () => "Trace page",
+      url: () => "https://example.com",
+      screenshot: async () => Buffer.from(""),
+      evaluate: async <T>(fn: () => T) => fn(),
+    };
+    try {
+      process.env.BROWSER_CONTROL_HOME = home;
+      const recorder = new ScreencastRecorder();
+      const session = await recorder.start({
+        browserSessionId,
+        pageId,
+        options: { path: copyPath, retention: "keep" },
+        artifactRoot,
+        page,
+      });
+
+      assert.equal(session.path, session.runtimePath);
+      assert.ok(session.runtimePath.startsWith(artifactRoot));
+      assert.equal(session.copyPath, copyPath);
+
+      const stopped = await recorder.stop();
+      assert.equal(stopped.session.path, stopped.session.runtimePath);
+      assert.equal(fs.existsSync(stopped.session.runtimePath), true);
+      assert.equal(fs.existsSync(copyPath), true);
+    } finally {
+      if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+      else process.env.BROWSER_CONTROL_HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(copyPath, { force: true });
+    }
+  });
+
   it("returns status for active session", async () => {
     const recorder = new ScreencastRecorder();
     await recorder.start({

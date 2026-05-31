@@ -4,7 +4,7 @@ import path from "node:path";
 import { loadConfig } from "../shared/config";
 import { isPidAlive } from "../runtime/daemon_cleanup";
 import { ProviderRegistry } from "../providers/registry";
-import { getInteropDir, getLegacyInteropDir } from "../shared/paths";
+import { getInteropDir, getLegacyInteropDir, getRuntimeDir } from "../shared/paths";
 import type { BrowserControlConfig } from "../shared/config";
 import type { BrokerProbeResult, SystemStatus } from "./types";
 
@@ -182,6 +182,7 @@ export async function collectStatus(options: StatusOptions = {}): Promise<System
     },
     policyProfile: config.policyProfile,
     dataHome: config.dataHome,
+    sessionArtifactsPath: getRuntimeDir(config.dataHome),
     health: healthSummary(probe),
     timestamp: new Date().toISOString(),
   };

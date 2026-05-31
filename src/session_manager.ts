@@ -76,6 +76,8 @@ export interface SessionState {
 	workingDirectory: string;
 	/** Runtime output directory for this session. */
 	runtimeDir: string;
+	/** Canonical artifact root for this session. */
+	sessionArtifactsPath: string;
 	/** Report output directory under runtimeDir. */
 	reportsDir: string;
 	/** Screenshot output directory under runtimeDir. */
@@ -871,6 +873,7 @@ export class SessionManager {
 			terminalSessionId: null,
 			workingDirectory: "",
 			runtimeDir: "",
+			sessionArtifactsPath: "",
 			reportsDir: "",
 			screenshotsDir: "",
 			artifactsDir: "",
@@ -883,6 +886,7 @@ export class SessionManager {
 				name: state.name,
 				createdAt: state.createdAt,
 			});
+		state.sessionArtifactsPath = state.runtimeDir;
 		state.reportsDir = path.join(state.runtimeDir, "reports");
 		state.screenshotsDir = path.join(state.runtimeDir, "screenshots");
 		state.artifactsDir = path.join(state.runtimeDir, "artifacts");
@@ -1710,6 +1714,10 @@ export class SessionManager {
 							name: state.name,
 							createdAt: state.createdAt || new Date().toISOString(),
 						});
+						dirty = true;
+					}
+					if (!state.sessionArtifactsPath) {
+						state.sessionArtifactsPath = state.runtimeDir;
 						dirty = true;
 					}
 					if (!state.reportsDir) {

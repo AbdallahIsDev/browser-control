@@ -68,6 +68,7 @@ export function formatStatus(status: SystemStatus): string {
     `Services: ${status.services.count}`,
     `Policy: ${status.policyProfile}`,
     `Data home: ${status.dataHome}`,
+    `Session artifacts: ${status.sessionArtifactsPath}`,
     `Health: ${status.health.overall} (${status.health.pass} pass, ${status.health.warn} warn, ${status.health.fail} fail)`,
   ].join("\n");
 }

@@ -30,7 +30,7 @@ import type {
 	BrowserDropResult,
 	BrowserTargetType,
 } from "./browser/connection";
-import type { BrowserActOptions, BrowserStateResult, TaskRunResult, TaskStep } from "./browser/actions";
+import type { BrowserActOptions, BrowserStateResult, ScreenshotResult, TaskRunResult, TaskStep } from "./browser/actions";
 import type { ExtendedDownloadResult } from "./browser/file_helpers";
 import { type FsActionContext, FsActions } from "./filesystem/actions";
 import type {
@@ -197,13 +197,14 @@ export interface BrowserNamespace {
 		tabId?: string;
 	}): Promise<ActionResult<{ scrolled: string; tabId: string }>>;
 	screenshot(options?: {
+		copyTo?: string;
 		outputPath?: string;
 		fullPage?: boolean;
 		target?: string;
 		annotate?: boolean;
 		refs?: string[];
 		tabId?: string;
-	}): Promise<ActionResult<{ path: string; sizeBytes: number; tabId: string }>>;
+	}): Promise<ActionResult<ScreenshotResult>>;
 	highlight(
 		options: HighlightOptions,
 	): Promise<ActionResult<{ highlighted: string; tabId: string }>>;

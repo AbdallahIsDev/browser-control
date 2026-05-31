@@ -53,6 +53,10 @@
             "description": "Continue on field failure for fillMany.",
             "type": "boolean"
           },
+          "copyTo": {
+            "description": "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime.",
+            "type": "string"
+          },
           "delayMs": {
             "default": 0,
             "description": "Delay between keystrokes in ms. Default: 0.",
@@ -104,7 +108,7 @@
             "type": "string"
           },
           "outputPath": {
-            "description": "Custom screenshot output path (screenshot action only).",
+            "description": "Deprecated screenshot copy destination. Use copyTo.",
             "type": "string"
           },
           "rootSelector": {
@@ -346,6 +350,10 @@
             "description": "Continue on field failure for fillMany.",
             "type": "boolean"
           },
+          "copyTo": {
+            "description": "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime.",
+            "type": "string"
+          },
           "delayMs": {
             "default": 0,
             "description": "Delay between keystrokes in ms. Default: 0.",
@@ -397,7 +405,7 @@
             "type": "string"
           },
           "outputPath": {
-            "description": "Custom screenshot output path (screenshot action only).",
+            "description": "Deprecated screenshot copy destination. Use copyTo.",
             "type": "string"
           },
           "rootSelector": {
@@ -2089,7 +2097,7 @@
     },
     {
       "category": "browser",
-      "description": "Compatibility alias for bc_screencast_start. Start a browser screencast recording. Opt-in recording with action timeline support.",
+      "description": "Compatibility alias for bc_screencast_start. Start a browser screencast recording. Primary screencast artifacts are saved to session runtime; use copyTo only for an explicit extra copy.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2105,8 +2113,12 @@
             ],
             "type": "string"
           },
+          "copyTo": {
+            "description": "Optional extra copy path. Primary screencast save remains in session runtime and is returned as runtimePath.",
+            "type": "string"
+          },
           "path": {
-            "description": "Optional output file path for the screencast.",
+            "description": "Deprecated. Use copyTo. Primary screencast save remains in session runtime and is returned as runtimePath.",
             "type": "string"
           },
           "retention": {
@@ -2259,7 +2271,7 @@
     },
     {
       "category": "browser",
-      "description": "Compatibility alias for bc_screenshot. Take a screenshot of the page or a specific element.",
+      "description": "Compatibility alias for bc_screenshot. Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2267,13 +2279,17 @@
             "description": "Annotate screenshot with ref labels and boxes for interactive elements.",
             "type": "boolean"
           },
+          "copyTo": {
+            "description": "Optional auxiliary copy destination. Primary screenshot still saves under the active session runtime screenshots directory.",
+            "type": "string"
+          },
           "fullPage": {
             "default": false,
             "description": "Capture the full page instead of just the viewport.",
             "type": "boolean"
           },
           "outputPath": {
-            "description": "Optional custom screenshot file path. If omitted, Browser Control saves under the active session runtime screenshots directory.",
+            "description": "Deprecated alias for copyTo. Returns a warning when used.",
             "type": "string"
           },
           "refs": {
@@ -5656,7 +5672,7 @@
     },
     {
       "category": "browser",
-      "description": "Start a browser screencast recording. Opt-in recording with action timeline support.",
+      "description": "Start a browser screencast recording. Primary screencast artifacts are saved to session runtime; use copyTo only for an explicit extra copy.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -5672,8 +5688,12 @@
             ],
             "type": "string"
           },
+          "copyTo": {
+            "description": "Optional extra copy path. Primary screencast save remains in session runtime and is returned as runtimePath.",
+            "type": "string"
+          },
           "path": {
-            "description": "Optional output file path for the screencast.",
+            "description": "Deprecated. Use copyTo. Primary screencast save remains in session runtime and is returned as runtimePath.",
             "type": "string"
           },
           "retention": {
@@ -5826,7 +5846,7 @@
     },
     {
       "category": "browser",
-      "description": "Take a screenshot of the page or a specific element.",
+      "description": "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -5834,13 +5854,17 @@
             "description": "Annotate screenshot with ref labels and boxes for interactive elements.",
             "type": "boolean"
           },
+          "copyTo": {
+            "description": "Optional auxiliary copy destination. Primary screenshot still saves under the active session runtime screenshots directory.",
+            "type": "string"
+          },
           "fullPage": {
             "default": false,
             "description": "Capture the full page instead of just the viewport.",
             "type": "boolean"
           },
           "outputPath": {
-            "description": "Optional custom screenshot file path. If omitted, Browser Control saves under the active session runtime screenshots directory.",
+            "description": "Deprecated alias for copyTo. Returns a warning when used.",
             "type": "string"
           },
           "refs": {
@@ -6822,6 +6846,10 @@
                   "description": "Continue within fillMany after an individual field failure.",
                   "type": "boolean"
                 },
+                "copyTo": {
+                  "description": "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime.",
+                  "type": "string"
+                },
                 "delayMs": {
                   "description": "Delay between keystrokes in milliseconds.",
                   "type": "number"
@@ -6867,6 +6895,10 @@
                 },
                 "key": {
                   "description": "Keyboard key for press action.",
+                  "type": "string"
+                },
+                "outputPath": {
+                  "description": "Deprecated screenshot copy destination. Use copyTo.",
                   "type": "string"
                 },
                 "screenshot": {

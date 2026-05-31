@@ -1807,7 +1807,7 @@ describe("BrowserActions", () => {
 			assert.ok(result.error);
 		});
 
-		it("rejects explicit screenshot paths outside the data home", async () => {
+		it("keeps legacy outputPath as copy only while primary screenshot stays in runtime", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const visiblePage = createMockPage("https://example.com", {
 				hasBrowserWindow: true,
@@ -1831,19 +1831,20 @@ describe("BrowserActions", () => {
 
 				const result = await isolatedActions.screenshot({ outputPath });
 
-				assert.equal(result.success, false);
-				assert.match(
-					result.error ?? "",
-					/Refusing to write screenshot outside the data home/,
-				);
-				assert.equal(fs.existsSync(outputPath), false);
+				assert.equal(result.success, true);
+				assert.match(result.warning ?? "", /outputPath is deprecated/);
+				assert.ok(result.data?.runtimePath.includes(path.join(dataHome, "runtime")));
+				assert.equal(result.data?.path, result.data?.runtimePath);
+				assert.equal(result.data?.copyPath, outputPath);
+				assert.equal(fs.existsSync(result.data!.runtimePath), true);
+				assert.equal(fs.existsSync(outputPath), true);
 			} finally {
 				isolatedStore.close();
 				fs.rmSync(outputPath, { force: true });
 			}
 		});
 
-		it("rejects explicit screenshot paths outside data home without an active session", async () => {
+		it("copies legacy outputPath outside data home without making it primary", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const visiblePage = createMockPage("https://example.com", {
 				hasBrowserWindow: true,
@@ -1865,12 +1866,13 @@ describe("BrowserActions", () => {
 
 				const result = await isolatedActions.screenshot({ outputPath });
 
-				assert.equal(result.success, false);
-				assert.match(
-					result.error ?? "",
-					/Refusing to write screenshot outside the data home/,
-				);
-				assert.equal(fs.existsSync(outputPath), false);
+				assert.equal(result.success, true);
+				assert.match(result.warning ?? "", /outputPath is deprecated/);
+				assert.ok(result.data?.runtimePath.includes(path.join(dataHome, "runtime")));
+				assert.equal(result.data?.path, result.data?.runtimePath);
+				assert.equal(result.data?.copyPath, outputPath);
+				assert.equal(fs.existsSync(result.data!.runtimePath), true);
+				assert.equal(fs.existsSync(outputPath), true);
 			} finally {
 				isolatedStore.close();
 				fs.rmSync(outsideDir, { recursive: true, force: true });
@@ -1919,7 +1921,7 @@ describe("BrowserActions", () => {
 			}
 		});
 
-		it("resolves relative explicit screenshot paths under the data home", async () => {
+		it("supports copyTo while preserving runtime as the primary screenshot path", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const visiblePage = createMockPage("https://example.com", {
 				hasBrowserWindow: true,
@@ -1938,16 +1940,17 @@ describe("BrowserActions", () => {
 					sessionManager: isolatedSessionManager,
 				});
 
-				const result = await isolatedActions.screenshot({
-					outputPath: "manual-shots/custom.png",
-				});
+				const copyTo = path.join(dataHome, "..", "manual-shots", "custom.png");
+				const result = await isolatedActions.screenshot({ copyTo });
 
 				assert.equal(result.success, true);
-				assert.equal(
-					result.data?.path,
-					path.join(dataHome, "manual-shots", "custom.png"),
-				);
-				assert.equal(fs.existsSync(result.data!.path), true);
+				assert.equal(result.warning, undefined);
+				assert.ok(result.data?.runtimePath.includes(path.join(dataHome, "runtime")));
+				assert.equal(result.data?.path, result.data?.runtimePath);
+				assert.equal(result.data?.copyPath, copyTo);
+				assert.equal(fs.existsSync(result.data!.runtimePath), true);
+				assert.equal(fs.existsSync(copyTo), true);
+				fs.rmSync(path.dirname(copyTo), { recursive: true, force: true });
 			} finally {
 				isolatedStore.close();
 			}

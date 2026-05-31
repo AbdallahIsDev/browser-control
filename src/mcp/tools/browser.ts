@@ -149,6 +149,8 @@ const BROWSER_STEP_PROPERTIES = {
   amount: { type: "number", description: "Scroll amount in pixels." },
   delayMs: { type: "number", description: "Delay between keystrokes in milliseconds." },
   tabId: { type: "string", description: "Optional browser tab ID." },
+  copyTo: { type: "string", description: "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime." },
+  outputPath: { type: "string", description: "Deprecated screenshot copy destination. Use copyTo." },
   url: { type: "string", description: "URL for open/navigate actions." },
   urls: URLS_SCHEMA,
   waitUntil: WAIT_UNTIL_SCHEMA,
@@ -488,9 +490,10 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_screenshot",
-      description: "Take a screenshot of the page or a specific element.",
+      description: "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
       inputSchema: buildSchema({
-        outputPath: { type: "string", description: "Optional custom screenshot file path. If omitted, Browser Control saves under the active session runtime screenshots directory." },
+        copyTo: { type: "string", description: "Optional auxiliary copy destination. Primary screenshot still saves under the active session runtime screenshots directory." },
+        outputPath: { type: "string", description: "Deprecated alias for copyTo. Returns a warning when used." },
         fullPage: { type: "boolean", description: "Capture the full page instead of just the viewport.", default: false },
         target: { type: "string", description: "Element ref or selector to screenshot. If omitted, screenshots the viewport." },
         annotate: { type: "boolean", description: "Annotate screenshot with ref labels and boxes for interactive elements." },
@@ -502,6 +505,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         if (params.sessionId) api.session.use(params.sessionId as string);
         const refs = params.refs ? (params.refs as string).split(",").map(r => r.trim()) : undefined;
         return api.browser.screenshot({
+          copyTo: params.copyTo as string | undefined,
           outputPath: params.outputPath as string | undefined,
           fullPage: params.fullPage as boolean | undefined,
           target: params.target as string | undefined,
@@ -602,9 +606,10 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_screencast_start",
-      description: "Start a browser screencast recording. Opt-in recording with action timeline support.",
+      description: "Start a browser screencast recording. Primary screencast artifacts are saved to session runtime; use copyTo only for an explicit extra copy.",
       inputSchema: buildSchema({
-        path: { type: "string", description: "Optional output file path for the screencast." },
+        copyTo: { type: "string", description: "Optional extra copy path. Primary screencast save remains in session runtime and is returned as runtimePath." },
+        path: { type: "string", description: "Deprecated. Use copyTo. Primary screencast save remains in session runtime and is returned as runtimePath." },
         showActions: { type: "boolean", description: "Display visible action labels during recording." },
         annotationPosition: { type: "string", description: "Position for action labels: top-left, top, top-right, bottom-left, bottom, bottom-right.", enum: ["top-left", "top", "top-right", "bottom-left", "bottom", "bottom-right"] },
         retention: { type: "string", description: "Retention policy: keep, delete-on-success, debug-only.", enum: ["keep", "delete-on-success", "debug-only"] },
@@ -613,6 +618,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         const options: ScreencastOptions = {};
+        if (params.copyTo) options.copyTo = params.copyTo as string;
         if (params.path) options.path = params.path as string;
         if (params.showActions) options.showActions = params.showActions as boolean;
         if (params.annotationPosition) options.annotationPosition = params.annotationPosition as "top-left" | "top" | "top-right" | "bottom-left" | "bottom" | "bottom-right";
@@ -836,7 +842,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         amount: { type: "number", description: "Pixels to scroll. Default: 300." },
         delayMs: { type: "number", description: "Delay between keystrokes in ms. Default: 0.", default: 0 },
         tabId: { type: "string", description: "Optional tab ID." },
-        outputPath: { type: "string", description: "Custom screenshot output path (screenshot action only)." },
+        copyTo: { type: "string", description: "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime." },
+        outputPath: { type: "string", description: "Deprecated screenshot copy destination. Use copyTo." },
         fullPage: { type: "boolean", description: "Full-page screenshot (screenshot action only).", default: false },
         captureOnSuccess: { type: "boolean", description: "Automatically capture snapshot/screenshot after the action.", default: false },
         snapshot: { type: "boolean", description: "Include snapshot in post-action capture. Default: false (compact).", default: false },
@@ -864,6 +871,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           amount: params.amount as number | undefined,
           delayMs: params.delayMs as number | undefined,
           tabId: params.tabId as string | undefined,
+          copyTo: params.copyTo as string | undefined,
           outputPath: params.outputPath as string | undefined,
           fullPage: params.fullPage as boolean | undefined,
           captureOnSuccess: params.captureOnSuccess as boolean | undefined,
