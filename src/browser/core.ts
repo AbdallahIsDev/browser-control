@@ -714,6 +714,11 @@ function attachSessionCookiePersistence(
 			);
 		}
 	};
+	let cookieSavePromise: Promise<void> | undefined;
+	const persistCookies = (): Promise<void> => {
+		cookieSavePromise ??= saveCookies();
+		return cookieSavePromise;
+	};
 
 	const eventTarget = context as BrowserContext & {
 		on?: (event: string, callback: () => void) => void;
@@ -721,8 +726,21 @@ function attachSessionCookiePersistence(
 
 	if (typeof eventTarget.on === "function") {
 		eventTarget.on("close", () => {
-			void saveCookies();
+			void persistCookies();
 		});
+	}
+
+	const closeableContext = context as BrowserContext & {
+		close?: BrowserContext["close"];
+	};
+	if (typeof closeableContext.close === "function") {
+		const originalClose = closeableContext.close.bind(context);
+		closeableContext.close = async (
+			...args: Parameters<BrowserContext["close"]>
+		): Promise<void> => {
+			await persistCookies();
+			await originalClose(...args);
+		};
 	}
 }
 

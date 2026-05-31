@@ -726,3 +726,59 @@ test("createAutomationContext restores and persists cookies for automation-owned
 
   store.close();
 });
+
+test("createAutomationContext awaits cookie persistence before closing context", async () => {
+  const store = new MemoryStore({
+    filename: ":memory:",
+  });
+
+  let resolveCookies: ((cookies: unknown[]) => void) | undefined;
+  let closeCalled = false;
+
+  const context = {
+    addCookies: async () => undefined,
+    cookies: async () => new Promise<unknown[]>((resolve) => {
+      resolveCookies = resolve;
+    }),
+    close: async () => {
+      closeCalled = true;
+    },
+    on: () => undefined,
+  } as unknown as BrowserContext;
+
+  const browser = {
+    newContext: async () => context,
+  } as unknown as Browser;
+
+  const createdContext = await createAutomationContext(browser, {
+    memoryStore: store,
+    sessionKey: "site-close",
+    sessionTtlMs: 60_000,
+  });
+
+  const closePromise = createdContext.close();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(closeCalled, false);
+  resolveCookies?.([
+    {
+      name: "close-save",
+      value: "cookie-c",
+      domain: ".example.com",
+      path: "/",
+    },
+  ]);
+  await closePromise;
+
+  assert.equal(closeCalled, true);
+  assert.deepEqual(store.get("sessions:site-close"), [
+    {
+      name: "close-save",
+      value: "cookie-c",
+      domain: ".example.com",
+      path: "/",
+    },
+  ]);
+
+  store.close();
+});
