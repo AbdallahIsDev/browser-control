@@ -41,7 +41,7 @@ async function ask(question: string, fallback: string): Promise<string> {
 
 export async function runSetup(options: SetupOptions = {}): Promise<SetupResult> {
   const env = options.env ?? process.env;
-  const nonInteractive = options.nonInteractive === true;
+  const nonInteractive = options.nonInteractive === true || options.json === true;
   const changed: string[] = [];
   const skipped: string[] = [];
   const warnings: string[] = [];

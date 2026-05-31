@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import { buildDoctorChecks, runDoctor } from "../../src/operator/doctor";
@@ -137,6 +138,42 @@ test("setup non-interactive creates config and never waits for prompts", async (
         },
       },
     });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("setup --json emits only JSON and never prompts interactively", () => {
+  const home = makeHome();
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register",
+        "src/cli.ts",
+        "setup",
+        "--json",
+        "--skip-browser-test",
+        "--skip-terminal-test",
+      ],
+      {
+        cwd: path.join(__dirname, "..", ".."),
+        env: { ...process.env, BROWSER_CONTROL_HOME: home },
+        encoding: "utf8",
+        input: "",
+        timeout: 5000,
+      },
+    );
+
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout, /Policy profile|Browser mode|Chrome debug port/);
+    const parsed = JSON.parse(result.stdout) as { success: boolean; skipped: string[] };
+    assert.equal(parsed.success, true);
+    assert.deepEqual(parsed.skipped, ["browser-test", "terminal-test"]);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
