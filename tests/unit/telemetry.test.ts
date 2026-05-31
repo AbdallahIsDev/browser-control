@@ -117,6 +117,62 @@ test("createTelegramAlertHandler does not crash on spawn error", async (t) => {
   }
 });
 
+test("createTelegramAlertHandler passes alert data as literal argv without a shell", (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "telemetry-alert-argv-"));
+  const scriptPath = path.join(tempDir, "notifier.ps1");
+  fs.writeFileSync(scriptPath, 'param([string]$TaskName,[string]$Summary)');
+
+  try {
+    const fakeChild = {
+      on() {
+        return fakeChild;
+      },
+      unref() {
+        return fakeChild;
+      },
+    };
+    const calls: Array<{
+      command: string;
+      args: string[];
+      options: { shell?: boolean | string };
+    }> = [];
+
+    t.mock.method(childProcessApi, "spawn", (
+      command: string,
+      args: readonly string[] | undefined,
+      options: unknown,
+    ) => {
+      calls.push({
+        command,
+        args: [...(args ?? [])],
+        options: options as { shell?: boolean | string },
+      });
+      return fakeChild as unknown as ReturnType<typeof childProcessApi.spawn>;
+    });
+
+    const injectedAction = 'x"; Set-Content pwned.txt owned; #';
+    const injectedSummary = '$(Set-Content pwned.txt owned); "quoted"';
+    const handler = createTelegramAlertHandler(scriptPath);
+    handler({
+      action: injectedAction,
+      result: "error",
+      durationMs: 50,
+      timestamp: new Date().toISOString(),
+      details: { reason: injectedSummary },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.shell, false);
+    assert.equal(calls[0].args.includes(injectedAction), true);
+    assert.equal(
+      calls[0].args.includes(JSON.stringify({ reason: injectedSummary })),
+      true,
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Telemetry saves reports and dispatches alerts for error events", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "telemetry-test-"));
   const alerts: string[] = [];

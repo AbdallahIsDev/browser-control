@@ -241,6 +241,7 @@ export function createTelegramAlertHandler(scriptPath = path.join(process.cwd(),
       JSON.stringify(event.details ?? {}),
     ], {
       stdio: "ignore",
+      shell: false,
       // Only set windowsHide on Windows — the option is ignored on other
       // platforms but keeps the intent explicit.
       windowsHide: process.platform === "win32",
