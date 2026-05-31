@@ -142,6 +142,55 @@ test("setup non-interactive creates config and never waits for prompts", async (
   }
 });
 
+test("setup reports browser test failures as unsuccessful", async () => {
+  const home = makeHome();
+  try {
+    const result = await runSetup({
+      env: { BROWSER_CONTROL_HOME: home },
+      nonInteractive: true,
+      chromeDebugPort: 9,
+      skipTerminalTest: true,
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(result.warnings.some((warning) => warning.includes("CDP port 9")), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("setup rolls back partial config writes when a later config write fails", async () => {
+  const home = makeHome();
+  try {
+    const env = { BROWSER_CONTROL_HOME: home };
+    const before = {
+      policyProfile: "trusted",
+      browserMode: "managed",
+    };
+    fs.mkdirSync(path.join(home, "config"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, "config", "config.json"),
+      `${JSON.stringify(before, null, 2)}\n`,
+    );
+
+    const result = await runSetup({
+      env,
+      nonInteractive: true,
+      profile: "safe",
+      modelProvider: "invalid-provider" as "openrouter",
+      skipBrowserTest: true,
+      skipTerminalTest: true,
+    });
+
+    assert.equal(result.success, false);
+    assert.deepEqual(loadUserConfig({ env }), before);
+    assert.equal(result.changed.length, 0);
+    assert.equal(result.warnings.some((warning) => warning.includes("Config write failed")), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("status reports stopped daemon without throwing when broker is unreachable", async () => {
   const home = makeHome();
   try {
