@@ -27,6 +27,22 @@ const BUILT_IN_PROVIDERS: ProviderConfig[] = [
 ];
 
 const BUILT_IN_NAMES = BUILT_IN_PROVIDERS.map((p) => p.name);
+const PROVIDER_TYPES: ProviderConfig["type"][] = [
+  "local",
+  "custom",
+  "browserless",
+  "browserbase",
+  "e2b",
+  "cubesandbox",
+  "camofox",
+  "cloak",
+  "obscura",
+];
+const PROVIDER_TYPE_SET = new Set<ProviderConfig["type"]>(PROVIDER_TYPES);
+const PROVIDER_CONFIG_KEYS = new Set(["name", "type", "endpoint", "apiKey", "options"]);
+const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+const PROVIDER_ENDPOINT_PROTOCOLS = new Set(["http:", "https:", "ws:", "wss:"]);
+const DANGEROUS_OPTION_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
@@ -168,6 +184,84 @@ function redactProviderForList(config: ProviderConfig): ProviderConfig {
   };
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isSafeJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 8) return false;
+  if (value === null) return true;
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) {
+    return value.length <= 1000 && value.every((item) => isSafeJsonValue(item, depth + 1));
+  }
+  if (!isPlainRecord(value)) return false;
+  return Object.entries(value).every(
+    ([key, item]) => !DANGEROUS_OPTION_KEYS.has(key) && isSafeJsonValue(item, depth + 1),
+  );
+}
+
+function isProviderType(value: unknown): value is ProviderConfig["type"] {
+  return typeof value === "string" && PROVIDER_TYPE_SET.has(value as ProviderConfig["type"]);
+}
+
+function isValidProviderEndpoint(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 4096) return false;
+  try {
+    const url = new URL(value);
+    return PROVIDER_ENDPOINT_PROTOCOLS.has(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isValidProviderConfig(value: unknown): value is ProviderConfig {
+  if (!isPlainRecord(value)) return false;
+  if (Object.keys(value).some((key) => !PROVIDER_CONFIG_KEYS.has(key))) return false;
+  if (typeof value.name !== "string" || !PROVIDER_NAME_PATTERN.test(value.name)) return false;
+  if (!isProviderType(value.type)) return false;
+  if ("endpoint" in value && value.endpoint !== undefined && !isValidProviderEndpoint(value.endpoint)) return false;
+  if ("apiKey" in value && value.apiKey !== undefined && typeof value.apiKey !== "string") return false;
+  if ("options" in value && value.options !== undefined && !isSafeJsonValue(value.options)) return false;
+  if (PROTECTED_BUILT_IN_NAMES.has(value.name) && value.type !== BUILT_IN_PROVIDERS.find((p) => p.name === value.name)?.type) {
+    return false;
+  }
+  return true;
+}
+
+function isValidRegistryData(value: unknown): value is ProviderRegistryData {
+  if (!isPlainRecord(value)) return false;
+  if (value.version !== PROVIDER_REGISTRY_VERSION) return false;
+  if (!Array.isArray(value.providers) || !value.providers.every(isValidProviderConfig)) return false;
+  if (typeof value.activeProvider !== "string" || !PROVIDER_NAME_PATTERN.test(value.activeProvider)) return false;
+  if (typeof value.updatedAt !== "string") return false;
+  if (!BUILT_IN_NAMES.includes(value.activeProvider) && !value.providers.some((p) => p.name === value.activeProvider)) {
+    return false;
+  }
+  return true;
+}
+
+function getMigratedRegistry(parsed: unknown): ProviderRegistryData {
+  if (!isPlainRecord(parsed)) return getDefaultRegistry();
+  const providers = Array.isArray(parsed.providers) ? parsed.providers.filter(isValidProviderConfig) : [];
+  const activeProvider =
+    typeof parsed.activeProvider === "string" && PROVIDER_NAME_PATTERN.test(parsed.activeProvider)
+      ? parsed.activeProvider
+      : DEFAULT_PROVIDER_NAME;
+  const migratedActiveProvider =
+    BUILT_IN_NAMES.includes(activeProvider) || providers.some((provider) => provider.name === activeProvider)
+      ? activeProvider
+      : DEFAULT_PROVIDER_NAME;
+  return {
+    ...getDefaultRegistry(),
+    providers,
+    activeProvider: migratedActiveProvider,
+  };
+}
+
 export class ProviderRegistry {
   private data: ProviderRegistryData;
   private readonly path: string;
@@ -183,17 +277,12 @@ export class ProviderRegistry {
         return getDefaultRegistry();
       }
       const raw = readFileSync(this.path, "utf-8");
-      const parsed = JSON.parse(raw) as ProviderRegistryData;
-      if (!parsed || typeof parsed !== "object") {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isValidRegistryData(parsed)) {
+        if (isPlainRecord(parsed) && parsed.version !== PROVIDER_REGISTRY_VERSION) {
+          return getMigratedRegistry(parsed);
+        }
         return getDefaultRegistry();
-      }
-      if (!parsed.version || parsed.version !== PROVIDER_REGISTRY_VERSION) {
-        // Migrate or reset
-        return {
-          ...getDefaultRegistry(),
-          providers: Array.isArray(parsed.providers) ? parsed.providers : [],
-          activeProvider: typeof parsed.activeProvider === "string" ? parsed.activeProvider : DEFAULT_PROVIDER_NAME,
-        };
       }
       return parsed;
     } catch {
@@ -255,8 +344,12 @@ export class ProviderRegistry {
   }
 
   add(config: ProviderConfig): ProviderAddResult {
-    if (PROTECTED_BUILT_IN_NAMES.has(config.name)) {
+    if (isPlainRecord(config) && typeof config.name === "string" && PROTECTED_BUILT_IN_NAMES.has(config.name)) {
       return { success: false, persisted: false, error: `Cannot override built-in provider "${config.name}".` };
+    }
+
+    if (!isValidProviderConfig(config)) {
+      return { success: false, persisted: false, error: "Invalid provider configuration." };
     }
 
     const idx = this.data.providers.findIndex((p) => p.name === config.name);

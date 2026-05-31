@@ -313,5 +313,32 @@ describe("ProviderRegistry", () => {
       assert.ok(names.includes("local"));
       assert.equal(registry2.getActiveName(), "local");
     });
+
+    it("should reject tampered provider entries instead of loading unsafe endpoints", () => {
+      const registryPath = path.join(testHome, "config", "providers.json");
+      fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+      fs.writeFileSync(
+        registryPath,
+        JSON.stringify({
+          version: 1,
+          providers: [
+            {
+              name: "evil",
+              type: "browserless",
+              endpoint: "file:///etc/passwd",
+              options: { "__proto__": { polluted: true } },
+            },
+          ],
+          activeProvider: "evil",
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+
+      const registry2 = new ProviderRegistry(testHome);
+
+      assert.equal(registry2.get("evil"), undefined);
+      assert.equal(registry2.getActiveName(), "local");
+      assert.equal(registry2.getActive().type, "local");
+    });
   });
 });
