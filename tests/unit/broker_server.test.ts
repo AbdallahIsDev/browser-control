@@ -650,6 +650,41 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   assert.equal(allowedResponse.status, 202);
 });
 
+test("createBrokerServer rejects deeply nested domain params without stack overflow", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "domain-depth-key",
+      BROKER_ALLOWED_DOMAINS: "allowed.example",
+    },
+    callbacks: {
+      submitTask: async () => ({
+        taskId: "should-not-submit",
+      }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+  const depth = 1_000;
+  const nestedParams = `${'{"child":'.repeat(depth)}{}${"}".repeat(depth)}`;
+  const response = await fetch(`${baseUrl}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "domain-depth-key",
+    },
+    body: `{"action":"visit","params":${nestedParams}}`,
+  });
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 403);
+  assert.match(body.error ?? "", /deeply nested/i);
+});
+
 test("createBrokerServer evicts completed task statuses after retention window", () => {
   let now = 1_000;
   const broker = createBrokerServer({

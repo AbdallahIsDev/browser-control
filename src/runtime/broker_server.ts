@@ -40,6 +40,7 @@ const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 100;
 const DEFAULT_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60_000;
 const DEFAULT_TASK_STATUS_RETENTION_MS = 60 * 60_000;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const MAX_DOMAIN_PARAM_DEPTH = 10;
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -851,16 +852,23 @@ function collectDomainCandidates(
 	value: unknown,
 	allowedFields: Set<string>,
 	output: string[],
-): void {
+	depth = 0,
+): boolean {
+	if (depth > MAX_DOMAIN_PARAM_DEPTH) {
+		return false;
+	}
+
 	if (!value || typeof value !== "object") {
-		return;
+		return true;
 	}
 
 	if (Array.isArray(value)) {
 		for (const entry of value) {
-			collectDomainCandidates(entry, allowedFields, output);
+			if (!collectDomainCandidates(entry, allowedFields, output, depth + 1)) {
+				return false;
+			}
 		}
-		return;
+		return true;
 	}
 
 	for (const [key, entry] of Object.entries(value as JsonRecord)) {
@@ -869,9 +877,13 @@ function collectDomainCandidates(
 		}
 
 		if (entry && typeof entry === "object") {
-			collectDomainCandidates(entry, allowedFields, output);
+			if (!collectDomainCandidates(entry, allowedFields, output, depth + 1)) {
+				return false;
+			}
 		}
 	}
+
+	return true;
 }
 
 function validateAllowedDomains(
@@ -883,16 +895,19 @@ function validateAllowedDomains(
 	}
 
 	const candidates: string[] = [];
-	collectDomainCandidates(
+	const withinDepthLimit = collectDomainCandidates(
 		params,
 		new Set(config.allowedDomainParamFields),
 		candidates,
 	);
+	if (!withinDepthLimit) {
+		return "Task params are too deeply nested to validate allowed domains.";
+	}
 
 	for (const candidate of candidates) {
 		const hostname = toHostname(candidate);
 		if (!hostname || !isAllowedHostname(hostname, config.allowedDomains)) {
-			return candidate;
+			return `Task params contain a disallowed domain target: ${candidate}.`;
 		}
 	}
 
@@ -1133,7 +1148,7 @@ export function createBrokerServer(
 				const invalidDomain = validateAllowedDomains(payload.params, config);
 				if (invalidDomain) {
 					writeJson(response, 403, {
-						error: `Task params contain a disallowed domain target: ${invalidDomain}.`,
+						error: invalidDomain,
 					});
 					return;
 				}
