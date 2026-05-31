@@ -173,7 +173,7 @@
         "scroll": "(options: { direction: \"up\" | \"down\" | \"left\" | \"right\"; amount?: number | undefined; tabId?: string | undefined; }): Promise<ActionResult<{ scrolled: string; tabId: string; }>>",
         "snapshot": "(options?: { rootSelector?: string | undefined; boxes?: boolean | undefined; tabId?: string | undefined; } | undefined): Promise<ActionResult<A11ySnapshot>>",
         "state": "(options?: { tabId?: string | undefined; snapshot?: boolean | undefined; screenshot?: boolean | undefined; fullPage?: boolean | undefined; dialog?: boolean | undefined; downloads?: boolean | undefined; } | undefined): Promise<...>",
-        "tabClose": "(): Promise<ActionResult<{ closed: boolean; }>>",
+        "tabClose": "(options?: { tabId?: string | undefined; } | undefined): Promise<ActionResult<{ closed: boolean; tabId?: string | undefined; }>>",
         "tabList": "(): Promise<ActionResult<{ id: string; url: string; title: string; }[]>>",
         "tabSwitch": "(tabId: string): Promise<ActionResult<{ activeTabId: string; url: string; title?: string | undefined; readyState?: string | undefined; }>>",
         "taskRun": "(options: { steps: TaskStep[]; continueOnFailure?: boolean | undefined; }): Promise<ActionResult<TaskRunResult>>",

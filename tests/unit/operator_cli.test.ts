@@ -802,11 +802,12 @@ test("bc --help keeps promoted browser command guidance current", () => {
 		assert.doesNotMatch(result.stdout, /term view <sessionId>/);
 		assert.doesNotMatch(result.stdout, /Shortcut for:/);
 		for (const command of [
-			"open <url>",
+			"open [url]",
 			"snapshot",
 			"state",
 			"act <action>",
 			"task run",
+			"tab close",
 			"provider list",
 			"downloads list",
 			"click <ref-or-target>",
@@ -821,7 +822,7 @@ test("bc --help keeps promoted browser command guidance current", () => {
 		for (const browserCommand of [
 			"browser list",
 			"browser detach",
-			"browser open <url>",
+			"browser open [url]",
 			"browser navigate <url>",
 			"browser open-many",
 			"browser capture ",

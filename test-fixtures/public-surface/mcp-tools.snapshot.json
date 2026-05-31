@@ -4194,12 +4194,16 @@
     },
     {
       "category": "browser",
-      "description": "Close the current browser tab. Keeps the browser session and automation lifecycle alive.",
+      "description": "Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "sessionId": {
             "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
+          "tabId": {
+            "description": "Optional tab ID or index. If omitted, closes the active tab.",
             "type": "string"
           }
         },

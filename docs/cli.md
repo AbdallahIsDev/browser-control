@@ -78,6 +78,7 @@ scroll [up|down|left|right] [--amount]
 screenshot [--output] [--full-page] [--target]
 tab list
 tab switch <id>
+tab close [--tab-id]
 close
 ```
 
@@ -91,7 +92,7 @@ Targets can be accessibility refs such as `@e3`, CSS selectors, or text matches.
 These commands are the preferred high-level path for agents that need fewer operations.
 
 ```text
-browser open <url> [--wait-until] [--json]
+browser open [url] [--urls <json>] [--same-tab] [--port] [--profile] [--provider] [--wait-until] [--json]
 browser navigate <url> [--tab] [--wait-until] [--json]
 browser open-many --urls <json> [--wait-until] [--json]
 browser snapshot [--root-selector] [--boxes] [--json]
@@ -102,10 +103,20 @@ browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields
 browser task run --steps <json>|--steps-file <path> [--timeout] [--continue-on-failure] [--json]
 browser tab list [--json]
 browser tab switch <id> [--json]
+browser tab close [--tab-id] [--json]
 browser highlight <target> [--json]
 browser drop <target> --file <path>|--data <mime=value> [--json]
 browser downloads list [--json]
 ```
+
+`browser open` is the additive unified entrypoint:
+
+- no URL launches a managed automation browser
+- URL opens a new tab
+- URL plus `--same-tab` navigates the current or selected tab
+- `--urls <json>` opens multiple tabs
+
+`browser launch`, `browser navigate`, and `browser open-many` remain supported compatibility commands.
 
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
 

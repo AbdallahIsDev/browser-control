@@ -590,13 +590,16 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_tab_close",
-      description: "Close the current browser tab. Keeps the browser session and automation lifecycle alive.",
+      description: "Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.",
       inputSchema: buildSchema({
+        tabId: { type: "string", description: "Optional tab ID or index. If omitted, closes the active tab." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
-        return api.browser.tabClose();
+        return api.browser.tabClose({
+          tabId: params.tabId as string | undefined,
+        });
       },
     },
 

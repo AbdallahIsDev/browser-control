@@ -659,12 +659,17 @@
           "commandPath": [
             "open"
           ],
-          "description": "Open/navigate browser tab",
+          "description": "",
           "flags": [
-            "json"
+            "json",
+            "port",
+            "profile",
+            "provider",
+            "same-tab",
+            "urls"
           ],
           "jsonSupport": true,
-          "syntax": "open <url> [--json]"
+          "syntax": "open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]"
         },
         {
           "commandPath": [
@@ -794,6 +799,19 @@
           ],
           "jsonSupport": true,
           "syntax": "tab switch <id> [--json]"
+        },
+        {
+          "commandPath": [
+            "tab",
+            "close"
+          ],
+          "description": "Close current or selected browser tab",
+          "flags": [
+            "json",
+            "tab-id"
+          ],
+          "jsonSupport": true,
+          "syntax": "tab close [--tab-id=<id>] [--json]"
         },
         {
           "commandPath": [
@@ -1204,12 +1222,17 @@
             "browser",
             "open"
           ],
-          "description": "Open/navigate browser tab",
+          "description": "",
           "flags": [
-            "json"
+            "json",
+            "port",
+            "profile",
+            "provider",
+            "same-tab",
+            "urls"
           ],
           "jsonSupport": true,
-          "syntax": "browser open <url> [--json]"
+          "syntax": "browser open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]"
         },
         {
           "commandPath": [
@@ -1360,6 +1383,20 @@
           ],
           "jsonSupport": true,
           "syntax": "browser tab switch <id> [--json]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "tab",
+            "close"
+          ],
+          "description": "Close current or selected browser tab",
+          "flags": [
+            "json",
+            "tab-id"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser tab close [--tab-id=<id>] [--json]"
         },
         {
           "commandPath": [

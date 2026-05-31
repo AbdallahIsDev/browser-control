@@ -7,6 +7,7 @@ import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
 import type { ScreencastOptions } from "./observability/types";
 import type { ProviderConfig } from "./providers/types";
+import type { ActionResult } from "./shared/action_result";
 import { installGlobalFatalHandlers } from "./shared/fatal_handlers";
 
 const { buildSafeChildEnv } = require("../safe_child_env.cjs") as {
@@ -798,7 +799,7 @@ Browser Commands:
   launch [--port=9222] [--profile=default] [--provider=<name>]       Launch managed automation browser
   list [--all] [--json]                                             List attachable browsers
   detach [--json]                                                   Detach from the active browser
-  open <url> [--json]                                               Open/navigate browser tab
+  open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]
   navigate <url> [--tab=<id>] [--json]                              Navigate current or selected tab
   open-many --urls='<json>' [--json]                                Open multiple tabs
   snapshot [--boxes] [--json]                                       Take accessibility snapshot
@@ -809,6 +810,7 @@ Browser Commands:
   task run --steps='<json>'|--steps-file=<path> [--json]            Run multiple browser/fs-output steps
   tab list [--json]                                                 List browser tabs
   tab switch <id> [--json]                                          Switch to a browser tab
+  tab close [--tab-id=<id>] [--json]                                Close current or selected browser tab
   click <ref-or-target>                                             Click an element
   fill <ref-or-target> <text>                                       Fill an element
   hover <ref-or-target>                                             Hover an element
@@ -849,7 +851,7 @@ Browser Namespace (compatibility):
   browser list [--all] [--json]                                      List attachable browsers
   browser detach [--json]                                            Detach from the active browser
   browser status                                                     Show browser connection status
-  browser open <url> [--json]                                       Open/navigate browser tab
+  browser open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]
   browser navigate <url> [--tab=<id>] [--json]                       Navigate current or selected tab
   browser open-many --urls='<json>' [--json]                         Open multiple tabs
   browser snapshot [--boxes] [--json]                                Take accessibility snapshot
@@ -861,6 +863,7 @@ Browser Namespace (compatibility):
   browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser tab list [--json]                                          List browser tabs
   browser tab switch <id> [--json]                                   Switch to a browser tab
+  browser tab close [--tab-id=<id>] [--json]                         Close current or selected browser tab
   browser highlight <target> [--json]                                Highlight an element
   browser drop <target> --file=<path>|--data=<mime=value> [--json]   Drop files or data onto a page target
   browser downloads list [--json]                                    List browser downloads
@@ -2921,20 +2924,43 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 		case "open": {
 			const url = positional[0] ?? flags.url;
-			if (!url) {
-				console.error("Error: URL is required");
-				throw commandFailed();
-			}
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
 				const timeoutMs = flags.timeout;
-				const { result, timedOut } = await withCliTimeout(
-					bc.browser.act({
-						action: "open",
-						url,
+				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
+				if (urls !== undefined && (!Array.isArray(urls) || urls.length === 0)) {
+					console.error("Error: --urls must be a non-empty JSON array");
+					throw commandFailed();
+				}
+				if (urls !== undefined && url) {
+					console.error("Error: Use either a URL argument or --urls, not both");
+					throw commandFailed();
+				}
+				if (urls !== undefined && flags["same-tab"] === "true") {
+					console.error("Error: --same-tab cannot be used with --urls");
+					throw commandFailed();
+				}
+				const operation: Promise<ActionResult<unknown>> = urls !== undefined
+					? bc.browser.act({
+						action: "openMany",
+						urls,
 						waitUntil: parseWaitUntil(flags["wait-until"]),
-					}),
+					})
+					: url
+						? bc.browser.act({
+							action: flags["same-tab"] === "true" ? "navigate" : "open",
+							url,
+							tabId: flags.tab ?? flags["tab-id"],
+							waitUntil: parseWaitUntil(flags["wait-until"]),
+						})
+						: bc.browser.launch({
+							port: flags.port ? Number(flags.port) : undefined,
+							profile: flags.profile as "system" | "isolated" | undefined,
+							provider: flags.provider,
+						});
+				const { result, timedOut } = await withCliTimeout(
+					operation,
 					timeoutMs ? Number(timeoutMs) : 60_000,
 					"browser open",
 				);
@@ -5922,9 +5948,13 @@ async function handleBrowserAction(
 						throw commandFailed();
 					}
 					result = await browserActions.tabSwitch(tabId);
+				} else if (tabAction === "close") {
+					result = await browserActions.tabClose({
+						tabId: flags.tab ?? flags["tab-id"],
+					});
 				} else {
 					console.error(
-						"Error: Unknown tab command. Use 'tab list' or 'tab switch <id>'",
+						"Error: Unknown tab command. Use 'tab list', 'tab switch <id>', or 'tab close'",
 					);
 					throw commandFailed();
 				}

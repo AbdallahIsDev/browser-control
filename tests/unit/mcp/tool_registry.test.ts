@@ -759,6 +759,13 @@ describe("MCP Tool Registry", () => {
       assert.ok("tabId" in tool.inputSchema.properties, "bc_drop should have tabId property");
     });
 
+    it("bc_tab_close schema has tabId", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_tab_close")!;
+      assert.ok(tool, "bc_tab_close tool should exist");
+      assert.ok("tabId" in tool.inputSchema.properties, "bc_tab_close should have tabId property");
+    });
+
     it("terminal tools disambiguate Browser Control and terminal session IDs", () => {
       const tools = buildToolRegistry(api);
       const terminalTools = tools.filter((tool) => tool.name.startsWith("bc_terminal_"));

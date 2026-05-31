@@ -4174,27 +4174,30 @@ export class BrowserActions {
 	/**
 	 * Close the current browser tab without ending the browser lifecycle.
 	 */
-	async tabClose(): Promise<ActionResult<{ closed: boolean }>> {
+	async tabClose(options?: { tabId?: string }): Promise<ActionResult<{ closed: boolean; tabId?: string }>> {
 		const sessionId = this.getSessionId();
 
 		const policyEval = this.context.sessionManager.evaluateAction(
 			"browser_tab_close",
-			{},
+			{ tabId: options?.tabId },
 		);
-		if (!isPolicyAllowed(policyEval))
-			return policyEval as ActionResult<{ closed: boolean }>;
+		if (!isPolicyAllowed(policyEval)) {
+			return policyEval as ActionResult<{ closed: boolean; tabId?: string }>;
+		}
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{
 				closed: true;
-			}>();
+			}>(options?.tabId);
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
+			const closedTabId = await this.getTabIdForPage(page, options?.tabId ?? "0")
+				.catch(() => options?.tabId);
 			await this.persistObservability(sessionId, page);
 			await this.closePage(page);
 
 			return successResult(
-				{ closed: true },
+				{ closed: true, tabId: closedTabId },
 				{
 					path: policyEval.path,
 					sessionId,
@@ -5053,7 +5056,7 @@ export class BrowserActions {
 				break;
 			}
 			case "tab-close": {
-				const r = await this.tabClose();
+				const r = await this.tabClose({ tabId: options.tabId });
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;
 			}

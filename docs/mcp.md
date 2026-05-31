@@ -218,7 +218,7 @@ Packages:
 
 No MCP tools exist for setup, doctor, service register/remove, direct policy editing, raw low-level CDP, task scheduling, or skill management.
 
-`bc_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_tab_close` to close the current tab.
+`bc_close` closes Browser Control's automation lifecycle. For attached Chrome it detaches the CDP client and returns `closedBrowser:false`; it does not kill the visible user browser. Use `bc_tab_close` to close the current tab, or pass `tabId` to close a specific tab.
 
 ## Compact Browser State
 

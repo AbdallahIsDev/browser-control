@@ -231,7 +231,7 @@ export interface BrowserNamespace {
 		ActionResult<Array<{ id: string; url: string; title: string }>>
 	>;
 	tabSwitch(tabId: string): Promise<ActionResult<{ activeTabId: string; url: string; title?: string; readyState?: string }>>;
-	tabClose(): Promise<ActionResult<{ closed: boolean }>>;
+	tabClose(options?: { tabId?: string }): Promise<ActionResult<{ closed: boolean; tabId?: string }>>;
 	close(): Promise<ActionResult<BrowserCloseResult>>;
 	provider: ProviderNamespace;
 	/** Screencast recording namespace (Section 26). */
@@ -1034,7 +1034,7 @@ export function createBrowserControl(
 			cdp: async (o) => attachCompactBrowserState(await browserActions.cdp(o), o.tabId),
 			tabList: () => browserActions.tabList(),
 			tabSwitch: async (id) => attachCompactBrowserState(await browserActions.tabSwitch(id), id),
-			tabClose: async () => attachCompactBrowserState(await browserActions.tabClose()),
+			tabClose: async (options) => attachCompactBrowserState(await browserActions.tabClose(options), options?.tabId),
 			close: async () => attachCompactBrowserState(await browserActions.close()),
 			provider: providerNamespace,
 			screencast: screencastNamespace,

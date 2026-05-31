@@ -2788,6 +2788,41 @@ describe("BrowserActions", () => {
 				isolatedStore.close();
 			}
 		});
+
+		it("closes a requested tab by durable tab id", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const frontPage = createMockPage("chrome://newtab/");
+			const backgroundPage = createMockPage("https://background.example/");
+			const manager = createConnectedBrowserManager([
+				frontPage,
+				backgroundPage,
+			]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				await isolatedActions.tabList();
+				const result = await isolatedActions.tabClose({
+					tabId: backgroundPage.targetId,
+				});
+
+				assert.equal(result.success, true);
+				assert.equal(backgroundPage.calls.close, 1);
+				assert.equal(frontPage.calls.close, 0);
+				assert.equal(result.data?.tabId, backgroundPage.targetId);
+			} finally {
+				isolatedStore.close();
+			}
+		});
 	});
 
 	// ── Screenshot Viewport Bug Tests ──────────────────────────────────
