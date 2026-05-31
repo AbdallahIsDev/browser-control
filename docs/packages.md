@@ -17,7 +17,7 @@ bc package list
 bc package info <name>
 bc package update <name> [source]
 bc package remove <name>
-bc package run <name> <workflow>
+bc package run <name> [workflow]
 bc package eval <name>
 bc package grant <name> <permission>
 bc package review <name> approved --by=<reviewer> --reason=<reason>
@@ -43,6 +43,8 @@ bc package materialize <recording-id> --overwrite --json
 ```
 
 Legacy internal commands may still use `skill` names for compatibility. Public docs and UI should say Automation Package, Package, or Workflow.
+
+If an installed package declares exactly one workflow, `bc package run <name>` selects it automatically. Multi-workflow packages require an explicit workflow id, workflow name, or manifest path.
 
 Package runtime files live under Browser Control data home:
 

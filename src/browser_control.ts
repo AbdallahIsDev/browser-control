@@ -525,7 +525,7 @@ export interface PackageNamespace {
 		name: string,
 		permissionRef: string | number,
 	): ActionResult<{ granted: boolean }>;
-	run(name: string, workflowNameOrId: string): Promise<ActionResult>;
+	run(name: string, workflowNameOrId?: string): Promise<ActionResult>;
 	eval(
 		name: string,
 	): Promise<ActionResult<import("./packages/types").PackageEvalResult[]>>;
@@ -1631,7 +1631,7 @@ export function createBrowserControl(
 					policy.policy,
 				);
 			},
-			run: async (name: string, workflowNameOrId: string) => {
+			run: async (name: string, workflowNameOrId?: string) => {
 				const policy = evaluateActionPolicy("package_run", {
 					name,
 					workflowNameOrId,

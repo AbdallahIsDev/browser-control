@@ -749,7 +749,7 @@ Automation Packages (primary):
   package list [--json]                                              List installed packages
   package info <name> [--json]                                       Show package info
   package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
-  package run <name> <workflow> [--json]                             Run a package workflow
+  package run <name> [workflow] [--json]                             Run a package workflow
   package eval <name> [--json]                                       Evaluate a package
   package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
   package review-history <name> [--json]                             Show package trust review history
@@ -778,7 +778,7 @@ Operator:
   desktop start [--json]                                             Start the Electron desktop wrapper
 
 Workflow Graph (Section 29):
-  workflow run <graphPathOrName> [--json]                            Run a workflow graph
+  workflow run <graphPathOrName> [--json]                            Run a raw workflow graph
   workflow status <runId> [--json]                                   Show workflow run status
   workflow events <runId> [--json]                                   Show workflow run events
   workflow edit-state <runId> <key> <value> [--json]                 Edit workflow run state
@@ -975,7 +975,7 @@ Install, review, and run packages:
   package remove <name> [--json]                                     Remove an installed package
   package update <name> [source] [--json]                            Update an installed package
   package grant <name> <permission-kind-or-index> [--json]            Grant a declared package permission
-  package run <name> <workflow> [--json]                             Run a package workflow and include savings telemetry
+  package run <name> [workflow] [--json]                             Run a package workflow and include savings telemetry
   package eval <name> [--json]                                       Evaluate a package
   package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review
   package review-history <name> [--json]                             Show package trust review history
@@ -5466,8 +5466,8 @@ async function handlePackage(args: ParsedArgs): Promise<void> {
 			case "run": {
 				const name = positional[0];
 				const workflowNameOrId = positional[1];
-				if (!name || !workflowNameOrId) {
-					console.error("Error: package name and workflow are required");
+				if (!name) {
+					console.error("Error: package name is required");
 					throw commandFailed();
 				}
 				const result = await bc.package.run(name, workflowNameOrId);

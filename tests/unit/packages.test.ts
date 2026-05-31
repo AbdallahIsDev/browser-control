@@ -224,6 +224,43 @@ describe("Automation Packages - Hardened", () => {
       assert.strictEqual((runResult.data as any).status, "completed");
     });
 
+    it("runs the only package workflow when workflow is omitted", async () => {
+      const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
+      await bc.package.install(fixturePath);
+      const grantResult = bc.package.grantPermission("basic-test-package", "terminal");
+      assert.strictEqual(grantResult.success, true);
+
+      const runResult = await bc.package.run("basic-test-package");
+
+      assert.strictEqual(runResult.success, true, `Run should succeed: ${runResult.error}`);
+      assert.strictEqual((runResult.data as any).status, "completed");
+      assert.strictEqual((runResult.data as any).graphId, "test-workflow");
+    });
+
+    it("requires workflow selection when a package has multiple workflows", async () => {
+      const packageDir = path.join(tmpDataHome, "multi-workflow-package");
+      fs.cpSync(fixturePath, packageDir, { recursive: true });
+      const manifestPath = path.join(packageDir, "automation-package.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      manifest.name = "multi-workflow-package";
+      manifest.workflows = [
+        "workflows/test-workflow.json",
+        "workflows/other-workflow.json",
+      ];
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      fs.copyFileSync(
+        path.join(packageDir, "workflows", "test-workflow.json"),
+        path.join(packageDir, "workflows", "other-workflow.json"),
+      );
+
+      const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
+      await bc.package.install(packageDir);
+      const result = await bc.package.run("multi-workflow-package");
+
+      assert.equal(result.success, false);
+      assert.match(result.error ?? "", /Workflow is required/);
+    });
+
     it("denies terminal command chaining even when the command prefix is granted", async () => {
       const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
       await bc.package.install(fixturePath);

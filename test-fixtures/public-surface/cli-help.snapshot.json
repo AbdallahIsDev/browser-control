@@ -133,7 +133,7 @@
             "json"
           ],
           "jsonSupport": true,
-          "syntax": "package run <name> <workflow> [--json]"
+          "syntax": "package run <name> [workflow] [--json]"
         },
         {
           "commandPath": [
@@ -441,7 +441,7 @@
             "workflow",
             "run"
           ],
-          "description": "Run a workflow graph",
+          "description": "Run a raw workflow graph",
           "flags": [
             "json"
           ],

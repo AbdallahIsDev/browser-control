@@ -769,6 +769,7 @@ test("bc package --help shows package-focused help", () => {
 		assert.equal(result.status, 0, result.stderr || result.stdout);
 		assert.match(result.stdout, /Usage: bc package <command>/);
 		assert.match(result.stdout, /package record start/);
+		assert.match(result.stdout, /package run <name> \[workflow\]/);
 		assert.doesNotMatch(result.stdout, /Browser Actions:/);
 		assert.doesNotMatch(result.stdout, /Service Management:/);
 	} finally {

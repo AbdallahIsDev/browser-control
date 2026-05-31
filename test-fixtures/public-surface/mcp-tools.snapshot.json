@@ -2979,7 +2979,7 @@
     },
     {
       "category": "package",
-      "description": "Run a workflow from an installed package",
+      "description": "Run a workflow from an installed package. If workflowNameOrId is omitted, the package must declare exactly one workflow.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2987,12 +2987,12 @@
             "type": "string"
           },
           "workflowNameOrId": {
+            "description": "Workflow id, name, or manifest path. Optional only for single-workflow packages.",
             "type": "string"
           }
         },
         "required": [
-          "name",
-          "workflowNameOrId"
+          "name"
         ],
         "type": "object"
       },

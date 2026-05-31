@@ -36,13 +36,13 @@ export function buildPackageTools(api: BrowserControlAPI): McpTool[] {
     },
     {
       name: "bc_package_run",
-      description: "Run a workflow from an installed package",
+      description: "Run a workflow from an installed package. If workflowNameOrId is omitted, the package must declare exactly one workflow.",
       inputSchema: buildSchema({
         name: { type: "string" },
-        workflowNameOrId: { type: "string" },
-      }, ["name", "workflowNameOrId"]),
+        workflowNameOrId: { type: "string", description: "Workflow id, name, or manifest path. Optional only for single-workflow packages." },
+      }, ["name"]),
       handler: async (args) => {
-        const { name, workflowNameOrId } = args as { name: string; workflowNameOrId: string };
+        const { name, workflowNameOrId } = args as { name: string; workflowNameOrId?: string };
         return api.package.run(name, workflowNameOrId);
       },
     },

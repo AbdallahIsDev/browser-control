@@ -2051,7 +2051,7 @@ export function createWebAppServer(
 		if (request.method === "POST" && packageRunMatch) {
 			const name = decodeURIComponent(packageRunMatch[1] ?? "");
 			const body = await readJsonBody(request);
-			const workflow = asString(body.workflow, "workflow");
+			const workflow = asOptionalString(body.workflow);
 			const result = await api.package.run(name, workflow);
 			json(response, result.success ? 200 : 403, result);
 			return;

@@ -54,14 +54,15 @@ export class PackageRunner {
 
   async runWorkflow(
     packageName: string,
-    workflowNameOrId: string,
+    workflowNameOrId?: string,
     options: { maxNodeTimeoutMs?: number } = {},
   ): Promise<ActionResult> {
     const startedAt = new Date().toISOString();
+    let effectiveWorkflowNameOrId = workflowNameOrId ?? "(default)";
     const withTelemetry = (result: ActionResult): ActionResult => {
       const telemetry = recordReplayTelemetry({
         packageName,
-        workflowNameOrId,
+        workflowNameOrId: effectiveWorkflowNameOrId,
         startedAt,
         result: result as ActionResult<import("../workflows/types").WorkflowRun>,
         dataHome: this.options.dataHome,
@@ -83,41 +84,61 @@ export class PackageRunner {
 
     let targetWorkflowPath: string | null = null;
 
-    // Try to find matching workflow
-    for (const relPath of pkg.workflows) {
-      try {
-        const fullPath = safeResolveRelativePath(pkg.installedPath, relPath);
-        if (fs.existsSync(fullPath)) {
-          const content = JSON.parse(fs.readFileSync(fullPath, "utf8")) as WorkflowGraph;
-          if (content.id === workflowNameOrId || content.name === workflowNameOrId) {
-            targetWorkflowPath = fullPath;
-            break;
-          }
-        }
-      } catch {
-        // ignore errors during search
+    if (!workflowNameOrId) {
+      if (pkg.workflows.length === 0) {
+        return withTelemetry(failureResult(`Package ${packageName} has no workflows`, { path: "command", sessionId: this.sessionId }));
       }
-    }
-
-    if (!targetWorkflowPath) {
-      // Check if it's a direct path
-      const directMatch = pkg.workflows.find(w => w === workflowNameOrId);
-      if (directMatch) {
+      if (pkg.workflows.length > 1) {
+        return withTelemetry(failureResult(`Workflow is required for package ${packageName} because it declares ${pkg.workflows.length} workflows`, { path: "command", sessionId: this.sessionId }));
+      }
+      effectiveWorkflowNameOrId = pkg.workflows[0] ?? "(default)";
+      try {
+        targetWorkflowPath = safeResolveRelativePath(pkg.installedPath, effectiveWorkflowNameOrId);
+      } catch {
+        targetWorkflowPath = null;
+      }
+    } else {
+      // Try to find matching workflow
+      for (const relPath of pkg.workflows) {
         try {
-          targetWorkflowPath = safeResolveRelativePath(pkg.installedPath, directMatch);
+          const fullPath = safeResolveRelativePath(pkg.installedPath, relPath);
+          if (fs.existsSync(fullPath)) {
+            const content = JSON.parse(fs.readFileSync(fullPath, "utf8")) as WorkflowGraph;
+            if (content.id === workflowNameOrId || content.name === workflowNameOrId) {
+              effectiveWorkflowNameOrId = workflowNameOrId;
+              targetWorkflowPath = fullPath;
+              break;
+            }
+          }
         } catch {
-          // ignore
+          // ignore errors during search
+        }
+      }
+
+      if (!targetWorkflowPath) {
+        // Check if it's a direct path
+        const directMatch = pkg.workflows.find(w => w === workflowNameOrId);
+        if (directMatch) {
+          try {
+            effectiveWorkflowNameOrId = directMatch;
+            targetWorkflowPath = safeResolveRelativePath(pkg.installedPath, directMatch);
+          } catch {
+            // ignore
+          }
         }
       }
     }
 
     if (!targetWorkflowPath || !fs.existsSync(targetWorkflowPath)) {
-      return withTelemetry(failureResult(`Workflow ${workflowNameOrId} not found in package ${packageName}`, { path: "command", sessionId: this.sessionId }));
+      return withTelemetry(failureResult(`Workflow ${effectiveWorkflowNameOrId} not found in package ${packageName}`, { path: "command", sessionId: this.sessionId }));
     }
 
     let graph: WorkflowGraph;
     try {
       graph = JSON.parse(fs.readFileSync(targetWorkflowPath, "utf8"));
+      if (!workflowNameOrId) {
+        effectiveWorkflowNameOrId = graph.id || graph.name || effectiveWorkflowNameOrId;
+      }
     } catch (err) {
       return withTelemetry(failureResult(`Failed to parse workflow file: ${(err as Error).message}`, { path: "command", sessionId: this.sessionId }));
     }

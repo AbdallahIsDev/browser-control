@@ -187,7 +187,7 @@ Built-in providers are `local`, `custom`, and `browserless`. `local` is the defa
 ## Tasks, Schedules, Daemon
 
 ```text
-package run <name> <workflow> [--json]
+package run <name> [workflow] [--json]
 run --skill <name> --action <action> [--params JSON] [--priority] [--timeoutMs]
 schedule <id> --cron "*/5 * * * *" [--name] [--skill] [--action] [--params JSON]
 schedule list
