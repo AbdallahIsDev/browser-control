@@ -109,6 +109,12 @@ function errorLookingStdoutCommand(): string {
     : 'printf "Error: Connection successful\\nbash: not an error\\n"';
 }
 
+function sentinelLookingStdoutCommand(): string {
+  return os.platform() === "win32"
+    ? 'Write-Output "keep __BC_S_123__ user data"; Write-Output "keep __BC_E_123:0 user data"; Write-Output "before }; after"'
+    : 'printf "keep __BC_S_123__ user data\\nkeep __BC_E_123:0 user data\\nbefore }; after\\n"';
+}
+
 test("terminal_session: create, exec, snapshot, and close a real session", { timeout: 20000 }, async () => {
   const manager = new TerminalSessionManager();
   const session = await manager.create();
@@ -144,6 +150,22 @@ test("terminal_session: PTY exec keeps merged output in stdout", { timeout: 2000
     assert.match(result.stdout, /Error: Connection successful/);
     assert.match(result.stdout, /bash: not an error/);
     assert.equal(result.stderr, "");
+  } finally {
+    await manager.closeAll();
+  }
+});
+
+test("terminal_session: PTY exec preserves user data that resembles control markers", { timeout: 20000 }, async () => {
+  const manager = new TerminalSessionManager();
+  const session = await manager.create();
+
+  try {
+    const result = await session.exec(sentinelLookingStdoutCommand(), { timeoutMs: 5000 });
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /keep __BC_S_123__ user data/);
+    assert.match(result.stdout, /keep __BC_E_123:0 user data/);
+    assert.match(result.stdout, /before \}; after/);
+    assert.doesNotMatch(result.stdout, /\$__bc_success|Write-Output/);
   } finally {
     await manager.closeAll();
   }

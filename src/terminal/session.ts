@@ -212,10 +212,10 @@ export class PtyTerminalSession implements ITerminalSession {
 
 		const timeoutMs = options.timeoutMs ?? 0;
 
-		// Use markers that differ between shell echo and actual output.
-		const stamp = Date.now();
-		const startMarker = `__BC_S_${stamp}__`;
-		const endMarkerBase = `__BC_E_${stamp}`;
+		// Use high-entropy markers so cleanup never treats user output as control data.
+		const markerId = crypto.randomUUID().replace(/-/g, "");
+		const startMarker = `__BC_S_${markerId}__`;
+		const endMarkerBase = `__BC_E_${markerId}`;
 
 		// Shell-specific command wrapping for exit code capture
 		// POSIX (bash/zsh): Uses $? for exit code
@@ -227,8 +227,12 @@ export class PtyTerminalSession implements ITerminalSession {
 			: `printf '%s\n' '${startMarker}'\r`;
 
 		let execCmd: string;
+		let successVariable: string | undefined;
+		let exitVariable: string | undefined;
 		if (isWindowsShell) {
-			execCmd = `& { ${command} }; $__bc_success = $?; $__bc_exit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } elseif ($__bc_success) { 0 } else { 1 }; Write-Output "${endMarkerBase}:$__bc_exit"\r`;
+			successVariable = `__bc_success_${markerId}`;
+			exitVariable = `__bc_exit_${markerId}`;
+			execCmd = `& { ${command} }; $${successVariable} = $?; $${exitVariable} = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } elseif ($${successVariable}) { 0 } else { 1 }; Write-Output "${endMarkerBase}:$${exitVariable}"\r`;
 		} else {
 			execCmd = `${command}; __bc_ec=$?; printf '${endMarkerBase}:%s\n' "$__bc_ec"\r`;
 		}
@@ -249,9 +253,7 @@ export class PtyTerminalSession implements ITerminalSession {
 			this._process.write(execCmd);
 		}
 
-		// Wait for the end marker with expanded exit code to appear
-		// POSIX looks like: __BC_E_<ts>:0  (digits after colon)
-		// PowerShell looks like: __BC_E_<ts>:"0" (quoted digits)
+		// Wait for the end marker with expanded exit code to appear.
 		const endMarkerEscaped = endMarkerBase.replace(
 			/[.*+?^${}()|[\]\\]/g,
 			"\\$&",
@@ -310,6 +312,7 @@ export class PtyTerminalSession implements ITerminalSession {
 		const cleanOutput = cleanPtyCommandOutput(
 			stripAnsi(commandOutput),
 			command,
+			{ startMarker, endMarkerBase, successVariable, exitVariable },
 		);
 
 		// PTY exposes one merged stream; keep it in stdout instead of guessing.
@@ -790,26 +793,40 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function cleanPtyCommandOutput(output: string, command: string): string {
-	return output
-		.replace(/^.*__BC_S_\d+__.*$/gm, "")
-		.replace(
-			/(?:^|\r?\n)(?:PS [^\r\n>]+>\s*)?>\s*& \{ [\s\S]*? \}; \$__bc_success = \$\?; \$__bc_exit = if \(\$null -ne \$LASTEXITCODE\) \{ \[int\]\$LASTEXITCODE \} elseif \(\$__bc_success\) \{ 0 \} else \{ 1 \}; Write-Output "__BC_E_\d+:\$__bc_exit"\s*/g,
-			"\n",
-		)
-		.replace(/^.*__BC_E_\d+:\d+.*$/gm, "")
-		.replace(/__BC_S_\d+__/g, "")
-		.replace(/__BC_E_\d+:\d+/g, "")
-		.replace(new RegExp(`^\\s*${escapeRegExp(command)}\\s*$`, "gm"), "")
+interface PtyControlMarkers {
+	startMarker: string;
+	endMarkerBase: string;
+	successVariable?: string;
+	exitVariable?: string;
+}
+
+function cleanPtyCommandOutput(
+	output: string,
+	command: string,
+	markers?: PtyControlMarkers,
+): string {
+	let cleaned = output.replace(
+		new RegExp(`^\\s*${escapeRegExp(command)}\\s*$`, "gm"),
+		"",
+	);
+
+	if (markers) {
+		cleaned = cleaned
+			.replace(new RegExp(escapeRegExp(markers.startMarker), "g"), "")
+			.replace(
+				new RegExp(`${escapeRegExp(markers.endMarkerBase)}:\\d+`, "g"),
+				"",
+			);
+	}
+
+	return cleaned
 		.split(/\r?\n/)
 		.filter((line) => {
 			const trimmed = line.trim();
 			return !(
 				trimmed === '"' ||
 				trimmed === "" ||
-				/\$__bc_success|\$__bc_exit/.test(trimmed) ||
-				/Write-Output\s+"__BC_E_\d+/.test(trimmed) ||
-				/^(?:PS [^\r\n>]+>\s*)?>?\s*& \{/.test(trimmed)
+				isCurrentControlLine(trimmed, command, markers)
 			);
 		})
 		.join("\n")
@@ -822,16 +839,45 @@ function cleanPtySessionOutput(output: string): string {
 		.filter((line) => {
 			const trimmed = line.trim();
 			return !(
-				/__BC_S_\d+__/.test(trimmed) ||
-				/__BC_E_\d+:\d+/.test(trimmed) ||
-				/\$__bc_success|\$__bc_exit/.test(trimmed) ||
-				/Write-Output\s+"__BC_[SE]_/.test(trimmed) ||
-				/^(?:PS [^\r\n>]+>\s*)?>?\s*& \{/.test(trimmed)
+				isStandaloneControlMarker(trimmed) ||
+				/\$__bc_(?:success|exit)_[0-9a-f]{32}\b/u.test(trimmed) ||
+				/Write-Output\s+"__BC_[SE]_[0-9a-f]{32}/u.test(trimmed)
 			);
 		})
 		.join("\n")
-		.replace(/__BC_S_\d+__/g, "")
-		.replace(/__BC_E_\d+:\d+/g, "");
+		.replace(/__BC_S_[0-9a-f]{32}__/gu, "")
+		.replace(/__BC_E_[0-9a-f]{32}:\d+/gu, "");
+}
+
+function isCurrentControlLine(
+	trimmed: string,
+	command: string,
+	markers?: PtyControlMarkers,
+): boolean {
+	if (!markers) return false;
+
+	const controlFragments = [
+		markers.startMarker,
+		markers.endMarkerBase,
+		markers.successVariable ? `$${markers.successVariable}` : undefined,
+		markers.exitVariable ? `$${markers.exitVariable}` : undefined,
+	].filter((fragment): fragment is string => Boolean(fragment));
+
+	if (controlFragments.some((fragment) => trimmed.includes(fragment))) {
+		return true;
+	}
+
+	const withoutPrompt = trimmed.replace(/^(?:PS [^\r\n>]+>\s*)?>?\s*/u, "");
+	return withoutPrompt.startsWith(`& { ${command}`);
+}
+
+function isStandaloneControlMarker(trimmed: string): boolean {
+	return (
+		/^__BC_S_[0-9a-f]{32}__$/u.test(trimmed) ||
+		/^__BC_E_[0-9a-f]{32}:\d+$/u.test(trimmed) ||
+		/^__BC_S_\d+__$/u.test(trimmed) ||
+		/^__BC_E_\d+:\d+$/u.test(trimmed)
+	);
 }
 
 function escapeRegExp(value: string): string {
