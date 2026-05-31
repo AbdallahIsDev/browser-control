@@ -248,7 +248,7 @@ export function saveAuthSnapshotToStore(
   snapshot: AuthSnapshot,
   ttlMs?: number,
 ): void {
-  store.set(`${AUTH_SNAPSHOT_PREFIX}${profileId}`, protectAuthSnapshot(snapshot), ttlMs);
+  store.set(`${AUTH_SNAPSHOT_PREFIX}${profileId}`, protectAuthSnapshot({ ...snapshot, profileId }), ttlMs);
   log.info(`Auth snapshot saved for profile "${profileId}".`);
 }
 
@@ -264,9 +264,18 @@ export function loadAuthSnapshot(
     return null;
   }
   if (isProtectedAuthSnapshotRecord(stored)) {
-    return unprotectAuthSnapshot(stored);
+    const snapshot = unprotectAuthSnapshot(stored);
+    if (!snapshot) {
+      return null;
+    }
+    if (snapshot.profileId !== profileId) {
+      log.error(`Rejected auth snapshot for profile "${profileId}": protected payload profile mismatch.`);
+      return null;
+    }
+    return snapshot;
   }
-  return stored;
+  log.error(`Rejected unprotected auth snapshot for profile "${profileId}". Recreate the snapshot to store it in the protected format.`);
+  return null;
 }
 
 /** Delete an auth snapshot from the memory store. */

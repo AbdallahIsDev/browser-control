@@ -151,6 +151,31 @@ describe("browser_auth_state", () => {
       assert.ok(loaded.localStorage["https://example.com"]);
       assert.equal(loaded.localStorage["https://example.com"]["theme"], "dark");
     });
+
+    it("rejects raw unprotected snapshots injected into the store", () => {
+      const injected = createTestSnapshot("injected-profile");
+      injected.cookies[0].value = "attacker-cookie";
+      store.set("auth_snapshot:injected-profile", injected);
+
+      const loaded = loadAuthSnapshot(store, "injected-profile");
+
+      assert.equal(loaded, null);
+    });
+
+    it("rejects tampered protected auth snapshot payloads", () => {
+      const snapshot = createTestSnapshot("tampered-profile");
+      saveAuthSnapshotToStore(store, "tampered-profile", snapshot);
+      const stored = store.get<{ encryptedPayload: string }>("auth_snapshot:tampered-profile");
+      assert.ok(stored);
+      store.set("auth_snapshot:tampered-profile", {
+        ...stored,
+        encryptedPayload: `${stored.encryptedPayload.slice(0, -4)}AAAA`,
+      });
+
+      const loaded = loadAuthSnapshot(store, "tampered-profile");
+
+      assert.equal(loaded, null);
+    });
   });
 
   describe("deleteAuthSnapshot", () => {
