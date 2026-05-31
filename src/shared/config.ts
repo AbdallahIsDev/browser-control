@@ -300,6 +300,17 @@ export interface ConfigEntry {
   description: string;
 }
 
+export interface ConfigEnvEntry {
+  envVar: string;
+  category: string;
+  description: string;
+  configKey?: ConfigKey;
+  sensitive: boolean;
+  currentValue: string | "[redacted]" | undefined;
+  source: "env" | "unset";
+  defaultValue?: string;
+}
+
 export interface ConfigSetResult {
   key: ConfigKey;
   value: ConfigValue | "[redacted]";
@@ -316,6 +327,14 @@ interface ConfigDefinition {
   defaultValue: (env: NodeJS.ProcessEnv) => ConfigValue;
   parse: (value: unknown, key: ConfigKey) => ConfigValue;
   validate?: (value: ConfigValue, key: ConfigKey) => void;
+}
+
+interface AdditionalConfigEnvDefinition {
+  envVar: string;
+  category: string;
+  description: string;
+  sensitive?: boolean;
+  defaultValue?: string;
 }
 
 function requiredString(value: unknown, key: ConfigKey): string {
@@ -421,6 +440,53 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "openrouterModel", category: "ai", envVars: ["OPENROUTER_MODEL", "AI_AGENT_MODEL"], description: "OpenRouter model for AI agent features.", defaultValue: () => "openai/gpt-4.1-mini", parse: requiredString },
   { key: "openrouterBaseUrl", category: "ai", envVars: ["OPENROUTER_BASE_URL"], description: "OpenRouter API base URL.", defaultValue: () => "https://openrouter.ai/api/v1", parse: requiredString, validate: ensureUrl },
   { key: "openrouterApiKey", category: "ai", envVars: ["OPENROUTER_API_KEY"], description: "OpenRouter API key.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+];
+
+const ADDITIONAL_CONFIG_ENV_DEFINITIONS: AdditionalConfigEnvDefinition[] = [
+  { envVar: "BROKER_API_KEY", category: "broker", description: "Broker bearer token; preferred over BROKER_SECRET.", sensitive: true },
+  { envVar: "BROKER_SECRET", category: "broker", description: "Legacy broker bearer token fallback.", sensitive: true },
+  { envVar: "BROKER_ALLOWED_ORIGINS", category: "broker", description: "Comma-separated origins allowed by the broker CORS guard.", defaultValue: "" },
+  { envVar: "BROKER_ALLOWED_DOMAINS", category: "broker", description: "Comma-separated host/domain allowlist for broker task URLs.", defaultValue: "" },
+  { envVar: "BROKER_MAX_BODY_BYTES", category: "broker", description: "Maximum JSON request body size accepted by the broker.", defaultValue: "1048576" },
+  { envVar: "BROKER_RATE_LIMIT_MAX_REQUESTS", category: "broker", description: "Maximum broker requests per rate-limit window.", defaultValue: "120" },
+  { envVar: "BROKER_RATE_LIMIT_WINDOW_MS", category: "broker", description: "Broker rate-limit window length in milliseconds.", defaultValue: "60000" },
+  { envVar: "BROKER_RATE_LIMIT_BUCKET_TTL_MS", category: "broker", description: "How long idle broker rate-limit buckets are retained.", defaultValue: "600000" },
+  { envVar: "BROKER_TASK_STATUS_RETENTION_MS", category: "broker", description: "How long completed broker task statuses remain queryable.", defaultValue: "86400000" },
+  { envVar: "BROWSER_ALLOW_DEBUG_FILE_READS", category: "debug", description: "Allows debug file overrides under Browser Control runtime/debug only.", defaultValue: "0" },
+  { envVar: "BROWSER_ALLOW_REMOTE_CDP", category: "browser", description: "Allows launcher scripts to bind Chrome remote debugging beyond localhost.", defaultValue: "0" },
+  { envVar: "BROWSER_CONTROL_ALLOW_SYSTEM_PROFILE", category: "browser", description: "Allows CLI flows to use the system Chrome profile after explicit confirmation.", defaultValue: "0" },
+  { envVar: "BROWSER_CONTROL_DOM_SNAPSHOT_FALLBACK", category: "browser", description: "Enables DOM fallback when accessibility snapshots cannot see page content.", defaultValue: "true" },
+  { envVar: "BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS", category: "browser", description: "Timeout for DOM snapshot fallback collection.", defaultValue: "2500" },
+  { envVar: "BROWSER_CONTROL_JSON_LOGS", category: "logging", description: "Writes logs as JSON records.", defaultValue: "0" },
+  { envVar: "BROWSER_CONTROL_JSON_OUTPUT", category: "cli", description: "Suppresses human logs when CLI JSON output is requested.", defaultValue: "0" },
+  { envVar: "BROWSER_CONTROL_MCP_MODE", category: "mcp", description: "Selects MCP tool surface mode: full or lite.", defaultValue: "full" },
+  { envVar: "BROWSER_CONTROL_STATE_BACKEND", category: "runtime", description: "Selects state storage backend: sqlite or json.", defaultValue: "sqlite" },
+  { envVar: "BROWSER_CONTROL_STDIO_MODE", category: "mcp", description: "Suppresses non-protocol output for stdio MCP transport.", defaultValue: "0" },
+  { envVar: "BROWSER_DEBUG_HOST", category: "browser", description: "Additional host candidate for WSL/private Chrome debug discovery." },
+  { envVar: "BROWSER_DEBUG_RESOLV_CONF", category: "debug", description: "Debug-only resolv.conf override; requires BROWSER_ALLOW_DEBUG_FILE_READS=1." },
+  { envVar: "BROWSER_DEBUG_ROUTE_TABLE", category: "debug", description: "Debug-only route-table override; requires BROWSER_ALLOW_DEBUG_FILE_READS=1." },
+  { envVar: "BROWSER_ENABLE_WSL_CDP_BRIDGE", category: "browser", description: "Enables the Windows-hosted WSL CDP bridge.", defaultValue: "true" },
+  { envVar: "BROWSER_TELEMETRY_MAX_EVENTS", category: "observability", description: "Maximum telemetry events retained in memory.", defaultValue: "2000" },
+  { envVar: "BROWSERBASE_API_KEY", category: "provider", description: "Browserbase API key used by Browserbase provider sessions.", sensitive: true },
+  { envVar: "BROWSERBASE_PROJECT_ID", category: "provider", description: "Browserbase project id used by Browserbase provider sessions." },
+  { envVar: "CAPTCHA_TIMEOUT_MS", category: "captcha", description: "CAPTCHA solver timeout in milliseconds.", defaultValue: "120000" },
+  { envVar: "CHROME_TAB_LIMIT", category: "daemon", description: "Maximum active Chrome tabs before health warnings.", defaultValue: "20" },
+  { envVar: "ENABLE_STEALTH", category: "stealth", description: "Enables stealth context options.", defaultValue: "false" },
+  { envVar: "MEMORY_ALERT_MB", category: "daemon", description: "Memory warning threshold for health checks.", defaultValue: "1024" },
+  { envVar: "PROXY_LIST", category: "proxy", description: "Comma-separated proxy URL list.", sensitive: true },
+  { envVar: "RESUME_POLICY", category: "daemon", description: "Task resume policy after daemon interruption.", defaultValue: "abandon" },
+  { envVar: "STAGEHAND_MODEL", category: "ai", description: "Stagehand model override." },
+  { envVar: "STEALTH_DEVICE_MEMORY", category: "stealth", description: "Navigator deviceMemory override for stealth contexts." },
+  { envVar: "STEALTH_FINGERPRINT_SEED", category: "stealth", description: "Fingerprint seed for deterministic stealth context values.", sensitive: true },
+  { envVar: "STEALTH_HARDWARE_CONCURRENCY", category: "stealth", description: "Navigator hardwareConcurrency override for stealth contexts." },
+  { envVar: "STEALTH_LOCALE", category: "stealth", description: "Locale override for stealth contexts." },
+  { envVar: "STEALTH_PLATFORM", category: "stealth", description: "Navigator platform override for stealth contexts." },
+  { envVar: "STEALTH_TIMEZONE_ID", category: "stealth", description: "Timezone override for stealth contexts." },
+  { envVar: "STEALTH_WEBGL_RENDERER", category: "stealth", description: "WebGL renderer override for stealth contexts." },
+  { envVar: "STEALTH_WEBGL_VENDOR", category: "stealth", description: "WebGL vendor override for stealth contexts." },
+  { envVar: "TERMINAL_MAX_OUTPUT_BYTES", category: "terminal", description: "Maximum bytes captured from one terminal command.", defaultValue: "1048576" },
+  { envVar: "TERMINAL_MAX_SCROLLBACK_LINES", category: "terminal", description: "Maximum terminal scrollback lines persisted for resume.", defaultValue: "10000" },
+  { envVar: "TERMINAL_MAX_SERIALIZED_SESSIONS", category: "terminal", description: "Maximum serialized terminal sessions retained for resume.", defaultValue: "50" },
 ];
 
 const CONFIG_BY_KEY = new Map<ConfigKey, ConfigDefinition>(
@@ -606,6 +672,50 @@ export function getConfigEntries(options: { env?: NodeJS.ProcessEnv; validate?: 
       description: definition.description,
     };
   });
+}
+
+function redactEnvValue(definition: { sensitive?: boolean }, value: string | undefined): string | "[redacted]" | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (definition.sensitive) return "[redacted]";
+  return redactString(value);
+}
+
+export function getConfigEnvEntries(options: { env?: NodeJS.ProcessEnv } = {}): ConfigEnvEntry[] {
+  const env = options.env ?? process.env;
+  const entries = new Map<string, ConfigEnvEntry>();
+
+  for (const definition of CONFIG_DEFINITIONS) {
+    const defaultValue = definition.defaultValue(env);
+    for (const envVar of definition.envVars) {
+      const currentValue = env[envVar];
+      entries.set(envVar, {
+        envVar,
+        category: definition.category,
+        description: definition.description,
+        configKey: definition.key,
+        sensitive: definition.sensitive === true,
+        currentValue: redactEnvValue(definition, currentValue),
+        source: currentValue === undefined || currentValue === "" ? "unset" : "env",
+        defaultValue: defaultValue === undefined ? undefined : String(redactConfigValue(definition, defaultValue)),
+      });
+    }
+  }
+
+  for (const definition of ADDITIONAL_CONFIG_ENV_DEFINITIONS) {
+    if (entries.has(definition.envVar)) continue;
+    const currentValue = env[definition.envVar];
+    entries.set(definition.envVar, {
+      envVar: definition.envVar,
+      category: definition.category,
+      description: definition.description,
+      sensitive: definition.sensitive === true,
+      currentValue: redactEnvValue(definition, currentValue),
+      source: currentValue === undefined || currentValue === "" ? "unset" : "env",
+      defaultValue: definition.defaultValue,
+    });
+  }
+
+  return [...entries.values()].sort((a, b) => a.envVar.localeCompare(b.envVar));
 }
 
 export function getConfigValue(

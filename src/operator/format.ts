@@ -1,4 +1,4 @@
-import type { ConfigEntry, ConfigSetResult } from "../shared/config";
+import type { ConfigEntry, ConfigEnvEntry, ConfigSetResult } from "../shared/config";
 import type { DoctorReport, SetupResult, SystemStatus } from "./types";
 
 export function formatConfigList(entries: ConfigEntry[]): string {
@@ -12,6 +12,15 @@ export function formatConfigList(entries: ConfigEntry[]): string {
 export function formatConfigGet(entry: ConfigEntry): string {
   const value = entry.value === undefined ? "" : String(entry.value);
   return `${entry.key}=${value} (${entry.source})`;
+}
+
+export function formatConfigEnv(entries: ConfigEnvEntry[]): string {
+  const rows = entries.map((entry) => {
+    const value = entry.currentValue === undefined ? "" : String(entry.currentValue);
+    const key = entry.configKey ?? "";
+    return `${entry.envVar.padEnd(38)} ${entry.source.padEnd(5)} ${value.padEnd(18)} ${key.padEnd(24)} ${entry.description}`;
+  });
+  return ["Env Var                                Src   Value              Config Key               Description", ...rows].join("\n");
 }
 
 export function formatConfigSet(result: ConfigSetResult): string {

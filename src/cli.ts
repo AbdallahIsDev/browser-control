@@ -720,7 +720,7 @@ Operator:
         [--terminal-shell=pwsh] [--browserless-endpoint=<url>]
         [--browserless-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]
                                                                       Create/update user config
-  config list|get|set                                                Inspect or update effective config
+  config list|get|set|env                                            Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
   data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]
                                                                       Inspect, clean, or export local data home
@@ -971,8 +971,8 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 	const { subcommand, positional, flags } = args;
 	const jsonOutput = flags.json === "true";
 	const [
-		{ getConfigEntries, getConfigValue, setUserConfigValue },
-		{ formatConfigGet, formatConfigList, formatConfigSet },
+		{ getConfigEntries, getConfigEnvEntries, getConfigValue, setUserConfigValue },
+		{ formatConfigEnv, formatConfigGet, formatConfigList, formatConfigSet },
 	] = await Promise.all([
 		import("./shared/config"),
 		import("./operator/format"),
@@ -996,6 +996,12 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 			else console.log(formatConfigGet(entry));
 			break;
 		}
+		case "env": {
+			const entries = getConfigEnvEntries();
+			if (jsonOutput) outputJson(entries, false);
+			else console.log(formatConfigEnv(entries));
+			break;
+		}
 		case "set": {
 			const key = positional[0];
 			const value = positional[1];
@@ -1011,7 +1017,7 @@ async function handleConfig(args: ParsedArgs): Promise<void> {
 		}
 		default:
 			console.error(`Unknown config command: ${subcommand}`);
-			console.error("Available: list, get, set");
+			console.error("Available: list, get, set, env");
 			throw commandFailed();
 	}
 }

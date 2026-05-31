@@ -185,6 +185,38 @@ test("bc config list --json writes clean parseable JSON", async () => {
 	}
 });
 
+test("bc config env --json lists env-only knobs without leaking secrets", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const previousMcpMode = process.env.BROWSER_CONTROL_MCP_MODE;
+	const previousBrowserbaseKey = process.env.BROWSERBASE_API_KEY;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		process.env.BROWSER_CONTROL_MCP_MODE = "lite";
+		process.env.BROWSERBASE_API_KEY = "browserbase-secret";
+		const output = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "config", "env", "--json"]);
+		});
+		const parsed = JSON.parse(output) as Array<{
+			envVar: string;
+			category: string;
+			currentValue?: string;
+		}>;
+		assert.ok(parsed.some((entry) => entry.envVar === "BROWSER_CONTROL_MCP_MODE" && entry.category === "mcp"));
+		assert.ok(parsed.some((entry) => entry.envVar === "BROKER_RATE_LIMIT_MAX_REQUESTS"));
+		assert.equal(parsed.find((entry) => entry.envVar === "BROWSERBASE_API_KEY")?.currentValue, "[redacted]");
+		assert.doesNotMatch(output, /browserbase-secret/u);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		if (previousMcpMode === undefined) delete process.env.BROWSER_CONTROL_MCP_MODE;
+		else process.env.BROWSER_CONTROL_MCP_MODE = previousMcpMode;
+		if (previousBrowserbaseKey === undefined) delete process.env.BROWSERBASE_API_KEY;
+		else process.env.BROWSERBASE_API_KEY = previousBrowserbaseKey;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc browser provider catalog --json lists provider setup metadata without secrets", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;

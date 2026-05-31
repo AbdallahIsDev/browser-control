@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { getConfigEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../src/config";
+import { getConfigEntries, getConfigEnvEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../src/config";
 
 // ── Config Loader: Defaults ──────────────────────────────────────────
 
@@ -184,6 +184,28 @@ test("config list/get redact sensitive URL query params in endpoint values", () 
   assert.match(String(browserDebugUrl.value), /REDACTED/);
   assert.match(String(browserDebugUrl.value), /example\.test/);
   assert.doesNotMatch(JSON.stringify(entries), /browserless-secret-token-123456|debug-secret-token-123456|user:pass/);
+});
+
+test("config env inventory includes env-only knobs and redacts sensitive values", () => {
+  const entries = getConfigEnvEntries({
+    env: {
+      BROWSER_CONTROL_MCP_MODE: "lite",
+      BROWSERBASE_API_KEY: "browserbase-secret",
+      BROKER_RATE_LIMIT_MAX_REQUESTS: "10",
+      BROWSER_DEBUG_HOST: "127.0.0.1",
+      STEALTH_FINGERPRINT_SEED: "seed-secret",
+    },
+  });
+
+  assert.equal(entries.some((entry) => entry.envVar === "BROWSER_CONTROL_MCP_MODE" && entry.category === "mcp"), true);
+  assert.equal(entries.some((entry) => entry.envVar === "BROKER_RATE_LIMIT_MAX_REQUESTS"), true);
+  assert.equal(entries.some((entry) => entry.envVar === "BROWSER_DEBUG_HOST"), true);
+  assert.equal(entries.find((entry) => entry.envVar === "BROWSERBASE_API_KEY")?.currentValue, "[redacted]");
+  assert.equal(entries.find((entry) => entry.envVar === "STEALTH_FINGERPRINT_SEED")?.currentValue, "[redacted]");
+  assert.equal(entries.find((entry) => entry.envVar === "BROWSER_CONTROL_HOME")?.configKey, "dataHome");
+
+  const names = entries.map((entry) => entry.envVar);
+  assert.deepEqual([...new Set(names)].sort(), names.sort());
 });
 
 test("loadConfig reads ENABLE_STEALTH", () => {
