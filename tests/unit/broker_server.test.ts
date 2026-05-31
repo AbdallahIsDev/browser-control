@@ -1367,6 +1367,93 @@ test("createBrokerServer routes skill tasks through daemon.submitSkillTask when 
   assert.equal(submittedTasks[0].name, "visit");
 });
 
+test("createBrokerServer reports daemon skill-task policy denial immediately", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "skill-deny-key",
+    },
+    daemon: {
+      submitTask: async () => "should-not-run",
+      submitSkillTask: (taskId) => ({
+        taskId,
+        accepted: false,
+        status: "failed",
+        error: "Policy denied: skill action blocked",
+        statusCode: 403,
+      }),
+      getScheduler: () => ({
+        schedule: () => {},
+        pause: () => {},
+        resume: () => {},
+        unschedule: () => {},
+        getQueue: () => [],
+      }),
+      emergencyKill: async () => {},
+      getHealthCheck: () => ({
+        runAll: async () => ({
+          overall: "healthy" as const,
+          checks: [],
+          timestamp: new Date().toISOString(),
+        }),
+      }),
+      getTelemetry: () => ({
+        getSummary: () => ({
+          totalSteps: 0,
+          successCount: 0,
+          errorCount: 0,
+          successRate: 0,
+          averageDurationMs: 0,
+          captchasSolved: 0,
+          screenshotsCaptured: 0,
+          proxyUsage: {},
+          actions: {},
+        }),
+      }),
+      getStats: () => ({
+        totalSteps: 0,
+        successCount: 0,
+        errorCount: 0,
+        successRate: 0,
+        averageDurationMs: 0,
+        captchasSolved: 0,
+        screenshotsCaptured: 0,
+        proxyUsage: {},
+        actions: {},
+      }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const response = await fetch(`${baseUrl}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "skill-deny-key",
+    },
+    body: JSON.stringify({
+      skill: "framer",
+      action: "publish",
+      params: { siteId: "test-site" },
+    }),
+  });
+
+  assert.equal(response.status, 403);
+  const body = await response.json() as {
+    taskId?: string;
+    status?: string;
+    error?: string;
+  };
+  assert.match(body.taskId ?? "", /^skill-framer-/);
+  assert.equal(body.status, "failed");
+  assert.match(body.error ?? "", /Policy denied/);
+});
+
 test("broker /api/v1/tasks/run with skill field routes through submitTask callback (daemon-managed path)", async (t) => {
   let submitTaskCalls = 0;
   let lastRequest: BrokerRunTaskRequest | undefined;

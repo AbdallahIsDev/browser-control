@@ -130,6 +130,14 @@ interface RunningTaskRecord {
 	finishedAtMs?: number;
 }
 
+export interface SkillTaskSubmissionResult {
+	taskId: string;
+	accepted: boolean;
+	status: "pending" | "running" | "failed";
+	error?: string;
+	statusCode?: number;
+}
+
 // ── Daemon Configuration ────────────────────────────────────────────
 
 export interface DaemonConfig {
@@ -750,13 +758,19 @@ export class Daemon {
 		skillName: string,
 		action: string,
 		params: Record<string, unknown>,
-	): void {
+	): SkillTaskSubmissionResult {
 		if (!this.acceptNewTasks) {
 			this.log.warn("Rejecting skill task — daemon is shutting down", {
 				taskId,
 				skillName,
 			});
-			return;
+			return {
+				taskId,
+				accepted: false,
+				status: "failed",
+				error: "Daemon is shutting down — not accepting new tasks.",
+				statusCode: 503,
+			};
 		}
 		this.purgeExpiredTaskStatuses();
 
@@ -817,7 +831,13 @@ export class Daemon {
 				this.setTerminalTaskStatus(record, "failed", {
 					error: `Policy denied: ${evaluation.reason}`,
 				});
-				return;
+				return {
+					taskId,
+					accepted: false,
+					status: "failed",
+					error: `Policy denied: ${evaluation.reason}`,
+					statusCode: 403,
+				};
 			}
 
 			if (evaluation.decision === "require_confirmation") {
@@ -843,7 +863,13 @@ export class Daemon {
 				this.setTerminalTaskStatus(record, "failed", {
 					error: `Policy requires confirmation: ${evaluation.reason}`,
 				});
-				return;
+				return {
+					taskId,
+					accepted: false,
+					status: "failed",
+					error: `Policy requires confirmation: ${evaluation.reason}`,
+					statusCode: 403,
+				};
 			}
 
 			// allow_with_audit and allow both proceed with execution
@@ -880,6 +906,11 @@ export class Daemon {
 		});
 
 		this.executeSkillAsync(taskId, skillName, action, params);
+		return {
+			taskId,
+			accepted: true,
+			status: "pending",
+		};
 	}
 
 	getTaskStatus(taskId: string): {
@@ -2006,13 +2037,12 @@ export class Daemon {
 					// If skill is provided, route through skill registry
 					if (request.skill) {
 						const taskId = `skill-${request.skill}-${Date.now()}`;
-						this.submitSkillTask(
+						return this.submitSkillTask(
 							taskId,
 							request.skill,
 							request.action ?? "",
 							request.params ?? {},
 						);
-						return { taskId };
 					}
 
 					const taskId = await this.submitTask({

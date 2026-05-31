@@ -70,10 +70,18 @@ export interface BrokerStatusPatch {
 	error?: string;
 }
 
+export interface BrokerTaskSubmissionResult {
+	taskId: string;
+	accepted?: boolean;
+	status?: "pending" | "running" | "failed";
+	error?: string;
+	statusCode?: number;
+}
+
 export interface BrokerServerCallbacks {
 	submitTask?: (
 		request: BrokerRunTaskRequest,
-	) => MaybePromise<{ taskId: string } | string>;
+	) => MaybePromise<BrokerTaskSubmissionResult | string>;
 	scheduleTask?: (
 		request: BrokerScheduleTaskRequest,
 	) => MaybePromise<{ id: string; nextRun?: Date | string | null }>;
@@ -125,7 +133,7 @@ export interface BrokerServerOptions {
 			skillName: string,
 			action: string,
 			params: Record<string, unknown>,
-		): void;
+		): BrokerTaskSubmissionResult | void;
 		getScheduler(): {
 			schedule(task: {
 				id: string;
@@ -438,13 +446,13 @@ function createCallbacksFromDaemon(
 			// handling, and startup recovery.
 			if (request.skill) {
 				const taskId = `skill-${request.skill}-${Date.now()}`;
-				daemon.submitSkillTask(
+				const submission = daemon.submitSkillTask(
 					taskId,
 					request.skill,
 					request.action ?? "",
 					request.params ?? {},
 				);
-				return { taskId };
+				return submission ?? { taskId };
 			}
 
 			const actionName = request.action ?? "task";
@@ -1385,12 +1393,32 @@ export function createBrokerServer(
 				const submission = await callbacks.submitTask(payload);
 				const taskId =
 					typeof submission === "string" ? submission : submission.taskId;
+				const submissionStatus =
+					typeof submission === "string"
+						? "pending"
+						: (submission.status ?? "pending");
+				const accepted =
+					typeof submission === "string" ? true : (submission.accepted ?? true);
+				const submissionError =
+					typeof submission === "string" ? undefined : submission.error;
+				if (!accepted) {
+					setTaskStatus(taskId, {
+						status: "failed",
+						...(submissionError ? { error: submissionError } : {}),
+					});
+					writeJson(response, typeof submission === "string" ? 400 : (submission.statusCode ?? 403), {
+						taskId,
+						status: "failed",
+						...(submissionError ? { error: redactString(submissionError) } : {}),
+					});
+					return;
+				}
 				setTaskStatus(taskId, {
-					status: "pending",
+					status: submissionStatus,
 				});
 				writeJson(response, 202, {
 					taskId,
-					status: "pending",
+					status: submissionStatus,
 				});
 				return;
 			}
