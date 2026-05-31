@@ -308,6 +308,58 @@ describe("Automation Packages - Hardened", () => {
       assert.strictEqual(runResult.success, false);
       assert.ok(runResult.error?.includes("Permission denied"));
     });
+
+    it("denies filesystem permission escapes through symlinked allowed paths", async (t) => {
+      const bc = createBrowserControl({ memoryStore, dataHome: tmpDataHome, policyProfile: "trusted" });
+      await bc.package.install(fixturePath);
+
+      const allowedDir = path.join(tmpDataHome, "allowed");
+      const outsideDir = path.join(tmpDataHome, "outside");
+      const linkDir = path.join(allowedDir, "link");
+      const secretPath = path.join(outsideDir, "secret.txt");
+      fs.mkdirSync(allowedDir, { recursive: true });
+      fs.mkdirSync(outsideDir, { recursive: true });
+      fs.writeFileSync(secretPath, "secret");
+      try {
+        fs.symlinkSync(outsideDir, linkDir, process.platform === "win32" ? "junction" : "dir");
+      } catch (error) {
+        t.skip(`symlink creation unavailable: ${(error as Error).message}`);
+        return;
+      }
+
+      const registryPath = path.join(tmpDataHome, "packages", "registry.json");
+      const pkgs = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+      pkgs[0].permissions = [{
+        permission: { kind: "filesystem", paths: [allowedDir], access: "read" },
+        granted: true,
+      }];
+      fs.writeFileSync(registryPath, JSON.stringify(pkgs, null, 2));
+
+      const installedWorkflowPath = path.join(
+        tmpDataHome,
+        "packages",
+        "installed",
+        "basic-test-package",
+        "workflows",
+        "test-workflow.json",
+      );
+      const workflow = JSON.parse(fs.readFileSync(installedWorkflowPath, "utf8"));
+      workflow.nodes[0] = {
+        id: "node-1",
+        kind: "filesystem",
+        name: "Symlink Escape Read",
+        input: {
+          action: "read",
+          path: path.join(linkDir, "secret.txt"),
+        },
+      };
+      fs.writeFileSync(installedWorkflowPath, JSON.stringify(workflow, null, 2));
+
+      const runResult = await bc.package.run("basic-test-package", "test-workflow");
+
+      assert.strictEqual(runResult.success, false);
+      assert.ok(runResult.error?.includes("Permission denied"));
+    });
   });
 
   describe("Evaluation & Timeout", () => {

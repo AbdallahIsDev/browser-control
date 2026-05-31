@@ -11,10 +11,36 @@ import type { InstalledAutomationPackage, PackagePermissionDecision } from "./ty
 import { recordReplayTelemetry } from "./savings_telemetry";
 
 function isWithinAllowedPath(rawPath: string, allowedPath: string): boolean {
-  const resolvedPath = path.resolve(rawPath);
-  const resolvedAllowed = path.resolve(allowedPath);
+  const resolvedPath = resolvePathForPermission(rawPath);
+  const resolvedAllowed = resolvePathForPermission(allowedPath);
+  if (!resolvedPath || !resolvedAllowed) return false;
   const relative = path.relative(resolvedAllowed, resolvedPath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function resolvePathForPermission(rawPath: string): string | null {
+  const resolved = path.resolve(rawPath);
+  try {
+    return fs.realpathSync(resolved);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") return null;
+  }
+
+  const missingParts: string[] = [];
+  let current = resolved;
+  while (true) {
+    try {
+      return path.join(fs.realpathSync(current), ...missingParts.reverse());
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") return null;
+      const parent = path.dirname(current);
+      if (parent === current) return null;
+      missingParts.push(path.basename(current));
+      current = parent;
+    }
+  }
 }
 
 export class PackageRunner {
