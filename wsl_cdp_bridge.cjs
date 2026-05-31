@@ -36,7 +36,7 @@ function startTcpBridge({ listenHost, listenPort, targetHost, targetPort }) {
 
 function parseArgs(argv) {
   const options = {
-    listenHost: "",
+    listenHost: SAFE_LISTEN_HOST,
     listenPort: 0,
     targetHost: "127.0.0.1",
     targetPort: 0,
@@ -64,7 +64,7 @@ function parseArgs(argv) {
     }
   }
 
-  if (!options.listenHost || !options.listenPort || !options.targetPort) {
+  if (!options.listenPort || !options.targetPort) {
     throw new Error(
       "Usage: node wsl_cdp_bridge.cjs --listen-host <host> --listen-port <port> --target-host <host> --target-port <port>",
     );

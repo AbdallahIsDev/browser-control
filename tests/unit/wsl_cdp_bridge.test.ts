@@ -47,6 +47,24 @@ test("parseArgs accepts explicit localhost address for WSL CDP bridge", () => {
   assert.equal(options.targetPort, 9222);
 });
 
+test("parseArgs defaults WSL CDP bridge listen host to localhost", () => {
+  const options = parseArgs([
+    "node",
+    "wsl_cdp_bridge.cjs",
+    "--listen-port",
+    "9223",
+    "--target-host",
+    "127.0.0.1",
+    "--target-port",
+    "9222",
+  ]);
+
+  assert.equal(options.listenHost, "127.0.0.1");
+  assert.equal(options.listenPort, 9223);
+  assert.equal(options.targetHost, "127.0.0.1");
+  assert.equal(options.targetPort, 9222);
+});
+
 test("startTcpBridge rejects non-localhost listen hosts before opening a socket", () => {
   assert.throws(
     () =>

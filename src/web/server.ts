@@ -1008,10 +1008,10 @@ export function createWebAppServer(
 
 		if (request.method === "POST" && pathname === "/api/vault") {
 			const body = await readJsonBody(request);
-			if (body.confirm !== "STORE_SECRET") {
+			if (body.yes !== true && body.confirm !== "STORE_SECRET") {
 				json(response, 400, {
 					success: false,
-					error: "Secret storage requires confirm=STORE_SECRET.",
+					error: "Secret storage requires yes=true or confirm=STORE_SECRET.",
 				});
 				return;
 			}
@@ -3035,7 +3035,16 @@ export function createWebAppServer(
 			}
 
 			if (request.method === "GET" && requestUrl.pathname === "/healthz") {
-				if (!isAuthorizedRequest(request, token, requestUrl)) {
+				const authorized = isAuthorizedRequest(request, token, requestUrl);
+				const rateLimitDecision = rateLimiter.consume(
+					createRateLimitEntries(request, token, requestUrl, authorized),
+				);
+				if (!rateLimitDecision.allowed) {
+					writeRateLimitResponse(response, rateLimitDecision);
+					return;
+				}
+
+				if (!authorized) {
 					json(response, 401, {
 						success: false,
 						code: "unauthorized",

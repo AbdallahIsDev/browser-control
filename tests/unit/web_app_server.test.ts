@@ -638,6 +638,23 @@ test("web app server requires auth for healthz", async (t) => {
 	assert.deepEqual(await allowed.json(), { ok: true });
 });
 
+test("web app server rate limits repeated unauthorized healthz requests", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	let response: Response | null = null;
+	for (let i = 0; i < 61; i += 1) {
+		response = await fetch(`${info.url}/healthz`, {
+			headers: { authorization: "Bearer wrong-token" },
+		});
+	}
+
+	assert.equal(response?.status, 429);
+	assert.equal(response?.headers.get("retry-after"), "60");
+	assert.match(await response.text(), /rate limit/i);
+});
+
 test("web app server rate limits repeated unauthorized api requests", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());
@@ -870,12 +887,34 @@ test("web app server exposes credential vault without leaking secret values", as
 	assert.equal(createdBody.id, "secret://site/example.test/login");
 	assert.equal(createdBody.hasValue, true);
 
+	const createdWithYes = await fetch(`${info.url}/api/vault`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			scope: "site",
+			scopeName: "example.test",
+			secretName: "login-yes",
+			value: "super-secret-yes-value",
+			yes: true,
+		}),
+	});
+	assert.equal(createdWithYes.status, 200);
+	const createdWithYesText = await createdWithYes.text();
+	assert.doesNotMatch(createdWithYesText, /super-secret-yes-value/);
+	const createdWithYesBody = JSON.parse(createdWithYesText) as {
+		id: string;
+		hasValue: boolean;
+	};
+	assert.equal(createdWithYesBody.id, "secret://site/example.test/login-yes");
+	assert.equal(createdWithYesBody.hasValue, true);
+
 	const list = await fetch(`${info.url}/api/vault`, {
 		headers: { authorization: "Bearer test-token" },
 	});
 	assert.equal(list.status, 200);
 	const listText = await list.text();
 	assert.doesNotMatch(listText, /super-secret-value/);
+	assert.doesNotMatch(listText, /super-secret-yes-value/);
 	assert.doesNotMatch(listText, /secret:\/\/site\/example.test\/login/);
 	assert.doesNotMatch(listText, /example\.test/);
 	assert.doesNotMatch(listText, /login/);
@@ -886,9 +925,9 @@ test("web app server exposes credential vault without leaking secret values", as
 		missingValues: number;
 	};
 	assert.deepEqual(listSummary, {
-		count: 1,
+		count: 2,
 		scopes: ["site"],
-		withValues: 1,
+		withValues: 2,
 		missingValues: 0,
 	});
 
@@ -898,6 +937,7 @@ test("web app server exposes credential vault without leaking secret values", as
 	assert.equal(verboseList.status, 200);
 	const verboseListText = await verboseList.text();
 	assert.doesNotMatch(verboseListText, /super-secret-value/);
+	assert.doesNotMatch(verboseListText, /super-secret-yes-value/);
 	assert.match(verboseListText, /secret:\/\/site\/example.test\/login/);
 	const verboseListBody = JSON.parse(verboseListText) as Array<{
 		id: string;
@@ -943,6 +983,7 @@ test("web app server exposes credential vault without leaking secret values", as
 	});
 	const grantsText = await grantsAfterRevoke.text();
 	assert.doesNotMatch(grantsText, /super-secret-value/);
+	assert.doesNotMatch(grantsText, /super-secret-yes-value/);
 	assert.doesNotMatch(grantsText, /example\.test/);
 	assert.doesNotMatch(grantsText, /pkg\.alpha/);
 	assert.doesNotMatch(grantsText, /flow\.login/);
@@ -965,6 +1006,7 @@ test("web app server exposes credential vault without leaking secret values", as
 	);
 	const verboseGrantsText = await verboseGrantsAfterRevoke.text();
 	assert.doesNotMatch(verboseGrantsText, /super-secret-value/);
+	assert.doesNotMatch(verboseGrantsText, /super-secret-yes-value/);
 	const grantsBody = JSON.parse(verboseGrantsText) as Array<{
 		id: string;
 		revoked: boolean;
@@ -980,6 +1022,7 @@ test("web app server exposes credential vault without leaking secret values", as
 	});
 	const auditText = await audit.text();
 	assert.doesNotMatch(auditText, /super-secret-value/);
+	assert.doesNotMatch(auditText, /super-secret-yes-value/);
 	assert.match(auditText, /grant:revoke/);
 });
 
