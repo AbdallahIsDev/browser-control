@@ -191,6 +191,7 @@ test("config env inventory includes env-only knobs and redacts sensitive values"
     env: {
       BROWSER_CONTROL_MCP_MODE: "lite",
       BROWSERBASE_API_KEY: "browserbase-secret",
+      AI_AGENT_COST_PER_TOKEN: "0.0005",
       BROKER_RATE_LIMIT_MAX_REQUESTS: "10",
       BROWSER_DEBUG_HOST: "127.0.0.1",
       STEALTH_FINGERPRINT_SEED: "seed-secret",
@@ -198,6 +199,7 @@ test("config env inventory includes env-only knobs and redacts sensitive values"
   });
 
   assert.equal(entries.some((entry) => entry.envVar === "BROWSER_CONTROL_MCP_MODE" && entry.category === "mcp"), true);
+  assert.equal(entries.find((entry) => entry.envVar === "AI_AGENT_COST_PER_TOKEN")?.currentValue, "0.0005");
   assert.equal(entries.some((entry) => entry.envVar === "BROKER_RATE_LIMIT_MAX_REQUESTS"), true);
   assert.equal(entries.some((entry) => entry.envVar === "BROWSER_DEBUG_HOST"), true);
   assert.equal(entries.find((entry) => entry.envVar === "BROWSERBASE_API_KEY")?.currentValue, "[redacted]");

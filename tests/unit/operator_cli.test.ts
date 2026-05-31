@@ -190,10 +190,12 @@ test("bc config env --json lists env-only knobs without leaking secrets", async 
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	const previousMcpMode = process.env.BROWSER_CONTROL_MCP_MODE;
 	const previousBrowserbaseKey = process.env.BROWSERBASE_API_KEY;
+	const previousCostPerToken = process.env.AI_AGENT_COST_PER_TOKEN;
 	try {
 		process.env.BROWSER_CONTROL_HOME = home;
 		process.env.BROWSER_CONTROL_MCP_MODE = "lite";
 		process.env.BROWSERBASE_API_KEY = "browserbase-secret";
+		process.env.AI_AGENT_COST_PER_TOKEN = "0.0005";
 		const output = await captureStdout(async () => {
 			await runCli(["node", "cli.ts", "config", "env", "--json"]);
 		});
@@ -203,6 +205,7 @@ test("bc config env --json lists env-only knobs without leaking secrets", async 
 			currentValue?: string;
 		}>;
 		assert.ok(parsed.some((entry) => entry.envVar === "BROWSER_CONTROL_MCP_MODE" && entry.category === "mcp"));
+		assert.equal(parsed.find((entry) => entry.envVar === "AI_AGENT_COST_PER_TOKEN")?.currentValue, "0.0005");
 		assert.ok(parsed.some((entry) => entry.envVar === "BROKER_RATE_LIMIT_MAX_REQUESTS"));
 		assert.equal(parsed.find((entry) => entry.envVar === "BROWSERBASE_API_KEY")?.currentValue, "[redacted]");
 		assert.doesNotMatch(output, /browserbase-secret/u);
@@ -213,6 +216,8 @@ test("bc config env --json lists env-only knobs without leaking secrets", async 
 		else process.env.BROWSER_CONTROL_MCP_MODE = previousMcpMode;
 		if (previousBrowserbaseKey === undefined) delete process.env.BROWSERBASE_API_KEY;
 		else process.env.BROWSERBASE_API_KEY = previousBrowserbaseKey;
+		if (previousCostPerToken === undefined) delete process.env.AI_AGENT_COST_PER_TOKEN;
+		else process.env.AI_AGENT_COST_PER_TOKEN = previousCostPerToken;
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 });
