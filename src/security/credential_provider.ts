@@ -36,19 +36,36 @@ function vaultKeyPath(dataHome?: string): string {
 	return path.join(getSecretsDir(dataHome), ".vault-key");
 }
 
+function writeVaultKeyAtomic(keyPath: string, value: Buffer): boolean {
+	const tmpPath = `${keyPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+	fs.writeFileSync(tmpPath, value, { mode: 0o600 });
+	if (process.platform !== "win32") fs.chmodSync(tmpPath, 0o600);
+	if (fs.existsSync(keyPath)) {
+		fs.rmSync(tmpPath, { force: true });
+		return false;
+	}
+	fs.renameSync(tmpPath, keyPath);
+	if (process.platform !== "win32") fs.chmodSync(keyPath, 0o600);
+	return true;
+}
+
 function ensureVaultKey(dataHome?: string): Buffer {
 	const keyPath = vaultKeyPath(dataHome);
 	if (fs.existsSync(keyPath)) {
 		const stored = fs.readFileSync(keyPath);
 		if (stored.length === 64) return stored.subarray(32);
 		if (stored.length === 32) return stored;
+		throw new Error(
+			`Invalid local vault key file at ${keyPath}: expected 32 or 64 bytes, found ${stored.length}. Refusing to regenerate because existing vault data would become undecryptable.`,
+		);
 	}
 
 	fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
 	const salt = crypto.randomBytes(32);
 	const key = crypto.pbkdf2Sync(machineIdentity(), salt, 100_000, 32, "sha256");
-	fs.writeFileSync(keyPath, Buffer.concat([salt, key]), { mode: 0o600 });
-	if (process.platform !== "win32") fs.chmodSync(keyPath, 0o600);
+	if (!writeVaultKeyAtomic(keyPath, Buffer.concat([salt, key]))) {
+		return ensureVaultKey(dataHome);
+	}
 	return key;
 }
 
