@@ -20,6 +20,6 @@ if "%BIND_ADDRESS%"=="::" if /I not "%BROWSER_ALLOW_REMOTE_CDP%"=="1" (
   exit /b 1
 )
 
-node "%~dp0scripts\launch_browser.cjs" %PORT% %BIND_ADDRESS%
+node "%~dp0scripts\launch_browser.cjs" "%PORT%" "%BIND_ADDRESS%"
 set EXIT_CODE=%ERRORLEVEL%
 endlocal & exit /b %EXIT_CODE%

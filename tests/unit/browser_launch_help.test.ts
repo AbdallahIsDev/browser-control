@@ -34,4 +34,20 @@ describe("browser launch help", () => {
       );
     }
   });
+
+  it("quotes Windows launcher arguments before invoking node", () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, "../..", "launch_browser.bat"),
+      "utf8",
+    );
+
+    assert.match(
+      source,
+      /node "%~dp0scripts\\launch_browser\.cjs" "%PORT%" "%BIND_ADDRESS%"/u,
+    );
+    assert.doesNotMatch(
+      source,
+      /node "%~dp0scripts\\launch_browser\.cjs" %PORT% %BIND_ADDRESS%/u,
+    );
+  });
 });
