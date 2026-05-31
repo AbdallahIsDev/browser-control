@@ -862,7 +862,7 @@ function toHostname(value: string): string | null {
 		return null;
 	}
 
-	if (/^https?:\/\//i.test(trimmed)) {
+	if (/^(?:https?|wss?):\/\//i.test(trimmed)) {
 		try {
 			return new URL(trimmed).hostname.toLowerCase();
 		} catch {
@@ -872,6 +872,17 @@ function toHostname(value: string): string | null {
 
 	const normalized = trimmed.toLowerCase();
 	return HOSTNAME_PATTERN.test(normalized) ? normalized : null;
+}
+
+function shouldValidateDomainCandidate(
+	key: string,
+	value: unknown,
+	allowedFields: Set<string>,
+): value is string {
+	if (typeof value !== "string") {
+		return false;
+	}
+	return allowedFields.has(key) || /(?:https?|wss?):\/\//i.test(value);
 }
 
 function isAllowedHostname(
@@ -907,7 +918,7 @@ function collectDomainCandidates(
 	}
 
 	for (const [key, entry] of Object.entries(value as JsonRecord)) {
-		if (allowedFields.has(key) && typeof entry === "string") {
+		if (shouldValidateDomainCandidate(key, entry, allowedFields)) {
 			output.push(entry);
 		}
 

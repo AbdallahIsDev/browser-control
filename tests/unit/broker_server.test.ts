@@ -636,6 +636,21 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   });
   assert.equal(blockedResponse.status, 403);
 
+  const nonStandardKeyResponse = await fetch(`${domainBaseUrl}/api/v1/tasks/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": "domain-key",
+    },
+    body: JSON.stringify({
+      action: "visit",
+      params: {
+        targetUrl: "https://blocked.example/phish",
+      },
+    }),
+  });
+  assert.equal(nonStandardKeyResponse.status, 403);
+
   const allowedResponse = await fetch(`${domainBaseUrl}/api/v1/tasks/run`, {
     method: "POST",
     headers: {
