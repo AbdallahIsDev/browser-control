@@ -24,20 +24,77 @@ export function getDefaultSelectorsPath(): string {
   return path.join(process.cwd(), "selectors.json");
 }
 
+function getSelectorCacheValidationError(value: unknown, requireRequiredFields: boolean): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "cache must be an object";
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return "cache must be a plain object";
+  }
+
+  const record = value as Record<string, unknown>;
+  if (requireRequiredFields && typeof record.selectorsDiscovered !== "boolean") {
+    return "selectorsDiscovered must be a boolean";
+  }
+  if (requireRequiredFields && typeof record.discoveryNote !== "string") {
+    return "discoveryNote must be a string";
+  }
+
+  for (const [key, entry] of Object.entries(record)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      return `disallowed selector cache key: ${key}`;
+    }
+    if (key === "selectorsDiscovered" && typeof entry !== "boolean") {
+      return "selectorsDiscovered must be a boolean";
+    }
+    if (key === "discoveryNote" && typeof entry !== "string") {
+      return "discoveryNote must be a string";
+    }
+    if (
+      key !== "selectorsDiscovered" &&
+      key !== "discoveryNote" &&
+      typeof entry !== "string" &&
+      typeof entry !== "boolean" &&
+      entry !== null
+    ) {
+      return `selector "${key}" must be a string, boolean, or null`;
+    }
+  }
+
+  return null;
+}
+
 /** Load a selector cache file and merge it with defaults. */
 export function loadSelectorCache<T extends SelectorCacheRecord>(defaults: T, jsonPath = getDefaultSelectorsPath()): T {
+  if (!fs.existsSync(jsonPath)) {
+    return { ...defaults };
+  }
+
   try {
+    const parsed = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+    const validationError = getSelectorCacheValidationError(parsed, false);
+    if (validationError) {
+      log.warn(`Ignoring invalid selector cache at ${jsonPath}: ${validationError}`);
+      return { ...defaults };
+    }
     return {
       ...defaults,
-      ...(JSON.parse(fs.readFileSync(jsonPath, "utf8")) as Partial<T>),
+      ...(parsed as Partial<T>),
     };
-  } catch {
+  } catch (error: unknown) {
+    log.warn(`Failed to load selector cache at ${jsonPath}: ${error instanceof Error ? error.message : String(error)}`);
     return { ...defaults };
   }
 }
 
 /** Persist a selector cache file to disk. */
 export function saveSelectorCache<T extends SelectorCacheRecord>(selectors: T, jsonPath = getDefaultSelectorsPath()): void {
+  const validationError = getSelectorCacheValidationError(selectors, true);
+  if (validationError) {
+    throw new Error(`Invalid selector cache: ${validationError}`);
+  }
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
   fs.writeFileSync(jsonPath, JSON.stringify(selectors, null, 2));
 }
