@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import type { Skill, SkillContext, SkillManifest } from "../skill";
+import { logger } from "../shared/logger";
 
 const manifest: SkillManifest = {
   name: "adobe_stock",
@@ -36,10 +37,12 @@ const manifest: SkillManifest = {
   ],
 };
 
+const adobeStockLog = logger.withComponent("skill:adobe_stock");
+
 async function navigateToUpload(page: Page): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[ADOBE_STOCK] Navigating to upload page.");
+    adobeStockLog.info("Navigating to upload page.");
 
     const uploadLink = page.locator("a[href*='upload'], a:has-text('Upload')").first();
     await uploadLink.click();
@@ -55,7 +58,7 @@ async function navigateToUpload(page: Page): Promise<Record<string, unknown>> {
 async function submitMetadata(page: Page, metadata: Record<string, unknown>): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[ADOBE_STOCK] Submitting metadata.");
+    adobeStockLog.info("Submitting metadata.");
 
     const titleField = page.locator("input[name='title'], textarea[name='title']").first();
     if (metadata.title) {
@@ -75,7 +78,7 @@ async function submitMetadata(page: Page, metadata: Record<string, unknown>): Pr
     const submitButton = page.locator("button[type='submit'], button:has-text('Submit'), button:has-text('Save')").first();
     await submitButton.click();
 
-    console.log("[ADOBE_STOCK] Metadata submitted.");
+    adobeStockLog.info("Metadata submitted.");
     return { success: true };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -86,7 +89,7 @@ async function submitMetadata(page: Page, metadata: Record<string, unknown>): Pr
 async function checkSubmissionStatus(page: Page): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[ADOBE_STOCK] Checking submission status.");
+    adobeStockLog.info("Checking submission status.");
 
     const pendingCount = await page.locator("[data-testid='pending'], .status-pending").count();
     const approvedCount = await page.locator("[data-testid='approved'], .status-approved").count();
@@ -107,7 +110,7 @@ async function checkSubmissionStatus(page: Page): Promise<Record<string, unknown
 async function setReleaseType(page: Page, releaseType: string): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log(`[ADOBE_STOCK] Setting release type to ${releaseType}.`);
+    adobeStockLog.info("Setting release type.", { releaseType });
 
     const releaseSelect = page.locator("select[name='releaseType'], select[name='property_release']").first();
     await releaseSelect.selectOption({ value: releaseType });
@@ -127,7 +130,7 @@ export function createAdobeStockSkill(): Skill {
 
     async setup(context: SkillContext): Promise<void> {
       ctx = context;
-      console.log(`[ADOBE_STOCK_SKILL] Setup for page: ${context.page.url()}`);
+      adobeStockLog.info("Setup.", { url: context.page.url() });
     },
 
     async execute(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -152,7 +155,7 @@ export function createAdobeStockSkill(): Skill {
 
     async teardown(_context: SkillContext): Promise<void> {
       ctx = undefined;
-      console.log("[ADOBE_STOCK_SKILL] Teardown.");
+      adobeStockLog.info("Teardown.");
     },
 
     async healthCheck(_context: SkillContext): Promise<{ healthy: boolean; details?: string }> {

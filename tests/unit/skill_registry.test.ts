@@ -821,5 +821,20 @@ describe.describe("SkillRegistry", () => {
         assert.ok(actions.length > 0, `Built-in skill "${name}" should have actions defined`);
       }
     });
+
+    describe.it("built-in skills use the shared logger instead of raw console output", () => {
+      const skillsDir = path.resolve(__dirname, "../../src/skills");
+      const skillFiles = [
+        "adobe_stock_skill.ts",
+        "exness_skill.ts",
+        "framer_skill.ts",
+      ];
+
+      for (const file of skillFiles) {
+        const source = fs.readFileSync(path.join(skillsDir, file), "utf8");
+        assert.doesNotMatch(source, /console\.(log|error|warn|info)\s*\(/u, `${file} must not use raw console output`);
+        assert.match(source, /logger\.withComponent/u, `${file} should create a skill logger`);
+      }
+    });
   });
 });

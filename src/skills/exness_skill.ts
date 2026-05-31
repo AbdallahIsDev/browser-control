@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import type { Skill, SkillContext, SkillManifest } from "../skill";
+import { logger } from "../shared/logger";
 
 const manifest: SkillManifest = {
   name: "exness",
@@ -30,10 +31,12 @@ const manifest: SkillManifest = {
   ],
 };
 
+const exnessLog = logger.withComponent("skill:exness");
+
 async function login(page: Page, email: string, password: string): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[EXNESS] Starting login flow.");
+    exnessLog.info("Starting login flow.");
 
     const emailInput = page.locator("input[type='email'], input[name='email']").first();
     await emailInput.fill(email);
@@ -45,11 +48,11 @@ async function login(page: Page, email: string, password: string): Promise<Recor
     await submitButton.click();
 
     await page.waitForURL("**/dashboard**", { timeout: 15000 }).catch(() => {});
-    console.log("[EXNESS] Login flow completed.");
+    exnessLog.info("Login flow completed.");
     return { success: true };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[EXNESS] Login failed: ${message}`);
+    exnessLog.error("Login failed.", { error: message });
     return { success: false, error: message };
   }
 }
@@ -57,7 +60,7 @@ async function login(page: Page, email: string, password: string): Promise<Recor
 async function getBalance(page: Page): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[EXNESS] Reading account balance.");
+    exnessLog.info("Reading account balance.");
 
     const balanceElement = page.locator("[data-testid='balance'], .account-balance, [class*='balance']").first();
     const balanceText = await balanceElement.textContent({ timeout: 5000 });
@@ -73,7 +76,7 @@ async function getBalance(page: Page): Promise<Record<string, unknown>> {
 async function navigateToInstruments(page: Page): Promise<Record<string, unknown>> {
   try {
     await page.bringToFront();
-    console.log("[EXNESS] Navigating to instruments page.");
+    exnessLog.info("Navigating to instruments page.");
 
     const instrumentsLink = page.locator("a[href*='instruments'], a:has-text('Instruments'), nav a:has-text('Trading')").first();
     await instrumentsLink.click();
@@ -94,7 +97,7 @@ export function createExnessSkill(): Skill {
 
     async setup(context: SkillContext): Promise<void> {
       ctx = context;
-      console.log(`[EXNESS_SKILL] Setup for page: ${context.page.url()}`);
+      exnessLog.info("Setup.", { url: context.page.url() });
     },
 
     async execute(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -117,7 +120,7 @@ export function createExnessSkill(): Skill {
 
     async teardown(_context: SkillContext): Promise<void> {
       ctx = undefined;
-      console.log("[EXNESS_SKILL] Teardown.");
+      exnessLog.info("Teardown.");
     },
 
     async healthCheck(_context: SkillContext): Promise<{ healthy: boolean; details?: string }> {
