@@ -107,9 +107,20 @@ export function killProcessTree(pid: number): void {
  *   any Browser Control Chrome (suitable for `bc daemon stop`).
  */
 export function killAutomationBrowser(homeDir?: string): void {
-  if (process.platform !== "win32") return;
-
   try {
+    if (process.platform !== "win32") {
+      const output = execSync("ps -axo pid=,command=", {
+        encoding: "utf8",
+        timeout: 10000,
+      });
+      for (const pid of findAutomationBrowserPids(output, homeDir)) {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch { /* already gone */ }
+      }
+      return;
+    }
+
     const output = execSync(
       `wmic process where "name='chrome.exe'" get processid,commandline /format:csv 2>nul`,
       { encoding: "utf8", timeout: 10000 },
@@ -151,6 +162,42 @@ export function killAutomationBrowser(homeDir?: string): void {
   } catch {
     // WMIC may fail or not be available — best-effort
   }
+}
+
+export function findAutomationBrowserPids(processListOutput: string, homeDir?: string): number[] {
+  const pids: number[] = [];
+  for (const line of processListOutput.split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/u);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    const command = match[2] ?? "";
+    if (isAutomationBrowserCommand(command, homeDir)) {
+      pids.push(pid);
+    }
+  }
+  return pids;
+}
+
+function isAutomationBrowserCommand(command: string, homeDir?: string): boolean {
+  const lowerCommand = command.toLowerCase();
+  const isChromeFamily =
+    lowerCommand.includes("chrome") || lowerCommand.includes("chromium");
+  if (!isChromeFamily || !lowerCommand.includes("--remote-debugging-port")) {
+    return false;
+  }
+
+  if (!homeDir) {
+    return lowerCommand.includes(".browser-control");
+  }
+
+  const normalizedCommand = lowerCommand.replace(/\\/g, "/");
+  const normalizedHome = homeDir.replace(/\\/g, "/").toLowerCase();
+  const homeSegment = normalizedHome.split("/").filter(Boolean).pop();
+  return (
+    normalizedCommand.includes(normalizedHome) ||
+    (homeSegment ? normalizedCommand.includes(`/${homeSegment}/`) : false)
+  );
 }
 
 // ── Stale file cleanup ───────────────────────────────────────────────
