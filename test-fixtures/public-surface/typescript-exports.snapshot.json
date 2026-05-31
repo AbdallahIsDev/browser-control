@@ -217,7 +217,7 @@
       },
       "SessionNamespace": {
         "cleanup": "(): Promise<ActionResult<SessionCleanupSummary>>",
-        "create": "(name: string, options?: { policyProfile?: string | undefined; workingDirectory?: string | undefined; } | undefined): Promise<ActionResult<SessionState>>",
+        "create": "(name: string, options?: { policyProfile?: string | undefined; workingDirectory?: string | undefined; policyProfileEscalationConfirmed?: boolean | undefined; } | undefined): Promise<...>",
         "destroy": "(nameOrId: string): Promise<ActionResult<SessionCleanupSummary>>",
         "list": "(): ActionResult<SessionListEntry[]>",
         "status": "(nameOrId?: string | undefined): ActionResult<SessionState>",

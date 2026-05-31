@@ -3842,6 +3842,11 @@
             "description": "Policy profile: 'safe', 'balanced', or 'trusted'. Default: from config.",
             "type": "string"
           },
+          "policyProfileEscalationConfirmed": {
+            "default": false,
+            "description": "Required when creating a session with a less restrictive policy profile than the configured default.",
+            "type": "boolean"
+          },
           "workingDirectory": {
             "description": "Filesystem working directory for this session. Default: current working directory.",
             "type": "string"

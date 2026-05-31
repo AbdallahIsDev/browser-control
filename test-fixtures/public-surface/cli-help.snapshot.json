@@ -1052,10 +1052,11 @@
           ],
           "description": "Create a new session",
           "flags": [
-            "policy"
+            "policy",
+            "yes"
           ],
           "jsonSupport": false,
-          "syntax": "session create <name> [--policy=balanced]"
+          "syntax": "session create <name> [--policy=balanced] [--yes]"
         },
         {
           "commandPath": [
