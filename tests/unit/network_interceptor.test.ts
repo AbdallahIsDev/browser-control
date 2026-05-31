@@ -514,11 +514,35 @@ describe.describe("standalone helpers", () => {
     describe.it("is a function", () => {
       assert.equal(typeof blockResource, "function");
     });
+
+    describe.it("returns a cleanup handle that removes the route", async () => {
+      const routes = new Map<string, (route: Route) => Promise<void>>();
+      const page = createMockPage({ routes });
+
+      const cleanup = await blockResource(page, "*.png");
+
+      assert.equal(typeof cleanup, "function");
+      assert.equal(routes.has("*.png"), true);
+      await cleanup();
+      assert.equal(routes.has("*.png"), false);
+    });
   });
 
   describe.describe("mockResponse", () => {
     describe.it("is a function", () => {
       assert.equal(typeof mockResponse, "function");
+    });
+
+    describe.it("returns a cleanup handle that removes the route", async () => {
+      const routes = new Map<string, (route: Route) => Promise<void>>();
+      const page = createMockPage({ routes });
+
+      const cleanup = await mockResponse(page, "/api/test", { body: { ok: true } });
+
+      assert.equal(typeof cleanup, "function");
+      assert.equal(routes.has("/api/test"), true);
+      await cleanup();
+      assert.equal(routes.has("/api/test"), false);
     });
   });
 });

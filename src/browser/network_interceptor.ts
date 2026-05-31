@@ -27,6 +27,8 @@ export interface NetworkInterceptorOptions {
   maxCapturedResponses?: number;
 }
 
+export type RouteCleanup = () => Promise<void>;
+
 export class NetworkInterceptor {
   private readonly capturedResponses: InterceptedResponse[] = [];
 
@@ -345,9 +347,10 @@ export async function captureJsonResponse(
 }
 
 /** Block a resource type or URL pattern on a page. */
-export async function blockResource(page: Page, pattern: string | RegExp): Promise<void> {
+export async function blockResource(page: Page, pattern: string | RegExp): Promise<RouteCleanup> {
   const interceptor = new NetworkInterceptor();
   await interceptor.blockResource(page, pattern);
+  return () => interceptor.unrouteAll();
 }
 
 /** Mock responses for a URL pattern on a page. */
@@ -360,7 +363,8 @@ export async function mockResponse(
     body?: string | Record<string, unknown>;
     contentType?: string;
   },
-): Promise<void> {
+): Promise<RouteCleanup> {
   const interceptor = new NetworkInterceptor();
   await interceptor.mockResponse(page, pattern, options);
+  return () => interceptor.unrouteAll();
 }
