@@ -107,10 +107,6 @@
             "description": "Keyboard key to press. Required for press.",
             "type": "string"
           },
-          "outputPath": {
-            "description": "Deprecated screenshot copy destination. Use copyTo.",
-            "type": "string"
-          },
           "rootSelector": {
             "description": "Root CSS selector for scoped snapshot.",
             "type": "string"
@@ -3602,10 +3598,6 @@
             "description": "Capture the full page instead of just the viewport.",
             "type": "boolean"
           },
-          "outputPath": {
-            "description": "Deprecated alias for copyTo. Returns a warning when used.",
-            "type": "string"
-          },
           "refs": {
             "description": "Comma-separated list of specific refs to annotate (if annotate is true). If omitted, annotates all interactive elements.",
             "type": "string"
@@ -4639,10 +4631,6 @@
                 },
                 "key": {
                   "description": "Keyboard key for press action.",
-                  "type": "string"
-                },
-                "outputPath": {
-                  "description": "Deprecated screenshot copy destination. Use copyTo.",
                   "type": "string"
                 },
                 "screenshot": {
