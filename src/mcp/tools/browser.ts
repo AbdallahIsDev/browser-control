@@ -151,7 +151,6 @@ const BROWSER_STEP_PROPERTIES = {
   delayMs: { type: "number", description: "Delay between keystrokes in milliseconds." },
   tabId: { type: "string", description: "Optional browser tab ID." },
   copyTo: { type: "string", description: "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime." },
-  outputPath: { type: "string", description: "Deprecated screenshot copy destination. Use copyTo." },
   url: { type: "string", description: "URL for open/navigate actions." },
   urls: URLS_SCHEMA,
   waitUntil: WAIT_UNTIL_SCHEMA,
@@ -191,7 +190,7 @@ const BROWSER_STEP_SCHEMA = {
 } as any;
 
 const BROWSER_ACT_VALIDATION: ToolParameterValidation = {
-  mutuallyExclusive: [["copyTo", "outputPath"]],
+  forbiddenParameters: ["outputPath"],
   conditionalRequired: [
     { when: { parameter: "action", equals: "click" }, requires: ["target"] },
     { when: { parameter: "action", equals: "fill" }, requires: ["target", { parameter: "text", allowEmptyString: true }] },
@@ -505,7 +504,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
       inputSchema: buildSchema({
         copyTo: { type: "string", description: "Optional auxiliary copy destination. Primary screenshot still saves under the active session runtime screenshots directory." },
-        outputPath: { type: "string", description: "Deprecated alias for copyTo. Returns a warning when used." },
         fullPage: { type: "boolean", description: "Capture the full page instead of just the viewport.", default: false },
         target: { type: "string", description: "Element ref or selector to screenshot. If omitted, screenshots the viewport." },
         annotate: { type: "boolean", description: "Annotate screenshot with ref labels and boxes for interactive elements." },
@@ -518,7 +516,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         const refs = params.refs ? (params.refs as string).split(",").map(r => r.trim()) : undefined;
         return api.browser.screenshot({
           copyTo: params.copyTo as string | undefined,
-          outputPath: params.outputPath as string | undefined,
           fullPage: params.fullPage as boolean | undefined,
           target: params.target as string | undefined,
           annotate: params.annotate as boolean | undefined,
@@ -855,7 +852,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         delayMs: { type: "number", description: "Delay between keystrokes in ms. Default: 0.", default: 0 },
         tabId: { type: "string", description: "Optional tab ID." },
         copyTo: { type: "string", description: "Optional auxiliary screenshot copy destination. Primary save remains in Browser Control runtime." },
-        outputPath: { type: "string", description: "Deprecated screenshot copy destination. Use copyTo." },
         fullPage: { type: "boolean", description: "Full-page screenshot (screenshot action only).", default: false },
         captureOnSuccess: { type: "boolean", description: "Automatically capture snapshot/screenshot after the action.", default: false },
         snapshot: { type: "boolean", description: "Include snapshot in post-action capture. Default: false (compact).", default: false },
@@ -885,7 +881,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           delayMs: params.delayMs as number | undefined,
           tabId: params.tabId as string | undefined,
           copyTo: params.copyTo as string | undefined,
-          outputPath: params.outputPath as string | undefined,
           fullPage: params.fullPage as boolean | undefined,
           captureOnSuccess: params.captureOnSuccess as boolean | undefined,
           snapshot: params.snapshot as boolean | undefined,

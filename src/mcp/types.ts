@@ -55,6 +55,7 @@ export interface ConditionalRequiredRule {
 export interface ToolParameterValidation {
   conditionalRequired?: ConditionalRequiredRule[];
   mutuallyExclusive?: string[][];
+  forbiddenParameters?: string[];
   arrayItems?: Record<string, ToolParameterValidation>;
 }
 
@@ -184,6 +185,12 @@ function ruleMatches(params: Record<string, unknown>, rule: ConditionalRequiredR
 function validateRules(toolName: string, params: Record<string, unknown>, validation: ToolParameterValidation | undefined, path = ""): string | null {
   if (!validation) return null;
   const prefix = path ? `${path}.` : "";
+
+  for (const key of validation.forbiddenParameters ?? []) {
+    if (!isMissingRequired(params[key], key)) {
+      return `Parameter '${prefix}${key}' is not supported for tool '${toolName}'.`;
+    }
+  }
 
   for (const group of validation.mutuallyExclusive ?? []) {
     const present = group.filter((key) => !isMissingRequired(params[key], key));

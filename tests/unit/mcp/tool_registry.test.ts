@@ -265,7 +265,7 @@ describe("MCP Tool Registry", () => {
       assert.match(stepItems.properties.action.description, /click|fill|scroll/);
       assert.match(stepItems.properties.target.description, /click|fill|hover/);
       assert.match(stepItems.properties.copyTo.description, /Primary save remains/);
-      assert.match(stepItems.properties.outputPath.description, /Deprecated/);
+      assert.equal(stepItems.properties.outputPath, undefined);
 
       const fieldsItems = stepItems.properties.fields.items;
       assert.equal(fieldsItems.properties.target.type, "string");
@@ -273,15 +273,15 @@ describe("MCP Tool Registry", () => {
       assert.deepEqual(fieldsItems.required, ["target", "text"]);
     });
 
-    it("screenshot tools expose copyTo and keep outputPath as deprecated shim", () => {
+    it("screenshot tools expose copyTo without advertising outputPath", () => {
       const tools = buildToolRegistry(api);
       const screenshotTool = tools.find((t) => t.name === "bc_screenshot")!;
       const actTool = tools.find((t) => t.name === "bc_act")!;
 
       assert.match((screenshotTool.inputSchema.properties.copyTo as any).description, /Primary screenshot/);
-      assert.match((screenshotTool.inputSchema.properties.outputPath as any).description, /Deprecated/);
       assert.match((actTool.inputSchema.properties.copyTo as any).description, /Primary save remains/);
-      assert.match((actTool.inputSchema.properties.outputPath as any).description, /Deprecated/);
+      assert.equal(screenshotTool.inputSchema.properties.outputPath, undefined);
+      assert.equal(actTool.inputSchema.properties.outputPath, undefined);
     });
 
     it("screencast start exposes copyTo and keeps path as deprecated shim", () => {
@@ -790,14 +790,14 @@ describe("MCP Tool Registry", () => {
 
       const missingClickTarget = validateToolParams(actTool.name, actTool.inputSchema, { action: "click" }, actTool.validation);
       const emptyOpenMany = validateToolParams(actTool.name, actTool.inputSchema, { action: "openMany", urls: [] }, actTool.validation);
-      const duplicateScreenshotOutput = validateToolParams(actTool.name, actTool.inputSchema, { action: "screenshot", copyTo: "a.png", outputPath: "b.png" }, actTool.validation);
+      const unsupportedScreenshotOutput = validateToolParams(actTool.name, actTool.inputSchema, { action: "screenshot", outputPath: "b.png" }, actTool.validation);
 
       assert.ok(missingClickTarget);
       assert.match(missingClickTarget, /target/);
       assert.ok(emptyOpenMany);
       assert.match(emptyOpenMany, /urls/);
-      assert.ok(duplicateScreenshotOutput);
-      assert.match(duplicateScreenshotOutput, /mutually exclusive/);
+      assert.ok(unsupportedScreenshotOutput);
+      assert.match(unsupportedScreenshotOutput, /Unknown parameter 'outputPath'/);
       assert.equal(
         validateToolParams(actTool.name, actTool.inputSchema, { action: "fill", target: "#name", text: "" }, actTool.validation),
         null,
@@ -810,11 +810,14 @@ describe("MCP Tool Registry", () => {
 
       const missingFillTarget = validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "fill", text: "Ada" }] }, taskTool.validation);
       const missingPressKey = validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "press" }] }, taskTool.validation);
+      const unsupportedScreenshotOutput = validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "screenshot", outputPath: "shot.png" }] }, taskTool.validation);
 
       assert.ok(missingFillTarget);
       assert.match(missingFillTarget, /steps\[0\]\.target/);
       assert.ok(missingPressKey);
       assert.match(missingPressKey, /steps\[0\]\.key/);
+      assert.ok(unsupportedScreenshotOutput);
+      assert.match(unsupportedScreenshotOutput, /steps\[0\]\.outputPath/);
       assert.equal(
         validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "press", key: "Enter" }] }, taskTool.validation),
         null,
