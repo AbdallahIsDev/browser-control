@@ -98,10 +98,13 @@ type MockLocator = {
 };
 
 type BrowserActionsInternals = {
+	tabIdMap: Map<string, MockPage>;
 	resolveTarget: (
 		target: string,
 		page: MockPage,
 	) => Promise<{ locator: MockLocator; description: string } | null>;
+	resolveTabId: <T>(tabId: string, contextPage: MockPage) => Promise<MockPage | { success: boolean }>;
+	getTabIdForPage: (page: MockPage, defaultTabId?: string) => Promise<string>;
 	ensureScreenshotViewport: (page: MockPage) => Promise<void>;
 	injectHighlightOverlay: (
 		page: MockPage,
@@ -573,6 +576,40 @@ describe("BrowserActions", () => {
 			assert.doesNotMatch(injectedStyle, /@import/iu);
 			assert.match(injectedStyle, /border-color: red/u);
 			assert.match(injectedStyle, /box-shadow: 0 0 2px #000/u);
+		});
+	});
+
+	describe("tab id mapping", () => {
+		it("preserves existing durable tab mappings when refresh is partial", async () => {
+			const pageA = createMockPage("https://a.example/", { hasBrowserWindow: true });
+			const pageB = createMockPage("https://b.example/", { hasBrowserWindow: true });
+			const manager = createConnectedBrowserManager([pageA, pageB]);
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			let isolatedSessionManager: SessionManager | undefined;
+
+			try {
+				isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("tab-map-test", {
+					policyProfile: "balanced",
+				});
+				const actions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				}) as unknown as BrowserActionsInternals;
+
+				const durableTabB = await actions.getTabIdForPage(pageB, "1");
+				assert.equal(durableTabB, pageB.targetId);
+
+				pageB.hasBrowserWindow = false;
+				await actions.resolveTabId("missing-tab", pageA);
+
+				assert.equal(actions.tabIdMap.has(durableTabB), true);
+			} finally {
+				isolatedSessionManager?.close();
+				isolatedStore.close();
+			}
 		});
 	});
 

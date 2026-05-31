@@ -718,6 +718,19 @@ export class BrowserActions {
 		return targets;
 	}
 
+	private refreshTabIdMap(
+		targets: BrowserWindowTarget[],
+		currentPages: Page[],
+	): void {
+		const currentPageSet = new Set(currentPages);
+		for (const [tabId, mappedPage] of this.tabIdMap.entries()) {
+			if (!currentPageSet.has(mappedPage)) this.tabIdMap.delete(tabId);
+		}
+		for (const target of targets) {
+			this.tabIdMap.set(target.targetId, target.page);
+		}
+	}
+
 	private async getVisiblePages(pages = this.getPages()): Promise<Page[]> {
 		const targets = await this.getWindowTargets(pages);
 		return targets.length > 0 ? targets.map((target) => target.page) : pages;
@@ -901,12 +914,9 @@ export class BrowserActions {
 			return existingPage;
 		}
 
-		// Rebuild the map from current pages (handles reconnects and tab changes)
-		this.tabIdMap.clear();
+		// Refresh known targets without dropping current pages that failed this CDP probe.
 		const refreshTargets = await this.getWindowTargets(pages);
-		for (const t of refreshTargets) {
-			this.tabIdMap.set(t.targetId, t.page);
-		}
+		this.refreshTabIdMap(refreshTargets, rawPages);
 		const refreshedPage = this.tabIdMap.get(tabId);
 		if (refreshedPage) {
 			await this.foregroundPage(refreshedPage);
@@ -4043,11 +4053,8 @@ export class BrowserActions {
 			const windowTargets = await this.getWindowTargets(rawPages);
 			const pages = windowTargets.length > 0 ? windowTargets.map(t => t.page) : rawPages;
 
-			// Rebuild tabIdMap with durable targetIds
-			this.tabIdMap.clear();
-			for (const t of windowTargets) {
-				this.tabIdMap.set(t.targetId, t.page);
-			}
+			// Refresh durable targetIds without discarding pages missed by this probe.
+			this.refreshTabIdMap(windowTargets, rawPages);
 
 			const tabs = await Promise.all(
 				pages.map(async (p, i) => {
