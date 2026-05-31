@@ -3,7 +3,7 @@
     {
       "category": "runtime",
       "defaultValue": "BROWSER_CONTROL_HOME_PLACEHOLDER",
-      "description": "Browser Control runtime data home.",
+      "description": "Directory used for Browser Control runtime state, including sessions, logs, screenshots, profiles, and durable stores. Set this when you need an isolated workspace or a non-default data location.",
       "envVars": [
         "BROWSER_CONTROL_HOME"
       ],
@@ -13,7 +13,7 @@
     {
       "category": "broker",
       "defaultValue": 7788,
-      "description": "Broker HTTP API port.",
+      "description": "Port for the local broker HTTP API and WebSocket server. Change this when another service already uses the default port or when running multiple instances.",
       "envVars": [
         "BROKER_PORT"
       ],
@@ -23,7 +23,7 @@
     {
       "category": "browser",
       "defaultValue": 9222,
-      "description": "Chrome remote debugging port.",
+      "description": "Chrome DevTools Protocol port used when attaching to a visible browser. The launcher scripts and attach-mode commands must use the same port.",
       "envVars": [
         "BROWSER_DEBUG_PORT"
       ],
@@ -33,7 +33,7 @@
     {
       "category": "browser",
       "defaultValue": "127.0.0.1",
-      "description": "Chrome debug bind address.",
+      "description": "Network address where launched Chrome exposes its debugging port. Keep this on localhost unless you explicitly understand the remote-control risk.",
       "envVars": [
         "BROWSER_BIND_ADDRESS"
       ],
@@ -42,7 +42,7 @@
     },
     {
       "category": "browser",
-      "description": "Explicit Chrome executable path.",
+      "description": "Explicit filesystem path to the Chrome or Chromium executable. Use this when automatic browser discovery picks the wrong binary or cannot find Chrome.",
       "envVars": [
         "BROWSER_CHROME_PATH"
       ],
@@ -51,7 +51,7 @@
     },
     {
       "category": "browser",
-      "description": "Explicit CDP endpoint URL override.",
+      "description": "Full Chrome DevTools Protocol endpoint to attach to instead of deriving one from host and port. Use this for remote CDP providers, forwarded ports, or non-standard browser endpoints.",
       "envVars": [
         "BROWSER_DEBUG_URL"
       ],
@@ -61,7 +61,7 @@
     {
       "category": "browser",
       "defaultValue": "attach",
-      "description": "Browser ownership mode.",
+      "description": "Controls whether Browser Control attaches to an existing browser or launches a managed browser it owns. Use `attach` for a visible user browser and `managed` for isolated automation sessions.",
       "envVars": [
         "BROWSER_MODE"
       ],
@@ -71,7 +71,7 @@
     {
       "category": "browser",
       "defaultValue": true,
-      "description": "Auto-launch managed browser when attach fails.",
+      "description": "Allows Browser Control to launch an attachable browser when attach mode cannot find one. Disable this when browser startup must be manual or externally supervised.",
       "envVars": [
         "BROWSER_AUTO_LAUNCH"
       ],
@@ -81,7 +81,7 @@
     {
       "category": "browser",
       "defaultValue": "isolated",
-      "description": "Visible launcher profile mode.",
+      "description": "Profile mode used by the visible browser launcher. Use `isolated` for a Browser Control profile and `system` only when you intentionally want the normal Chrome profile.",
       "envVars": [
         "BROWSER_LAUNCH_PROFILE"
       ],
@@ -90,7 +90,7 @@
     },
     {
       "category": "browser",
-      "description": "Explicit Chrome user-data-dir for visible launcher.",
+      "description": "Explicit Chrome user-data directory for the visible launcher. Use this to point launched Chrome at a known profile directory without relying on the default profile manager.",
       "envVars": [
         "BROWSER_USER_DATA_DIR"
       ],
@@ -100,7 +100,7 @@
     {
       "category": "browser",
       "defaultValue": 1365,
-      "description": "Default viewport width for automation-owned browser contexts.",
+      "description": "Default viewport width for automation-owned browser contexts. This affects screenshots, layout-sensitive interactions, and tests that depend on responsive breakpoints.",
       "envVars": [
         "BROWSER_VIEWPORT_WIDTH"
       ],
@@ -110,7 +110,7 @@
     {
       "category": "browser",
       "defaultValue": 768,
-      "description": "Default viewport height for automation-owned browser contexts.",
+      "description": "Default viewport height for automation-owned browser contexts. This affects visible page area, screenshot dimensions, and scroll behavior.",
       "envVars": [
         "BROWSER_VIEWPORT_HEIGHT"
       ],
@@ -119,7 +119,7 @@
     },
     {
       "category": "browser",
-      "description": "User agent for automation-owned browser contexts.",
+      "description": "User-Agent string applied to automation-owned browser contexts. Use this only when a target site or test requires a specific client identity.",
       "envVars": [
         "BROWSER_USER_AGENT"
       ],
@@ -129,7 +129,7 @@
     {
       "category": "policy",
       "defaultValue": "balanced",
-      "description": "Default policy profile.",
+      "description": "Default safety policy profile for sessions and actions. Use `safe` for stricter automation, `balanced` for normal work, and `trusted` only for high-trust local workflows.",
       "envVars": [
         "POLICY_PROFILE"
       ],
@@ -139,7 +139,7 @@
     {
       "category": "daemon",
       "defaultValue": false,
-      "description": "Whether daemon launches use a visible console window on Windows.",
+      "description": "Controls whether daemon helper processes use a visible console window on Windows. Keep it false for background operation and enable it only when debugging daemon startup.",
       "envVars": [
         "DAEMON_VISIBLE"
       ],
@@ -149,7 +149,7 @@
     {
       "category": "logging",
       "defaultValue": "info",
-      "description": "Minimum log level.",
+      "description": "Minimum severity level written to logs. Use `debug` for diagnosis and `info` or higher for normal local operation.",
       "envVars": [
         "LOG_LEVEL"
       ],
@@ -159,7 +159,7 @@
     {
       "category": "logging",
       "defaultValue": false,
-      "description": "Whether logs are also written to files.",
+      "description": "Controls whether logs are also persisted to files under the runtime data home. Enable this when you need post-run diagnostics beyond terminal output.",
       "envVars": [
         "LOG_FILE"
       ],
@@ -168,7 +168,7 @@
     },
     {
       "category": "terminal",
-      "description": "Default shell for terminal sessions.",
+      "description": "Default shell executable or named shell for terminal sessions. Use this to prefer PowerShell, bash, zsh, or another installed shell.",
       "envVars": [
         "TERMINAL_SHELL"
       ],
@@ -178,7 +178,7 @@
     {
       "category": "terminal",
       "defaultValue": 80,
-      "description": "Default terminal column count.",
+      "description": "Default terminal width in columns for new terminal sessions. Increase this when commands wrap too aggressively or when testing wide terminal layouts.",
       "envVars": [
         "TERMINAL_COLS"
       ],
@@ -188,7 +188,7 @@
     {
       "category": "terminal",
       "defaultValue": 24,
-      "description": "Default terminal row count.",
+      "description": "Default terminal height in rows for new terminal sessions. Increase this when interactive tools need more visible screen space.",
       "envVars": [
         "TERMINAL_ROWS"
       ],
@@ -198,7 +198,7 @@
     {
       "category": "terminal",
       "defaultValue": "resume",
-      "description": "Terminal recovery policy on daemon startup.",
+      "description": "Policy for reconstructing terminal sessions after daemon startup. Use `resume` to restore metadata and buffer, `metadata_only` to preserve identity only, or `abandon` to start clean.",
       "envVars": [
         "TERMINAL_RESUME_POLICY"
       ],
@@ -208,7 +208,7 @@
     {
       "category": "terminal",
       "defaultValue": true,
-      "description": "Whether terminal sessions auto-resume on daemon startup.",
+      "description": "Controls whether terminal sessions are automatically restored when the daemon starts. Disable this when stale terminal state is more harmful than losing prior session context.",
       "envVars": [
         "TERMINAL_AUTO_RESUME"
       ],
@@ -217,7 +217,7 @@
     },
     {
       "category": "provider",
-      "description": "Browserless endpoint.",
+      "description": "WebSocket or HTTPS endpoint for a Browserless remote browser provider. Configure this when browser sessions should run outside the local machine.",
       "envVars": [
         "BROWSERLESS_ENDPOINT"
       ],
@@ -227,7 +227,7 @@
     {
       "category": "provider",
       "defaultValue": "[redacted]",
-      "description": "Browserless API key.",
+      "description": "API key sent to the Browserless provider when the endpoint does not already include a token. This is sensitive and is redacted from config inventories.",
       "envVars": [
         "BROWSERLESS_API_KEY"
       ],
@@ -236,7 +236,7 @@
     },
     {
       "category": "captcha",
-      "description": "CAPTCHA provider.",
+      "description": "CAPTCHA solving provider used by browser automation when solver support is enabled. Leave this unset unless a workflow explicitly needs CAPTCHA solving.",
       "envVars": [
         "CAPTCHA_PROVIDER"
       ],
@@ -246,7 +246,7 @@
     {
       "category": "captcha",
       "defaultValue": "[redacted]",
-      "description": "CAPTCHA provider API key.",
+      "description": "API key for the configured CAPTCHA solving provider. This is sensitive and should only be set for workflows that are allowed to use solver services.",
       "envVars": [
         "CAPTCHA_API_KEY"
       ],
@@ -256,7 +256,7 @@
     {
       "category": "ai",
       "defaultValue": "openrouter",
-      "description": "Preferred model provider for Browser Control model router.",
+      "description": "Preferred model provider used by the Browser Control model router. Choose `openrouter`, `ollama`, or `openai-compatible` based on where model requests should be sent.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_PROVIDER"
       ],
@@ -265,7 +265,7 @@
     },
     {
       "category": "ai",
-      "description": "OpenAI-compatible model endpoint override.",
+      "description": "Custom OpenAI-compatible base URL for the selected model provider. Use this for local gateways, private deployments, or providers that are not covered by built-in defaults.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_ENDPOINT"
       ],
@@ -275,7 +275,7 @@
     {
       "category": "ai",
       "defaultValue": "[redacted]",
-      "description": "API key for the selected model provider.",
+      "description": "API key for the selected model provider in the model router. This value is sensitive and is redacted from config output.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_API_KEY"
       ],
@@ -284,7 +284,7 @@
     },
     {
       "category": "ai",
-      "description": "Model name for the selected model provider.",
+      "description": "Model identifier used by the selected model provider. Use provider-specific names such as an OpenRouter model slug or a local Ollama model name.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_NAME"
       ],
@@ -294,7 +294,7 @@
     {
       "category": "ai",
       "defaultValue": "openai/gpt-4.1-mini",
-      "description": "OpenRouter model for AI agent features.",
+      "description": "OpenRouter model slug used by legacy AI-agent features. This remains for compatibility with older agent configuration paths.",
       "envVars": [
         "OPENROUTER_MODEL",
         "AI_AGENT_MODEL"
@@ -305,7 +305,7 @@
     {
       "category": "ai",
       "defaultValue": "https://openrouter.ai/api/v1",
-      "description": "OpenRouter API base URL.",
+      "description": "Base URL for OpenRouter-compatible API requests. Override this only for a compatible proxy or self-hosted gateway.",
       "envVars": [
         "OPENROUTER_BASE_URL"
       ],
@@ -315,7 +315,7 @@
     {
       "category": "ai",
       "defaultValue": "[redacted]",
-      "description": "OpenRouter API key.",
+      "description": "API key for OpenRouter-backed AI-agent features. This is sensitive and is redacted from inventories and logs.",
       "envVars": [
         "OPENROUTER_API_KEY"
       ],

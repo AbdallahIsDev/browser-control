@@ -208,6 +208,30 @@ test("config env inventory includes env-only knobs and redacts sensitive values"
   assert.deepEqual([...new Set(names)].sort(), names.sort());
 });
 
+test("config inventory descriptions are explanatory, not terse labels", () => {
+  const entries = [
+    ...getConfigEntries({ env: {}, validate: false }).map((entry) => ({
+      id: entry.key,
+      description: entry.description,
+    })),
+    ...getConfigEnvEntries({ env: {} }).map((entry) => ({
+      id: entry.envVar,
+      description: entry.description,
+    })),
+  ];
+
+  for (const entry of entries) {
+    const sentenceCount = entry.description
+      .split(".")
+      .map((part) => part.trim())
+      .filter(Boolean).length;
+    const wordCount = entry.description.split(/\s+/u).filter(Boolean).length;
+
+    assert.ok(sentenceCount >= 2, `${entry.id} needs at least two description sentences`);
+    assert.ok(wordCount >= 10, `${entry.id} description is too terse`);
+  }
+});
+
 test("loadConfig reads ENABLE_STEALTH", () => {
   const config = loadConfig({ env: { ENABLE_STEALTH: "true" }, validate: false });
   assert.equal(config.stealthEnabled, true);
