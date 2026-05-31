@@ -103,6 +103,12 @@ function sessionEchoCommand(): string {
     : 'printf "session-hello\\n"';
 }
 
+function errorLookingStdoutCommand(): string {
+  return os.platform() === "win32"
+    ? 'Write-Output "Error: Connection successful"; Write-Output "bash: not an error"'
+    : 'printf "Error: Connection successful\\nbash: not an error\\n"';
+}
+
 test("terminal_session: create, exec, snapshot, and close a real session", { timeout: 20000 }, async () => {
   const manager = new TerminalSessionManager();
   const session = await manager.create();
@@ -123,6 +129,21 @@ test("terminal_session: create, exec, snapshot, and close a real session", { tim
     assert.equal(snapshot.sessionId, session.id);
     assert.equal(snapshot.status, "idle");
     assert.ok(snapshot.cwd.length > 0);
+  } finally {
+    await manager.closeAll();
+  }
+});
+
+test("terminal_session: PTY exec keeps merged output in stdout", { timeout: 20000 }, async () => {
+  const manager = new TerminalSessionManager();
+  const session = await manager.create();
+
+  try {
+    const result = await session.exec(errorLookingStdoutCommand(), { timeoutMs: 5000 });
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /Error: Connection successful/);
+    assert.match(result.stdout, /bash: not an error/);
+    assert.equal(result.stderr, "");
   } finally {
     await manager.closeAll();
   }

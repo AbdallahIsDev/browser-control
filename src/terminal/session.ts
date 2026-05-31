@@ -313,7 +313,7 @@ export class PtyTerminalSession implements ITerminalSession {
 			command,
 		);
 
-		// Split into stdout/stderr (PTY merges them)
+		// PTY exposes one merged stream; keep it in stdout instead of guessing.
 		const { stdout, stderr } = splitPtyOutput(cleanOutput, command);
 		this._publicOutputBuffer = appendBoundedOutput(
 			this._publicOutputBuffer,
@@ -848,8 +848,9 @@ function appendBoundedOutput(current: string, next: string): string {
 }
 
 /**
- * PTY merges stdout and stderr. This function cleans up the output
- * by removing echo lines and shell noise.
+ * PTY merges stdout and stderr into a single stream. Keep the cleaned stream in
+ * stdout and leave stderr empty; callers that need real stderr should use the
+ * child_process exec path.
  */
 function splitPtyOutput(
 	output: string,
@@ -857,7 +858,6 @@ function splitPtyOutput(
 ): { stdout: string; stderr: string } {
 	const lines = output.split(/\r?\n/);
 	const stdoutLines: string[] = [];
-	const stderrLines: string[] = [];
 
 	for (const line of lines) {
 		const trimmed = line.trim();
@@ -866,29 +866,12 @@ function splitPtyOutput(
 		// Skip echo of the command itself
 		if (trimmed === command) continue;
 
-		// Heuristic: error-looking lines go to stderr
-		if (
-			trimmed.startsWith("Error:") ||
-			trimmed.startsWith("error:") ||
-			trimmed.startsWith("ERROR:") ||
-			trimmed.startsWith("bash:") ||
-			trimmed.startsWith("sh:") ||
-			trimmed.startsWith("zsh:") ||
-			trimmed.startsWith("pwsh:") ||
-			trimmed.startsWith("powershell:") ||
-			trimmed.includes(": command not found") ||
-			trimmed.includes(": No such file or directory") ||
-			trimmed.includes("Permission denied")
-		) {
-			stderrLines.push(line);
-		} else {
-			stdoutLines.push(line);
-		}
+		stdoutLines.push(line);
 	}
 
 	return {
 		stdout: stdoutLines.join("\n").trim(),
-		stderr: stderrLines.join("\n").trim(),
+		stderr: "",
 	};
 }
 

@@ -22,6 +22,10 @@ One-shot command:
 bc term exec "node --version" --json
 ```
 
+Persistent PTY-backed `term exec` captures the terminal's merged output stream
+as `stdout` and leaves `stderr` empty. Use the child-process execution API when
+you need separate stdout/stderr streams.
+
 Persistent session commands use a terminal session ID returned by `term open`.
 
 ## Dashboard Terminal
