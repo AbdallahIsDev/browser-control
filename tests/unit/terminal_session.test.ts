@@ -160,7 +160,7 @@ test("terminal_session: snapshot redacts secret environment values", { timeout: 
 
   try {
     const snapshot = await session.snapshot();
-    assert.equal(snapshot.env.NEXIUM_API_KEY, "<redacted>");
+    assert.equal(snapshot.env.NEXIUM_API_KEY, "[REDACTED]");
     assert.equal(snapshot.env.NORMAL_ENV_VALUE, "safe-value");
     assert.notDeepStrictEqual(snapshot.env, session.env);
   } finally {

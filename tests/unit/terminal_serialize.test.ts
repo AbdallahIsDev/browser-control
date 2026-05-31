@@ -47,15 +47,17 @@ test("serializeTerminalSession: redacts secrets from env", () => {
       GITHUB_TOKEN: "ghp_xxx",
       PASSWORD: "hunter2",
       SESSION_COOKIE: "sid=secret",
+      NPM_CONFIG: "registry=https://registry.example.test/?token=central-secret-token",
     },
   });
   const serialized = serializeTerminalSession(session);
 
   assert.ok(serialized !== null);
-  assert.equal(serialized!.env.API_KEY, "<redacted>");
-  assert.equal(serialized!.env.GITHUB_TOKEN, "<redacted>");
-  assert.equal(serialized!.env.PASSWORD, "<redacted>");
-  assert.equal(serialized!.env.SESSION_COOKIE, "<redacted>");
+  assert.equal(serialized!.env.API_KEY, "[REDACTED]");
+  assert.equal(serialized!.env.GITHUB_TOKEN, "[REDACTED]");
+  assert.equal(serialized!.env.PASSWORD, "[REDACTED]");
+  assert.equal(serialized!.env.SESSION_COOKIE, "[REDACTED]");
+  assert.equal(serialized!.env.NPM_CONFIG, "registry=https://registry.example.test/?token=[REDACTED]");
   assert.equal(serialized!.env.PATH, "/usr/bin");
 });
 

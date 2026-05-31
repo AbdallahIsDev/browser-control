@@ -10,30 +10,9 @@ import type {
   TerminalBufferRecord,
   TerminalResumeLevel,
 } from "./resume_types";
-import { redactString } from "../observability/redaction";
+import { redactObject, redactString } from "../observability/redaction";
 
 const DEFAULT_MAX_SCROLLBACK_LINES = 10_000;
-
-/**
- * Patterns for env keys that likely contain secrets.
- * These are excluded from serialization to avoid storing credentials
- * in the durable store.
- */
-const SECRET_KEY_PATTERNS = [
-  /password/i,
-  /secret/i,
-  /token/i,
-  /api[_-]?key/i,
-  /auth/i,
-  /cookie/i,
-  /credential/i,
-  /private[_-]?key/i,
-  /passphrase/i,
-];
-
-function isSecretKey(key: string): boolean {
-  return SECRET_KEY_PATTERNS.some((p) => p.test(key));
-}
 
 export interface TerminalSerializeOptions {
   maxScrollbackLines?: number;
@@ -43,11 +22,14 @@ export interface TerminalSerializeOptions {
  * Redact sensitive env values, keeping the key with a placeholder.
  */
 export function redactEnv(env: Record<string, string>): Record<string, string> {
+  const redacted = redactObject(env);
+  if (!redacted || typeof redacted !== "object" || Array.isArray(redacted)) {
+    return {};
+  }
+
   const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (isSecretKey(key)) {
-      result[key] = "<redacted>";
-    } else {
+  for (const [key, value] of Object.entries(redacted)) {
+    if (typeof value === "string") {
       result[key] = value;
     }
   }

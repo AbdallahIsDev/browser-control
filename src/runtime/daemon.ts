@@ -1518,7 +1518,7 @@ export class Daemon {
 		const env: Record<string, string> = {};
 		const lost: string[] = [];
 		for (const [key, value] of Object.entries(metadata.env)) {
-			if (value === "<redacted>") {
+			if (value === "<redacted>" || value === "[REDACTED]") {
 				lost.push(`redacted env var omitted: ${key}`);
 				continue;
 			}
