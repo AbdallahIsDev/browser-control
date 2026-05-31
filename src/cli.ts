@@ -687,7 +687,15 @@ async function requireCliPolicy(
 	const store = new MemoryStore({ filename: ":memory:" });
 	try {
 		const manager = new SessionManager({ memoryStore: store });
-		const policyEval = manager.evaluateAction(action, params);
+		if (!jsonOutput && !confirmed && process.stdin.isTTY && process.stderr.isTTY) {
+			manager.setConfirmationHandler({
+				confirm: async (_step, evaluation) => promptCliConfirmation(evaluation.reason),
+			});
+		}
+
+		const policyEval = confirmed
+			? manager.evaluateAction(action, params)
+			: await manager.evaluateActionWithConfirmation(action, params);
 		if (!isPolicyAllowed(policyEval)) {
 			if (confirmed && policyEval.policyDecision === "require_confirmation") {
 				return;
@@ -703,6 +711,20 @@ async function requireCliPolicy(
 		}
 	} finally {
 		store.close();
+	}
+}
+
+async function promptCliConfirmation(reason: string): Promise<boolean> {
+	const { createInterface } = await import("node:readline/promises");
+	const rl = createInterface({
+		input: process.stdin,
+		output: process.stderr,
+	});
+	try {
+		const answer = await rl.question(`${reason}\nAllow this action? [y/N] `);
+		return /^(y|yes)$/iu.test(answer.trim());
+	} finally {
+		rl.close();
 	}
 }
 

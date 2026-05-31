@@ -20,8 +20,11 @@ import { BrowserConnectionManager } from "./browser/connection";
 import { DefaultPolicyEngine } from "./policy/engine";
 import { defaultRouter, type ExecutionRouter } from "./policy/execution_router";
 import type {
+	ConfirmationHandler,
+	ExecutionContext,
 	ExecutionPath,
 	PolicyDecision,
+	PolicyEvaluationResult,
 	PolicyTaskIntent,
 	RiskLevel,
 	RoutedStep,
@@ -1116,6 +1119,11 @@ export class SessionManager {
 		return this.policyEngine;
 	}
 
+	/** Set the policy confirmation handler used by confirmation-aware callers. */
+	setConfirmationHandler(handler: ConfirmationHandler | null): void {
+		this.policyEngine.setConfirmationHandler(handler);
+	}
+
 	/** Get the execution router. */
 	getExecutionRouter(): ExecutionRouter {
 		return this.executionRouter;
@@ -1410,6 +1418,32 @@ export class SessionManager {
 		params: Record<string, unknown>,
 		sessionOverride?: string,
 	): PolicyEvalResult {
+		const prepared = this.preparePolicyEvaluation(action, params, sessionOverride);
+		const evaluation = this.evaluatePreparedPolicy(prepared);
+		return this.policyEvaluationToResult(prepared, evaluation);
+	}
+
+	async evaluateActionWithConfirmation(
+		action: string,
+		params: Record<string, unknown>,
+		sessionOverride?: string,
+	): Promise<PolicyEvalResult> {
+		const prepared = this.preparePolicyEvaluation(action, params, sessionOverride);
+		const evaluation = await this.evaluatePreparedPolicyWithConfirmation(prepared);
+		return this.policyEvaluationToResult(prepared, evaluation);
+	}
+
+	private preparePolicyEvaluation(
+		action: string,
+		params: Record<string, unknown>,
+		sessionOverride?: string,
+	): {
+		state: SessionState | null;
+		sessionId: string;
+		profileName: string;
+		step: RoutedStep;
+		context: ExecutionContext;
+	} {
 		const state = this.resolveSession(sessionOverride);
 		const sessionId = state?.id ?? this.activeSessionId ?? "default";
 		const actor: "human" | "agent" = "human";
@@ -1440,6 +1474,25 @@ export class SessionManager {
 			},
 		);
 
+		return {
+			state,
+			sessionId,
+			profileName,
+			step,
+			context: {
+				sessionId,
+				actor,
+				profileName,
+				cwd: state?.workingDirectory,
+			},
+		};
+	}
+
+	private evaluatePreparedPolicy(prepared: {
+		profileName: string;
+		step: RoutedStep;
+		context: ExecutionContext;
+	}): PolicyEvaluationResult {
 		// ── Issue 1 fix: Switch the policy engine to the session's profile ──
 		// The DefaultPolicyEngine.evaluate() reads the active profile internally
 		// via getRiskDecisionMatrix(this.profileName). Without switching, the
@@ -1450,26 +1503,20 @@ export class SessionManager {
 		// We save/restore the previous profile so that calling evaluateAction
 		// does not permanently mutate the engine's global state.
 		const previousProfile = this.policyEngine.getActiveProfile();
-		if (profileName !== previousProfile) {
+		if (prepared.profileName !== previousProfile) {
 			try {
-				this.policyEngine.setProfile(profileName);
+				this.policyEngine.setProfile(prepared.profileName);
 			} catch {
 				// If the profile name is invalid, fall back to the current profile
 				// and let the evaluation proceed (it may still deny the action)
 			}
 		}
 
-		let evaluation: import("./policy/types").PolicyEvaluationResult;
 		try {
-			evaluation = this.policyEngine.evaluate(step, {
-				sessionId,
-				actor,
-				profileName,
-				cwd: state?.workingDirectory,
-			});
+			return this.policyEngine.evaluate(prepared.step, prepared.context);
 		} finally {
 			// Always restore the previous profile, even if evaluation throws
-			if (profileName !== previousProfile) {
+			if (prepared.profileName !== previousProfile) {
 				try {
 					this.policyEngine.setProfile(previousProfile);
 				} catch {
@@ -1477,38 +1524,76 @@ export class SessionManager {
 				}
 			}
 		}
+	}
 
+	private async evaluatePreparedPolicyWithConfirmation(prepared: {
+		profileName: string;
+		step: RoutedStep;
+		context: ExecutionContext;
+	}): Promise<PolicyEvaluationResult> {
+		const previousProfile = this.policyEngine.getActiveProfile();
+		if (prepared.profileName !== previousProfile) {
+			try {
+				this.policyEngine.setProfile(prepared.profileName);
+			} catch {
+				// If the profile name is invalid, fall back to the current profile
+				// and let the evaluation proceed (it may still deny the action).
+			}
+		}
+
+		try {
+			return await this.policyEngine.evaluateWithConfirmation(prepared.step, prepared.context);
+		} finally {
+			if (prepared.profileName !== previousProfile) {
+				try {
+					this.policyEngine.setProfile(previousProfile);
+				} catch {
+					// Best-effort restore; should not fail for a previously valid profile
+				}
+			}
+		}
+	}
+
+	private policyEvaluationToResult(
+		prepared: {
+			state: SessionState | null;
+			sessionId: string;
+			profileName: string;
+			step: RoutedStep;
+		},
+		evaluation: PolicyEvaluationResult,
+	): PolicyEvalResult {
 		log.info("Policy evaluation for action", {
-			action,
+			action: prepared.step.action,
 			decision: evaluation.decision,
 			risk: evaluation.risk,
 			reason: evaluation.reason,
-			sessionId,
-			profileName,
+			sessionId: prepared.sessionId,
+			profileName: prepared.profileName,
 		});
 
 		if (evaluation.decision === "deny") {
 			return policyDeniedResult(evaluation.reason, {
-				path: step.path,
-				sessionId,
+				path: prepared.step.path,
+				sessionId: prepared.sessionId,
 				risk: evaluation.risk,
 			});
 		}
 
 		if (evaluation.decision === "require_confirmation") {
 			return confirmationRequiredResult(evaluation.reason, {
-				path: step.path,
-				sessionId,
+				path: prepared.step.path,
+				sessionId: prepared.sessionId,
 				risk: evaluation.risk,
 			});
 		}
 
 		// Action is allowed — record audit ID if applicable
 		let auditId: string | undefined;
-		if (evaluation.auditRequired && state) {
+		if (evaluation.auditRequired && prepared.state) {
 			auditId = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-			state.auditIds.push(auditId);
-			this.touchSession(state.id);
+			prepared.state.auditIds.push(auditId);
+			this.touchSession(prepared.state.id);
 		}
 
 		// Return rich allow result with REAL metadata
@@ -1517,7 +1602,7 @@ export class SessionManager {
 			policyDecision: evaluation.decision, // "allow" or "allow_with_audit"
 			risk: evaluation.risk,
 			auditId,
-			path: step.path,
+			path: prepared.step.path,
 		};
 	}
 

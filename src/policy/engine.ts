@@ -163,6 +163,57 @@ export class DefaultPolicyEngine implements PolicyEngine {
   }
 
   /**
+   * Evaluate a step and invoke the configured confirmation handler when policy
+   * requires explicit human approval.
+   */
+  async evaluateWithConfirmation(
+    step: RoutedStep,
+    context: ExecutionContext = {},
+  ): Promise<PolicyEvaluationResult> {
+    const evaluation = this.evaluate(step, context);
+    if (evaluation.decision !== "require_confirmation" || !this.confirmationHandler) {
+      return evaluation;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await this.confirmationHandler.confirm(step, evaluation, context);
+    } catch (error: unknown) {
+      const result: PolicyEvaluationResult = {
+        decision: "deny",
+        reason: `Confirmation failed: ${error instanceof Error ? error.message : String(error)}`,
+        profile: evaluation.profile,
+        risk: evaluation.risk,
+        matchedRule: evaluation.matchedRule,
+        auditRequired: true,
+      };
+      this.recordAudit(step, result, context);
+      return result;
+    }
+
+    const result: PolicyEvaluationResult = confirmed
+      ? {
+          decision: "allow_with_audit",
+          reason: `Confirmed by user: ${evaluation.reason}`,
+          profile: evaluation.profile,
+          risk: evaluation.risk,
+          matchedRule: evaluation.matchedRule,
+          auditRequired: true,
+        }
+      : {
+          decision: "deny",
+          reason: `Confirmation rejected: ${evaluation.reason}`,
+          profile: evaluation.profile,
+          risk: evaluation.risk,
+          matchedRule: evaluation.matchedRule,
+          auditRequired: true,
+        };
+
+    this.recordAudit(step, result, context);
+    return result;
+  }
+
+  /**
    * Evaluate category-specific policy rules.
    */
   private evaluateCategoryRules(

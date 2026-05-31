@@ -166,6 +166,7 @@ export interface PolicyAuditEntry {
 
 export interface PolicyEngine {
   evaluate(step: RoutedStep, context?: ExecutionContext): PolicyEvaluationResult;
+  evaluateWithConfirmation?(step: RoutedStep, context?: ExecutionContext): Promise<PolicyEvaluationResult>;
   setConfirmationHandler(handler: ConfirmationHandler | null): void;
   getActiveProfile(): string;
   setProfile(profileName: string): void;
