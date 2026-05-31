@@ -190,6 +190,8 @@ export class Daemon {
 
 	private stopped = false;
 
+	private startPromise: Promise<void> | null = null;
+
 	private brokerStarted = false;
 
 	private schedulerStarted = false;
@@ -242,7 +244,22 @@ export class Daemon {
 		if (this.started) {
 			return;
 		}
+		if (this.startPromise) {
+			return this.startPromise;
+		}
 
+		this.startPromise = this.startOnce();
+		try {
+			await this.startPromise;
+		} finally {
+			this.startPromise = null;
+		}
+	}
+
+	private async startOnce(): Promise<void> {
+		if (this.started) {
+			return;
+		}
 		this.stopped = false;
 		this.storeClosed = false;
 		this.acceptNewTasks = true;

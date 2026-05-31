@@ -115,6 +115,72 @@ test("Daemon emergencyKill stops broker and clears daemon lifecycle state", asyn
   }
 });
 
+test("Daemon start coalesces concurrent initialization calls", async () => {
+  const brokerCalls = { start: 0, stop: 0 };
+  let brokerStartEntered!: () => void;
+  const brokerStartEnteredPromise = new Promise<void>((resolve) => {
+    brokerStartEntered = resolve;
+  });
+  let releaseBrokerStart!: () => void;
+  const releaseBrokerStartPromise = new Promise<void>((resolve) => {
+    releaseBrokerStart = resolve;
+  });
+  const { tempDir, store, config } = createTestConfig({
+    brokerFactory: async () => ({
+      start: async () => {
+        brokerCalls.start += 1;
+        brokerStartEntered();
+        await releaseBrokerStartPromise;
+      },
+      stop: async () => {
+        brokerCalls.stop += 1;
+      },
+    }),
+  });
+
+  let daemon: Daemon | null = null;
+  try {
+    daemon = new Daemon(config);
+    const internals = daemon as unknown as {
+      startHeartbeat: () => void;
+      startChromeWatchdog: () => void;
+      startSkillStatePersistence: () => void;
+      registerSignalHandlers: () => void;
+    };
+    internals.startHeartbeat = () => {};
+    internals.startChromeWatchdog = () => {};
+    internals.startSkillStatePersistence = () => {};
+    internals.registerSignalHandlers = () => {};
+
+    const firstStart = daemon.start();
+    await Promise.race([
+      brokerStartEnteredPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("broker start was not reached")), 1000),
+      ),
+    ]);
+    const secondStart = daemon.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const overlappingStartCalls = brokerCalls.start;
+
+    releaseBrokerStart();
+    const startsSettled = await Promise.race([
+      Promise.allSettled([firstStart, secondStart]).then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000)),
+    ]);
+    assert.equal(startsSettled, true);
+    assert.equal(overlappingStartCalls, 1);
+    assert.equal(brokerCalls.start, 1);
+  } finally {
+    releaseBrokerStart?.();
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Daemon start fails fast when critical health checks fail", async () => {
   const daemon = new Daemon({
     healthCheck: {
