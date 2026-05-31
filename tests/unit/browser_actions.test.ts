@@ -1807,7 +1807,7 @@ describe("BrowserActions", () => {
 			assert.ok(result.error);
 		});
 
-		it("rejects explicit screenshot paths inside the session working directory", async () => {
+		it("rejects explicit screenshot paths outside the data home", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const visiblePage = createMockPage("https://example.com", {
 				hasBrowserWindow: true,
@@ -1834,12 +1834,46 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, false);
 				assert.match(
 					result.error ?? "",
-					/Refusing to write screenshot inside the session working directory/,
+					/Refusing to write screenshot outside the data home/,
 				);
 				assert.equal(fs.existsSync(outputPath), false);
 			} finally {
 				isolatedStore.close();
 				fs.rmSync(outputPath, { force: true });
+			}
+		});
+
+		it("rejects explicit screenshot paths outside data home without an active session", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const visiblePage = createMockPage("https://example.com", {
+				hasBrowserWindow: true,
+			});
+			const manager = createConnectedBrowserManager([visiblePage]);
+			const outsideDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "bc-shot-outside-"),
+			);
+			const outputPath = path.join(outsideDir, "shot.png");
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.screenshot({ outputPath });
+
+				assert.equal(result.success, false);
+				assert.match(
+					result.error ?? "",
+					/Refusing to write screenshot outside the data home/,
+				);
+				assert.equal(fs.existsSync(outputPath), false);
+			} finally {
+				isolatedStore.close();
+				fs.rmSync(outsideDir, { recursive: true, force: true });
 			}
 		});
 
@@ -1880,6 +1914,40 @@ describe("BrowserActions", () => {
 				);
 				assert.equal(fs.existsSync(manifestPath), true);
 				assert.equal(fs.existsSync(screenshotPath), true);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("resolves relative explicit screenshot paths under the data home", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const visiblePage = createMockPage("https://example.com", {
+				hasBrowserWindow: true,
+			});
+			const manager = createConnectedBrowserManager([visiblePage]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.screenshot({
+					outputPath: "manual-shots/custom.png",
+				});
+
+				assert.equal(result.success, true);
+				assert.equal(
+					result.data?.path,
+					path.join(dataHome, "manual-shots", "custom.png"),
+				);
+				assert.equal(fs.existsSync(result.data!.path), true);
 			} finally {
 				isolatedStore.close();
 			}

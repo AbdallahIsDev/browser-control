@@ -1237,21 +1237,25 @@ export class BrowserActions {
 			return helpers.path.join(outputDir, `screenshot-${randomUUID()}.png`);
 		}
 
-		const baseDir = activeSession?.workingDirectory ?? process.cwd();
-		const resolvedPath = helpers.path.resolve(baseDir, requestedPath);
-		const dataHome = helpers.getDataHome();
+		const dataHome = helpers.path.resolve(helpers.getDataHome());
+		const resolvedPath = helpers.path.isAbsolute(requestedPath)
+			? helpers.path.resolve(requestedPath)
+			: helpers.path.resolve(dataHome, requestedPath);
 
-		if (
-			activeSession?.workingDirectory &&
-			this.isPathInside(
-				resolvedPath,
-				activeSession.workingDirectory,
-				helpers.path,
-			) &&
-			!this.isPathInside(resolvedPath, dataHome, helpers.path)
-		) {
+		if (!this.isPathInside(resolvedPath, dataHome, helpers.path)) {
 			throw new Error(
-				`Refusing to write screenshot inside the session working directory: ${resolvedPath}. ` +
+				`Refusing to write screenshot outside the data home: ${resolvedPath}. ` +
+					`Use the default runtime screenshots directory under ${outputDir}.`,
+			);
+		}
+
+		const parentDir = helpers.path.dirname(resolvedPath);
+		helpers.fs.mkdirSync(parentDir, { recursive: true });
+		const realDataHome = helpers.fs.realpathSync(dataHome);
+		const realParentDir = helpers.fs.realpathSync(parentDir);
+		if (!this.isPathInside(realParentDir, realDataHome, helpers.path)) {
+			throw new Error(
+				`Refusing to write screenshot outside the data home: ${resolvedPath}. ` +
 					`Use the default runtime screenshots directory under ${outputDir}.`,
 			);
 		}
