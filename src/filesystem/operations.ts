@@ -331,8 +331,8 @@ export function moveFile(
   dstPath: string,
   options: MoveOptions = {},
 ): MoveResult {
-  const resolvedSrc = resolvePathSafe(srcPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
-  const resolvedDst = resolvePathSafe(dstPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
+  const resolvedSrc = resolvePathSafeForDirectoryEntry(srcPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
+  const resolvedDst = resolvePathSafeForDirectoryEntry(dstPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolvedSrc)) {
     throw new FsError(`Source not found: ${resolvedSrc}`, "ENOENT", resolvedSrc);
@@ -359,7 +359,7 @@ export function deletePath(
   targetPath: string,
   options: DeleteOptions = {},
 ): DeleteResult {
-  const resolved = resolvePathSafe(targetPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
+  const resolved = resolvePathSafeForDirectoryEntry(targetPath, { cwd: options.cwd, allowedRoots: options.allowedRoots });
 
   if (!fs.existsSync(resolved)) {
     if (options.force) {
@@ -529,12 +529,20 @@ export function resolvePathSafe(
   options: { cwd?: string; allowedRoots?: string[] } = {},
 ): string {
   const resolved = resolvePath(filePath, options.cwd);
+  return validateRealPath(resolved, options.allowedRoots);
+}
+
+function resolvePathSafeForDirectoryEntry(
+  filePath: string,
+  options: { cwd?: string; allowedRoots?: string[] } = {},
+): string {
+  const resolved = resolvePath(filePath, options.cwd);
   validateRealPath(resolved, options.allowedRoots);
   return resolved;
 }
 
-function validateRealPath(targetPath: string, allowedRoots?: string[]): void {
-  if (!allowedRoots || allowedRoots.length === 0) return;
+function validateRealPath(targetPath: string, allowedRoots?: string[]): string {
+  if (!allowedRoots || allowedRoots.length === 0) return targetPath;
 
   let realPath: string;
   try {
@@ -569,7 +577,7 @@ function validateRealPath(targetPath: string, allowedRoots?: string[]): void {
         targetPath,
       );
     }
-    return;
+    return targetPath;
   }
 
   const allowed = allowedRoots.some(root => {
@@ -583,6 +591,7 @@ function validateRealPath(targetPath: string, allowedRoots?: string[]): void {
       targetPath,
     );
   }
+  return realPath;
 }
 
 function resolveRealRoot(root: string): string {

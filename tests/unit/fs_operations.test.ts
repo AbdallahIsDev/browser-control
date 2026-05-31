@@ -425,6 +425,51 @@ test("fs_operations: resolvePathSafe rejects symlink to outside allowed roots", 
   }
 });
 
+test("fs_operations: resolvePathSafe returns canonical path for allowed symlinks", { skip: !hasSymlinkSupport }, () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-symcanon-"));
+
+  try {
+    const insideDir = path.join(tmpDir, "inside");
+    const targetFile = path.join(insideDir, "target.txt");
+    const symlink = path.join(insideDir, "link.txt");
+
+    fs.mkdirSync(insideDir, { recursive: true });
+    fs.writeFileSync(targetFile, "safe");
+    fs.symlinkSync(targetFile, symlink);
+
+    assert.equal(
+      resolvePathSafe(symlink, { allowedRoots: [insideDir] }),
+      fs.realpathSync(targetFile),
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("fs_operations: resolvePathSafe returns the validated real path", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-realpath-"));
+  const visiblePath = path.join(tmpDir, "visible.txt");
+  const realPath = path.join(tmpDir, "real.txt");
+  const originalRealpathSync = fs.realpathSync;
+
+  try {
+    fs.writeFileSync(visiblePath, "visible");
+    fs.writeFileSync(realPath, "real");
+    fs.realpathSync = ((target: fs.PathLike) => {
+      if (path.resolve(String(target)) === visiblePath) return realPath;
+      return originalRealpathSync(target);
+    }) as typeof fs.realpathSync;
+
+    assert.equal(
+      resolvePathSafe(visiblePath, { allowedRoots: [tmpDir] }),
+      realPath,
+    );
+  } finally {
+    fs.realpathSync = originalRealpathSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("fs_operations: resolvePath is exported and resolves paths", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-resolve-"));
 
