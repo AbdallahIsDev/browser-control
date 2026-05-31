@@ -8,6 +8,8 @@ import {
 	type NetworkRouteEvidence,
 	type NetworkRule,
 } from "../../src/security/network_rules";
+import { DefaultPolicyEngine } from "../../src/policy/engine";
+import { BALANCED_PROFILE } from "../../src/policy/profiles";
 import { getStateStorage, resetStateStorage } from "../../src/state/index";
 
 type MockRouteHandler = (route: unknown) => Promise<void>;
@@ -137,7 +139,7 @@ describe("NetworkRuleEngine", () => {
 		);
 	});
 
-	it("uses the audit profile to observe tracker matches without blocking them", () => {
+	it("uses the audit profile to audit tracker matches without blocking them", () => {
 		const engine = new NetworkRuleEngine();
 		const trackerRule: NetworkRule = {
 			id: "tracker",
@@ -155,7 +157,7 @@ describe("NetworkRuleEngine", () => {
 				[trackerRule],
 				"audit",
 			),
-			{ decision: "allow" },
+			{ decision: "audit", matchedRule: trackerRule },
 		);
 		assert.deepEqual(
 			engine.evaluateRequest(
@@ -165,6 +167,25 @@ describe("NetworkRuleEngine", () => {
 				"balanced",
 			),
 			{ decision: "block", matchedRule: trackerRule },
+		);
+	});
+
+	it("uses the policy engine as final authority for network domain decisions", () => {
+		const policyEngine = new DefaultPolicyEngine({
+			customProfile: {
+				...BALANCED_PROFILE,
+				name: "network-domain-policy",
+				browserPolicy: {
+					...BALANCED_PROFILE.browserPolicy,
+					blockedDomains: ["policy-blocked.example"],
+				},
+			},
+		});
+		const engine = new NetworkRuleEngine(undefined, policyEngine);
+
+		assert.deepEqual(
+			engine.evaluateRequest("https://policy-blocked.example/app.js", "script", []),
+			{ decision: "block", matchedRule: undefined },
 		);
 	});
 });

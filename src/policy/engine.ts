@@ -20,6 +20,7 @@ import type {
   FilesystemPolicy,
   BrowserPolicy,
   LowLevelPolicy,
+  PrivacyProfileName,
 } from "./types";
 import fs from "node:fs";
 import path from "node:path";
@@ -227,6 +228,8 @@ export class DefaultPolicyEngine implements PolicyEngine {
         return this.evaluateBrowserPolicy(step, context);
       case "low_level":
         return this.evaluateLowLevelPolicy(step, context);
+      case "network":
+        return this.evaluateNetworkPolicy(step, context);
       default:
         return {
           decision: "deny",
@@ -533,6 +536,107 @@ export class DefaultPolicyEngine implements PolicyEngine {
     };
   }
 
+  private evaluateNetworkPolicy(
+    step: RoutedStep,
+    context: ExecutionContext,
+  ): PolicyEvaluationResult {
+    const policy = this.profile.browserPolicy;
+    const domain = context.targetDomain ?? this.getNetworkDomain(step);
+
+    if (policy.blockedDomains && policy.blockedDomains.length > 0 && domain) {
+      if (this.matchesDomain(domain, policy.blockedDomains)) {
+        return {
+          decision: "deny",
+          reason: `Network domain is blocked: ${domain}`,
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "blockedDomains",
+          auditRequired: false,
+        };
+      }
+    }
+
+    if (policy.allowedDomains && policy.allowedDomains.length > 0 && domain) {
+      if (!this.matchesDomain(domain, policy.allowedDomains)) {
+        return {
+          decision: "deny",
+          reason: `Network domain not in allowed list: ${domain}`,
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "allowedDomains",
+          auditRequired: false,
+        };
+      }
+    }
+
+    const matchedRuleType = typeof step.params.matchedRuleType === "string"
+      ? step.params.matchedRuleType
+      : undefined;
+    const privacyProfile = this.getNetworkPrivacyProfile(step);
+
+    if (matchedRuleType === "allowlist") {
+      return {
+        decision: "allow",
+        reason: "Network request matched allowlist rule",
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "networkRule:allowlist",
+        auditRequired: false,
+      };
+    }
+
+    if (matchedRuleType === "denylist") {
+      return {
+        decision: "deny",
+        reason: "Network request matched denylist rule",
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "networkRule:denylist",
+        auditRequired: false,
+      };
+    }
+
+    if (matchedRuleType === "tracker") {
+      if (privacyProfile === "audit") {
+        return {
+          decision: "allow_with_audit",
+          reason: "Network tracker matched in audit privacy profile",
+          profile: this.profileName,
+          risk: step.risk,
+          matchedRule: "networkRule:tracker",
+          auditRequired: true,
+        };
+      }
+      return {
+        decision: "deny",
+        reason: `Network tracker blocked by ${privacyProfile} privacy profile`,
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "networkRule:tracker",
+        auditRequired: false,
+      };
+    }
+
+    if (privacyProfile === "strict") {
+      return {
+        decision: "deny",
+        reason: "Strict privacy profile blocks unmatched network request",
+        profile: this.profileName,
+        risk: step.risk,
+        matchedRule: "privacyProfile:strict",
+        auditRequired: false,
+      };
+    }
+
+    return {
+      decision: "allow",
+      reason: "Network policy allows this request",
+      profile: this.profileName,
+      risk: step.risk,
+      auditRequired: false,
+    };
+  }
+
   /**
    * Evaluate low-level policy rules.
    */
@@ -659,6 +763,28 @@ export class DefaultPolicyEngine implements PolicyEngine {
       const pat = pattern.toLowerCase();
       return normalized === pat || normalized.endsWith(`.${pat}`);
     });
+  }
+
+  private getNetworkDomain(step: RoutedStep): string | undefined {
+    if (typeof step.params.domain === "string") {
+      return step.params.domain;
+    }
+    if (typeof step.params.url !== "string") {
+      return undefined;
+    }
+    try {
+      return new URL(step.params.url).hostname.toLowerCase();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getNetworkPrivacyProfile(step: RoutedStep): PrivacyProfileName {
+    const value = step.params.privacyProfile;
+    if (value === "strict" || value === "balanced" || value === "audit") {
+      return value;
+    }
+    return this.profile.privacyPolicy.profile;
   }
 
   /**

@@ -6,7 +6,10 @@ import {
 } from "../state/index";
 import { redactUrl } from "../observability/redaction";
 import type { NetworkEntry } from "../observability/types";
+import { DefaultPolicyEngine } from "../policy/engine";
+import type { PrivacyProfileName } from "../policy/types";
 import trackerProfiles from "./tracker_profiles.json";
+export type { PrivacyProfileName } from "../policy/types";
 
 const log = logger.withComponent("network-rules");
 
@@ -61,8 +64,6 @@ export interface NetworkRule {
 	source: "user" | "built-in" | "profile";
 	createdAt: string;
 }
-
-export type PrivacyProfileName = "strict" | "balanced" | "audit";
 
 export interface PrivacyProfile {
 	name: PrivacyProfileName;
@@ -170,10 +171,12 @@ function normalizeResourceType(value: string | undefined): ResourceType {
 
 export class NetworkRuleEngine {
 	private storage: StateStorage;
+	private policyEngine: DefaultPolicyEngine;
 	private loadedBuiltIn = false;
 
-	constructor(storage?: StateStorage) {
+	constructor(storage?: StateStorage, policyEngine?: DefaultPolicyEngine) {
 		this.storage = storage ?? getStateStorage();
+		this.policyEngine = policyEngine ?? new DefaultPolicyEngine({ profileName: "balanced" });
 	}
 
 	private async ensureBuiltInLoaded(): Promise<void> {
@@ -270,7 +273,7 @@ export class NetworkRuleEngine {
 		profile?: PrivacyProfileName,
 	): { decision: "allow" | "block" | "audit"; matchedRule?: NetworkRule } {
 		const activeRules = rules ?? [];
-		const privacyConfig = PRIVACY_PROFILES[profile ?? "balanced"];
+		const privacyProfile = profile ?? "balanced";
 		const matches = activeRules.filter((rule) => {
 			if (!rule.enabled) return false;
 			if (!domainMatches(rule.pattern, url)) return false;
@@ -284,22 +287,39 @@ export class NetworkRuleEngine {
 			return true;
 		});
 
-		const allowRule = matches.find((rule) => rule.ruleType === "allowlist");
-		if (allowRule) return { decision: "allow", matchedRule: allowRule };
+		const matchedRule =
+			matches.find((rule) => rule.ruleType === "allowlist") ??
+			matches.find((rule) => rule.ruleType === "denylist") ??
+			matches.find((rule) => rule.ruleType === "tracker");
+		const domain = hostnameFromUrl(url);
+		const risk = matchedRule?.ruleType === "allowlist"
+			? "low"
+			: matchedRule || privacyProfile === "strict" ? "moderate" : "low";
+		const evaluation = this.policyEngine.evaluate(
+			{
+				id: `network-${crypto.createHash("sha256").update(url).digest("hex").slice(0, 12)}`,
+				path: "network",
+				action: "network_request",
+				params: {
+					url,
+					domain,
+					resourceType,
+					matchedRuleId: matchedRule?.id,
+					matchedRuleType: matchedRule?.ruleType,
+					privacyProfile,
+				},
+				risk,
+			},
+			{ targetDomain: domain },
+		);
 
-		const denyRule = matches.find((rule) => rule.ruleType === "denylist");
-		if (denyRule) return { decision: "block", matchedRule: denyRule };
-
-		const trackerRule = matches.find((rule) => rule.ruleType === "tracker");
-		if (trackerRule && privacyConfig.blockTrackers) {
-			return { decision: "block", matchedRule: trackerRule };
+		if (evaluation.decision === "deny") {
+			return { decision: "block", matchedRule };
 		}
-
-		if (privacyConfig.blockUnknown) {
-			return { decision: "block" };
+		if (evaluation.decision === "allow_with_audit") {
+			return { decision: "audit", matchedRule };
 		}
-
-		return { decision: "allow" };
+		return matchedRule ? { decision: "allow", matchedRule } : { decision: "allow" };
 	}
 
 	async applyToPage(

@@ -65,8 +65,8 @@ import {
 } from "../security/credential_vault";
 import {
 	NetworkRuleEngine,
-	type PrivacyProfileName,
 } from "../security/network_rules";
+import type { PrivacyProfileName } from "../policy/types";
 import type { BrowserConnectionManager, BrowserDropResult } from "./connection";
 import { globalRefStore } from "./core";
 import {
@@ -862,7 +862,8 @@ export class BrowserActions {
 
 	private getNetworkPrivacyProfile(): PrivacyProfileName {
 		const profile = this.context.sessionManager.getActiveSession()?.policyProfile;
-		if (profile === "strict" || profile === "audit") return profile;
+		if (profile === "safe" || profile === "strict") return "strict";
+		if (profile === "trusted" || profile === "audit") return "audit";
 		return "balanced";
 	}
 
@@ -956,7 +957,7 @@ export class BrowserActions {
 		if (this.networkPrivacyPages.has(page)) return;
 		this.networkPrivacyPages.add(page);
 		try {
-			const engine = new NetworkRuleEngine();
+			const engine = new NetworkRuleEngine(undefined, this.context.sessionManager.getPolicyEngine());
 			await engine.applyToPage(page, {
 				profile: this.getNetworkPrivacyProfile(),
 				sessionId,

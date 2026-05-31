@@ -8,7 +8,7 @@
 
 // ── Core Type Definitions ─────────────────────────────────────────────
 
-export type ExecutionPath = "command" | "a11y" | "low_level";
+export type ExecutionPath = "command" | "a11y" | "low_level" | "network";
 export type RiskLevel = "low" | "moderate" | "high" | "critical";
 export type PolicyDecision = "allow" | "allow_with_audit" | "require_confirmation" | "deny";
 
