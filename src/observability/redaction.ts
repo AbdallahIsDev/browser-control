@@ -9,6 +9,9 @@
 // ── Secret Patterns ────────────────────────────────────────────────────
 
 const SENSITIVE_PATTERNS = [
+  /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z]+ )?PRIVATE KEY-----/g,
+  /\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b/g,
+  /\bsk-[a-zA-Z0-9_-]{20,}\b/g,
   // API keys and tokens
   /api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   /api[_-]?token\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
@@ -25,6 +28,7 @@ const SENSITIVE_PATTERNS = [
   // CAPTCHA
   /captcha[_-]?api[_-]?key\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   // Generic secrets
+  /client[_-]?secret\s*[:=]\s*["']?[^"'\s&<>]+["']?/gi,
   /secret\s*[:=]\s*["']?[a-zA-Z0-9_-]{16,}["']?/gi,
   /[a-zA-Z0-9_-]*cookie[a-zA-Z0-9_-]*\s*[:=]\s*["']?[^"'\s;]{4,}["']?/gi,
   /password\s*[:=]\s*["']?[^"'\s]{4,}["']?/gi,
@@ -47,6 +51,7 @@ const SENSITIVE_QUERY_PARAMS = new Set([
   "access_token",
   "refresh_token",
   "secret",
+  "client_secret",
   "password",
   "passwd",
   "key",
@@ -73,7 +78,7 @@ export function redactUrl(url: string): string {
     return parsed.toString();
   } catch {
     return url.replace(
-      /([?&](?:token|api[_-]?key|apikey|key|secret|password|auth|access_token|refresh_token)=)([^&\s"'<>]+)/gi,
+      /([?&](?:token|api[_-]?key|apikey|key|secret|client[_-]?secret|password|auth|access_token|refresh_token)=)([^&\s"'<>]+)/gi,
       `$1${REDACTION_TOKEN}`,
     );
   }
@@ -104,7 +109,7 @@ export function redactString(input: string): string {
     });
   }
   result = result.replace(
-    /(\b(?:token|api[_-]?key|api[_-]?token|auth[_-]?token|access[_-]?token|refresh[_-]?token|browserless[_-]?token|secret|password|passwd|bearer)\s*=\s*)[^&\s"'<>]+/gi,
+    /(\b(?:token|api[_-]?key|api[_-]?token|auth[_-]?token|access[_-]?token|refresh[_-]?token|browserless[_-]?token|client[_-]?secret|secret|password|passwd|bearer)\s*=\s*)[^&\s"'<>]+/gi,
     `$1${REDACTION_TOKEN}`,
   );
   result = result.replace(

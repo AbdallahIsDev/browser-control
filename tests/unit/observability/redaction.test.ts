@@ -67,6 +67,45 @@ describe("redactString", () => {
     assert(!result.includes("signature_secret"));
   });
 
+  it("redacts bare JWT values", () => {
+    const jwt =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInNjb3BlIjoiYWxsIn0.signature_secret_value";
+    const result = redactString(`Login failed for token ${jwt}`);
+
+    assert(result.includes("[REDACTED]"));
+    assert(!result.includes(jwt));
+    assert(!result.includes("signature_secret_value"));
+  });
+
+  it("redacts bare OpenAI-style sk keys", () => {
+    const key = "sk-proj_1234567890abcdefghijklmnopqrstuvwxyz";
+    const result = redactString(`provider error for key ${key}`);
+
+    assert(result.includes("[REDACTED]"));
+    assert(!result.includes(key));
+  });
+
+  it("redacts SSH private key blocks", () => {
+    const privateKey = [
+      "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAA",
+      "-----END OPENSSH PRIVATE KEY-----",
+    ].join("\n");
+    const result = redactString(`load failed:\n${privateKey}\nretry`);
+
+    assert(result.includes("[REDACTED]"));
+    assert(!result.includes("OPENSSH PRIVATE KEY"));
+    assert(!result.includes("b3BlbnNzaC1rZXktdjE"));
+  });
+
+  it("redacts explicit client_secret values", () => {
+    const secret = "oauth.secret.value.with.dots.1234567890";
+    const result = redactString(`client_secret="${secret}"`);
+
+    assert(result.includes("[REDACTED]"));
+    assert(!result.includes(secret));
+  });
+
   it("redacts cookies", () => {
     const input = "Cookie: session_id=abc123; auth_token=xyz789";
     const result = redactString(input);
