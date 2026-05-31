@@ -103,6 +103,12 @@ function sessionEchoCommand(): string {
     : 'printf "session-hello\\n"';
 }
 
+function slowSessionCommand(): string {
+  return os.platform() === "win32"
+    ? 'Start-Sleep -Milliseconds 800; Write-Output "first-done"'
+    : 'sleep 0.8; printf "first-done\\n"';
+}
+
 function errorLookingStdoutCommand(): string {
   return os.platform() === "win32"
     ? 'Write-Output "Error: Connection successful"; Write-Output "bash: not an error"'
@@ -166,6 +172,30 @@ test("terminal_session: PTY exec preserves user data that resembles control mark
     assert.match(result.stdout, /keep __BC_E_123:0 user data/);
     assert.match(result.stdout, /before \}; after/);
     assert.doesNotMatch(result.stdout, /\$__bc_success|Write-Output/);
+  } finally {
+    await manager.closeAll();
+  }
+});
+
+test("terminal_session: rejects concurrent exec calls on the same session", { timeout: 20000 }, async () => {
+  const manager = new TerminalSessionManager();
+  const session = await manager.create();
+
+  try {
+    const firstExec = session.exec(slowSessionCommand(), { timeoutMs: 5000 });
+
+    await assert.rejects(
+      () => session.exec(sessionEchoCommand(), { timeoutMs: 5000 }),
+      /already executing a command/,
+    );
+
+    const result = await firstExec;
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /first-done/);
+
+    const snapshot = await session.snapshot();
+    assert.equal(snapshot.status, "idle");
+    assert.equal(snapshot.runningCommand, undefined);
   } finally {
     await manager.closeAll();
   }

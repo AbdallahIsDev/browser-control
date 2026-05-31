@@ -209,136 +209,146 @@ export class PtyTerminalSession implements ITerminalSession {
 
 	async exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 		this.assertNotClosed();
-
-		const timeoutMs = options.timeoutMs ?? 0;
-
-		// Use high-entropy markers so cleanup never treats user output as control data.
-		const markerId = crypto.randomUUID().replace(/-/g, "");
-		const startMarker = `__BC_S_${markerId}__`;
-		const endMarkerBase = `__BC_E_${markerId}`;
-
-		// Shell-specific command wrapping for exit code capture
-		// POSIX (bash/zsh): Uses $? for exit code
-		// PowerShell (Windows): Uses $LASTEXITCODE
-		const isWindowsShell = this._shellInfo.family === "windows";
-
-		const startCmd = isWindowsShell
-			? `Write-Output "${startMarker}"\r`
-			: `printf '%s\n' '${startMarker}'\r`;
-
-		let execCmd: string;
-		let successVariable: string | undefined;
-		let exitVariable: string | undefined;
-		if (isWindowsShell) {
-			successVariable = `__bc_success_${markerId}`;
-			exitVariable = `__bc_exit_${markerId}`;
-			execCmd = `& { ${command} }; $${successVariable} = $?; $${exitVariable} = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } elseif ($${successVariable}) { 0 } else { 1 }; Write-Output "${endMarkerBase}:$${exitVariable}"\r`;
-		} else {
-			execCmd = `${command}; __bc_ec=$?; printf '${endMarkerBase}:%s\n' "$__bc_ec"\r`;
+		if (this._status === "running") {
+			throw new Error(
+				`Terminal session ${this.id} is already executing a command.`,
+			);
 		}
 
 		this._status = "running";
 		this._runningCommand = command;
 		this._commandHistory.push(command);
-		const startMs = Date.now();
 
-		// Clear the output buffer
-		this._outputBuffer = "";
-		this._publicOutputBuffer = "";
+		const timeoutMs = options.timeoutMs ?? 0;
 
-		// Write the command sequence
-		if (this._process) {
-			this._process.write(startCmd);
-			await new Promise((r) => setTimeout(r, 50));
-			this._process.write(execCmd);
-		}
+		try {
+			// Use high-entropy markers so cleanup never treats user output as control data.
+			const markerId = crypto.randomUUID().replace(/-/g, "");
+			const startMarker = `__BC_S_${markerId}__`;
+			const endMarkerBase = `__BC_E_${markerId}`;
 
-		// Wait for the end marker with expanded exit code to appear.
-		const endMarkerEscaped = endMarkerBase.replace(
-			/[.*+?^${}()|[\]\\]/g,
-			"\\$&",
-		);
-		const endMarkerPattern = new RegExp(`${endMarkerEscaped}:\\d+`);
-		let timedOut = false;
+			// Shell-specific command wrapping for exit code capture
+			// POSIX (bash/zsh): Uses $? for exit code
+			// PowerShell (Windows): Uses $LASTEXITCODE
+			const isWindowsShell = this._shellInfo.family === "windows";
 
-		const waitForEndMarker = async (): Promise<void> => {
-			const pollInterval = 50;
-			const deadline = timeoutMs > 0 ? startMs + timeoutMs : startMs + 30000;
+			const startCmd = isWindowsShell
+				? `Write-Output "${startMarker}"\r`
+				: `printf '%s\n' '${startMarker}'\r`;
 
-			while (Date.now() < deadline) {
-				if (endMarkerPattern.test(this._outputBuffer)) {
-					return;
-				}
-				if (this._closed) return;
-				await new Promise((r) => setTimeout(r, pollInterval));
+			let execCmd: string;
+			let successVariable: string | undefined;
+			let exitVariable: string | undefined;
+			if (isWindowsShell) {
+				successVariable = `__bc_success_${markerId}`;
+				exitVariable = `__bc_exit_${markerId}`;
+				execCmd = `& { ${command} }; $${successVariable} = $?; $${exitVariable} = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } elseif ($${successVariable}) { 0 } else { 1 }; Write-Output "${endMarkerBase}:$${exitVariable}"\r`;
+			} else {
+				execCmd = `${command}; __bc_ec=$?; printf '${endMarkerBase}:%s\n' "$__bc_ec"\r`;
 			}
-			timedOut = true;
-			await this.interrupt();
-			await new Promise((r) => setTimeout(r, 200));
-		};
 
-		await waitForEndMarker();
+			const startMs = Date.now();
 
-		const durationMs = Date.now() - startMs;
+			// Clear the output buffer
+			this._outputBuffer = "";
+			this._publicOutputBuffer = "";
 
-		// Extract output between markers
-		let commandOutput = "";
-		let exitCode = timedOut ? 124 : 1;
+			// Write the command sequence
+			if (this._process) {
+				this._process.write(startCmd);
+				await new Promise((r) => setTimeout(r, 50));
+				this._process.write(execCmd);
+			}
 
-		const startIdx = this._outputBuffer.indexOf(startMarker);
-		const endMatch = this._outputBuffer.match(endMarkerPattern);
-
-		if (startIdx !== -1 && endMatch && endMatch.index !== undefined) {
-			// Get everything after the start marker line and before the end marker
-			const afterStart = this._outputBuffer.slice(
-				startIdx + startMarker.length,
+			// Wait for the end marker with expanded exit code to appear.
+			const endMarkerEscaped = endMarkerBase.replace(
+				/[.*+?^${}()|[\]\\]/g,
+				"\\$&",
 			);
-			const endPos = afterStart.search(endMarkerPattern);
+			const endMarkerPattern = new RegExp(`${endMarkerEscaped}:\\d+`);
+			let timedOut = false;
 
-			if (endPos !== -1) {
-				commandOutput = afterStart.slice(0, endPos);
+			const waitForEndMarker = async (): Promise<void> => {
+				const pollInterval = 50;
+				const deadline = timeoutMs > 0 ? startMs + timeoutMs : startMs + 30000;
 
-				// Extract exit code from the end marker
-				const exitCodeStr = endMatch[0].split(":")[1];
-				if (exitCodeStr) {
-					exitCode = parseInt(exitCodeStr, 10);
+				while (Date.now() < deadline) {
+					if (endMarkerPattern.test(this._outputBuffer)) {
+						return;
+					}
+					if (this._closed) return;
+					await new Promise((r) => setTimeout(r, pollInterval));
 				}
+				timedOut = true;
+				await this.interrupt();
+				await new Promise((r) => setTimeout(r, 200));
+			};
+
+			await waitForEndMarker();
+
+			const durationMs = Date.now() - startMs;
+
+			// Extract output between markers
+			let commandOutput = "";
+			let exitCode = timedOut ? 124 : 1;
+
+			const startIdx = this._outputBuffer.indexOf(startMarker);
+			const endMatch = this._outputBuffer.match(endMarkerPattern);
+
+			if (startIdx !== -1 && endMatch && endMatch.index !== undefined) {
+				// Get everything after the start marker line and before the end marker
+				const afterStart = this._outputBuffer.slice(
+					startIdx + startMarker.length,
+				);
+				const endPos = afterStart.search(endMarkerPattern);
+
+				if (endPos !== -1) {
+					commandOutput = afterStart.slice(0, endPos);
+
+					// Extract exit code from the end marker
+					const exitCodeStr = endMatch[0].split(":")[1];
+					if (exitCodeStr) {
+						exitCode = parseInt(exitCodeStr, 10);
+					}
+				}
+			} else if (this._outputBuffer.length > 0) {
+				commandOutput = this._outputBuffer;
 			}
-		} else if (this._outputBuffer.length > 0) {
-			commandOutput = this._outputBuffer;
+
+			// Clean ANSI codes and remove Browser Control marker/wrapper echo.
+			const cleanOutput = cleanPtyCommandOutput(
+				stripAnsi(commandOutput),
+				command,
+				{ startMarker, endMarkerBase, successVariable, exitVariable },
+			);
+
+			// PTY exposes one merged stream; keep it in stdout instead of guessing.
+			const { stdout, stderr } = splitPtyOutput(cleanOutput, command);
+			this._publicOutputBuffer = appendBoundedOutput(
+				this._publicOutputBuffer,
+				[stdout, stderr].filter(Boolean).join("\n"),
+			);
+
+			// Try to detect cwd from the full buffer
+			const detectedCwd = extractCwdFromPrompt(this._outputBuffer);
+			if (detectedCwd) {
+				this._cwd = detectedCwd;
+			}
+
+			return {
+				exitCode,
+				stdout: stdout.slice(0, options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT),
+				stderr: stderr.slice(0, options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT),
+				durationMs,
+				cwd: this._cwd,
+				timedOut,
+			};
+		} finally {
+			if (!this._closed) {
+				this._status = "idle";
+			}
+			this._runningCommand = undefined;
 		}
-
-		// Clean ANSI codes and remove Browser Control marker/wrapper echo.
-		const cleanOutput = cleanPtyCommandOutput(
-			stripAnsi(commandOutput),
-			command,
-			{ startMarker, endMarkerBase, successVariable, exitVariable },
-		);
-
-		// PTY exposes one merged stream; keep it in stdout instead of guessing.
-		const { stdout, stderr } = splitPtyOutput(cleanOutput, command);
-		this._publicOutputBuffer = appendBoundedOutput(
-			this._publicOutputBuffer,
-			[stdout, stderr].filter(Boolean).join("\n"),
-		);
-
-		// Try to detect cwd from the full buffer
-		const detectedCwd = extractCwdFromPrompt(this._outputBuffer);
-		if (detectedCwd) {
-			this._cwd = detectedCwd;
-		}
-
-		this._status = "idle";
-		this._runningCommand = undefined;
-
-		return {
-			exitCode,
-			stdout: stdout.slice(0, options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT),
-			stderr: stderr.slice(0, options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT),
-			durationMs,
-			cwd: this._cwd,
-			timedOut,
-		};
 	}
 
 	async write(data: string, options: TerminalWriteOptions = {}): Promise<void> {
