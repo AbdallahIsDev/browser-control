@@ -828,16 +828,20 @@ export class DefaultPolicyEngine implements PolicyEngine {
   private normalizeFilesystemPath(inputPath: string): string {
     const resolved = path.resolve(inputPath);
     try {
-      return fs.realpathSync.native(resolved).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+      return this.normalizePathCase(fs.realpathSync.native(resolved).replace(/\\/g, "/").replace(/\/+$/u, ""));
     } catch {
       const existingParent = this.findExistingParent(resolved);
       if (existingParent) {
         const realParent = fs.realpathSync.native(existingParent);
         const relativeSuffix = path.relative(existingParent, resolved);
-        return path.join(realParent, relativeSuffix).replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+        return this.normalizePathCase(path.join(realParent, relativeSuffix).replace(/\\/g, "/").replace(/\/+$/u, ""));
       }
-      return resolved.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+      return this.normalizePathCase(resolved.replace(/\\/g, "/").replace(/\/+$/u, ""));
     }
+  }
+
+  private normalizePathCase(normalizedPath: string): string {
+    return process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
   }
 
   private findExistingParent(inputPath: string): string | undefined {

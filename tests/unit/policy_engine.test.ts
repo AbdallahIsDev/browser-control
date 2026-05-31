@@ -142,6 +142,30 @@ test("denies restricted working directories after resolving dot components", () 
   }
 });
 
+test("normalizes filesystem paths without lowercasing case-sensitive platforms", () => {
+	const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-case-"));
+	Object.defineProperty(process, "platform", { value: "linux" });
+
+	try {
+		const policyEngine = new DefaultPolicyEngine({
+			logger: new Logger({ component: "test", level: "info" }),
+		});
+		const normalized = (
+			policyEngine as unknown as {
+				normalizeFilesystemPath(inputPath: string): string;
+			}
+		).normalizeFilesystemPath(path.join(home, "CaseSensitiveChild"));
+
+		assert.match(normalized, /CaseSensitiveChild$/u);
+	} finally {
+		if (originalPlatform) {
+			Object.defineProperty(process, "platform", originalPlatform);
+		}
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("initializes with a saved custom profile by name", () => {
   const previousHome = process.env.BROWSER_CONTROL_HOME;
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profile-"));
