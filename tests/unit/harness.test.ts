@@ -285,4 +285,50 @@ describe("LocalTempSandbox", () => {
     await sandbox.cleanup();
     fs.rmSync(home, { recursive: true, force: true });
   });
+
+  it("does not inherit sensitive ambient environment variables", async () => {
+    const home = makeTempHome();
+    const sandbox = new LocalTempSandbox();
+    const originalBrokerKey = process.env.BROKER_API_KEY;
+    const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
+    const originalBrowserControlHome = process.env.BROWSER_CONTROL_HOME;
+
+    try {
+      process.env.BROKER_API_KEY = "broker-secret";
+      process.env.OPENROUTER_API_KEY = "openrouter-secret";
+      process.env.BROWSER_CONTROL_HOME = "browser-control-home";
+      fs.writeFileSync(
+        path.join(home, "env.js"),
+        [
+          "console.log(JSON.stringify({",
+          "broker: process.env.BROKER_API_KEY || null,",
+          "openrouter: process.env.OPENROUTER_API_KEY || null,",
+          "browserControlHome: process.env.BROWSER_CONTROL_HOME || null,",
+          "helperInput: process.env.BC_HELPER_INPUT || null",
+          "}));",
+        ].join("\n"),
+      );
+
+      const result = await sandbox.run("node env.js", ["env.js"], home, {
+        env: { BC_HELPER_INPUT: "{\"target\":\"ok\"}" },
+      });
+
+      assert.strictEqual(result.success, true);
+      const output = JSON.parse(result.output ?? "{}");
+      assert.strictEqual(output.broker, null);
+      assert.strictEqual(output.openrouter, null);
+      assert.strictEqual(output.browserControlHome, "browser-control-home");
+      assert.strictEqual(output.helperInput, "{\"target\":\"ok\"}");
+    } finally {
+      if (originalBrokerKey === undefined) delete process.env.BROKER_API_KEY;
+      else process.env.BROKER_API_KEY = originalBrokerKey;
+      if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
+      if (originalBrowserControlHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+      else process.env.BROWSER_CONTROL_HOME = originalBrowserControlHome;
+      await sandbox.cleanup();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
 });

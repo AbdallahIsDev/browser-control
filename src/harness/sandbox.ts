@@ -15,6 +15,18 @@ import type { SandboxProvider, SandboxRunResult } from "./types";
 
 const SAFE_SANDBOX_COMMANDS = new Set(["node", "npm", "npx"]);
 const UNSAFE_SHELL_CHARS = /[&|;<>()`$\r\n]/;
+const SAFE_SANDBOX_ENV_NAMES = new Set([
+  "COMSPEC",
+  "HOME",
+  "PATH",
+  "PATHEXT",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "USERPROFILE",
+]);
+const SAFE_SANDBOX_ENV_PREFIXES = ["BROWSER_CONTROL_"];
+const SAFE_SANDBOX_EXTRA_ENV_PREFIXES = ["BC_HELPER_", ...SAFE_SANDBOX_ENV_PREFIXES];
 
 function parseSandboxCommand(command: string): { executable: string; args: string[] } {
   const trimmed = command.trim();
@@ -29,6 +41,32 @@ function parseSandboxCommand(command: string): { executable: string; args: strin
     throw new Error(`Sandbox command is not allowed: ${executable}`);
   }
   return { executable, args: parts.slice(1) };
+}
+
+function isAllowedSandboxEnvName(name: string): boolean {
+  const normalized = name.toUpperCase();
+  return (
+    SAFE_SANDBOX_ENV_NAMES.has(normalized) ||
+    SAFE_SANDBOX_ENV_PREFIXES.some(prefix => normalized.startsWith(prefix))
+  );
+}
+
+function isAllowedSandboxExtraEnvName(name: string): boolean {
+  const normalized = name.toUpperCase();
+  return SAFE_SANDBOX_EXTRA_ENV_PREFIXES.some(prefix => normalized.startsWith(prefix));
+}
+
+function buildSandboxEnv(extra: Record<string, string> = {}): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined || !isAllowedSandboxEnvName(key)) continue;
+    env[key] = value;
+  }
+  for (const [key, value] of Object.entries(extra)) {
+    if (value === undefined || !isAllowedSandboxExtraEnvName(key)) continue;
+    env[key] = String(value);
+  }
+  return env;
 }
 
 export class LocalTempSandbox implements SandboxProvider {
@@ -73,7 +111,7 @@ export class LocalTempSandbox implements SandboxProvider {
       // Run bounded command (max 30s timeout) without a shell.
       const output = execFileSync(parsed.executable, parsed.args, {
         cwd: this.tempDir,
-        env: { ...process.env, ...(options?.env ?? {}) },
+        env: buildSandboxEnv(options?.env),
         timeout: 30000,
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
