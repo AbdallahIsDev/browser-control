@@ -85,6 +85,15 @@ import {
 
 const log = logger.withComponent("browser_actions");
 
+function isSafeHighlightStyleValue(value: string): boolean {
+	const compact = value.toLowerCase().replace(/\s+/gu, "");
+	return !/[\\\u0000-\u001f\u007f]/u.test(value)
+		&& !value.includes("/*")
+		&& !compact.includes("@import")
+		&& !compact.includes("javascript:")
+		&& !/(?:url|expression)\(/u.test(compact);
+}
+
 interface BrowserWindowTarget {
 	page: Page;
 	targetId: string;
@@ -3268,7 +3277,7 @@ export class BrowserActions {
 				if (colonIndex === -1) continue;
 				const property = rule.slice(0, colonIndex).trim().toLowerCase();
 				const value = rule.slice(colonIndex + 1).trim();
-				if (safeStyleProperties.includes(property)) {
+				if (safeStyleProperties.includes(property) && isSafeHighlightStyleValue(value)) {
 					sanitizedStyle += `${property}: ${value}; `;
 				}
 			}

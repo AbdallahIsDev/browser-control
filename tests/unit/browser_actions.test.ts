@@ -103,6 +103,16 @@ type BrowserActionsInternals = {
 		page: MockPage,
 	) => Promise<{ locator: MockLocator; description: string } | null>;
 	ensureScreenshotViewport: (page: MockPage) => Promise<void>;
+	injectHighlightOverlay: (
+		page: MockPage,
+		locator: {
+			elementHandle: () => Promise<{
+				boundingBox: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
+			} | null>;
+		},
+		customStyle?: string,
+		persist?: boolean,
+	) => Promise<void>;
 };
 
 type TestBrowserManager = BrowserConnectionManager & {
@@ -524,6 +534,45 @@ describe("BrowserActions", () => {
 		it("uses global ref store when none provided", () => {
 			const actions = new BrowserActions({ sessionManager });
 			assert.ok(actions);
+		});
+	});
+
+	describe("highlight", () => {
+		it("removes CSS fetch and script-like values from custom overlay style", async () => {
+			const page = createMockPage("https://example.test/");
+			let injectedStyle = "";
+			page.evaluate = async (_callback: unknown, payload: unknown) => {
+				injectedStyle = (payload as { style: string }).style;
+				return undefined;
+			};
+
+			const actions = browserActions as unknown as BrowserActionsInternals;
+			await actions.injectHighlightOverlay(
+				page,
+				{
+					elementHandle: async () => ({
+						boundingBox: async () => ({
+							x: 10,
+							y: 20,
+							width: 100,
+							height: 50,
+						}),
+					}),
+				},
+				[
+					"background-color: url(https://evil.test/exfil)",
+					"outline: expression(alert(1))",
+					"border-color: red",
+					"box-shadow: 0 0 2px #000",
+				].join("; "),
+				true,
+			);
+
+			assert.doesNotMatch(injectedStyle, /url\s*\(/iu);
+			assert.doesNotMatch(injectedStyle, /expression\s*\(/iu);
+			assert.doesNotMatch(injectedStyle, /@import/iu);
+			assert.match(injectedStyle, /border-color: red/u);
+			assert.match(injectedStyle, /box-shadow: 0 0 2px #000/u);
 		});
 	});
 
