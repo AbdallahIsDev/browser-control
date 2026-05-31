@@ -19,6 +19,8 @@ describe("proof-of-work anti-abuse primitive", () => {
     const result = verifyProofOfWork(challenge, solution, { now: () => 2_000 });
 
     assert.equal(challenge.algorithm, "sha256");
+    assert.equal(typeof challenge.signature, "string");
+    assert.ok(challenge.signature.length > 0);
     assert.equal(result.ok, true);
     assert.match(result.hash ?? "", /^00/);
   });
@@ -48,5 +50,20 @@ describe("proof-of-work anti-abuse primitive", () => {
   it("bounds difficulty to prevent accidental local denial of service", () => {
     assert.throws(() => createProofOfWorkChallenge({ difficulty: 0 }), /difficulty/i);
     assert.throws(() => createProofOfWorkChallenge({ difficulty: 99 }), /difficulty/i);
+  });
+
+  it("rejects client-side challenge difficulty tampering", () => {
+    const challenge = createProofOfWorkChallenge({
+      difficulty: 3,
+      ttlMs: 60_000,
+      now: () => 1_000,
+      randomBytes: () => Buffer.from("deterministic-challenge-789"),
+    });
+    const tampered = { ...challenge, difficulty: 1 };
+    const solution = solveProofOfWorkForTest(tampered);
+    const result = verifyProofOfWork(tampered, solution, { now: () => 2_000 });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? "", /integrity/i);
   });
 });
