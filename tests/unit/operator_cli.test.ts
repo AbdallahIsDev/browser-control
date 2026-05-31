@@ -739,12 +739,167 @@ test("bc package --help shows package-focused help", () => {
 	}
 });
 
-test("top-level browser actions keep the first user argument", () => {
-	const parsed = parseArgs(["node", "cli.ts", "open", "https://example.com"]);
-	assert.deepEqual(getBrowserActionPositionals("open", parsed), [
-		"https://example.com",
-	]);
+test("bc --help keeps browser shortcut guidance compact and current", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
 
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.match(result.stdout, /Browser Shortcuts \(compatibility\):/);
+		assert.doesNotMatch(result.stdout, /\n\s+open <url>\s+/);
+		assert.doesNotMatch(result.stdout, /term view <sessionId>/);
+		for (const shortcut of [
+			"snapshot",
+			"click <ref-or-target>",
+			"fill <ref-or-target> <text>",
+			"hover <ref-or-target>",
+			"type <text>",
+			"paste <text>",
+			"press <key>",
+			"scroll <direction>",
+			"screenshot",
+			"tab list",
+			"tab switch <id>",
+			"close",
+		]) {
+			assert.match(
+				result.stdout,
+				new RegExp(`${shortcut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*Shortcut for:`),
+				`shortcut help missing compact guidance for ${shortcut}`,
+			);
+		}
+		for (const browserCommand of [
+			"browser list",
+			"browser detach",
+			"browser open <url>",
+			"browser navigate <url>",
+			"browser open-many",
+			"browser capture ",
+			"browser capture-many",
+			"browser tab list",
+			"browser tab switch <id>",
+			"browser highlight <target>",
+			"browser drop <target>",
+			"browser downloads list",
+		]) {
+			assert.match(
+				result.stdout,
+				new RegExp(browserCommand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+				`help missing implemented browser command ${browserCommand}`,
+			);
+		}
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("removed CLI aliases fail before browser or daemon work starts", () => {
+	const home = makeHome();
+	try {
+		const openResult = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"open",
+				"https://example.com",
+				"--json",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(openResult.status, 0);
+		assert.match(openResult.stderr, /Unknown command: open/);
+
+		const termViewResult = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"term",
+				"view",
+				"term-test",
+				"--json",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(termViewResult.status, 0);
+		assert.match(termViewResult.stderr, /Unknown term command: view/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("unknown browser command lists implemented recovery commands", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"browser",
+				"unknown",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.notEqual(result.status, 0);
+		for (const command of [
+			"list",
+			"detach",
+			"open",
+			"snapshot",
+			"drop",
+			"downloads",
+			"open-many",
+			"capture-many",
+		]) {
+			assert.match(result.stderr, new RegExp(`\\b${command}\\b`));
+		}
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("top-level browser shortcuts keep the first user argument", () => {
 	const fill = parseArgs([
 		"node",
 		"cli.ts",

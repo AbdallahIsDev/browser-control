@@ -502,7 +502,7 @@ export class BrowserActions {
 			}
 		}
 		throw new Error(
-			"No active browser page. Use 'bc open <url>' or 'bc browser attach' first.",
+			"No active browser page. Use 'bc browser open <url>' or 'bc browser attach' first.",
 		);
 	}
 
@@ -1443,14 +1443,7 @@ export class BrowserActions {
 	 *
 	 * If no browser is connected, this will attempt to attach to a
 	 * running browser on the configured debug port first. This is the
-	 * canonical first action — it should work as `bc open <url>`.
-	 */
-	/**
-	 * Open a URL in the browser.
-	 *
-	 * If no browser is connected, this will attempt to attach to a
-	 * running browser on the configured debug port first. This is the
-	 * canonical first action — it should work as `bc open <url>`.
+	 * canonical first action — it should work as `bc browser open <url>`.
 	 */
 	async open(
 		options: OpenOptions,

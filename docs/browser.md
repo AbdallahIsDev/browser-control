@@ -24,20 +24,20 @@ Commands:
 bc browser launch --port 9222 --profile default
 bc browser attach --port 9222
 bc browser status
-bc open https://example.com
+bc browser open https://example.com
 bc snapshot
 ```
 
 ## Browser Readiness
 
-`bc_open` automatically ensures a browser is connected before navigating. The connection sequence is:
+`bc browser open` automatically ensures a browser is connected before navigating. The connection sequence is:
 
 1. **Already connected** — uses the existing browser page.
 2. **Reconnect** — attempts to reconnect to a previously managed browser.
 3. **Attach** — tries to attach to a running Chrome on the configured CDP port.
 4. **Auto-launch fallback** — if attach fails and `browserAutoLaunch` is `true` (default), launches a managed browser automatically.
 
-This means `bc open https://example.com` works as a single first command without needing a prior `bc browser launch` or `bc browser attach`, as long as `BROWSER_AUTO_LAUNCH` is not set to `false`.
+This means `bc browser open https://example.com` works as a single first command without needing a prior `bc browser launch` or `bc browser attach`, as long as `BROWSER_AUTO_LAUNCH` is not set to `false`.
 
 To disable auto-launch (strict attach-only mode):
 

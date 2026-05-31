@@ -39,7 +39,7 @@ To control visible Windows Chrome from WSL, start Windows Chrome through the Win
 cd /mnt/c/path/to/browser-control
 /mnt/c/Windows/System32/cmd.exe /C "set BROWSER_ENABLE_WSL_CDP_BRIDGE=1&& launch_browser.bat 9222"
 bc browser attach --port=9222 --yes
-bc open https://example.com --json
+bc browser open https://example.com --json
 bc screenshot --json
 ```
 

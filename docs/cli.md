@@ -65,10 +65,9 @@ bc config list --json
 bc config set logLevel debug
 ```
 
-## Browser Actions
+## Browser Shortcuts
 
 ```text
-open <url> [--wait-until]
 snapshot [--root-selector]
 click <ref-or-target> [--timeout] [--force]
 fill <ref-or-target> <text> [--timeout] [--commit]
@@ -82,6 +81,9 @@ tab switch <id>
 close
 ```
 
+These are compatibility shortcuts for `bc browser ...`; prefer `bc browser open`,
+`bc browser act`, and `bc browser task run` for new automation.
+
 Targets can be accessibility refs such as `@e3`, CSS selectors, or text matches.
 
 ## Composite Browser Commands
@@ -90,10 +92,19 @@ These commands are the preferred high-level path for agents that need fewer oper
 
 ```text
 browser open <url> [--wait-until] [--json]
+browser navigate <url> [--tab] [--wait-until] [--json]
+browser open-many --urls <json> [--wait-until] [--json]
 browser snapshot [--root-selector] [--boxes] [--json]
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
+browser capture [--snapshot] [--screenshot] [--json]
+browser capture-many --tab-ids <ids>|--urls <json> [--snapshot] [--screenshot] [--json]
 browser act <action> [target] [text] [--text] [--key] [--url] [--urls] [--fields] [--wait-until] [--timeout] [--capture-on-success] [--snapshot] [--screenshot] [--json]
 browser task run --steps <json>|--steps-file <path> [--timeout] [--continue-on-failure] [--json]
+browser tab list [--json]
+browser tab switch <id> [--json]
+browser highlight <target> [--json]
+browser drop <target> --file <path>|--data <mime=value> [--json]
+browser downloads list [--json]
 ```
 
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.

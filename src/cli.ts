@@ -769,20 +769,19 @@ Self-Healing Harness (Section 29):
                                                                      Generate a helper
   harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
 
-Browser Actions:
-  open <url>                                                         Open a URL in the browser
-  snapshot                                                           Take an accessibility snapshot
-  click <ref-or-target>                                              Click an element (ref, selector, or text)
-  fill <ref-or-target> <text>                                        Fill an element with text
-  hover <ref-or-target>                                             Hover over an element
-  type <text>                                                        Type text into focused element
-  paste <text> [--target=<ref-or-target>]                            Paste/insert text into focused element
-  press <key>                                                        Press a keyboard key
-  scroll <direction>                                                 Scroll (up/down/left/right)
-  screenshot [--output=<path>] [--full-page] [--target=<ref>]         Take a screenshot
-  tab list                                                           List browser tabs
-  tab switch <id>                                                    Switch to a browser tab
-  close                                                              Close the current browser tab
+Browser Shortcuts (compatibility):
+  snapshot                                                           Shortcut for: bc browser snapshot
+  click <ref-or-target>                                              Shortcut for: bc browser act click <target>
+  fill <ref-or-target> <text>                                        Shortcut for: bc browser act fill <target> <text>
+  hover <ref-or-target>                                             Shortcut for: bc browser act hover <target>
+  type <text>                                                        Shortcut for: bc browser act type --text=<text>
+  paste <text> [--target=<ref-or-target>]                            Shortcut for: bc browser act paste --text=<text>
+  press <key>                                                        Shortcut for: bc browser act press --key=<key>
+  scroll <direction>                                                 Shortcut for: bc browser act scroll --direction=<direction>
+  screenshot [--output=<path>] [--full-page] [--target=<ref>]         Shortcut for: bc browser act screenshot
+  tab list                                                           Shortcut for: bc browser tab list
+  tab switch <id>                                                    Shortcut for: bc browser tab switch <id>
+  close                                                              Shortcut for: bc browser act tab-close
 
 Session:
   session list                                                       List sessions
@@ -796,13 +795,24 @@ Browser Lifecycle:
   browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser
+  browser list [--all] [--json]                                      List attachable browsers
+  browser detach [--json]                                            Detach from the active browser
   browser status                                                     Show browser connection status
   browser open <url> [--json]                                       Open/navigate browser tab
+  browser navigate <url> [--tab=<id>] [--json]                       Navigate current or selected tab
+  browser open-many --urls='<json>' [--json]                         Open multiple tabs
   browser snapshot [--boxes] [--json]                                Take accessibility snapshot
   browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
+  browser capture [--snapshot] [--screenshot] [--json]               Capture current tab state
+  browser capture-many --tab-ids=<ids>|--urls='<json>' [--json]      Capture multiple tabs
   browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--capture-on-success] [--json]
                                                                       Run one composite browser action
   browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps
+  browser tab list [--json]                                          List browser tabs
+  browser tab switch <id> [--json]                                   Switch to a browser tab
+  browser highlight <target> [--json]                                Highlight an element
+  browser drop <target> --file=<path>|--data=<mime=value> [--json]   Drop files or data onto a page target
+  browser downloads list [--json]                                    List browser downloads
   browser provider list                                              List browser providers
   browser provider catalog                                           List supported browser provider types
   browser provider use <name>                                        Set active browser provider
@@ -854,7 +864,6 @@ Browser Lifecycle:
   term list                                                           List active sessions
   term resume <sessionId>                                             Resume a session from persisted state
   term status <sessionId>                                             Show resume status for a session
-  term view <sessionId> [--dashboard]                                 View terminal render state for dashboard
   fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>] [--yes]                           Write to a file
   fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
@@ -3347,7 +3356,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown browser command: ${subcommand}`);
 			console.error(
-				"Available: attach, launch, status, profile, auth, highlight, state, act, task, tab, open-many, navigate, capture, capture-many",
+				"Available: attach, launch, list, detach, status, open, navigate, open-many, snapshot, state, capture, capture-many, act, task, tab, highlight, drop, downloads, provider, profile, auth",
 			);
 			throw commandFailed();
 	}
@@ -3479,11 +3488,7 @@ export async function runCli(argv = process.argv): Promise<void> {
 				await handlePolicy(args);
 				break;
 
-			// ── Top-level browser actions (Section 5) ─────────────────────
-			case "open":
-				await handleBrowserAction("open", args);
-				break;
-
+			// ── Top-level browser shortcuts (Section 5) ───────────────────
 			case "snapshot":
 				await handleBrowserAction("snapshot", args);
 				break;
@@ -4028,7 +4033,6 @@ const DAEMON_REQUIRED_TERM_COMMANDS = new Set([
 	"list",
 	"resume",
 	"status",
-	"view",
 ]);
 
 export async function handleTerm(args: ParsedArgs): Promise<void> {
@@ -4218,16 +4222,6 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 				break;
 			}
 
-			case "view": {
-				const sessionId = positional[0] || flags.session;
-				if (!sessionId) {
-					console.error("Error: session ID is required for 'term view'");
-					throw commandFailed();
-				}
-				result = await terminalActions.snapshot({ sessionId });
-				break;
-			}
-
 			default:
 				console.error(`Unknown term command: ${subcommand}`);
 				throw commandFailed();
@@ -4293,25 +4287,6 @@ export async function handleTerm(args: ParsedArgs): Promise<void> {
 						);
 						if (resumeData.lost.length > 0) {
 							console.log(`Lost:    ${resumeData.lost.join(", ")}`);
-						}
-					} else if (subcommand === "view" && result.data) {
-						const { buildTerminalView } = await import("./terminal/render");
-						const view = buildTerminalView(
-							result.data as import("./terminal/types").TerminalSnapshot,
-						);
-						if (flags.dashboard === "true" || flags.json === "true") {
-							outputJson(view, true);
-						} else {
-							console.log(
-								`Browser Terminal View: ${view.title} (${view.status})`,
-							);
-							console.log(`Can accept input: ${view.canAcceptInput}`);
-							console.log(`Rows:`);
-							for (const row of view.rows) {
-								console.log(
-									`  [${row.index.toString().padStart(4)}] ${row.text}`,
-								);
-							}
 						}
 					} else {
 						outputJson(result.data, true);
@@ -5847,19 +5822,6 @@ async function handleBrowserAction(
 			flags["continue-on-failure"] === "true";
 
 		switch (action) {
-			case "open": {
-				const url = positional[0];
-				if (!url) {
-					console.error("Error: URL is required");
-					throw commandFailed();
-				}
-				result = await browserActions.open({
-					url,
-					waitUntil: parseWaitUntil(flags["wait-until"]),
-				});
-				break;
-			}
-
 			case "snapshot": {
 				result = await browserActions.takeSnapshot({
 					rootSelector: flags["root-selector"],
@@ -6025,7 +5987,7 @@ async function handleBrowserAction(
 			}
 
 			case "close": {
-				result = await browserActions.close();
+				result = await browserActions.tabClose();
 				break;
 			}
 

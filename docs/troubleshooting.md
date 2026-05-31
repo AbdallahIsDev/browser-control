@@ -19,10 +19,10 @@ Symptoms:
 
 Auto-launch (default):
 
-By default, `bc open <url>` automatically launches a managed browser if no browser is attachable. No manual launch step is required.
+By default, `bc browser open <url>` automatically launches a managed browser if no browser is attachable. No manual launch step is required.
 
 ```powershell
-bc open https://example.com
+bc browser open https://example.com
 ```
 
 If auto-launch fails, check Chrome installation and try an explicit launch:

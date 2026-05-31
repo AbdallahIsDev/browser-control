@@ -91,7 +91,7 @@ test("CLI inventory includes required public commands", async () => {
 		"config",
 		"status",
 		"mcp",
-		"open",
+		"browser",
 		"snapshot",
 		"click",
 		"term",
