@@ -2725,6 +2725,64 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("caps the in-memory Playwright download registry and evicts oldest records", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/download");
+			const manager = createConnectedBrowserManager([page]);
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
+				const actions = new BrowserActions({
+					sessionManager: sm,
+					downloadRegistryMaxEntries: 2,
+				});
+
+				for (const filename of ["one.txt", "two.txt", "three.txt"]) {
+					await (
+						actions as unknown as {
+							recordDownload: (
+								page: MockPage,
+								download: {
+									suggestedFilename: () => string;
+									url: () => string;
+									saveAs: (destPath: string) => Promise<void>;
+									failure: () => Promise<null>;
+								},
+							) => Promise<void>;
+						}
+					).recordDownload(page, {
+						suggestedFilename: () => filename,
+						url: () => `https://example.test/${filename}`,
+						saveAs: async (destPath: string) => {
+							fs.mkdirSync(path.dirname(destPath), { recursive: true });
+							fs.writeFileSync(destPath, filename);
+						},
+						failure: async () => null,
+					});
+				}
+
+				const registry = (
+					actions as unknown as {
+						downloadRegistry: Array<{ suggestedFilename: string }>;
+					}
+				).downloadRegistry;
+
+				assert.equal(registry.length, 2);
+				assert.deepEqual(
+					registry.map((download) => download.suggestedFilename),
+					["three.txt", "two.txt"],
+				);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
 		it("labels filesystem entries as fallback when registry is empty", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const manager = createConnectedBrowserManager([createMockPage()]);

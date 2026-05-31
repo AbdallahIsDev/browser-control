@@ -84,6 +84,18 @@ import {
 } from "./dialogs";
 
 const log = logger.withComponent("browser_actions");
+const DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES = 200;
+
+function resolveDownloadRegistryMaxEntries(value?: number): number {
+	if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+		return value;
+	}
+	const fromEnv = Number(process.env.BROWSER_DOWNLOAD_REGISTRY_MAX_ENTRIES ?? "");
+	if (Number.isInteger(fromEnv) && fromEnv > 0) {
+		return fromEnv;
+	}
+	return DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES;
+}
 
 function isSafeHighlightStyleValue(value: string): boolean {
 	const compact = value.toLowerCase().replace(/\s+/gu, "");
@@ -223,6 +235,8 @@ export interface BrowserActionContext {
 	refStore?: RefStore;
 	/** Service registry to use for URL resolution (defaults to global). */
 	serviceRegistry?: ServiceRegistry;
+	/** Maximum in-memory Playwright download records retained per BrowserActions instance. */
+	downloadRegistryMaxEntries?: number;
 }
 
 export interface OpenOptions {
@@ -439,11 +453,15 @@ export class BrowserActions {
 	private readonly downloadPages = new WeakSet<Page>();
 	private readonly downloadContexts = new WeakSet<BrowserContext>();
 	private readonly downloadRegistry: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
+	private readonly maxDownloadRegistryEntries: number;
 	private readonly trackedPages = new WeakSet<Page>();
 
 	constructor(context: BrowserActionContext) {
 		this.context = context;
 		this.refStore = context.refStore ?? globalRefStore;
+		this.maxDownloadRegistryEntries = resolveDownloadRegistryMaxEntries(
+			context.downloadRegistryMaxEntries,
+		);
 	}
 
 	private recordPackageAction(
@@ -612,6 +630,7 @@ export class BrowserActions {
 				source: "playwright",
 				sortTimeMs: Date.now(),
 			});
+			this.pruneDownloadRegistry();
 			return;
 		}
 		const record: ExtendedDownloadResult & { sortTimeMs: number } = {
@@ -626,6 +645,7 @@ export class BrowserActions {
 			sortTimeMs: Date.now(),
 		};
 		this.downloadRegistry.unshift(record);
+		this.pruneDownloadRegistry();
 		try {
 			await download.saveAs(filePath);
 			const failure = await download.failure().catch(() => null);
@@ -732,6 +752,11 @@ export class BrowserActions {
 		for (const target of targets) {
 			this.tabIdMap.set(target.targetId, target.page);
 		}
+	}
+
+	private pruneDownloadRegistry(): void {
+		if (this.downloadRegistry.length <= this.maxDownloadRegistryEntries) return;
+		this.downloadRegistry.splice(this.maxDownloadRegistryEntries);
 	}
 
 	private async getVisiblePages(pages = this.getPages()): Promise<Page[]> {
