@@ -1,5 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 
 import { BrowserlessProvider } from "../../../src/providers/browserless";
 import { canLaunch, canAttach } from "../../../src/providers/interface";
@@ -110,5 +112,17 @@ describe("BrowserlessProvider", () => {
         return true;
       },
     );
+  });
+
+  it("keeps launch and attach on the shared connection path", () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, "../../../src/providers/browserless.ts"),
+      "utf8",
+    );
+
+    assert.match(source, /private async connect\(/u);
+    assert.equal(source.match(/chromium\.connect\(/gu)?.length, 1);
+    assert.equal(source.match(/const connection: BrowserConnection =/gu)?.length, 1);
+    assert.equal(source.match(/buildConnectionOptions\(options\.config,\s*options\.cdpUrl\)/gu)?.length, 1);
   });
 });

@@ -96,6 +96,26 @@ export class BrowserlessProvider implements BrowserProvider {
   }
 
   async launch(options: ProviderLaunchOptions): Promise<ActiveConnection> {
+    return this.connect(options, "managed", false, async (browser) => {
+      const context = await createAutomationContext(
+        browser,
+        options.contextOptions ?? {},
+      );
+      await ensureContextHasPage(context);
+      return context;
+    });
+  }
+
+  async attach(options: ProviderAttachOptions): Promise<ActiveConnection> {
+    return this.connect(options, "attached", true, async (browser) => this.getAttachedContext(browser));
+  }
+
+  private async connect(
+    options: ProviderLaunchOptions | ProviderAttachOptions,
+    mode: "managed" | "attached",
+    isRealBrowser: boolean,
+    resolveContext: (browser: Browser) => Promise<BrowserContext | null>,
+  ): Promise<ActiveConnection> {
     const { wsUrl, headers } = this.buildConnectionOptions(options.config, options.cdpUrl);
     const safeEndpoint = stripSensitiveParams(wsUrl);
 
@@ -111,24 +131,20 @@ export class BrowserlessProvider implements BrowserProvider {
       );
     }
 
-    const context = await createAutomationContext(
-      browser,
-      options.contextOptions ?? {},
-    );
-    await ensureContextHasPage(context);
+    const context = await resolveContext(browser);
 
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;
     const connection: BrowserConnection = {
       id: generateConnectionId(),
-      mode: "managed",
+      mode,
       profile,
       cdpEndpoint: safeEndpoint,
       status: "connected",
       connectedAt: new Date().toISOString(),
       tabCount: getAllPages(browser).length,
       targetType: options.targetType ?? "chrome",
-      isRealBrowser: false,
+      isRealBrowser,
       provider: providerName,
       providerMetadata: { type: this.name, endpoint: safeEndpoint },
     };
@@ -141,50 +157,13 @@ export class BrowserlessProvider implements BrowserProvider {
     };
   }
 
-  async attach(options: ProviderAttachOptions): Promise<ActiveConnection> {
-    const { wsUrl, headers } = this.buildConnectionOptions(options.config, options.cdpUrl);
-    const safeEndpoint = stripSensitiveParams(wsUrl);
-
-    let browser: Browser;
-    try {
-      browser = await chromium.connect(wsUrl, headers ? { headers } : undefined);
-    } catch (err) {
-      const rawMessage = err instanceof Error ? err.message : String(err);
-      const safeMessage = sanitizeString(rawMessage);
-      throw new ProviderConnectionError(
-        this.name,
-        `Failed to connect to Browserless: ${safeEndpoint}. ${safeMessage}`,
-      );
-    }
-
+  private async getAttachedContext(browser: Browser): Promise<BrowserContext> {
     const contexts = browser.contexts();
-    const context: BrowserContext | null = contexts.length > 0 ? contexts[0] : await browser.newContext();
+    const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
     if (context.pages().length === 0) {
       await context.newPage();
     }
-
-    const profile = this.profileManager.getDefaultProfile();
-    const providerName = options.config?.name ?? this.name;
-    const connection: BrowserConnection = {
-      id: generateConnectionId(),
-      mode: "attached",
-      profile,
-      cdpEndpoint: safeEndpoint,
-      status: "connected",
-      connectedAt: new Date().toISOString(),
-      tabCount: getAllPages(browser).length,
-      targetType: options.targetType ?? "chrome",
-      isRealBrowser: true,
-      provider: providerName,
-      providerMetadata: { type: this.name, endpoint: safeEndpoint },
-    };
-
-    return {
-      browser,
-      context,
-      connection,
-      managedProcess: null,
-    };
+    return context;
   }
 
   async disconnect(result: ActiveConnection): Promise<void> {
