@@ -188,7 +188,7 @@ function startBackend(label: string): Promise<{
   });
 }
 
-function requestViaProxy(url: string, host: string): Promise<{
+function requestViaProxy(url: string, host: string, timeoutMs?: number): Promise<{
   status: number;
   body: unknown;
   headers: http.IncomingHttpHeaders;
@@ -214,6 +214,11 @@ function requestViaProxy(url: string, host: string): Promise<{
       });
     });
     request.on("error", reject);
+    if (timeoutMs !== undefined) {
+      request.setTimeout(timeoutMs, () => {
+        request.destroy(new Error(`Proxy request timed out after ${timeoutMs}ms`));
+      });
+    }
     request.end();
   });
 }
@@ -322,6 +327,36 @@ test("LocalhostProxyManager rejects non-localhost hosts and cleans up listener",
   await proxy.stop();
   assert.equal(proxy.getStatus().enabled, false);
   await assert.rejects(fetch(started.url), /fetch failed/u);
+});
+
+test("LocalhostProxyManager returns a proxy error when registry state is malformed", async () => {
+  const registry = {
+    get(name: string) {
+      if (name !== "myapp") return null;
+      return {
+        name,
+        port: 1,
+        protocol: "ftp",
+        path: "/",
+        registeredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+  } as unknown as ServiceRegistry;
+  const proxy = new LocalhostProxyManager({ registry, port: 0 });
+  const started = await proxy.start();
+
+  try {
+    const response = await requestViaProxy(
+      started.url,
+      `myapp.localhost:${started.port}`,
+      500,
+    );
+    assert.equal(response.status, 502);
+    assert.match((response.body as { error?: string }).error ?? "", /proxy request failed/i);
+  } finally {
+    await proxy.stop();
+  }
 });
 
 test("LocalhostProxyManager HTTPS requires explicit local CA certificate and key files", async () => {

@@ -3,6 +3,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
 import path from "node:path";
 import { request, type BrowserContextOptions } from "playwright";
+import { redactString } from "./observability/redaction";
 import type { Telemetry } from "./runtime/telemetry";
 import { ServiceRegistry, isValidServiceName, type ServiceEntry } from "./services/registry";
 import { getLocalhostCaStatus } from "./services/local_ca";
@@ -475,7 +476,14 @@ export class LocalhostProxyManager {
     }
 
     const requestHandler = (requestMessage: IncomingMessage, response: ServerResponse) => {
-      void this.handleRequest(requestMessage, response);
+      void this.handleRequest(requestMessage, response).catch((error: unknown) => {
+        const message = redactString(error instanceof Error ? error.message : String(error));
+        if (!response.headersSent) {
+          sendProxyError(response, 502, `Localhost proxy request failed: ${message}`);
+          return;
+        }
+        response.destroy(error instanceof Error ? error : new Error(message));
+      });
     };
     const server = this.httpsEnabled
       ? https.createServer(this.readTlsOptions(), requestHandler)
