@@ -2,7 +2,7 @@ import "dotenv/config";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { redactString } from "../observability/redaction";
 import { collectStatus } from "../operator/status";
 import type { SystemStatus } from "../operator/types";
@@ -41,6 +41,8 @@ const DEFAULT_RATE_LIMIT_BUCKET_TTL_MS = 5 * 60_000;
 const DEFAULT_TASK_STATUS_RETENTION_MS = 60 * 60_000;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 const MAX_DOMAIN_PARAM_DEPTH = 10;
+const MAX_SUBSCRIPTION_CHANNELS = 100;
+const MAX_SUBSCRIPTION_CHANNEL_LENGTH = 128;
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -986,6 +988,7 @@ export function createBrokerServer(
 	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
 	const webSocketServer = new WebSocketServer({ noServer: true });
+	const clientSubscriptions = new WeakMap<WebSocket, Set<string>>();
 	const rateLimitPruneIntervalMs = Math.min(
 		config.rateLimitBucketTtlMs,
 		60_000,
@@ -1083,11 +1086,115 @@ export function createBrokerServer(
 
 	const broadcast = (message: unknown): void => {
 		const payload = JSON.stringify(message);
+		const channels = messageChannels(message);
 		for (const client of webSocketServer.clients) {
-			if (client.readyState === WebSocket.OPEN) {
+			if (
+				client.readyState === WebSocket.OPEN &&
+				matchesSubscription(client, channels)
+			) {
 				client.send(payload);
 			}
 		}
+	};
+
+	const matchesSubscription = (
+		client: WebSocket,
+		channels: string[],
+	): boolean => {
+		const subscriptions = clientSubscriptions.get(client);
+		return !subscriptions || channels.some((channel) => subscriptions.has(channel));
+	};
+
+	const messageChannels = (message: unknown): string[] => {
+		if (!message || typeof message !== "object") {
+			return [];
+		}
+		const record = message as Record<string, unknown>;
+		const channels: string[] = [];
+		if (typeof record.type === "string") channels.push(record.type);
+		if (typeof record.taskId === "string") {
+			channels.push(`task:${record.taskId}`);
+		}
+		if (typeof record.sessionId === "string") {
+			channels.push(`session:${record.sessionId}`);
+			if (record.type === "terminal.output") {
+				channels.push(`terminal:${record.sessionId}`);
+			}
+		}
+		return channels;
+	};
+
+	const handleClientMessage = (
+		client: WebSocket,
+		data: RawData,
+	): void => {
+		const parsed = parseSubscriptionMessage(data);
+		if (!parsed.ok) {
+			client.send(
+				JSON.stringify({ type: "subscription.error", error: parsed.error }),
+			);
+			return;
+		}
+
+		const current = new Set(clientSubscriptions.get(client) ?? []);
+		if (parsed.type === "subscribe") {
+			for (const channel of parsed.channels) current.add(channel);
+		} else if (parsed.channels.length === 0) {
+			current.clear();
+		} else {
+			for (const channel of parsed.channels) current.delete(channel);
+		}
+
+		if (current.size > 0) {
+			clientSubscriptions.set(client, current);
+		} else {
+			clientSubscriptions.delete(client);
+		}
+		client.send(
+			JSON.stringify({
+				type: "subscription.updated",
+				channels: Array.from(current).sort(),
+			}),
+		);
+	};
+
+	const parseSubscriptionMessage = (
+		data: RawData,
+	):
+		| { ok: true; type: "subscribe" | "unsubscribe"; channels: string[] }
+		| { ok: false; error: string } => {
+		let payload: unknown;
+		try {
+			payload = JSON.parse(data.toString());
+		} catch {
+			return { ok: false, error: "Message must be valid JSON." };
+		}
+		if (!payload || typeof payload !== "object") {
+			return { ok: false, error: "Message must be a JSON object." };
+		}
+		const record = payload as Record<string, unknown>;
+		if (record.type !== "subscribe" && record.type !== "unsubscribe") {
+			return { ok: false, error: "Message type must be subscribe or unsubscribe." };
+		}
+		if (!Array.isArray(record.channels)) {
+			return { ok: false, error: "channels must be an array." };
+		}
+		if (record.channels.length > MAX_SUBSCRIPTION_CHANNELS) {
+			return { ok: false, error: "Too many subscription channels." };
+		}
+		const channels: string[] = [];
+		for (const channel of record.channels) {
+			if (
+				typeof channel !== "string" ||
+				channel.length === 0 ||
+				channel.length > MAX_SUBSCRIPTION_CHANNEL_LENGTH ||
+				!/^[a-zA-Z0-9._:-]+$/u.test(channel)
+			) {
+				return { ok: false, error: "Invalid subscription channel." };
+			}
+			channels.push(channel);
+		}
+		return { ok: true, type: record.type, channels };
 	};
 
 	const getTaskStatus = (taskId: string): BrokerTaskStatusEntry | null => {
@@ -1479,6 +1586,8 @@ export function createBrokerServer(
 		}
 
 		webSocketServer.handleUpgrade(request, socket, head, (client) => {
+			client.on("message", (data) => handleClientMessage(client, data));
+			client.once("close", () => clientSubscriptions.delete(client));
 			webSocketServer.emit("connection", client, request);
 		});
 	});

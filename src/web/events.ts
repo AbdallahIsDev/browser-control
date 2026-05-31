@@ -1,13 +1,16 @@
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { WebSocket, WebSocketServer } from "ws";
+import { type RawData, WebSocket, WebSocketServer } from "ws";
 import { redactObject } from "../observability/redaction";
 import type { WebAppEvent, WebEventKind } from "./types";
 
 const MAX_RECENT_EVENTS = 200;
+const MAX_SUBSCRIPTION_CHANNELS = 100;
+const MAX_CHANNEL_LENGTH = 128;
 
 interface ClientEventFilter {
 	sessionId?: string;
+	channels?: Set<string>;
 }
 
 function writeUpgradeError(
@@ -71,6 +74,7 @@ export class WebEventHub {
 		const filter = this.parseFilter(request);
 		this.wss.handleUpgrade(request, socket, head, (client) => {
 			this.clientFilters.set(client, filter);
+			client.on("message", (data) => this.handleClientMessage(client, data));
 			client.once("close", () => this.clientFilters.delete(client));
 			this.wss.emit("connection", client, request);
 			client.send(
@@ -125,7 +129,97 @@ export class WebEventHub {
 
 	private matchesFilter(client: WebSocket, event: WebAppEvent): boolean {
 		const filter = this.clientFilters.get(client);
+		if (filter?.channels) {
+			return this.eventChannels(event).some((channel) =>
+				filter.channels?.has(channel),
+			);
+		}
 		return !filter?.sessionId || event.sessionId === filter.sessionId;
+	}
+
+	private handleClientMessage(client: WebSocket, data: RawData): void {
+		const parsed = this.parseSubscriptionMessage(data);
+		if (!parsed.ok) {
+			client.send(
+				JSON.stringify({ type: "subscription.error", error: parsed.error }),
+			);
+			return;
+		}
+
+		const current = this.clientFilters.get(client) ?? {};
+		const channels = new Set(current.channels ?? []);
+		if (parsed.type === "subscribe") {
+			for (const channel of parsed.channels) channels.add(channel);
+		} else if (parsed.channels.length === 0) {
+			channels.clear();
+		} else {
+			for (const channel of parsed.channels) channels.delete(channel);
+		}
+
+		const next: ClientEventFilter = {
+			...(current.sessionId ? { sessionId: current.sessionId } : {}),
+			...(channels.size > 0 ? { channels } : {}),
+		};
+		this.clientFilters.set(client, next);
+		client.send(
+			JSON.stringify({
+				type: "subscription.updated",
+				channels: Array.from(channels).sort(),
+			}),
+		);
+	}
+
+	private parseSubscriptionMessage(
+		data: RawData,
+	):
+		| { ok: true; type: "subscribe" | "unsubscribe"; channels: string[] }
+		| { ok: false; error: string } {
+		let payload: unknown;
+		try {
+			payload = JSON.parse(data.toString());
+		} catch {
+			return { ok: false, error: "Message must be valid JSON." };
+		}
+		if (!payload || typeof payload !== "object") {
+			return { ok: false, error: "Message must be a JSON object." };
+		}
+		const record = payload as Record<string, unknown>;
+		if (record.type !== "subscribe" && record.type !== "unsubscribe") {
+			return {
+				ok: false,
+				error: "Message type must be subscribe or unsubscribe.",
+			};
+		}
+		if (!Array.isArray(record.channels)) {
+			return { ok: false, error: "channels must be an array." };
+		}
+		if (record.channels.length > MAX_SUBSCRIPTION_CHANNELS) {
+			return { ok: false, error: "Too many subscription channels." };
+		}
+		const channels: string[] = [];
+		for (const channel of record.channels) {
+			if (
+				typeof channel !== "string" ||
+				channel.length === 0 ||
+				channel.length > MAX_CHANNEL_LENGTH ||
+				!/^[a-zA-Z0-9._:-]+$/u.test(channel)
+			) {
+				return { ok: false, error: "Invalid subscription channel." };
+			}
+			channels.push(channel);
+		}
+		return { ok: true, type: record.type, channels };
+	}
+
+	private eventChannels(event: WebAppEvent): string[] {
+		const channels: string[] = [event.type];
+		if (event.sessionId) {
+			channels.push(`session:${event.sessionId}`);
+			if (event.type === "terminal.output") {
+				channels.push(`terminal:${event.sessionId}`);
+			}
+		}
+		return channels;
 	}
 
 	private payloadSessionId(payload: unknown): string | undefined {

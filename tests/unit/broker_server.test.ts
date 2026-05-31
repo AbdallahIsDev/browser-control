@@ -1413,3 +1413,47 @@ test("createBrokerServer rate limits WebSocket upgrades from the same client", a
   const [error] = await once(secondSocket, "error");
   assert.match(String(error), /Unexpected server response: 429/);
 });
+
+test("createBrokerServer WebSocket accepts dynamic task subscriptions", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "socket-subscribe-key",
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const websocketUrl = `${getBaseUrl(broker).replace("http", "ws")}/ws`;
+
+  const socket = new WebSocket(websocketUrl, {
+    headers: {
+      "x-api-key": "socket-subscribe-key",
+    },
+  });
+  t.after(() => socket.close());
+  await waitForOpen(socket);
+
+  socket.send(JSON.stringify({ type: "subscribe", channels: ["task:task-a"] }));
+  assert.deepEqual(JSON.parse(await waitForMessage(socket)), {
+    type: "subscription.updated",
+    channels: ["task:task-a"],
+  });
+
+  broker.setTaskStatus("task-b", { status: "completed", result: { hidden: true } });
+  const leaked = await Promise.race([
+    waitForMessage(socket).then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 150)),
+  ]);
+  assert.equal(leaked, false);
+
+  broker.setTaskStatus("task-a", { status: "completed", result: { visible: true } });
+  assert.deepEqual(JSON.parse(await waitForMessage(socket)), {
+    type: "task_completed",
+    taskId: "task-a",
+    status: "completed",
+    result: { visible: true },
+  });
+});
