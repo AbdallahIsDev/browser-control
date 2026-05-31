@@ -1880,33 +1880,37 @@ export function createWebAppServer(
 			const { getRuntimeDir } = await import("../shared/paths");
 			const runtimeDir = getRuntimeDir();
 			const files: unknown[] = [];
+			const collectScreenshots = (sessionPath: string, sessionDir: string) => {
+				if (!fs.statSync(sessionPath).isDirectory()) return;
+				const screenshotsDir = path.join(sessionPath, "screenshots");
+				if (!fs.existsSync(screenshotsDir)) return;
+				for (const name of fs.readdirSync(screenshotsDir)) {
+					if (
+						name.endsWith(".png") ||
+						name.endsWith(".jpg") ||
+						name.endsWith(".jpeg")
+					) {
+						const fullPath = path.join(screenshotsDir, name);
+						const stat = fs.statSync(fullPath);
+						files.push({
+							name,
+							path: fullPath,
+							sizeBytes: stat.size,
+							modifiedAt: stat.mtime.toISOString(),
+							sessionDir,
+						});
+					}
+				}
+			};
 			if (fs.existsSync(runtimeDir)) {
-				for (const dateDir of fs.readdirSync(runtimeDir)) {
-					const datePath = path.join(runtimeDir, dateDir);
-					if (!fs.statSync(datePath).isDirectory()) continue;
-					for (const sessionDir of fs.readdirSync(datePath)) {
-						const sessionPath = path.join(datePath, sessionDir);
+				for (const entry of fs.readdirSync(runtimeDir)) {
+					const entryPath = path.join(runtimeDir, entry);
+					if (!fs.statSync(entryPath).isDirectory()) continue;
+					collectScreenshots(entryPath, entry);
+					for (const sessionDir of fs.readdirSync(entryPath)) {
+						const sessionPath = path.join(entryPath, sessionDir);
 						if (!fs.statSync(sessionPath).isDirectory()) continue;
-						const screenshotsDir = path.join(sessionPath, "screenshots");
-						if (fs.existsSync(screenshotsDir)) {
-							for (const name of fs.readdirSync(screenshotsDir)) {
-								if (
-									name.endsWith(".png") ||
-									name.endsWith(".jpg") ||
-									name.endsWith(".jpeg")
-								) {
-									const fullPath = path.join(screenshotsDir, name);
-									const stat = fs.statSync(fullPath);
-									files.push({
-										name,
-										path: fullPath,
-										sizeBytes: stat.size,
-										modifiedAt: stat.mtime.toISOString(),
-										sessionDir,
-									});
-								}
-							}
-						}
+						collectScreenshots(sessionPath, sessionDir);
 					}
 				}
 			}

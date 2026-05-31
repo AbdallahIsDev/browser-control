@@ -14,6 +14,7 @@ import {
 	getDataHome,
 	getDataHomeManifestPath,
 	getEvidenceScreenshotsDir,
+	getStructuredSessionRuntimeDir,
 	getHelpersDir,
 	getInteropDir,
 	getRuntimeTempDir,
@@ -230,6 +231,29 @@ test("secrets README documents vault key exposure boundary", () => {
 		assert.match(readme, /decryption key/);
 		assert.match(readme, /Never commit, sync, or back up/);
 		assert.match(readme, /Windows/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("structured session runtime dir is stable outside created-at date folders", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-runtime-path-"));
+	try {
+		const runtimeDir = getStructuredSessionRuntimeDir(
+			{
+				id: "a370f357-1111-2222-3333-444444444444",
+				name: "Stdio Session Test",
+				createdAt: "2026-05-23T23:07:00.000Z",
+			},
+			home,
+		);
+
+		assert.equal(
+			runtimeDir,
+			path.join(home, "runtime", "stdio-session-test_a370f357"),
+		);
+		assert.equal(runtimeDir.includes("2026-05-23"), false);
+		assert.equal(path.basename(runtimeDir).startsWith("23-07_"), false);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}

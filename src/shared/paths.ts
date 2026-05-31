@@ -301,9 +301,6 @@ export function getRuntimeLocksDir(dataHome?: string): string {
 export function getSessionRuntimeDir(sessionId: string, dataHome?: string): string {
   return path.join(getRuntimeDir(dataHome), sessionId);
 }
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
 function slugifyRuntimeName(value: string): string {
   const slug = value
     .toLowerCase()
@@ -313,13 +310,9 @@ function slugifyRuntimeName(value: string): string {
   return slug || "session";
 }
 export function getStructuredSessionRuntimeDir(session: RuntimeSessionInfo, dataHome?: string): string {
-  const created = new Date(session.createdAt);
-  const safeDate = Number.isNaN(created.getTime()) ? new Date() : created;
-  const date = `${safeDate.getFullYear()}-${pad2(safeDate.getMonth() + 1)}-${pad2(safeDate.getDate())}`;
-  const time = `${pad2(safeDate.getHours())}-${pad2(safeDate.getMinutes())}`;
   const shortId = session.id.replace(/-/gu, "").slice(0, 8) || "session";
-  const folderName = `${time}_${slugifyRuntimeName(session.name)}_${shortId}`;
-  return path.join(getRuntimeDir(dataHome), date, folderName);
+  const folderName = `${slugifyRuntimeName(session.name)}_${shortId}`;
+  return path.join(getRuntimeDir(dataHome), folderName);
 }
 export function ensureStructuredSessionRuntimeDir(session: RuntimeSessionInfo, dataHome?: string): string {
   const runtimeDir = getStructuredSessionRuntimeDir(session, dataHome);

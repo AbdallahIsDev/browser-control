@@ -2075,6 +2075,47 @@ test("web app server exposes data and package endpoints without trading product 
 	assert.equal(trading.status, 404);
 });
 
+test("web app server lists screenshots from direct runtime session folders", async (t) => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-screenshots-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	t.after(() => {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	});
+
+	const sessionDir = path.join(tmpHome, "runtime", "qa-flow_a370f357");
+	const screenshotsDir = path.join(sessionDir, "screenshots");
+	fs.mkdirSync(screenshotsDir, { recursive: true });
+	writeTinyPng(path.join(screenshotsDir, "direct.png"), [255, 0, 0, 255]);
+	fs.writeFileSync(
+		path.join(sessionDir, "manifest.json"),
+		`${JSON.stringify({ sessionId: "a370f357", name: "QA Flow" })}\n`,
+	);
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(`${info.url}/api/screenshots`, {
+		headers: { authorization: "Bearer test-token" },
+	});
+	assert.equal(response.status, 200);
+	const screenshots = (await response.json()) as Array<{
+		name: string;
+		sessionDir: string;
+	}>;
+
+	assert.deepEqual(
+		screenshots.map((entry) => ({
+			name: entry.name,
+			sessionDir: entry.sessionDir,
+		})),
+		[{ name: "direct.png", sessionDir: "qa-flow_a370f357" }],
+	);
+});
+
 // ── Regression 1: Terminal stream event contract ─────────────────────
 
 test("terminal output WebSocket event uses correct payload shape", async (t) => {
