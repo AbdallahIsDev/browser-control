@@ -921,12 +921,13 @@
           "commandPath": [
             "highlight"
           ],
-          "description": "Highlight an element",
+          "description": "Highlight an element or hide existing highlights",
           "flags": [
+            "hide",
             "json"
           ],
           "jsonSupport": true,
-          "syntax": "highlight <target> [--json]"
+          "syntax": "highlight [target] [--hide] [--json]"
         },
         {
           "commandPath": [
@@ -1429,12 +1430,13 @@
             "browser",
             "highlight"
           ],
-          "description": "Highlight an element",
+          "description": "Highlight an element or hide existing highlights",
           "flags": [
+            "hide",
             "json"
           ],
           "jsonSupport": true,
-          "syntax": "browser highlight <target> [--json]"
+          "syntax": "browser highlight [target] [--hide] [--json]"
         },
         {
           "commandPath": [

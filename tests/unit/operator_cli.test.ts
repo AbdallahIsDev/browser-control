@@ -48,6 +48,29 @@ async function killPid(pid: number | undefined): Promise<void> {
 	} catch {
 		/* already dead */
 	}
+	if (process.platform === "win32") {
+		spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+	}
+	for (let attempt = 0; attempt < 20; attempt += 1) {
+		await sleep(100);
+		try {
+			process.kill(pid, 0);
+		} catch {
+			return;
+		}
+	}
+}
+
+async function removeHome(home: string): Promise<void> {
+	for (let attempt = 0; attempt < 10; attempt += 1) {
+		try {
+			fs.rmSync(home, { recursive: true, force: true });
+			return;
+		} catch (error) {
+			if (attempt === 9) throw error;
+			await sleep(100);
+		}
+	}
 }
 
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
@@ -218,7 +241,7 @@ test("bc config env --json lists env-only knobs without leaking secrets", async 
 		else process.env.BROWSERBASE_API_KEY = previousBrowserbaseKey;
 		if (previousCostPerToken === undefined) delete process.env.AI_AGENT_COST_PER_TOKEN;
 		else process.env.AI_AGENT_COST_PER_TOKEN = previousCostPerToken;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 
@@ -346,7 +369,7 @@ test("bc package record start stop draft materialize creates reusable package dr
 	} finally {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 
@@ -396,7 +419,7 @@ test("bc web serve --json --port=0 stays alive until killed", async () => {
 	} finally {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 
@@ -443,7 +466,7 @@ test("bc web open --json --port=0 exits cleanly", async () => {
 	} finally {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 
@@ -489,7 +512,7 @@ test("bc web open --json --port=N exits with a reachable URL", async () => {
 		}
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 
@@ -588,7 +611,7 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 		await killPid(childPid);
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;
-		fs.rmSync(home, { recursive: true, force: true });
+		await removeHome(home);
 	}
 });
 

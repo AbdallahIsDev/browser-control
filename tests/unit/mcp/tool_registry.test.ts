@@ -671,6 +671,34 @@ describe("MCP Tool Registry", () => {
         { key: "enabled", value: true, valueType: "boolean" },
       ]);
     });
+
+    it("package tools honor explicit sessionId", async () => {
+      const tools = buildToolRegistry(api);
+      const listTool = tools.find((t) => t.name === "bc_package_list")!;
+      const packageApi = api.package as unknown as {
+        list: () => Promise<ActionResult<unknown>>;
+      };
+      const originalUse = api.session.use;
+      const originalList = packageApi.list;
+      let selectedSession: string | undefined;
+
+      api.session.use = ((sessionId: string) => {
+        selectedSession = sessionId;
+        return successResult({ id: sessionId }, { path: "command", sessionId });
+      }) as typeof api.session.use;
+      packageApi.list = async () => successResult([], { path: "command", sessionId: selectedSession ?? "active" });
+
+      try {
+        const result = await listTool.handler({ sessionId: "package-session" });
+
+        assert.equal(result.success, true);
+        assert.equal(selectedSession, "package-session");
+        assert.equal(result.sessionId, "package-session");
+      } finally {
+        api.session.use = originalUse;
+        packageApi.list = originalList;
+      }
+    });
   });
 
   describe("schema shape", () => {
@@ -862,6 +890,20 @@ describe("MCP Tool Registry", () => {
         validateToolParams(taskTool.name, taskTool.inputSchema, { steps: [{ action: "press", key: "Enter" }] }, taskTool.validation),
         null,
       );
+    });
+
+    it("package tools include sessionId and parameter descriptions", () => {
+      const tools = buildToolRegistry(api);
+      const packageTools = tools.filter((tool) => tool.name.startsWith("bc_package_"));
+
+      assert.ok(packageTools.length > 0, "Expected package tools in registry");
+      for (const tool of packageTools) {
+        assert.ok("sessionId" in tool.inputSchema.properties, `${tool.name} should include sessionId`);
+        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${tool.name} should not require sessionId`);
+        for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
+          assert.ok(schema.description, `${tool.name}.${name} should have a description`);
+        }
+      }
     });
   });
 

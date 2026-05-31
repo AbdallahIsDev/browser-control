@@ -2044,9 +2044,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "target"
-        ],
+        "required": [],
         "type": "object"
       },
       "name": "bc_highlight",
@@ -2539,6 +2537,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name to evaluate.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2587,6 +2590,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Optional installed package name to filter evaluation history.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2633,9 +2641,15 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name.",
             "type": "string"
           },
           "permissionRef": {
+            "description": "Permission kind or numeric permission index to grant.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2685,6 +2699,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2732,7 +2751,12 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          },
           "source": {
+            "description": "Local package directory path to install.",
             "type": "string"
           }
         },
@@ -2779,7 +2803,12 @@
       "description": "List installed automation packages",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
         "required": [],
         "type": "object"
       },
@@ -2823,6 +2852,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name to remove.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2871,15 +2905,23 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name to review.",
             "type": "string"
           },
           "reason": {
+            "description": "Optional review rationale.",
             "type": "string"
           },
           "reviewedBy": {
+            "description": "Reviewer identifier recorded in review history.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "status": {
+            "description": "Trust review status to record.",
             "enum": [
               "unreviewed",
               "pending",
@@ -2936,6 +2978,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2984,6 +3031,11 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "workflowNameOrId": {
@@ -3036,9 +3088,15 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "description": "Installed package name to update.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "source": {
+            "description": "Optional local package directory path to update from.",
             "type": "string"
           }
         },
