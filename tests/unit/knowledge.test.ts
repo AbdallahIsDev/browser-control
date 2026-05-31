@@ -323,6 +323,63 @@ test("knowledge store: missing frontmatter returns null", () => {
   }
 });
 
+test("knowledge store: rejects malformed frontmatter field types", () => {
+  const tmp = createTempKnowledgeHome();
+  try {
+    withTempHome(tmp, () => {
+      const dir = path.join(tmp, "knowledge", "domain-skills");
+      fs.writeFileSync(
+        path.join(dir, "bad-types.md"),
+        [
+          "---",
+          "kind: domain-skill",
+          "domain: github.com",
+          "capturedAt: 2026-04-20T10:00:00Z",
+          "verified: yes",
+          "---",
+          "## Notes",
+          "Invalid verified type.",
+        ].join("\n"),
+      );
+
+      const artifact = loadArtifact(path.join(dir, "bad-types.md"));
+
+      assert.equal(artifact, null);
+    });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("knowledge store: rejects unknown and prototype-pollution frontmatter keys", () => {
+  const tmp = createTempKnowledgeHome();
+  try {
+    withTempHome(tmp, () => {
+      const dir = path.join(tmp, "knowledge", "domain-skills");
+      fs.writeFileSync(
+        path.join(dir, "bad-keys.md"),
+        [
+          "---",
+          "kind: domain-skill",
+          "domain: github.com",
+          "capturedAt: 2026-04-20T10:00:00Z",
+          "constructor: polluted",
+          "---",
+          "## Notes",
+          "Invalid key.",
+        ].join("\n"),
+      );
+
+      const artifact = loadArtifact(path.join(dir, "bad-keys.md"));
+
+      assert.equal(artifact, null);
+      assert.equal(({} as Record<string, unknown>).polluted, undefined);
+    });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // ── Tests: Validator ────────────────────────────────────────────────
 
 test("knowledge validator: valid artifact passes", () => {

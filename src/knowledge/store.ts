@@ -7,6 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 import { getInteractionSkillsDir, getDomainSkillsDir, getKnowledgeDir } from "../shared/paths";
 import { logger } from "../shared/logger";
@@ -24,6 +25,21 @@ const log = logger.withComponent("knowledge-store");
 // ── Frontmatter Parsing ─────────────────────────────────────────────
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const DISALLOWED_FRONTMATTER_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
+const KNOWLEDGE_FRONTMATTER_SCHEMA = z.object({
+  kind: z.enum(["interaction-skill", "domain-skill"]),
+  domain: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  capturedAt: z.string().min(1).optional(),
+  updatedAt: z.string().min(1).optional(),
+  verified: z.boolean().optional(),
+  lastVerified: z.string().min(1).optional(),
+  tags: z.array(z.string().min(1)).optional(),
+}).strict();
 
 function parseFrontmatter(text: string): { frontmatter: KnowledgeFrontmatter; body: string } {
   const match = text.match(FRONTMATTER_RE);
@@ -34,7 +50,7 @@ function parseFrontmatter(text: string): { frontmatter: KnowledgeFrontmatter; bo
   const raw = match[1];
   const body = text.slice(match[0].length);
 
-  const fm: Record<string, unknown> = {};
+  const fm: Record<string, unknown> = Object.create(null);
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -43,6 +59,9 @@ function parseFrontmatter(text: string): { frontmatter: KnowledgeFrontmatter; bo
     if (colonIdx === -1) continue;
 
     const key = trimmed.slice(0, colonIdx).trim();
+    if (DISALLOWED_FRONTMATTER_KEYS.has(key)) {
+      throw new Error(`Invalid frontmatter key: "${key}"`);
+    }
     let value: unknown = trimmed.slice(colonIdx + 1).trim();
 
     // Strip quotes
@@ -63,19 +82,21 @@ function parseFrontmatter(text: string): { frontmatter: KnowledgeFrontmatter; bo
     fm[key] = value;
   }
 
-  if (!fm.kind || (fm.kind !== "interaction-skill" && fm.kind !== "domain-skill")) {
-    throw new Error(`Invalid frontmatter kind: "${fm.kind}". Must be "interaction-skill" or "domain-skill".`);
+  const parsed = KNOWLEDGE_FRONTMATTER_SCHEMA.safeParse(fm);
+  if (!parsed.success) {
+    throw new Error(`Invalid frontmatter: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`);
   }
+  const data = parsed.data;
 
   const frontmatter: KnowledgeFrontmatter = {
-    kind: fm.kind as KnowledgeKind,
-    capturedAt: typeof fm.capturedAt === "string" ? fm.capturedAt : new Date().toISOString(),
-    ...(fm.domain ? { domain: fm.domain as string } : {}),
-    ...(fm.name ? { name: fm.name as string } : {}),
-    ...(fm.updatedAt ? { updatedAt: fm.updatedAt as string } : {}),
-    ...(fm.verified !== undefined ? { verified: fm.verified as boolean } : {}),
-    ...(fm.lastVerified ? { lastVerified: fm.lastVerified as string } : {}),
-    ...(Array.isArray(fm.tags) ? { tags: fm.tags as string[] } : {}),
+    kind: data.kind as KnowledgeKind,
+    capturedAt: data.capturedAt ?? new Date().toISOString(),
+    ...(data.domain ? { domain: data.domain } : {}),
+    ...(data.name ? { name: data.name } : {}),
+    ...(data.updatedAt ? { updatedAt: data.updatedAt } : {}),
+    ...(data.verified !== undefined ? { verified: data.verified } : {}),
+    ...(data.lastVerified ? { lastVerified: data.lastVerified } : {}),
+    ...(data.tags ? { tags: data.tags } : {}),
   };
 
   return { frontmatter, body };
