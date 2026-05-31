@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ExecutionRouter, defaultRouter, type PathInferenceRule, type RiskAdjustmentRule } from "../../src/execution_router";
+import { DEFAULT_PATH_RULES } from "../../src/policy/execution_router_rules";
 import type { PolicyTaskIntent, ExecutionPath, RiskLevel, ExecutionContext, RoutedStep } from "../../src/policy";
 
 test("default router instance is available", () => {
@@ -18,6 +19,34 @@ test("creates a new ExecutionRouter with default rules", () => {
   const router = new ExecutionRouter();
   assert.ok(router);
   assert.strictEqual(typeof router.buildRoutedStep, "function");
+});
+
+test("default path rule table explicitly covers public action surfaces", () => {
+  const explicitRules = DEFAULT_PATH_RULES.slice(0, -1);
+  const requiredActions = [
+    "browser_navigate",
+    "browser_click",
+    "browser_dialog",
+    "browser_provider_list",
+    "terminal_open",
+    "terminal_exec",
+    "fs_read",
+    "fs_write",
+    "workflow_run",
+    "package_run",
+    "debug_network_read",
+    "service_register",
+    "harness_execute",
+    "config_set",
+    "daemon_start",
+  ];
+
+  for (const action of requiredActions) {
+    assert.ok(
+      explicitRules.some((rule) => rule.matches(action, {})),
+      `missing explicit path rule for ${action}`,
+    );
+  }
 });
 
 test("infers a11y path for accessibility actions", () => {
