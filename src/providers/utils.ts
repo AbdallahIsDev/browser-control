@@ -31,6 +31,10 @@ function isSensitiveParam(param: string): boolean {
     || lower.endsWith("-secret");
 }
 
+export function generateConnectionId(): string {
+  return `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /**
  * Redact sensitive query parameters from URLs.
  *

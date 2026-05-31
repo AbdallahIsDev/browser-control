@@ -25,6 +25,7 @@ import { connectBrowser, createAutomationContext, ensureContextHasPage, resolveD
 import { BrowserProfileManager } from "../browser/profiles";
 import { loadConfig } from "../shared/config";
 import path from "node:path";
+import { generateConnectionId } from "./utils";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -103,7 +104,7 @@ export class LocalBrowserProvider implements BrowserProvider {
     const tabCount = getAllPages(browser).length;
 
     const connection: BrowserConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateConnectionId(),
       mode: "managed",
       profile,
       cdpEndpoint,
@@ -135,7 +136,7 @@ export class LocalBrowserProvider implements BrowserProvider {
 
     const profile = this.profileManager.getDefaultProfile();
     const connection: BrowserConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateConnectionId(),
       mode: "attached",
       profile,
       cdpEndpoint,

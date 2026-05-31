@@ -11,7 +11,7 @@ import type { ProviderConfig } from "./types";
 import { ensureContextHasPage, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
-import { sanitizeString, stripSensitiveParams } from "./utils";
+import { generateConnectionId, sanitizeString, stripSensitiveParams } from "./utils";
 
 interface BrowserbaseSession {
   id: string;
@@ -143,7 +143,7 @@ export class BrowserbaseProvider implements BrowserProvider {
     const profile = this.profileManager.getDefaultProfile();
     const providerName = config?.name ?? this.name;
     const connection: BrowserConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateConnectionId(),
       mode,
       profile,
       cdpEndpoint: safeEndpoint,

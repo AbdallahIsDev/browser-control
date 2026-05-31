@@ -11,7 +11,7 @@ import type { ProviderConfig } from "./types";
 import { createAutomationContext, ensureContextHasPage, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
-import { stripSensitiveParams, sanitizeString } from "./utils";
+import { generateConnectionId, sanitizeString, stripSensitiveParams } from "./utils";
 import { loadConfig } from "../shared/config";
 
 export class BrowserlessProvider implements BrowserProvider {
@@ -110,7 +110,7 @@ export class BrowserlessProvider implements BrowserProvider {
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;
     const connection: BrowserConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateConnectionId(),
       mode: "managed",
       profile,
       cdpEndpoint: safeEndpoint,
@@ -156,7 +156,7 @@ export class BrowserlessProvider implements BrowserProvider {
     const profile = this.profileManager.getDefaultProfile();
     const providerName = options.config?.name ?? this.name;
     const connection: BrowserConnection = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: generateConnectionId(),
       mode: "attached",
       profile,
       cdpEndpoint: safeEndpoint,
