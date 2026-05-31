@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { getSecretsDir } from "../shared/paths";
 
+const LOCAL_VAULT_KEY_PBKDF2_ITERATIONS = 600_000;
+
 export type CredentialProtectionProviderName =
 	| "windows-dpapi"
 	| "local-aes-gcm";
@@ -62,7 +64,13 @@ function ensureVaultKey(dataHome?: string): Buffer {
 
 	fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
 	const salt = crypto.randomBytes(32);
-	const key = crypto.pbkdf2Sync(machineIdentity(), salt, 100_000, 32, "sha256");
+	const key = crypto.pbkdf2Sync(
+		machineIdentity(),
+		salt,
+		LOCAL_VAULT_KEY_PBKDF2_ITERATIONS,
+		32,
+		"sha256",
+	);
 	if (!writeVaultKeyAtomic(keyPath, Buffer.concat([salt, key]))) {
 		return ensureVaultKey(dataHome);
 	}

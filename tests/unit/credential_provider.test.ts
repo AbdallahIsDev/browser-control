@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -52,6 +53,31 @@ test("local credential provider writes new vault key via temp file then rename",
 	} finally {
 		fs.writeFileSync = originalWriteFileSync;
 		fs.renameSync = originalRenameSync;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("local credential provider derives new vault key with current PBKDF2 work factor", () => {
+	const home = tempDataHome();
+	const originalPbkdf2Sync = crypto.pbkdf2Sync;
+	let iterations: number | undefined;
+
+	crypto.pbkdf2Sync = ((...args: Parameters<typeof crypto.pbkdf2Sync>) => {
+		iterations = args[2];
+		return originalPbkdf2Sync(...args);
+	}) as typeof crypto.pbkdf2Sync;
+
+	try {
+		const service = createCredentialProtectionService({
+			dataHome: home,
+			preferWindowsDpapi: false,
+		});
+
+		service.protect("secret");
+
+		assert.equal(iterations, 600_000);
+	} finally {
+		crypto.pbkdf2Sync = originalPbkdf2Sync;
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 });
