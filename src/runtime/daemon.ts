@@ -1871,6 +1871,7 @@ export class Daemon {
 
 		const broker = module.createBrokerServer({
 			memoryStore: this.memoryStore,
+			...(this.policyEngine ? { policyEngine: this.policyEngine } : {}),
 			callbacks: {
 				submitTask: async (request) => {
 					// If skill is provided, route through skill registry

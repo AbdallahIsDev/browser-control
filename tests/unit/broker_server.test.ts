@@ -15,6 +15,7 @@ import {
   type BrokerServer,
 } from "../../src/broker_server";
 import { MemoryStore } from "../../src/runtime/memory_store";
+import type { PolicyEngine } from "../../src/policy/types";
 import type {
   BrokerRunTaskRequest,
   BrokerTaskStatusEntry,
@@ -954,6 +955,51 @@ test("createBrokerServer exposes operator status and config endpoints", async (t
     value: "debug",
     source: "user",
   });
+});
+
+test("createBrokerServer reuses the provided policy engine for checked requests", async (t) => {
+  let evaluateCalls = 0;
+  const policyEngine: PolicyEngine = {
+    evaluate: () => {
+      evaluateCalls += 1;
+      return {
+        decision: "allow",
+        reason: "test policy allows",
+        profile: "custom-test",
+        risk: "low",
+        auditRequired: false,
+      };
+    },
+    getActiveProfile: () => "custom-test",
+    setConfirmationHandler: () => {},
+    setProfile: () => {},
+  };
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "policy-engine-key" },
+    policyEngine,
+    callbacks: {
+      handleTerminal: async (subcommand, payload) => ({ subcommand, payload }),
+    },
+  });
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+  for (const sessionId of ["one", "two"]) {
+    const response = await fetch(`${baseUrl}/api/v1/term/open`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": "policy-engine-key",
+      },
+      body: JSON.stringify({ sessionId }),
+    });
+    assert.equal(response.status, 200);
+  }
+
+  assert.equal(evaluateCalls, 2);
 });
 
 test("createBrokerServer rejects config mutation when auth key is not provided", async (t) => {

@@ -8,7 +8,7 @@ import { collectStatus } from "../operator/status";
 import type { SystemStatus } from "../operator/types";
 import { DefaultPolicyEngine } from "../policy/engine";
 import { defaultRouter } from "../policy/execution_router";
-import type { ExecutionContext, PolicyTaskIntent } from "../policy/types";
+import type { ExecutionContext, PolicyEngine, PolicyTaskIntent } from "../policy/types";
 import {
 	type ConfigEntry,
 	type ConfigSetResult,
@@ -190,6 +190,7 @@ export interface BrokerServerOptions {
 	taskStatusRetentionMs?: number;
 	allowedDomainParamFields?: string[];
 	memoryStore?: BrokerMemoryStore;
+	policyEngine?: PolicyEngine;
 	now?: () => number;
 }
 
@@ -693,12 +694,11 @@ function isPolicyAllowed(decision: string): boolean {
 function evaluateBrokerActionPolicy(
 	action: string,
 	params: Record<string, unknown>,
-	env: NodeJS.ProcessEnv,
+	policyEngine: PolicyEngine,
 ):
 	| { allowed: true }
 	| { allowed: false; statusCode: number; body: JsonRecord } {
-	const appConfig = loadConfig({ env, validate: false });
-	const profileName = appConfig.policyProfile;
+	const profileName = policyEngine.getActiveProfile();
 	const sessionId = "broker";
 	const actor = "agent";
 	const intent: PolicyTaskIntent = {
@@ -714,10 +714,7 @@ function evaluateBrokerActionPolicy(
 		metadata: { source: "broker" },
 	};
 	const step = defaultRouter.buildRoutedStep(intent, action, params, context);
-	const evaluation = new DefaultPolicyEngine({ profileName }).evaluate(
-		step,
-		context,
-	);
+	const evaluation = policyEngine.evaluate(step, context);
 
 	if (isPolicyAllowed(evaluation.decision)) {
 		return { allowed: true };
@@ -1021,6 +1018,14 @@ export function createBrokerServer(
 		options.callbacks ?? createCallbacksFromDaemon(options.daemon);
 	const now = options.now ?? Date.now;
 	const memoryStore = options.memoryStore;
+	const brokerPolicyEngine =
+		options.policyEngine ??
+		new DefaultPolicyEngine({
+			profileName: loadConfig({
+				env: options.env ?? process.env,
+				validate: false,
+			}).policyProfile,
+		});
 	const rateLimitBuckets = new Map<string, RateLimitBucket>();
 	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
@@ -1576,7 +1581,7 @@ export function createBrokerServer(
 				const policyEval = evaluateBrokerActionPolicy(
 					"config_set",
 					{ key, value: body.value },
-					options.env ?? process.env,
+					brokerPolicyEngine,
 				);
 				if (!policyEval.allowed) {
 					writeJson(response, policyEval.statusCode, policyEval.body);
@@ -1611,7 +1616,7 @@ export function createBrokerServer(
 				const policyEval = evaluateBrokerActionPolicy(
 					getTerminalPolicyAction(subcommand),
 					payload,
-					options.env ?? process.env,
+					brokerPolicyEngine,
 				);
 				if (!policyEval.allowed) {
 					writeJson(response, policyEval.statusCode, policyEval.body);
@@ -1641,7 +1646,7 @@ export function createBrokerServer(
 				const policyEval = evaluateBrokerActionPolicy(
 					getFilesystemPolicyAction(subcommand),
 					payload,
-					options.env ?? process.env,
+					brokerPolicyEngine,
 				);
 				if (!policyEval.allowed) {
 					writeJson(response, policyEval.statusCode, policyEval.body);
