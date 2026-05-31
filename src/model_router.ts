@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import { redactString } from "./observability/redaction";
+import { constantTimeTokenEqual } from "./shared/auth";
 import { logger } from "./shared/logger";
 import { getConfigValue, setUserConfigValue, loadUserConfig } from "./shared/config";
 
@@ -273,7 +274,7 @@ export async function startLocalApi(
 		}
 
 		const auth = req.headers.authorization;
-		if (!auth || auth !== `Bearer ${token}`) {
+		if (!constantTimeTokenEqual(auth, `Bearer ${token}`)) {
 			res.writeHead(401);
 			res.end(JSON.stringify({ error: "Unauthorized" }));
 			return;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -227,6 +228,50 @@ test("local OpenAI-compatible API reports actual port and requires bearer auth",
 	} finally {
 		await new Promise<void>(resolve => server.close(() => resolve()));
 		await upstream.close();
+	}
+});
+
+test("local OpenAI-compatible API checks bearer auth with timing-safe comparison", async () => {
+	const router = new ModelRouter({
+		providers: [
+			{
+				kind: "openai-compatible",
+				name: "Fixture",
+				baseUrl: "http://127.0.0.1:9/v1",
+				model: "fixture-model",
+				priority: 1,
+				enabled: true,
+			},
+		],
+	});
+	const originalTimingSafeEqual = crypto.timingSafeEqual;
+	let timingSafeEqualCalls = 0;
+	Object.defineProperty(crypto, "timingSafeEqual", {
+		configurable: true,
+		value: ((left: NodeJS.ArrayBufferView, right: NodeJS.ArrayBufferView) => {
+			timingSafeEqualCalls += 1;
+			return originalTimingSafeEqual(left, right);
+		}) satisfies typeof crypto.timingSafeEqual,
+	});
+	let server: http.Server | undefined;
+
+	try {
+		const api = await startLocalApi({ port: 0, token: "test-token", router });
+		server = api.server;
+		const models = await fetch(`${api.url}/v1/models`, {
+			headers: { authorization: `Bearer ${api.token}` },
+		});
+		assert.equal(models.status, 200);
+		assert.ok(timingSafeEqualCalls > 0);
+	} finally {
+		Object.defineProperty(crypto, "timingSafeEqual", {
+			configurable: true,
+			value: originalTimingSafeEqual,
+		});
+		const startedServer = server;
+		if (startedServer) {
+			await new Promise<void>(resolve => startedServer.close(() => resolve()));
+		}
 	}
 });
 
