@@ -3,11 +3,31 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { generateConnectionId } from "../../../src/providers/utils";
+import { generateConnectionId, getBrowserbaseApiBaseUrl } from "../../../src/providers/utils";
 
 describe("provider utils", () => {
   it("generates compact browser connection IDs", () => {
     assert.match(generateConnectionId(), /^conn-\d+-[a-z0-9]{5}$/u);
+  });
+
+  it("normalizes Browserbase API base URL from one shared utility", () => {
+    assert.equal(getBrowserbaseApiBaseUrl(), "https://api.browserbase.com/v1");
+    assert.equal(
+      getBrowserbaseApiBaseUrl({
+        name: "browserbase",
+        type: "browserbase",
+        options: { apiBaseUrl: "https://api.browserbase.test/v1///" },
+      }),
+      "https://api.browserbase.test/v1",
+    );
+    assert.equal(
+      getBrowserbaseApiBaseUrl({
+        name: "browserbase",
+        type: "browserbase",
+        options: { apiBaseUrl: "   " },
+      }),
+      "https://api.browserbase.com/v1",
+    );
   });
 
   it("keeps connection ID generation centralized", () => {
@@ -25,6 +45,25 @@ describe("provider utils", () => {
         source,
         /conn-\$\{Date\.now\(\)\}-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2,\s*7\)\}/u,
         `${file} should call generateConnectionId() instead of inlining the generator`,
+      );
+    }
+  });
+
+  it("keeps Browserbase API base URL normalization centralized", () => {
+    const providersDir = path.resolve(__dirname, "../../../src/providers");
+    const sourceFiles = ["browserbase.ts", "health.ts"];
+
+    for (const file of sourceFiles) {
+      const source = fs.readFileSync(path.join(providersDir, file), "utf8");
+      assert.doesNotMatch(
+        source,
+        /https:\/\/api\.browserbase\.com\/v1/u,
+        `${file} should call getBrowserbaseApiBaseUrl() instead of inlining the default URL`,
+      );
+      assert.doesNotMatch(
+        source,
+        /replace\(\/\\\/\+\$\/u,\s*""\)/u,
+        `${file} should not duplicate Browserbase API URL normalization`,
       );
     }
   });

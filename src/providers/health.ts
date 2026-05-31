@@ -5,7 +5,7 @@ import type { BrowserProvider } from "./interface";
 import { LocalBrowserProvider } from "./local";
 import { UnsupportedRemoteSandboxProvider } from "./unsupported";
 import type { ProviderConfig } from "./types";
-import { sanitizeString, stripSensitiveParams } from "./utils";
+import { getBrowserbaseApiBaseUrl, sanitizeString, stripSensitiveParams } from "./utils";
 
 export type ProviderHealthState = "healthy" | "degraded" | "unhealthy";
 
@@ -53,11 +53,6 @@ function createProvider(config: ProviderConfig): BrowserProvider {
     case "obscura":
       return new UnsupportedRemoteSandboxProvider("obscura");
   }
-}
-
-function apiBaseUrl(config: ProviderConfig): string {
-  const option = config.options?.apiBaseUrl;
-  return (typeof option === "string" && option.trim() ? option : "https://api.browserbase.com/v1").replace(/\/+$/u, "");
 }
 
 function scoreParts(report: Omit<ProviderHealthReport, "score" | "state" | "ok">): number {
@@ -111,7 +106,7 @@ export async function checkProviderHealth(
         endpointReachable = false;
         summary = "Browserbase API key is not configured.";
       } else {
-        const response = await fetchImpl(`${apiBaseUrl(config)}/sessions`, {
+        const response = await fetchImpl(`${getBrowserbaseApiBaseUrl(config)}/sessions`, {
           method: "GET",
           headers: { "x-bb-api-key": config.apiKey ?? process.env.BROWSERBASE_API_KEY ?? "" },
           signal: AbortSignal.timeout(3000),

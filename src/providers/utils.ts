@@ -1,4 +1,7 @@
 import { redactString as redactStringCentral, redactUrl as redactUrlCentral } from "../observability/redaction";
+import type { ProviderConfig } from "./types";
+
+const BROWSERBASE_DEFAULT_API_BASE_URL = "https://api.browserbase.com/v1";
 
 const SENSITIVE_PARAMS = new Set([
   "token",
@@ -33,6 +36,15 @@ function isSensitiveParam(param: string): boolean {
 
 export function generateConnectionId(): string {
   return `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getProviderStringOption(config: ProviderConfig | undefined, key: string): string | undefined {
+  const value = config?.options?.[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+export function getBrowserbaseApiBaseUrl(config?: ProviderConfig): string {
+  return (getProviderStringOption(config, "apiBaseUrl") ?? BROWSERBASE_DEFAULT_API_BASE_URL).replace(/\/+$/u, "");
 }
 
 /**

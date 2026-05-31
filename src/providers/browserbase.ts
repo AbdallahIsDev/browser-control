@@ -11,7 +11,12 @@ import type { ProviderConfig } from "./types";
 import { ensureContextHasPage, getAllPages } from "../browser/core";
 import { BrowserProfileManager } from "../browser/profiles";
 import { ProviderConfigError, ProviderConnectionError } from "./errors";
-import { generateConnectionId, sanitizeString, stripSensitiveParams } from "./utils";
+import {
+  generateConnectionId,
+  getBrowserbaseApiBaseUrl,
+  sanitizeString,
+  stripSensitiveParams,
+} from "./utils";
 
 interface BrowserbaseSession {
   id: string;
@@ -34,10 +39,6 @@ function getBooleanOption(config: ProviderConfig | undefined, key: string): bool
 function getNumberOption(config: ProviderConfig | undefined, key: string): number | undefined {
   const value = config?.options?.[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function getApiBaseUrl(config?: ProviderConfig): string {
-  return (getStringOption(config, "apiBaseUrl") ?? "https://api.browserbase.com/v1").replace(/\/+$/u, "");
 }
 
 export class BrowserbaseProvider implements BrowserProvider {
@@ -195,7 +196,7 @@ export class BrowserbaseProvider implements BrowserProvider {
     if (typeof keepAlive === "boolean") body.keepAlive = keepAlive;
     if (typeof timeout === "number") body.timeout = timeout;
 
-    const response = await fetch(`${getApiBaseUrl(config)}/sessions`, {
+    const response = await fetch(`${getBrowserbaseApiBaseUrl(config)}/sessions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -219,7 +220,7 @@ export class BrowserbaseProvider implements BrowserProvider {
     if (!apiKey) {
       throw new ProviderConfigError(this.name, "Browserbase API key is required to retrieve a session.");
     }
-    const response = await fetch(`${getApiBaseUrl(config)}/sessions/${encodeURIComponent(sessionId)}`, {
+    const response = await fetch(`${getBrowserbaseApiBaseUrl(config)}/sessions/${encodeURIComponent(sessionId)}`, {
       headers: { "x-bb-api-key": apiKey },
     });
     if (!response.ok) {
@@ -235,7 +236,7 @@ export class BrowserbaseProvider implements BrowserProvider {
 
   private async releaseSession(config: ProviderConfig, sessionId: string): Promise<void> {
     try {
-      await fetch(`${getApiBaseUrl(config)}/sessions/${encodeURIComponent(sessionId)}`, {
+      await fetch(`${getBrowserbaseApiBaseUrl(config)}/sessions/${encodeURIComponent(sessionId)}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
