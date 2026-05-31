@@ -448,6 +448,16 @@ test("tsconfig.build.json extends tsconfig.json and sets outDir", () => {
   assert.ok(excludes.includes("dist"), "build should exclude dist/");
 });
 
+test("tsconfig.json scopes package typecheck to source files", () => {
+  const configPath = path.join(process.cwd(), "tsconfig.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+  assert.deepEqual(config.include, ["src/**/*.ts"]);
+  for (const folder of ["tests", "scripts", "desktop"]) {
+    assert.ok(config.exclude.includes(folder), `root tsconfig should exclude ${folder}/`);
+  }
+});
+
 // ── Data Home Auto-Creation ──────────────────────────────────────────
 
 test("loadConfig auto-creates data home from BROWSER_CONTROL_HOME override", () => {

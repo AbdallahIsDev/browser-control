@@ -19,7 +19,7 @@
     ]
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -29,6 +29,9 @@
     "docs",
     "screenshots",
     ".omx",
+    "tests",
+    "scripts",
+    "desktop",
     "web"
   ]
 }
