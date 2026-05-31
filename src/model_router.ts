@@ -253,6 +253,21 @@ export interface LocalApiConfig {
 	token?: string;
 	allowRemote?: boolean;
 	router?: ModelRouter;
+	maxBodyBytes?: number;
+	requestTimeoutMs?: number;
+}
+
+const DEFAULT_LOCAL_API_MAX_BODY_BYTES = 1024 * 1024;
+const DEFAULT_LOCAL_API_REQUEST_TIMEOUT_MS = 30_000;
+
+class LocalApiRequestError extends Error {
+	constructor(
+		message: string,
+		readonly statusCode: number,
+	) {
+		super(message);
+		this.name = "LocalApiRequestError";
+	}
 }
 
 export async function startLocalApi(
@@ -262,6 +277,9 @@ export async function startLocalApi(
 	const token = config.token ?? crypto.randomBytes(16).toString("hex");
 	const router = config.router ?? new ModelRouter();
 	const host = config.allowRemote ? "0.0.0.0" : "127.0.0.1";
+	const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_LOCAL_API_MAX_BODY_BYTES;
+	const requestTimeoutMs =
+		config.requestTimeoutMs ?? DEFAULT_LOCAL_API_REQUEST_TIMEOUT_MS;
 
 	const server = http.createServer(async (req, res) => {
 		res.setHeader("Content-Type", "application/json");
@@ -289,14 +307,21 @@ export async function startLocalApi(
 
 		if (req.method === "POST" && pathname === "/v1/chat/completions") {
 			try {
-				const body = await readBody(req);
+				const body = await readBody(req, { maxBodyBytes, requestTimeoutMs });
 				const request: ChatRequest = JSON.parse(body);
 				const response = await router.chat(request);
 				res.writeHead(200);
 				res.end(JSON.stringify(response));
 			} catch (e) {
-				res.writeHead(500);
+				const statusCode =
+					e instanceof LocalApiRequestError ? e.statusCode : 500;
+				res.writeHead(statusCode, {
+					...(e instanceof LocalApiRequestError
+						? { Connection: "close" }
+						: {}),
+				});
 				res.end(JSON.stringify({ error: e instanceof Error ? redactString(e.message) : "Unknown error" }));
+				if (e instanceof LocalApiRequestError) req.destroy();
 			}
 			return;
 		}
@@ -326,11 +351,56 @@ export async function startLocalApi(
 	return { server, url, token };
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-	return new Promise((resolve) => {
+function readBody(
+	req: http.IncomingMessage,
+	options: { maxBodyBytes: number; requestTimeoutMs: number },
+): Promise<string> {
+	return new Promise((resolve, reject) => {
 		const chunks: Buffer[] = [];
-		req.on("data", (c: Buffer) => chunks.push(c));
-		req.on("end", () => resolve(Buffer.concat(chunks).toString()));
+		let receivedBytes = 0;
+		let settled = false;
+		const cleanup = () => {
+			clearTimeout(timeout);
+			req.off("data", onData);
+			req.off("end", onEnd);
+			req.off("error", onError);
+			req.off("aborted", onAborted);
+		};
+		const rejectBody = (error: Error) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			req.pause();
+			reject(error);
+		};
+		const onData = (chunk: Buffer) => {
+			receivedBytes += chunk.length;
+			if (receivedBytes > options.maxBodyBytes) {
+				rejectBody(new LocalApiRequestError("Request body too large", 413));
+				return;
+			}
+			chunks.push(Buffer.from(chunk));
+		};
+		const onEnd = () => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			resolve(Buffer.concat(chunks).toString());
+		};
+		const onError = (error: Error) => {
+			rejectBody(new LocalApiRequestError(error.message, 400));
+		};
+		const onAborted = () => {
+			rejectBody(new LocalApiRequestError("Request body aborted", 400));
+		};
+		const timeout = setTimeout(() => {
+			rejectBody(new LocalApiRequestError("Request body timed out", 408));
+		}, options.requestTimeoutMs);
+		timeout.unref?.();
+		req.on("data", onData);
+		req.on("end", onEnd);
+		req.on("error", onError);
+		req.on("aborted", onAborted);
 	});
 }
 

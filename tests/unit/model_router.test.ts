@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -302,6 +303,98 @@ test("local OpenAI-compatible API uses OS-assigned port for port 0", async () =>
 			new Promise<void>(resolve => first.server.close(() => resolve())),
 			new Promise<void>(resolve => second.server.close(() => resolve())),
 		]);
+	}
+});
+
+test("local OpenAI-compatible API rejects oversized chat request bodies", async () => {
+	const router = new ModelRouter({
+		providers: [
+			{
+				kind: "openai-compatible",
+				name: "Fixture",
+				baseUrl: "http://127.0.0.1:9/v1",
+				model: "fixture-model",
+				priority: 1,
+				enabled: true,
+			},
+		],
+	});
+	const { server, url, token } = await startLocalApi({
+		port: 0,
+		token: "test-token",
+		router,
+		maxBodyBytes: 64,
+	});
+
+	try {
+		const response = await fetch(`${url}/v1/chat/completions`, {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${token}`,
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "x".repeat(128) }],
+			}),
+		});
+		assert.equal(response.status, 413);
+	} finally {
+		await new Promise<void>(resolve => server.close(() => resolve()));
+	}
+});
+
+test("local OpenAI-compatible API times out incomplete chat request bodies", async () => {
+	const router = new ModelRouter({
+		providers: [
+			{
+				kind: "openai-compatible",
+				name: "Fixture",
+				baseUrl: "http://127.0.0.1:9/v1",
+				model: "fixture-model",
+				priority: 1,
+				enabled: true,
+			},
+		],
+	});
+	const { server, url, token } = await startLocalApi({
+		port: 0,
+		token: "test-token",
+		router,
+		requestTimeoutMs: 25,
+	});
+	const port = Number(new URL(url).port);
+	const socket = net.createConnection({ host: "127.0.0.1", port });
+
+	try {
+		await new Promise<void>((resolve, reject) => {
+			socket.once("connect", resolve);
+			socket.once("error", reject);
+		});
+		socket.write(
+			[
+				"POST /v1/chat/completions HTTP/1.1",
+				"Host: 127.0.0.1",
+				`Authorization: Bearer ${token}`,
+				"Content-Type: application/json",
+				"Content-Length: 100",
+				"",
+				"{",
+			].join("\r\n"),
+		);
+
+		const response = await Promise.race([
+			new Promise<string>((resolve) => {
+				socket.once("data", chunk => resolve(chunk.toString("utf8")));
+			}),
+			new Promise<"timeout">(resolve =>
+				setTimeout(() => resolve("timeout"), 200),
+			),
+		]);
+		assert.notEqual(response, "timeout");
+		assert.match(response, /^HTTP\/1\.1 408/u);
+	} finally {
+		socket.destroy();
+		await new Promise<void>(resolve => server.close(() => resolve()));
 	}
 });
 
