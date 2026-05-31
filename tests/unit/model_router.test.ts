@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
-import { ModelRouter, startLocalApi } from "../../src/model_router";
+import { getDefaultProviders, ModelRouter, startLocalApi } from "../../src/model_router";
 import type { ChatRequest, ChatResponse } from "../../src/model_router";
+import { saveUserConfig } from "../../src/shared/config";
 
 async function startJsonServer(
 	handler: (req: http.IncomingMessage, body: string) => {
@@ -125,6 +129,57 @@ test("ModelRouter local-only mode excludes remote OpenAI-compatible endpoints", 
 		router.getActiveProviders().map(provider => provider.name),
 		["Loopback Custom"],
 	);
+});
+
+test("default model providers warn and prefer canonical model config over legacy OpenRouter keys", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-model-router-"));
+	const envKeys = [
+		"BROWSER_CONTROL_HOME",
+		"BROWSER_CONTROL_MODEL_PROVIDER",
+		"BROWSER_CONTROL_MODEL_ENDPOINT",
+		"BROWSER_CONTROL_MODEL_API_KEY",
+		"BROWSER_CONTROL_MODEL_NAME",
+		"OPENROUTER_MODEL",
+		"AI_AGENT_MODEL",
+		"OPENROUTER_BASE_URL",
+		"OPENROUTER_API_KEY",
+	] as const;
+	const originalEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]])) as Record<(typeof envKeys)[number], string | undefined>;
+	const originalWrite = process.stdout.write;
+	let output = "";
+
+	try {
+		for (const key of envKeys) delete process.env[key];
+		process.env.BROWSER_CONTROL_HOME = home;
+		saveUserConfig({
+			modelProvider: "openrouter",
+			modelName: "canonical-model",
+			modelEndpoint: "https://canonical.example/v1",
+			modelApiKey: "canonical-key",
+			openrouterModel: "legacy-model",
+			openrouterBaseUrl: "https://legacy.example/v1",
+			openrouterApiKey: "legacy-key",
+		}, { env: process.env });
+		process.stdout.write = ((chunk: string | Uint8Array) => {
+			output += Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+			return true;
+		}) as typeof process.stdout.write;
+
+		const openrouter = getDefaultProviders().find(provider => provider.kind === "openrouter");
+
+		assert.equal(openrouter?.model, "canonical-model");
+		assert.equal(openrouter?.baseUrl, "https://canonical.example/v1");
+		assert.equal(openrouter?.apiKey, "canonical-key");
+		assert.match(output, /canonical model\* settings take precedence/u);
+		assert.doesNotMatch(output, /canonical-key|legacy-key/u);
+	} finally {
+		process.stdout.write = originalWrite;
+		for (const key of envKeys) {
+			if (originalEnv[key] === undefined) delete process.env[key];
+			else process.env[key] = originalEnv[key];
+		}
+		fs.rmSync(home, { recursive: true, force: true });
+	}
 });
 
 test("local OpenAI-compatible API reports actual port and requires bearer auth", async () => {

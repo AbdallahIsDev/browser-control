@@ -256,7 +256,7 @@
     {
       "category": "ai",
       "defaultValue": "openrouter",
-      "description": "Preferred model provider used by the Browser Control model router. Choose `openrouter`, `ollama`, or `openai-compatible` based on where model requests should be sent.",
+      "description": "Canonical model provider used by the Browser Control model router. Choose `openrouter`, `ollama`, or `openai-compatible` based on where model requests should be sent.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_PROVIDER"
       ],
@@ -265,7 +265,7 @@
     },
     {
       "category": "ai",
-      "description": "Custom OpenAI-compatible base URL for the selected model provider. Use this for local gateways, private deployments, or providers that are not covered by built-in defaults.",
+      "description": "Canonical base URL override for the selected model provider. When modelProvider is `openrouter`, this takes precedence over legacy openrouterBaseUrl.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_ENDPOINT"
       ],
@@ -275,7 +275,7 @@
     {
       "category": "ai",
       "defaultValue": "[redacted]",
-      "description": "API key for the selected model provider in the model router. This value is sensitive and is redacted from config output.",
+      "description": "Canonical API key for the selected model provider in the model router. When modelProvider is `openrouter`, this sensitive value takes precedence over legacy openrouterApiKey.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_API_KEY"
       ],
@@ -284,7 +284,7 @@
     },
     {
       "category": "ai",
-      "description": "Model identifier used by the selected model provider. Use provider-specific names such as an OpenRouter model slug or a local Ollama model name.",
+      "description": "Canonical model identifier used by the selected model provider. When modelProvider is `openrouter`, this takes precedence over legacy openrouterModel.",
       "envVars": [
         "BROWSER_CONTROL_MODEL_NAME"
       ],
@@ -294,7 +294,7 @@
     {
       "category": "ai",
       "defaultValue": "openai/gpt-4.1-mini",
-      "description": "OpenRouter model slug used by legacy AI-agent features. This remains for compatibility with older agent configuration paths.",
+      "description": "Legacy OpenRouter model slug kept for older AI-agent configuration. Prefer modelName because canonical model* settings take precedence when both are configured.",
       "envVars": [
         "OPENROUTER_MODEL",
         "AI_AGENT_MODEL"
@@ -305,7 +305,7 @@
     {
       "category": "ai",
       "defaultValue": "https://openrouter.ai/api/v1",
-      "description": "Base URL for OpenRouter-compatible API requests. Override this only for a compatible proxy or self-hosted gateway.",
+      "description": "Legacy OpenRouter base URL kept for compatibility with older configuration. Prefer modelEndpoint because canonical model* settings take precedence when both are configured.",
       "envVars": [
         "OPENROUTER_BASE_URL"
       ],
@@ -315,7 +315,7 @@
     {
       "category": "ai",
       "defaultValue": "[redacted]",
-      "description": "API key for OpenRouter-backed AI-agent features. This is sensitive and is redacted from inventories and logs.",
+      "description": "Legacy API key for OpenRouter-backed AI-agent features. Prefer modelApiKey because canonical model* settings take precedence when both are configured.",
       "envVars": [
         "OPENROUTER_API_KEY"
       ],

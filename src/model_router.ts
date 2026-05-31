@@ -5,6 +5,7 @@ import { logger } from "./shared/logger";
 import { getConfigValue, setUserConfigValue, loadUserConfig } from "./shared/config";
 
 const log = logger.withComponent("model-router");
+let warnedOpenRouterConfigOverlap = false;
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -45,16 +46,18 @@ function defaultProviders(): ModelProvider[] {
 
 export function getDefaultProviders(): ModelProvider[] {
 	const providers = defaultProviders();
+	const userConfig = (() => {
+		try {
+			return loadUserConfig() as Record<string, unknown>;
+		} catch {
+			return {};
+		}
+	})();
 	// Use loadUserConfig for sensitive values (API keys) to avoid redaction.
 	// Use getConfigValue for non-sensitive values.
 	const getRawString = (key: string): string | undefined => {
-		try {
-			const userConfig = loadUserConfig();
-			const value = (userConfig as Record<string, unknown>)[key];
-			return typeof value === "string" && value.trim() ? value : undefined;
-		} catch {
-			return undefined;
-		}
+		const value = userConfig[key];
+		return typeof value === "string" && value.trim() ? value : undefined;
 	};
 	const getString = (key: string): string | undefined => {
 		try {
@@ -68,6 +71,25 @@ export function getDefaultProviders(): ModelProvider[] {
 	const endpoint = getString("modelEndpoint");
 	const apiKey = getRawString("modelApiKey");
 	const modelName = getString("modelName");
+	const explicitOpenRouterOverlaps = [
+		modelName && (getRawString("openrouterModel") || process.env.OPENROUTER_MODEL || process.env.AI_AGENT_MODEL)
+			? "modelName overrides openrouterModel"
+			: undefined,
+		endpoint && (getRawString("openrouterBaseUrl") || process.env.OPENROUTER_BASE_URL)
+			? "modelEndpoint overrides openrouterBaseUrl"
+			: undefined,
+		apiKey && (getRawString("openrouterApiKey") || process.env.OPENROUTER_API_KEY)
+			? "modelApiKey overrides openrouterApiKey"
+			: undefined,
+	].filter((entry): entry is string => Boolean(entry));
+
+	if (selected === "openrouter" && explicitOpenRouterOverlaps.length > 0 && !warnedOpenRouterConfigOverlap) {
+		warnedOpenRouterConfigOverlap = true;
+		log.warn(
+			"Both canonical model* settings and legacy openrouter* settings are configured; canonical model* settings take precedence.",
+			{ precedence: explicitOpenRouterOverlaps },
+		);
+	}
 
 	return providers.map(provider => {
 		const enabled = provider.kind === selected;
