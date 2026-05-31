@@ -7,16 +7,16 @@ This file records the real-user Windows test pass run from a packed install, not
 - OS: Windows
 - Shell: PowerShell 7.6.1
 - Node.js: 24.13.0
-- Project checkout: `C:\Users\11\browser-control`
-- User test project: `C:\Users\11\bc-user-test`
-- Test data home: `C:\Users\11\bc-user-test\.browser-control`
+- Project checkout: `<project-checkout>`
+- User test project: `<test-project>`
+- Test data home: `<test-project>\.browser-control`
 - Install source: local package tarball from `npm pack`
 
 Common setup:
 
 ```powershell
-cd C:\Users\11\bc-user-test
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control"
+cd <test-project>
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control"
 ```
 
 ## Confirmed Passed
@@ -26,13 +26,13 @@ $env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control"
 Commands tested:
 
 ```powershell
-cd C:\Users\11\browser-control
+cd <project-checkout>
 npm run build
 npm pack
-mkdir C:\Users\11\bc-user-test
-cd C:\Users\11\bc-user-test
+mkdir <test-project>
+cd <test-project>
 npm init -y
-npm install C:\Users\11\browser-control\browser-control-1.0.0.tgz
+npm install <project-checkout>\browser-control-1.0.0.tgz
 npx bc --help
 npm audit
 ```
@@ -71,9 +71,9 @@ Result:
 Commands tested:
 
 ```powershell
-Set-Content C:\Users\11\bc-user-test\hello.txt "hello"
-npx bc fs read C:\Users\11\bc-user-test\hello.txt
-npx bc fs stat C:\Users\11\bc-user-test\hello.txt
+Set-Content <test-project>\hello.txt "hello"
+npx bc fs read <test-project>\hello.txt
+npx bc fs stat <test-project>\hello.txt
 ```
 
 Result:
@@ -108,8 +108,8 @@ Commands tested:
 npx bc browser status
 npx bc open https://example.com
 npx bc snapshot --json
-npx bc screenshot --output C:\Users\11\bc-user-test\shot.png
-Test-Path C:\Users\11\bc-user-test\shot.png
+npx bc screenshot --output <test-project>\shot.png
+Test-Path <test-project>\shot.png
 ```
 
 Result:
@@ -135,8 +135,8 @@ npx bc snapshot
 npx bc click "Learn more"
 Start-Sleep -Seconds 2
 npx bc tab list
-npx bc screenshot --output C:\Users\11\bc-user-test\iana-page.png
-Test-Path C:\Users\11\bc-user-test\iana-page.png
+npx bc screenshot --output <test-project>\iana-page.png
+Test-Path <test-project>\iana-page.png
 npx bc close
 ```
 
@@ -189,17 +189,17 @@ Status:
 Commands tested:
 
 ```powershell
-mkdir C:\Users\11\bc-user-test\site -Force
-Set-Content C:\Users\11\bc-user-test\site\index.html "<h1>Browser Control Service Test</h1><p>Hello from bc service.</p>"
-$server = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/site/index.html'))}).listen(3456,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+mkdir <test-project>\site -Force
+Set-Content <test-project>\site\index.html "<h1>Browser Control Service Test</h1><p>Hello from bc service.</p>"
+$server = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('<test-project>/site/index.html'))}).listen(3456,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 npx bc service register testsite --port 3456 --path /
 npx bc service list
 npx bc service resolve testsite
 npx bc open bc://testsite
 npx bc snapshot
-npx bc screenshot --output C:\Users\11\bc-user-test\service-test.png
-Test-Path C:\Users\11\bc-user-test\service-test.png
+npx bc screenshot --output <test-project>\service-test.png
+Test-Path <test-project>\service-test.png
 npx bc service remove testsite
 Stop-Process -Id $server.Id -Force
 npx bc service list
@@ -221,9 +221,9 @@ Result:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-service"
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-service"
 npx bc service list
-npx bc service register test-api --port 4567 --protocol=http --path=/health --cwd=C:\Users\11\bc-user-test
+npx bc service register test-api --port 4567 --protocol=http --path=/health --cwd=<test-project>
 npx bc service list
 npx bc service resolve test-api
 npx bc service remove test-api
@@ -248,7 +248,7 @@ Note:
 Commands tested:
 
 ```powershell
-mkdir C:\Users\11\bc-user-test\vite-detect -Force
+mkdir <test-project>\vite-detect -Force
 @"
 import { defineConfig } from 'vite'
 
@@ -258,17 +258,17 @@ export default defineConfig({
     port: 4567
   }
 })
-"@ | Set-Content C:\Users\11\bc-user-test\vite-detect\vite.config.js
+"@ | Set-Content <test-project>\vite-detect\vite.config.js
 
 $viteServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end('<h1>Detected Vite Service</h1><p>Port 4567</p>')}).listen(4567,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
-npx bc service register viteapp --detect --cwd C:\Users\11\bc-user-test\vite-detect
+npx bc service register viteapp --detect --cwd <test-project>\vite-detect
 npx bc service list
 npx bc service resolve viteapp
 npx bc open bc://viteapp
 npx bc snapshot
-npx bc screenshot --output C:\Users\11\bc-user-test\vite-detect.png
-Test-Path C:\Users\11\bc-user-test\vite-detect.png
+npx bc screenshot --output <test-project>\vite-detect.png
+Test-Path <test-project>\vite-detect.png
 ```
 
 Result:
@@ -293,8 +293,8 @@ npx bc browser profile use manual-profile
 npx bc browser launch --profile=manual-profile
 npx bc open https://example.com
 npx bc browser status
-npx bc screenshot --output C:\Users\11\bc-user-test\manual-profile-example.png
-Test-Path C:\Users\11\bc-user-test\manual-profile-example.png
+npx bc screenshot --output <test-project>\manual-profile-example.png
+Test-Path <test-project>\manual-profile-example.png
 npx bc close
 Get-Process chrome | Stop-Process -Force
 npx bc browser status
@@ -321,10 +321,10 @@ Commands tested after the named-profile fixes:
 npx bc browser profile use manual-profile
 npx bc browser launch --profile=manual-profile
 npx bc open https://example.com
-npx bc screenshot --output C:\Users\11\bc-user-test\manual-profile-regression.png
-npx bc browser auth export --live --profile=manual-profile --output C:\Users\11\bc-user-test\manual-profile-auth.json --yes
-Test-Path C:\Users\11\bc-user-test\manual-profile-auth.json
-npx bc browser auth import C:\Users\11\bc-user-test\manual-profile-auth.json --stored --profile=manual-profile --yes
+npx bc screenshot --output <test-project>\manual-profile-regression.png
+npx bc browser auth export --live --profile=manual-profile --output <test-project>\manual-profile-auth.json --yes
+Test-Path <test-project>\manual-profile-auth.json
+npx bc browser auth import <test-project>\manual-profile-auth.json --stored --profile=manual-profile --yes
 npx bc close
 npx bc browser status
 ```
@@ -344,15 +344,15 @@ Result:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-auth"
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-auth"
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Remove-Item C:\Users\11\bc-user-test\auth-state.json -Force -ErrorAction SilentlyContinue
+Remove-Item <test-project>\auth-state.json -Force -ErrorAction SilentlyContinue
 
 npx bc open https://example.com
-npx bc browser auth export --live --profile=default --output=C:\Users\11\bc-user-test\auth-state.json --yes
-Test-Path C:\Users\11\bc-user-test\auth-state.json
-Get-Content C:\Users\11\bc-user-test\auth-state.json | Select-Object -First 20
-npx bc browser auth import C:\Users\11\bc-user-test\auth-state.json --stored --profile=default --yes
+npx bc browser auth export --live --profile=default --output=<test-project>\auth-state.json --yes
+Test-Path <test-project>\auth-state.json
+Get-Content <test-project>\auth-state.json | Select-Object -First 20
+npx bc browser auth import <test-project>\auth-state.json --stored --profile=default --yes
 npx bc close
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 ```
@@ -374,11 +374,11 @@ Commands:
 npx bc policy list
 npx bc policy inspect balanced
 npx bc policy inspect trusted
-npx bc policy export balanced C:\Users\11\bc-user-test\balanced-policy.json
-Test-Path C:\Users\11\bc-user-test\balanced-policy.json
-npx bc fs write C:\Users\11\bc-user-test\policy-write-test.txt --content "blocked by balanced policy"
-Test-Path C:\Users\11\bc-user-test\policy-write-test.txt
-npx bc fs read C:\Users\11\bc-user-test\hello.txt
+npx bc policy export balanced <test-project>\balanced-policy.json
+Test-Path <test-project>\balanced-policy.json
+npx bc fs write <test-project>\policy-write-test.txt --content "blocked by balanced policy"
+Test-Path <test-project>\policy-write-test.txt
+npx bc fs read <test-project>\hello.txt
 npx bc term exec "echo policy-terminal-ok"
 ```
 
@@ -411,7 +411,7 @@ Result:
 
 - `daemon start` returned and printed readiness instead of hanging.
 - `term open --json` created a daemon-backed terminal session and returned a terminal id.
-- Terminal cwd defaulted to the caller directory (`C:\Users\11\bc-user-test`), not package `dist\src`.
+- Terminal cwd defaulted to the caller directory (`<test-project>`), not package `dist\src`.
 - `term list` showed daemon terminal sessions.
 - Using a real terminal id, `term exec`, `term read`, `term snapshot`, and `term close` succeeded.
 - Leaving `$termId="<PASTE_TERMINAL_ID_HERE>"` is user error, but now fails cleanly with `Invalid terminal session id: <PASTE_TERMINAL_ID_HERE>` and no native assertion crash.
@@ -431,8 +431,8 @@ npx bc open https://www.iana.org/help/example-domains
 npx bc tab list
 npx bc tab switch 0
 npx bc tab list
-npx bc screenshot --output C:\Users\11\bc-user-test\tab-switch-test.png
-Test-Path C:\Users\11\bc-user-test\tab-switch-test.png
+npx bc screenshot --output <test-project>\tab-switch-test.png
+Test-Path <test-project>\tab-switch-test.png
 npx bc close
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 ```
@@ -518,9 +518,9 @@ Commands:
 
 ```powershell
 npx bc policy list
-npx bc policy export safe C:\Users\11\bc-user-test\safe-policy.json
-Test-Path C:\Users\11\bc-user-test\safe-policy.json
-npx bc policy import C:\Users\11\bc-user-test\safe-policy.json
+npx bc policy export safe <test-project>\safe-policy.json
+Test-Path <test-project>\safe-policy.json
+npx bc policy import <test-project>\safe-policy.json
 npx bc policy list
 npx bc policy inspect safe
 ```
@@ -649,10 +649,10 @@ Commands:
 ```powershell
 npx bc debug console
 npx bc debug network
-npx bc debug bundle test-debug-id --output C:\Users\11\bc-user-test\debug-bundle.json
-Test-Path C:\Users\11\bc-user-test\debug-bundle.json
-npx bc debug bundle test-debug-id --output C:\Users\11\bc-user-test\debug-bundle.json --yes
-Test-Path C:\Users\11\bc-user-test\debug-bundle.json
+npx bc debug bundle test-debug-id --output <test-project>\debug-bundle.json
+Test-Path <test-project>\debug-bundle.json
+npx bc debug bundle test-debug-id --output <test-project>\debug-bundle.json --yes
+Test-Path <test-project>\debug-bundle.json
 ```
 
 Result:
@@ -671,7 +671,7 @@ Commands:
 ```powershell
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-mkdir C:\Users\11\bc-user-test\debug-events-site -Force
+mkdir <test-project>\debug-events-site -Force
 
 @"
 <!doctype html>
@@ -686,9 +686,9 @@ mkdir C:\Users\11\bc-user-test\debug-events-site -Force
   </script>
 </body>
 </html>
-"@ | Set-Content C:\Users\11\bc-user-test\debug-events-site\index.html
+"@ | Set-Content <test-project>\debug-events-site\index.html
 
-$debugServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{if(req.url.startsWith('/api/')){res.setHeader('content-type','application/json');res.end(JSON.stringify({ok:true,url:req.url}))}else{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/debug-events-site/index.html'))}}).listen(7890,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+$debugServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{if(req.url.startsWith('/api/')){res.setHeader('content-type','application/json');res.end(JSON.stringify({ok:true,url:req.url}))}else{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('<test-project>/debug-events-site/index.html'))}}).listen(7890,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 
 npx bc open http://127.0.0.1:7890
@@ -697,12 +697,12 @@ npx bc click "#event-button"
 Start-Sleep -Seconds 1
 npx bc debug console
 npx bc debug network
-npx bc debug console --json 1> C:\Users\11\bc-user-test\debug-console.json 2> C:\Users\11\bc-user-test\debug-console.err
-npx bc debug network --json 1> C:\Users\11\bc-user-test\debug-network.json 2> C:\Users\11\bc-user-test\debug-network.err
-(Get-Content C:\Users\11\bc-user-test\debug-console.json -Raw | ConvertFrom-Json).entries.Count
-(Get-Content C:\Users\11\bc-user-test\debug-network.json -Raw | ConvertFrom-Json).entries.Count
-(Get-Content C:\Users\11\bc-user-test\debug-console.err -Raw).Length
-(Get-Content C:\Users\11\bc-user-test\debug-network.err -Raw).Length
+npx bc debug console --json 1> <test-project>\debug-console.json 2> <test-project>\debug-console.err
+npx bc debug network --json 1> <test-project>\debug-network.json 2> <test-project>\debug-network.err
+(Get-Content <test-project>\debug-console.json -Raw | ConvertFrom-Json).entries.Count
+(Get-Content <test-project>\debug-network.json -Raw | ConvertFrom-Json).entries.Count
+(Get-Content <test-project>\debug-console.err -Raw).Length
+(Get-Content <test-project>\debug-network.err -Raw).Length
 npx bc close
 Stop-Process -Id $debugServer.Id -Force
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -736,21 +736,21 @@ Commands:
 
 ```powershell
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Remove-Item C:\Users\11\bc-user-test\real-debug-bundle.json -Force -ErrorAction SilentlyContinue
+Remove-Item <test-project>\real-debug-bundle.json -Force -ErrorAction SilentlyContinue
 
 npx bc open https://example.com
 npx bc click "#missing-button-for-debug-test"
 
-$bundleFile = Get-ChildItem C:\Users\11\bc-user-test\.browser-control\debug-bundles\bundle-*.json |
+$bundleFile = Get-ChildItem <test-project>\.browser-control\debug-bundles\bundle-*.json |
   Sort-Object LastWriteTime -Descending |
   Select-Object -First 1
 
 $bundleId = [System.IO.Path]::GetFileNameWithoutExtension($bundleFile.Name)
 $bundleId
 
-npx bc debug bundle $bundleId --output C:\Users\11\bc-user-test\real-debug-bundle.json --yes
-Test-Path C:\Users\11\bc-user-test\real-debug-bundle.json
-Get-Content C:\Users\11\bc-user-test\real-debug-bundle.json | Select-Object -First 40
+npx bc debug bundle $bundleId --output <test-project>\real-debug-bundle.json --yes
+Test-Path <test-project>\real-debug-bundle.json
+Get-Content <test-project>\real-debug-bundle.json | Select-Object -First 40
 npx bc close
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 ```
@@ -771,7 +771,7 @@ Commands:
 ```powershell
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-mkdir C:\Users\11\bc-user-test\interaction-site -Force
+mkdir <test-project>\interaction-site -Force
 
 @"
 <!doctype html>
@@ -802,9 +802,9 @@ mkdir C:\Users\11\bc-user-test\interaction-site -Force
   <div id="bottom">Bottom marker reached</div>
 </body>
 </html>
-"@ | Set-Content C:\Users\11\bc-user-test\interaction-site\index.html
+"@ | Set-Content <test-project>\interaction-site\index.html
 
-$interactionServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/interaction-site/index.html'))}).listen(5678,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+$interactionServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('<test-project>/interaction-site/index.html'))}).listen(5678,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 
 npx bc open http://127.0.0.1:5678
@@ -816,11 +816,11 @@ npx bc press Enter
 npx bc type "second line"
 npx bc hover "#hover-card"
 npx bc click "#copy-button"
-npx bc screenshot --target "#result" --output C:\Users\11\bc-user-test\interaction-result-target.png
+npx bc screenshot --target "#result" --output <test-project>\interaction-result-target.png
 npx bc scroll down
-npx bc screenshot --full-page --output C:\Users\11\bc-user-test\interaction-full-page.png
-Test-Path C:\Users\11\bc-user-test\interaction-result-target.png
-Test-Path C:\Users\11\bc-user-test\interaction-full-page.png
+npx bc screenshot --full-page --output <test-project>\interaction-full-page.png
+Test-Path <test-project>\interaction-result-target.png
+Test-Path <test-project>\interaction-full-page.png
 npx bc close
 Stop-Process -Id $interactionServer.Id -Force
 ```
@@ -848,7 +848,7 @@ Commands:
 ```powershell
 Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-mkdir C:\Users\11\bc-user-test\ref-site -Force
+mkdir <test-project>\ref-site -Force
 
 @"
 <!doctype html>
@@ -870,23 +870,23 @@ mkdir C:\Users\11\bc-user-test\ref-site -Force
   <div id="low">Bottom marker</div>
 </body>
 </html>
-"@ | Set-Content C:\Users\11\bc-user-test\ref-site\index.html
+"@ | Set-Content <test-project>\ref-site\index.html
 
-$refServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('C:/Users/11/bc-user-test/ref-site/index.html'))}).listen(6789,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
+$refServer = Start-Process node -ArgumentList "-e `"require('http').createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(require('fs').readFileSync('<test-project>/ref-site/index.html'))}).listen(6789,'127.0.0.1')`"" -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 
 npx bc open http://127.0.0.1:6789
 npx bc snapshot
 npx bc fill e3 "Ref Works"
 npx bc click e4
-npx bc screenshot --target "#ref-result" --output C:\Users\11\bc-user-test\ref-result.png
+npx bc screenshot --target "#ref-result" --output <test-project>\ref-result.png
 npx bc scroll down
 npx bc scroll up
 npx bc scroll right
 npx bc scroll left
-npx bc screenshot --full-page --output C:\Users\11\bc-user-test\ref-full-page.png
-Test-Path C:\Users\11\bc-user-test\ref-result.png
-Test-Path C:\Users\11\bc-user-test\ref-full-page.png
+npx bc screenshot --full-page --output <test-project>\ref-full-page.png
+Test-Path <test-project>\ref-result.png
+Test-Path <test-project>\ref-full-page.png
 npx bc close
 Stop-Process -Id $refServer.Id -Force
 ```
@@ -910,26 +910,26 @@ Result:
 Commands:
 
 ```powershell
-mkdir C:\Users\11\bc-user-test\fs-test -Force
-mkdir C:\Users\11\bc-user-test\fs-test\nested -Force
+mkdir <test-project>\fs-test -Force
+mkdir <test-project>\fs-test\nested -Force
 
-Set-Content C:\Users\11\bc-user-test\fs-test\a.txt "alpha"
-Set-Content C:\Users\11\bc-user-test\fs-test\b.log "bravo"
-Set-Content C:\Users\11\bc-user-test\fs-test\nested\c.txt "charlie"
+Set-Content <test-project>\fs-test\a.txt "alpha"
+Set-Content <test-project>\fs-test\b.log "bravo"
+Set-Content <test-project>\fs-test\nested\c.txt "charlie"
 
-npx bc fs ls C:\Users\11\bc-user-test\fs-test
-npx bc fs ls C:\Users\11\bc-user-test\fs-test --recursive
-npx bc fs ls C:\Users\11\bc-user-test\fs-test --recursive --ext=.txt
-npx bc fs read C:\Users\11\bc-user-test\fs-test\a.txt
-npx bc fs read C:\Users\11\bc-user-test\fs-test\nested\c.txt --max-bytes=4
-npx bc fs stat C:\Users\11\bc-user-test\fs-test\a.txt
-npx bc fs move C:\Users\11\bc-user-test\fs-test\a.txt C:\Users\11\bc-user-test\fs-test\a-moved.txt
-Test-Path C:\Users\11\bc-user-test\fs-test\a.txt
-Test-Path C:\Users\11\bc-user-test\fs-test\a-moved.txt
-npx bc fs rm C:\Users\11\bc-user-test\fs-test\a-moved.txt
-Test-Path C:\Users\11\bc-user-test\fs-test\a-moved.txt
-npx bc fs rm C:\Users\11\bc-user-test\fs-test --recursive --force
-Test-Path C:\Users\11\bc-user-test\fs-test
+npx bc fs ls <test-project>\fs-test
+npx bc fs ls <test-project>\fs-test --recursive
+npx bc fs ls <test-project>\fs-test --recursive --ext=.txt
+npx bc fs read <test-project>\fs-test\a.txt
+npx bc fs read <test-project>\fs-test\nested\c.txt --max-bytes=4
+npx bc fs stat <test-project>\fs-test\a.txt
+npx bc fs move <test-project>\fs-test\a.txt <test-project>\fs-test\a-moved.txt
+Test-Path <test-project>\fs-test\a.txt
+Test-Path <test-project>\fs-test\a-moved.txt
+npx bc fs rm <test-project>\fs-test\a-moved.txt
+Test-Path <test-project>\fs-test\a-moved.txt
+npx bc fs rm <test-project>\fs-test --recursive --force
+Test-Path <test-project>\fs-test
 ```
 
 Result:
@@ -949,21 +949,21 @@ Result:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-fs-yes-fixed"
-Remove-Item C:\Users\11\bc-user-test\fs-yes-fixed -Recurse -Force -ErrorAction SilentlyContinue
-mkdir C:\Users\11\bc-user-test\fs-yes-fixed -Force
-mkdir C:\Users\11\bc-user-test\fs-yes-fixed\nested -Force
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-fs-yes-fixed"
+Remove-Item <test-project>\fs-yes-fixed -Recurse -Force -ErrorAction SilentlyContinue
+mkdir <test-project>\fs-yes-fixed -Force
+mkdir <test-project>\fs-yes-fixed\nested -Force
 
-npx bc fs write C:\Users\11\bc-user-test\fs-yes-fixed\a.txt --content="alpha" --yes
-Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\a.txt
-npx bc fs move C:\Users\11\bc-user-test\fs-yes-fixed\a.txt C:\Users\11\bc-user-test\fs-yes-fixed\b.txt --yes
-Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\a.txt
-Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\b.txt
-npx bc fs rm C:\Users\11\bc-user-test\fs-yes-fixed\b.txt --yes
-Test-Path C:\Users\11\bc-user-test\fs-yes-fixed\b.txt
-Set-Content C:\Users\11\bc-user-test\fs-yes-fixed\nested\c.txt "charlie"
-npx bc fs rm C:\Users\11\bc-user-test\fs-yes-fixed --recursive --force --yes
-Test-Path C:\Users\11\bc-user-test\fs-yes-fixed
+npx bc fs write <test-project>\fs-yes-fixed\a.txt --content="alpha" --yes
+Test-Path <test-project>\fs-yes-fixed\a.txt
+npx bc fs move <test-project>\fs-yes-fixed\a.txt <test-project>\fs-yes-fixed\b.txt --yes
+Test-Path <test-project>\fs-yes-fixed\a.txt
+Test-Path <test-project>\fs-yes-fixed\b.txt
+npx bc fs rm <test-project>\fs-yes-fixed\b.txt --yes
+Test-Path <test-project>\fs-yes-fixed\b.txt
+Set-Content <test-project>\fs-yes-fixed\nested\c.txt "charlie"
+npx bc fs rm <test-project>\fs-yes-fixed --recursive --force --yes
+Test-Path <test-project>\fs-yes-fixed
 ```
 
 Result before fix:
@@ -987,7 +987,7 @@ Result after fix:
 - `fs move --yes` moved `a.txt` to `b.txt`; source `False`, destination `True`.
 - `fs rm --yes` deleted `b.txt`; `Test-Path` returned `False`.
 - Recursive `fs rm --recursive --force --yes` deleted the directory; final `Test-Path` returned `False`.
-- Final user retest against `C:\Users\11\bc-user-test\.browser-control-fs-yes-final` confirmed the same pass results from the packaged tarball.
+- Final user retest against `<test-project>\.browser-control-fs-yes-final` confirmed the same pass results from the packaged tarball.
 
 ### JSON Output Mode
 
@@ -997,13 +997,13 @@ Commands tested before fix:
 npx bc status --json
 npx bc doctor --json
 npx bc session list --json
-npx bc fs stat C:\Users\11\bc-user-test\json-test.txt --json
-npx bc fs read C:\Users\11\bc-user-test\json-test.txt --json
+npx bc fs stat <test-project>\json-test.txt --json
+npx bc fs read <test-project>\json-test.txt --json
 npx bc open https://example.com --json
 npx bc snapshot --json
 npx bc tab list --json
-npx bc screenshot --output C:\Users\11\bc-user-test\json-shot.png --json
-Test-Path C:\Users\11\bc-user-test\json-shot.png
+npx bc screenshot --output <test-project>\json-shot.png --json
+Test-Path <test-project>\json-shot.png
 npx bc close --json
 ```
 
@@ -1021,12 +1021,12 @@ Fix added:
 Commands tested after fix:
 
 ```powershell
-npx bc fs read C:\Users\11\bc-user-test\json-test.txt --json 1> C:\Users\11\bc-user-test\stdout.txt 2> C:\Users\11\bc-user-test\stderr.txt
-Get-Content C:\Users\11\bc-user-test\stdout.txt -Raw | ConvertFrom-Json
-Get-Content C:\Users\11\bc-user-test\stderr.txt
-npx bc doctor --json 1> C:\Users\11\bc-user-test\stdout.txt 2> C:\Users\11\bc-user-test\stderr.txt
-Get-Content C:\Users\11\bc-user-test\stdout.txt -Raw | ConvertFrom-Json
-Get-Content C:\Users\11\bc-user-test\stderr.txt
+npx bc fs read <test-project>\json-test.txt --json 1> <test-project>\stdout.txt 2> <test-project>\stderr.txt
+Get-Content <test-project>\stdout.txt -Raw | ConvertFrom-Json
+Get-Content <test-project>\stderr.txt
+npx bc doctor --json 1> <test-project>\stdout.txt 2> <test-project>\stderr.txt
+Get-Content <test-project>\stdout.txt -Raw | ConvertFrom-Json
+Get-Content <test-project>\stderr.txt
 ```
 
 Result after fix:
@@ -1044,8 +1044,8 @@ Result after fix:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-mcp"
-node C:\Users\11\bc-user-test\mcp-smoke.mjs
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-mcp"
+node <test-project>\mcp-smoke.mjs
 ```
 
 Result:
@@ -1065,7 +1065,7 @@ Status:
 Codex MCP registration:
 
 ```powershell
-cd C:\Users\11\browser-control
+cd <project-checkout>
 npm run build
 npm link
 codex mcp add browser-control -- bc mcp serve
@@ -1086,7 +1086,7 @@ Use browser-control MCP only.
 4. Click "Learn more".
 5. Take a screenshot.
 6. Use terminal MCP to run: node --version.
-7. Use fs MCP to write a temp file under C:\Users\11\AppData\Local\Temp\bc-mcp-prod-test.txt, read it back, then delete it.
+7. Use fs MCP to write a temp file under $env:TEMP\bc-mcp-prod-test.txt, read it back, then delete it.
 8. Summarize each tool call success/failure.
 ```
 
@@ -1100,10 +1100,10 @@ Result:
 - Snapshot included heading `Example Domain` and `Learn more` link ref `e5`.
 - Codex called `browser-control.bc_browser_click` successfully with target `@e5`.
 - Codex called `browser-control.bc_browser_screenshot` successfully.
-- Screenshot saved to `C:\Users\11\.browser-control\reports\screenshot-1777314968149.png` with size `93768` bytes.
+- Screenshot saved to `<browser-control-data-home>\reports\screenshot-1777314968149.png` with size `93768` bytes.
 - Codex called terminal MCP successfully; `node --version` returned `v24.13.0`.
 - Initial `bc_fs_write` under the active balanced session was correctly blocked with `Confirmation required: Risk level "high" requires user confirmation`.
-- Codex recovered by creating a trusted Browser Control session scoped to `C:\Users\11\AppData\Local\Temp`.
+- Codex recovered by creating a trusted Browser Control session scoped to `$env:TEMP`.
 - Retried `bc_fs_write` succeeded and wrote `17` bytes to `bc-mcp-prod-test.txt`.
 - `bc_fs_read` succeeded and returned content `bc-mcp-prod-test\n`.
 - `bc_fs_delete` succeeded and deleted the temp file.
@@ -1253,13 +1253,13 @@ Result after fix:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-browserless-retest-fixed"
-$env:BROWSERLESS_ENDPOINT=(Get-Content C:\Users\11\bc-user-test\browserless-sim-ws.txt -Raw).Trim()
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-browserless-retest-fixed"
+$env:BROWSERLESS_ENDPOINT=(Get-Content <test-project>\browserless-sim-ws.txt -Raw).Trim()
 Remove-Item Env:\BROWSERLESS_API_KEY -ErrorAction SilentlyContinue
 npx bc browser provider use browserless
 npx bc open https://example.com
-npx bc screenshot --output C:\Users\11\bc-user-test\browserless-fixed.png
-Test-Path C:\Users\11\bc-user-test\browserless-fixed.png
+npx bc screenshot --output <test-project>\browserless-fixed.png
+Test-Path <test-project>\browserless-fixed.png
 npx bc browser provider use local
 ```
 
@@ -1277,8 +1277,8 @@ Result:
 Commands tested:
 
 ```powershell
-$env:BROWSER_CONTROL_HOME="C:\Users\11\bc-user-test\.browser-control-wiki-retest-fixed"
-$skillsDir="C:\Users\11\bc-user-test\node_modules\browser-control\dist\src\skills"
+$env:BROWSER_CONTROL_HOME="<test-project>\.browser-control-wiki-retest-fixed"
+$skillsDir="<test-project>\node_modules\browser-control\dist\src\skills"
 npx bc open https://example.com
 npx bc daemon start
 npx bc skill list
@@ -1323,7 +1323,7 @@ Local published-install simulation result:
   - `bin[bc] script name cli.js was invalid and removed`
   - `repository.url` was normalized
   - `You cannot publish over the previously published versions: 1.0.0`
-- `npm pack --pack-destination C:\Users\11\bc-user-test\published-install-sim` created `browser-control-1.0.0.tgz`.
+- `npm pack --pack-destination <test-project>\published-install-sim` created `browser-control-1.0.0.tgz`.
 - Fresh test project was created with `npm init -y`.
 - `npm install .\browser-control-1.0.0.tgz` completed after about 10 minutes.
 - Install added 118 packages, audited 119 packages, and reported `found 0 vulnerabilities`.

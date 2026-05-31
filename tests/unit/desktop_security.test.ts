@@ -38,7 +38,7 @@ test("safe child env keeps runtime allowlist and drops unrelated secrets", () =>
 			GITHUB_TOKEN: "github-secret",
 			NODE_OPTIONS: "--enable-source-maps",
 			Path: "C:/Windows/System32",
-			USERPROFILE: "C:/Users/11",
+			USERPROFILE: "C:/Users/test-user",
 			npm_node_execpath: "C:/node.exe",
 		},
 		{ BROWSER_CONTROL_DESKTOP: "1" },
@@ -52,7 +52,7 @@ test("safe child env keeps runtime allowlist and drops unrelated secrets", () =>
 	assert.equal(env.BROKER_API_KEY, "broker-key");
 	assert.equal(env.NODE_OPTIONS, "--enable-source-maps");
 	assert.equal(env.Path, "C:/Windows/System32");
-	assert.equal(env.USERPROFILE, "C:/Users/11");
+	assert.equal(env.USERPROFILE, "C:/Users/test-user");
 });
 
 test("desktop app server spawn uses safe child env", () => {

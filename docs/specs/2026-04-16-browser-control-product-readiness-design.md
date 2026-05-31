@@ -38,7 +38,7 @@ This design covers four areas: rename + cross-platform foundation, core engine h
 - Data directory: `~/.browser-control/` (override with `BROWSER_CONTROL_HOME`)
 - Contains: `memory.sqlite`, `reports/`, `logs/`, `.interop/`, `skills/`
 - Created automatically on first run
-- Replace `C:\Users\11\` references with `os.homedir()` / `process.env.HOME` / `process.env.USERPROFILE`
+- Replace `C:\Users\<you>\` references with `os.homedir()` / `process.env.HOME` / `process.env.USERPROFILE`
 
 **Cleanup:**
 - Populate or remove empty `project-template/` directory
