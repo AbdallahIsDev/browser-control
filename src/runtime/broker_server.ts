@@ -29,6 +29,7 @@ import type {
 	BrokerTaskStatusEntry,
 } from "./broker_types";
 import type { HealthReport } from "./health_check";
+import type { MemoryStore } from "./memory_store";
 import type { TelemetrySummary } from "./telemetry";
 
 const brokerLog = new Logger({ component: "broker" });
@@ -43,6 +44,8 @@ const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 const MAX_DOMAIN_PARAM_DEPTH = 10;
 const MAX_SUBSCRIPTION_CHANNELS = 100;
 const MAX_SUBSCRIPTION_CHANNEL_LENGTH = 128;
+const BROKER_TASK_STATUS_STORE_PREFIX = "broker:task:";
+const BROKER_RATE_LIMIT_STORE_PREFIX = "broker:rate-limit:";
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -57,6 +60,7 @@ const DEFAULT_DOMAIN_PARAM_FIELDS = [
 
 type MaybePromise<T> = T | Promise<T>;
 type JsonRecord = Record<string, unknown>;
+type BrokerMemoryStore = Pick<MemoryStore, "delete" | "get" | "keys" | "set">;
 
 export interface BrokerStatusPatch {
 	status: BrokerTaskStatus;
@@ -185,6 +189,7 @@ export interface BrokerServerOptions {
 	};
 	taskStatusRetentionMs?: number;
 	allowedDomainParamFields?: string[];
+	memoryStore?: BrokerMemoryStore;
 	now?: () => number;
 }
 
@@ -221,6 +226,37 @@ interface RateLimitBucket {
 
 interface BrokerTaskStatusRecord extends BrokerTaskStatusEntry {
 	updatedAt: number;
+}
+
+function isBrokerTaskStatus(value: unknown): value is BrokerTaskStatus {
+	return (
+		value === "pending" ||
+		value === "running" ||
+		value === "completed" ||
+		value === "failed"
+	);
+}
+
+function isBrokerTaskStatusRecord(
+	value: unknown,
+): value is BrokerTaskStatusRecord {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		typeof record.id === "string" &&
+		isBrokerTaskStatus(record.status) &&
+		typeof record.updatedAt === "number"
+	);
+}
+
+function isRateLimitBucket(value: unknown): value is RateLimitBucket {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		Array.isArray(record.requests) &&
+		record.requests.every((timestamp) => typeof timestamp === "number") &&
+		typeof record.lastAccessedAt === "number"
+	);
 }
 
 function isHealthPath(pathname: string): boolean {
@@ -984,6 +1020,7 @@ export function createBrokerServer(
 	const callbacks =
 		options.callbacks ?? createCallbacksFromDaemon(options.daemon);
 	const now = options.now ?? Date.now;
+	const memoryStore = options.memoryStore;
 	const rateLimitBuckets = new Map<string, RateLimitBucket>();
 	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
@@ -994,6 +1031,58 @@ export function createBrokerServer(
 		60_000,
 	);
 	let lastRateLimitPruneAt = 0;
+
+	const taskStatusKey = (taskId: string): string =>
+		`${BROKER_TASK_STATUS_STORE_PREFIX}${taskId}`;
+
+	const rateLimitKey = (clientIp: string): string =>
+		`${BROKER_RATE_LIMIT_STORE_PREFIX}${encodeURIComponent(clientIp)}`;
+
+	const restorePersistedState = (): void => {
+		if (!memoryStore) return;
+		for (const key of memoryStore.keys(BROKER_TASK_STATUS_STORE_PREFIX)) {
+			const entry = memoryStore.get<BrokerTaskStatusRecord>(key);
+			if (isBrokerTaskStatusRecord(entry)) {
+				taskStatuses.set(entry.id, entry);
+			} else {
+				memoryStore.delete(key);
+			}
+		}
+		for (const key of memoryStore.keys(BROKER_RATE_LIMIT_STORE_PREFIX)) {
+			const bucket = memoryStore.get<RateLimitBucket>(key);
+			if (isRateLimitBucket(bucket)) {
+				const encodedIp = key.slice(BROKER_RATE_LIMIT_STORE_PREFIX.length);
+				rateLimitBuckets.set(decodeURIComponent(encodedIp), bucket);
+			} else {
+				memoryStore.delete(key);
+			}
+		}
+	};
+
+	const persistTaskStatus = (entry: BrokerTaskStatusRecord): void => {
+		memoryStore?.set(taskStatusKey(entry.id), entry, config.taskStatusRetentionMs);
+	};
+
+	const deletePersistedTaskStatus = (taskId: string): void => {
+		memoryStore?.delete(taskStatusKey(taskId));
+	};
+
+	const persistRateLimitBucket = (
+		clientIp: string,
+		bucket: RateLimitBucket,
+	): void => {
+		memoryStore?.set(
+			rateLimitKey(clientIp),
+			bucket,
+			config.rateLimitBucketTtlMs,
+		);
+	};
+
+	const deletePersistedRateLimitBucket = (clientIp: string): void => {
+		memoryStore?.delete(rateLimitKey(clientIp));
+	};
+
+	restorePersistedState();
 
 	const pruneRateLimitBuckets = (currentTime: number): void => {
 		if (currentTime - lastRateLimitPruneAt < rateLimitPruneIntervalMs) {
@@ -1008,6 +1097,9 @@ export function createBrokerServer(
 			);
 			if (bucket.requests.length === 0 && bucket.lastAccessedAt <= staleBefore) {
 				rateLimitBuckets.delete(clientIp);
+				deletePersistedRateLimitBucket(clientIp);
+			} else {
+				persistRateLimitBucket(clientIp, bucket);
 			}
 		}
 	};
@@ -1020,6 +1112,7 @@ export function createBrokerServer(
 				entry.updatedAt <= staleBefore
 			) {
 				taskStatuses.delete(taskId);
+				deletePersistedTaskStatus(taskId);
 			}
 		}
 	};
@@ -1047,11 +1140,13 @@ export function createBrokerServer(
 
 		if (bucket.requests.length >= config.rateLimitMaxRequests) {
 			rateLimitBuckets.set(clientIp, bucket);
+			persistRateLimitBucket(clientIp, bucket);
 			return false;
 		}
 
 		bucket.requests.push(currentTime);
 		rateLimitBuckets.set(clientIp, bucket);
+		persistRateLimitBucket(clientIp, bucket);
 		return true;
 	};
 
@@ -1070,6 +1165,7 @@ export function createBrokerServer(
 
 		taskStatuses.delete(taskId);
 		taskStatuses.set(taskId, nextEntry);
+		persistTaskStatus(nextEntry);
 
 		if (patch.status === "completed" || patch.status === "failed") {
 			broadcast({
@@ -1316,8 +1412,11 @@ export function createBrokerServer(
 					? await callbacks.getTaskStatus(taskId)
 					: getTaskStatus(taskId);
 				if (!taskStatus) {
-					writeJson(response, 404, {
-						error: `Task "${taskId}" was not found.`,
+					writeJson(response, 410, {
+						code: "task_status_unavailable",
+						error: `Task "${taskId}" status is unavailable.`,
+						hint:
+							"The broker may have restarted or the task status may have expired.",
 					});
 					return;
 				}

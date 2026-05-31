@@ -14,6 +14,7 @@ import {
   normalizeClientIp,
   type BrokerServer,
 } from "../../src/broker_server";
+import { MemoryStore } from "../../src/runtime/memory_store";
 import type {
   BrokerRunTaskRequest,
   BrokerTaskStatusEntry,
@@ -700,6 +701,83 @@ test("createBrokerServer evicts completed task statuses after retention window",
   const taskIds = broker.listTaskStatuses().map((entry) => entry.id);
 
   assert.deepEqual(taskIds, ["done-new", "running-old"]);
+});
+
+test("createBrokerServer restores task statuses from MemoryStore", async () => {
+  const store = new MemoryStore({ filename: ":memory:" });
+  const first = createBrokerServer({
+    env: { BROKER_API_KEY: "persist-task-key" },
+    memoryStore: store,
+  });
+
+  first.setTaskStatus("task-persisted", { status: "running" });
+  await first.close();
+
+  const second = createBrokerServer({
+    env: { BROKER_API_KEY: "persist-task-key" },
+    memoryStore: store,
+  });
+  try {
+    assert.deepEqual(second.getTaskStatus("task-persisted"), {
+      id: "task-persisted",
+      status: "running",
+    });
+  } finally {
+    await second.close();
+    store.close();
+  }
+});
+
+test("createBrokerServer restores rate limit buckets from MemoryStore", async (t) => {
+  const store = new MemoryStore({ filename: ":memory:" });
+  t.after(() => store.close());
+  let now = 1_000;
+  const first = createBrokerServer({
+    env: { BROKER_API_KEY: "persist-rate-key" },
+    rateLimit: { maxRequests: 1, windowMs: 60_000 },
+    memoryStore: store,
+    now: () => now,
+  });
+  t.after(async () => {
+    await first.close();
+  });
+
+  await first.listen(0, "127.0.0.1");
+  assert.equal((await fetch(`${getBaseUrl(first)}/api/v1/health`)).status, 200);
+  await first.close();
+
+  now += 1_000;
+  const second = createBrokerServer({
+    env: { BROKER_API_KEY: "persist-rate-key" },
+    rateLimit: { maxRequests: 1, windowMs: 60_000 },
+    memoryStore: store,
+    now: () => now,
+  });
+  t.after(async () => {
+    await second.close();
+  });
+
+  await second.listen(0, "127.0.0.1");
+  assert.equal((await fetch(`${getBaseUrl(second)}/api/v1/health`)).status, 429);
+});
+
+test("createBrokerServer returns restart-aware response for missing task status", async (t) => {
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "missing-task-key" },
+  });
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const response = await fetch(`${getBaseUrl(broker)}/api/v1/tasks/missing/status`, {
+    headers: { "x-api-key": "missing-task-key" },
+  });
+  const body = await response.json() as Record<string, unknown>;
+
+  assert.equal(response.status, 410);
+  assert.equal(body.code, "task_status_unavailable");
+  assert.match(String(body.hint), /restarted|expired/i);
 });
 
 test("createBrokerServer /api/v1/stats returns enriched format when getStats callback provides it", async (t) => {
