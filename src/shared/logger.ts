@@ -37,6 +37,30 @@ export interface LogRecord {
   data?: Record<string, unknown>;
 }
 
+interface LoggerExitProcess {
+  once(event: "beforeExit" | "exit", listener: () => void): unknown;
+}
+
+const activeFileLoggers = new Set<Logger>();
+const installedExitProcesses = new WeakSet<object>();
+
+export function closeActiveLoggers(): void {
+  for (const activeLogger of Array.from(activeFileLoggers)) {
+    activeLogger.close();
+  }
+}
+
+export function installLoggerExitHandlers(processRef: LoggerExitProcess = process): void {
+  const processKey = processRef as object;
+  if (installedExitProcesses.has(processKey)) {
+    return;
+  }
+  installedExitProcesses.add(processKey);
+
+  processRef.once("beforeExit", closeActiveLoggers);
+  processRef.once("exit", closeActiveLoggers);
+}
+
 export class Logger {
   private readonly minLevel: LogLevel;
 
@@ -112,6 +136,8 @@ export class Logger {
         fs.mkdirSync(this.logDir, { recursive: true });
         const logFile = path.join(this.logDir, `daemon-${new Date().toISOString().slice(0, 10)}.log`);
         this.stream = fs.createWriteStream(logFile, { flags: "a" });
+        activeFileLoggers.add(this);
+        installLoggerExitHandlers();
       }
       this.stream.write(`${line}\n`);
     } catch {
@@ -121,8 +147,10 @@ export class Logger {
 
   close(): void {
     if (this.stream) {
-      this.stream.end();
+      const stream = this.stream;
       this.stream = null;
+      activeFileLoggers.delete(this);
+      stream.end();
     }
   }
 

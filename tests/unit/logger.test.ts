@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { Logger, type LogLevel, type LogRecord } from "../../src/logger";
+import { installLoggerExitHandlers, Logger, type LogLevel, type LogRecord } from "../../src/logger";
 
 /** Capture writes to stdout/stderr for inspection. */
 function captureOutput(fn: () => void): { stdout: string; stderr: string } {
@@ -201,6 +202,41 @@ test("Logger writes to file when fileEnabled is true", async () => {
 
     const content = fs.readFileSync(path.join(tempDir, logFiles[0]), "utf8");
     assert.ok(content.includes("file test"));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("Logger exit handlers close active file streams", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "logger-exit-test-"));
+  const fakeProcess = new EventEmitter();
+
+  try {
+    installLoggerExitHandlers(fakeProcess as Parameters<typeof installLoggerExitHandlers>[0]);
+    const logger = new Logger({ component: "test", level: "info", logDir: tempDir, fileEnabled: true });
+
+    captureOutput(() => {
+      logger.info("exit flush test");
+    });
+
+    const stream = logger["stream"];
+    assert.ok(stream, "Expected file stream to be active before process exit");
+
+    const finished = new Promise<void>((resolve, reject) => {
+      stream.on("finish", () => resolve());
+      stream.on("error", reject);
+    });
+
+    fakeProcess.emit("exit");
+    await finished;
+
+    assert.equal(logger["stream"], null);
+
+    const logFiles = fs.readdirSync(tempDir).filter((f) => f.endsWith(".log"));
+    assert.ok(logFiles.length >= 1, `Expected at least one log file in ${tempDir}`);
+
+    const content = fs.readFileSync(path.join(tempDir, logFiles[0]), "utf8");
+    assert.ok(content.includes("exit flush test"));
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
