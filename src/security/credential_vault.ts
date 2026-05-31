@@ -41,7 +41,7 @@ export class SecretString {
 	}
 
 	get length(): number {
-		return 0;
+		return this._value.length;
 	}
 
 	valueOf(): never {

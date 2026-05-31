@@ -215,9 +215,9 @@ describe("CredentialVault", () => {
 			assert.throws(() => s.valueOf(), /SecretString\.valueOf/);
 		});
 
-		it("length returns 0", () => {
+		it("length returns the actual value length", () => {
 			const s = new SecretString("my-secret-value");
-			assert.equal(s.length, 0);
+			assert.equal(s.length, "my-secret-value".length);
 		});
 
 		it("template literal returns [REDACTED_SECRET]", () => {
