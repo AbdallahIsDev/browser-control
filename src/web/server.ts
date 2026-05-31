@@ -3228,13 +3228,23 @@ export async function startWebAppServer(
 }
 
 export function openUrlInDefaultBrowser(url: string): void {
+	const parsedUrl = new URL(url);
+	if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+		throw new Error(
+			"Only http and https URLs can be opened in the default browser.",
+		);
+	}
+	const browserUrl = parsedUrl.toString();
 	const command =
 		process.platform === "win32"
-			? "cmd"
+			? "rundll32.exe"
 			: process.platform === "darwin"
 				? "open"
 				: "xdg-open";
-	const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+	const args =
+		process.platform === "win32"
+			? ["url.dll,FileProtocolHandler", browserUrl]
+			: [browserUrl];
 	const child = spawn(command, args, {
 		detached: true,
 		stdio: "ignore",
