@@ -667,6 +667,48 @@ async function maybeSolveCaptcha(
 	return result !== null && result !== undefined;
 }
 
+function errorSuggestsCaptcha(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /\b(captcha|recaptcha|hcaptcha|turnstile|cloudflare|bot detection)\b|verify you are human|human verification/i.test(
+		message,
+	);
+}
+
+async function pageHasConfiguredCaptcha(
+	page: Page,
+	options: ActionCaptchaOptions,
+): Promise<boolean> {
+	if (!options.autoSolveCaptcha || !options.captchaSolver) {
+		return false;
+	}
+
+	const selector = options.captchaSelector?.trim();
+	if (!selector) {
+		return false;
+	}
+
+	try {
+		return (await page.locator(selector).count()) > 0;
+	} catch {
+		return false;
+	}
+}
+
+async function maybeSolveCaptchaAfterActionFailure(
+	page: Page,
+	options: ActionCaptchaOptions,
+	error: unknown,
+): Promise<boolean> {
+	if (
+		!errorSuggestsCaptcha(error) &&
+		!(await pageHasConfiguredCaptcha(page, options))
+	) {
+		return false;
+	}
+
+	return maybeSolveCaptcha(page, options);
+}
+
 async function maybeRestoreSessionCookies(
 	context: BrowserContext,
 	options: AutomationContextOptions,
@@ -769,7 +811,11 @@ export async function smartClick(
 		});
 		return true;
 	} catch (error: unknown) {
-		const solvedCaptcha = await maybeSolveCaptcha(page, opts);
+		const solvedCaptcha = await maybeSolveCaptchaAfterActionFailure(
+			page,
+			opts,
+			error,
+		);
 		if (solvedCaptcha) {
 			try {
 				await performClick();
@@ -850,7 +896,11 @@ export async function smartFill(
 		});
 		return true;
 	} catch (error: unknown) {
-		const solvedCaptcha = await maybeSolveCaptcha(page, opts);
+		const solvedCaptcha = await maybeSolveCaptchaAfterActionFailure(
+			page,
+			opts,
+			error,
+		);
 		if (solvedCaptcha) {
 			try {
 				await performFill();

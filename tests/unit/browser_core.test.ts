@@ -630,6 +630,36 @@ test("smartClick retries once after auto-solving a captcha", async () => {
   assert.equal(captchaSolveCalls, 1);
 });
 
+test("smartClick skips captcha solving for non-captcha errors", async () => {
+  let clickAttempts = 0;
+  let captchaSolveCalls = 0;
+
+  const page = {
+    locator: () => ({
+      first: () => ({
+        click: async () => {
+          clickAttempts += 1;
+          throw new Error("locator timeout");
+        },
+      }),
+    }),
+  } as unknown as Page;
+
+  const result = await smartClick(page, "#submit", {
+    autoSolveCaptcha: true,
+    captchaSolver: {
+      waitForCaptcha: async () => {
+        captchaSolveCalls += 1;
+        return { token: "captcha-token" };
+      },
+    },
+  });
+
+  assert.equal(result, false);
+  assert.equal(clickAttempts, 1);
+  assert.equal(captchaSolveCalls, 0);
+});
+
 test("smartFill retries once after auto-solving a captcha", async () => {
   let clickAttempts = 0;
   let fillAttempts = 0;
@@ -666,6 +696,42 @@ test("smartFill retries once after auto-solving a captcha", async () => {
   assert.equal(clickAttempts, 2);
   assert.equal(fillAttempts, 1);
   assert.equal(captchaSolveCalls, 1);
+});
+
+test("smartFill skips captcha solving for non-captcha errors", async () => {
+  let clickAttempts = 0;
+  let fillAttempts = 0;
+  let captchaSolveCalls = 0;
+
+  const page = {
+    locator: () => ({
+      first: () => ({
+        click: async () => {
+          clickAttempts += 1;
+          throw new Error("element detached");
+        },
+        fill: async () => {
+          fillAttempts += 1;
+        },
+        press: async () => undefined,
+      }),
+    }),
+  } as unknown as Page;
+
+  const result = await smartFill(page, "#email", "user@example.com", {
+    autoSolveCaptcha: true,
+    captchaSolver: {
+      waitForCaptcha: async () => {
+        captchaSolveCalls += 1;
+        return { token: "captcha-token" };
+      },
+    },
+  });
+
+  assert.equal(result, false);
+  assert.equal(clickAttempts, 1);
+  assert.equal(fillAttempts, 0);
+  assert.equal(captchaSolveCalls, 0);
 });
 
 test("createAutomationContext restores and persists cookies for automation-owned sessions", async () => {
