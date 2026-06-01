@@ -90,6 +90,7 @@ describe("CredentialVault", () => {
 			packageScope: "pkg.alpha",
 			workflowScope: "workflow.login",
 		});
+		assert.match(grant.id, /^grant-\d+-[a-f0-9]{32}$/);
 
 		const allowed = await vault.resolveForUse(secret.id, {
 			action: "type",
@@ -137,6 +138,12 @@ describe("CredentialVault", () => {
 		const auditJson = JSON.stringify(audit);
 		assert.match(auditJson, /REDACTED_SECRET/);
 		assert.doesNotMatch(auditJson, /secret-pass-123/);
+		assert.equal(
+			audit.every((event) =>
+				/^secret-audit-\d+-[a-f0-9]{32}$/.test(event.id),
+			),
+			true,
+		);
 		assert.equal(audit.some((event) => event.policyDecision === "allow"), true);
 		assert.equal(audit.some((event) => event.policyDecision === "deny"), true);
 	});

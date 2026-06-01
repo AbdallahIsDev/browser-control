@@ -46,9 +46,10 @@ describe("NetworkRuleEngine", () => {
 	it("blocks a full URL through one catch-all route and records redacted evidence", async () => {
 		const storage = getStateStorage();
 		const engine = new NetworkRuleEngine(storage);
-		await engine.addRule("tracker.example", "denylist", ["script"]);
+		const rule = await engine.addRule("tracker.example", "denylist", ["script"]);
 		const routes = new Map<string, MockRouteHandler>();
 		const evidence: NetworkRouteEvidence[] = [];
+		assert.match(rule.id, /^rule-\d+-[a-f0-9]{32}$/);
 
 		await engine.applyToPage(
 			{
@@ -92,6 +93,7 @@ describe("NetworkRuleEngine", () => {
 
 		const auditEvents = await storage.listAuditEvents(10);
 		assert.equal(auditEvents[0]?.action, "network_request_blocked");
+		assert.match(auditEvents[0]?.id ?? "", /^network-block-\d+-[a-f0-9]{32}$/);
 		assert.equal(auditEvents[0]?.details?.includes("raw-secret"), false);
 		assert.ok(auditEvents[0]?.details?.includes("tracker.example"));
 	});

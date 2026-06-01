@@ -372,7 +372,7 @@ export class CredentialVault {
 		const actions = normalizeGrantActions(input);
 		const now = new Date().toISOString();
 		const grant: SecretGrant = {
-			id: `grant-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			id: `grant-${Date.now()}-${crypto.randomBytes(16).toString("hex")}`,
 			secretId: secretRef,
 			action: actions[0],
 			actions,
@@ -499,7 +499,7 @@ export class CredentialVault {
 		deniedReason?: string,
 	): Promise<void> {
 		const event: StoredSecretAuditEvent = {
-			id: `secret-audit-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			id: `secret-audit-${Date.now()}-${crypto.randomBytes(16).toString("hex")}`,
 			secretId: secretRef,
 			action: context.action,
 			targetDomain: normalizeHost(context.targetDomain) ?? null,

@@ -216,7 +216,7 @@ export class NetworkRuleEngine {
 		resourceTypes?: ResourceType[],
 	): Promise<NetworkRule> {
 		const rule: NetworkRule = {
-			id: `rule-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			id: `rule-${Date.now()}-${crypto.randomBytes(16).toString("hex")}`,
 			pattern,
 			ruleType,
 			resourceTypes: resourceTypes?.length ? resourceTypes : undefined,
@@ -397,7 +397,7 @@ export class NetworkRuleEngine {
 		};
 		options.recordBlockedRequest?.(entry);
 		await this.storage.saveAuditEvent({
-			id: `network-block-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+			id: `network-block-${Date.now()}-${crypto.randomBytes(16).toString("hex")}`,
 			action: "network_request_blocked",
 			sessionId: options.sessionId,
 			policyDecision: "deny",
