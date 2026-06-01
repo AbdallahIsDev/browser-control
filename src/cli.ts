@@ -308,6 +308,23 @@ function splitRepeatedFlagValues(value: string): string[] {
 	return value.split(REPEATED_FLAG_DELIMITER);
 }
 
+function getPolicyExportPathWarning(outputPath: string, cwd = process.cwd()): string | undefined {
+	const absolute = path.isAbsolute(outputPath);
+	const resolvedCwd = path.resolve(cwd);
+	const resolvedOutput = path.resolve(resolvedCwd, outputPath);
+	const relative = path.relative(resolvedCwd, resolvedOutput);
+	const outsideCwd =
+		relative === ".." ||
+		relative.startsWith(`..${path.sep}`) ||
+		path.isAbsolute(relative);
+	if (!absolute && !outsideCwd) return undefined;
+	if (absolute && outsideCwd) {
+		return "absolute and outside the current working directory";
+	}
+	if (absolute) return "absolute";
+	return "outside the current working directory";
+}
+
 function hasConfirmation(flags: Record<string, string>, legacyToken: string): boolean {
 	return (
 		flags.yes === "true" ||
@@ -1861,6 +1878,13 @@ async function handlePolicy(args: ParsedArgs): Promise<void> {
 
 			const outputPath = positional[1] || `${name}-policy.json`;
 			const serialized = serializeProfile(profile);
+			const outputPathWarning = getPolicyExportPathWarning(outputPath);
+			if (outputPathWarning) {
+				console.error(
+					`Warning: policy export output path is ${outputPathWarning}: ${outputPath}`,
+				);
+				console.error("Only export policy files to trusted locations.");
+			}
 			fs.writeFileSync(outputPath, serialized, "utf-8");
 			console.log(`Profile exported to: ${outputPath}`);
 			break;

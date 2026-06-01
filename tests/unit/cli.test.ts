@@ -395,6 +395,44 @@ test("data cleanup destructive mode uses positive confirmation logic", () => {
   assert.doesNotMatch(handleDataSource, /dryRunRequested/);
 });
 
+test("policy export warns for absolute and outside-cwd output paths", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-policy-export-"));
+  const cwd = path.join(root, "project");
+  fs.mkdirSync(cwd);
+  try {
+    const env = { BROWSER_CONTROL_HOME: path.join(root, "data") };
+    const safe = runCli(["policy", "export", "balanced", "balanced-policy.json"], {
+      cwd,
+      env,
+    });
+    assert.equal(safe.status, 0, safe.stderr);
+    assert.doesNotMatch(safe.stderr, /Warning: policy export output path/);
+    assert.equal(fs.existsSync(path.join(cwd, "balanced-policy.json")), true);
+
+    const absoluteOutside = path.join(root, "absolute-policy.json");
+    const absolute = runCli(["policy", "export", "balanced", absoluteOutside], {
+      cwd,
+      env,
+    });
+    assert.equal(absolute.status, 0, absolute.stderr);
+    assert.match(absolute.stderr, /absolute and outside the current working directory/);
+    assert.equal(fs.existsSync(absoluteOutside), true);
+
+    const traversal = runCli(
+      ["policy", "export", "balanced", path.join("..", "traversal-policy.json")],
+      {
+        cwd,
+        env,
+      },
+    );
+    assert.equal(traversal.status, 0, traversal.stderr);
+    assert.match(traversal.stderr, /outside the current working directory/);
+    assert.equal(fs.existsSync(path.join(root, "traversal-policy.json")), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("CLI unknown subcommands preserve command context", () => {
   const result = runCli(["config", "wat", "--json"], {
     cwd: process.cwd(),
