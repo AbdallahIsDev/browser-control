@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { Command, Option } from "commander";
 import type { BrowserActionName, LocatorCandidate, OpenOptions, UrlEntry } from "./browser/actions";
 import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
@@ -102,9 +103,23 @@ interface StoredBrowserConnectionState {
 	targetType?: BrowserTargetType;
 }
 
-export const VALUE_FLAGS = new Set([
+// Flags that can be repeated and should be collected as arrays
+const REPEATED_FLAGS = new Set(["file", "files", "data"]);
+const REPEATED_FLAG_DELIMITER =
+	"\x1f__BROWSER_CONTROL_REPEATED_FLAG_8b24a0f4_5f30_4d4f_b38b_1c47dd95e64d__\x1f";
+
+type CommanderOptionArity = "boolean" | "optional" | "value";
+
+interface CommanderOptionSpec {
+	name: string;
+	arity: CommanderOptionArity;
+	canonicalName?: string;
+	repeated?: boolean;
+	short?: string;
+}
+
+const COMMANDER_VALUE_OPTIONS = [
 	"action",
-	"activate",
 	"amount",
 	"api-key",
 	"actions",
@@ -133,7 +148,6 @@ export const VALUE_FLAGS = new Set([
 	"domains",
 	"domain",
 	"domain-scope",
-	"dry-run",
 	"endpoint",
 	"entry-type",
 	"ext",
@@ -144,7 +158,6 @@ export const VALUE_FLAGS = new Set([
 	"fields",
 	"format",
 	"health-check-interval",
-	"help",
 	"host",
 	"id",
 	"input",
@@ -189,7 +202,6 @@ export const VALUE_FLAGS = new Set([
 	"screenshot-path",
 	"session",
 	"shell",
-	"show-actions",
 	"skill",
 	"scope",
 	"scope-name",
@@ -219,34 +231,81 @@ export const VALUE_FLAGS = new Set([
 	"value",
 	"wait-until",
 	"annotation-position",
-	"continue-on-failure",
 	"direction",
 	"steps",
 	"steps-file",
-	"snapshot",
-	"screenshot",
-	"downloads",
-	"dialog",
-	"boxes",
 	"urls",
 	"workflow-scope",
-]);
+] as const;
 
-// Flags that can be repeated and should be collected as arrays
-const REPEATED_FLAGS = new Set(["file", "files", "data"]);
-const REPEATED_FLAG_DELIMITER =
-	"\x1f__BROWSER_CONTROL_REPEATED_FLAG_8b24a0f4_5f30_4d4f_b38b_1c47dd95e64d__\x1f";
+const COMMANDER_OPTIONAL_VALUE_OPTIONS = [
+	"activate",
+	"boxes",
+	"continue-on-failure",
+	"dialog",
+	"downloads",
+	"dry-run",
+	"screenshot",
+	"show-actions",
+	"snapshot",
+] as const;
 
-const FLAG_ALIASES: Record<string, string> = {
-	captureOnSuccess: "capture-on-success",
-	continueOnFailure: "continue-on-failure",
-	delayMs: "delay",
-	fullPage: "full-page",
-	copyTo: "copy-to",
-	outputPath: "output-path",
-	tabId: "tab-id",
-	timeoutMs: "timeout",
-};
+const COMMANDER_BOOLEAN_OPTIONS = [
+	"all",
+	"allow-remote",
+	"allow-system-profile",
+	"annotate",
+	"background",
+	"capture",
+	"capture-on-success",
+	"cleanup",
+	"commit",
+	"create-dirs",
+	"dashboard",
+	"detect",
+	"force",
+	"full-page",
+	"hide",
+	"https",
+	"install",
+	"json",
+	"live",
+	"local-ca",
+	"non-interactive",
+	"overwrite",
+	"persist",
+	"purge-profiles",
+	"recursive",
+	"rotate",
+	"same-tab",
+	"skip-browser-test",
+	"skip-terminal-test",
+	"stale",
+	"stored",
+	"visible",
+	"wait",
+] as const;
+
+export const COMMANDER_OPTION_SPECS: CommanderOptionSpec[] = [
+	{ name: "help", short: "-h", arity: "boolean" },
+	{ name: "version", short: "-v", arity: "boolean" },
+	{ name: "yes", short: "-y", arity: "boolean" },
+	...COMMANDER_BOOLEAN_OPTIONS.map((name) => ({ name, arity: "boolean" as const })),
+	...COMMANDER_OPTIONAL_VALUE_OPTIONS.map((name) => ({ name, arity: "optional" as const })),
+	...COMMANDER_VALUE_OPTIONS.map((name) => ({
+		name,
+		arity: "value" as const,
+		repeated: REPEATED_FLAGS.has(name),
+	})),
+	{ name: "captureOnSuccess", canonicalName: "capture-on-success", arity: "boolean" },
+	{ name: "continueOnFailure", canonicalName: "continue-on-failure", arity: "optional" },
+	{ name: "copyTo", canonicalName: "copy-to", arity: "value" },
+	{ name: "delayMs", canonicalName: "delay", arity: "value" },
+	{ name: "fullPage", canonicalName: "full-page", arity: "boolean" },
+	{ name: "outputPath", canonicalName: "output-path", arity: "value" },
+	{ name: "tabId", canonicalName: "tab-id", arity: "value" },
+	{ name: "timeoutMs", canonicalName: "timeout", arity: "value" },
+];
 
 const CLI_BROWSER_ACT_ACTIONS = [
 	"click",
@@ -286,19 +345,6 @@ const CLI_BROWSER_ACT_ACTION_MAP: Record<string, BrowserActionName> = {
 	state: "state",
 };
 
-function isNegativeNumberToken(value: string): boolean {
-	return /^-\d+(?:\.\d+)?$/.test(value);
-}
-
-function shouldConsumeFlagValue(flag: string, next?: string): next is string {
-	if (!VALUE_FLAGS.has(flag) || !next) return false;
-	return !next.startsWith("-") || isNegativeNumberToken(next);
-}
-
-function canonicalFlagName(flag: string): string {
-	return FLAG_ALIASES[flag] ?? flag;
-}
-
 function appendRepeatedFlagValue(existing: string | undefined, value: string): string {
 	return existing ? `${existing}${REPEATED_FLAG_DELIMITER}${value}` : value;
 }
@@ -332,8 +378,102 @@ function hasConfirmation(flags: Record<string, string>, legacyToken: string): bo
 	);
 }
 
+function commanderAttributeName(name: string): string {
+	return name.replace(/-([a-z0-9])/gu, (_, char: string) => char.toUpperCase());
+}
+
+function formatCommanderOption(spec: CommanderOptionSpec): string {
+	const longOption =
+		spec.arity === "value"
+			? `--${spec.name} <value>`
+			: spec.arity === "optional"
+				? `--${spec.name} [value]`
+				: `--${spec.name}`;
+	return spec.short ? `${spec.short}, ${longOption}` : longOption;
+}
+
+function createCliParserCommand(): Command {
+	const seen = new Set<string>();
+	const program = new Command();
+	program
+		.name("bc")
+		.exitOverride()
+		.helpOption(false)
+		.allowExcessArguments(true)
+		.allowUnknownOption(true)
+		.enablePositionalOptions()
+		.configureOutput({ writeOut: () => {}, writeErr: () => {} })
+		.argument("[args...]");
+
+	for (const spec of COMMANDER_OPTION_SPECS) {
+		if (seen.has(spec.name)) {
+			throw new CliError(`Duplicate CLI option registration: --${spec.name}`);
+		}
+		seen.add(spec.name);
+		const option = new Option(formatCommanderOption(spec));
+		if (spec.repeated) {
+			option.argParser((value: string, previous: string[] | undefined) => [
+				...(previous ?? []),
+				value,
+			]);
+		}
+		program.addOption(option);
+	}
+
+	return program;
+}
+
+function isUnknownOptionToken(token: string): boolean {
+	if (token.startsWith("--")) return true;
+	if (/^-\d+(?:\.\d+)?$/u.test(token)) return false;
+	return /^-[A-Za-z]/u.test(token);
+}
+
+function stringifyCommanderFlagValue(value: unknown): string | undefined {
+	if (value === undefined) return undefined;
+	if (Array.isArray(value)) {
+		return value.reduce<string | undefined>(
+			(existing, item) => appendRepeatedFlagValue(existing, String(item)),
+			undefined,
+		);
+	}
+	if (value === true) return "true";
+	if (value === false) return "false";
+	return String(value);
+}
+
+function normalizeCommanderBooleanAssignments(rawArgs: string[]): {
+	args: string[];
+	explicitFlags: Record<string, string>;
+} {
+	const specsByName = new Map(COMMANDER_OPTION_SPECS.map((spec) => [spec.name, spec]));
+	const explicitFlags: Record<string, string> = {};
+	const args: string[] = [];
+
+	for (const arg of rawArgs) {
+		const match = /^--([^=]+)=(.*)$/u.exec(arg);
+		if (!match) {
+			args.push(arg);
+			continue;
+		}
+		const spec = specsByName.get(match[1]);
+		if (spec?.arity !== "boolean") {
+			args.push(arg);
+			continue;
+		}
+		const value = match[2] || "true";
+		explicitFlags[spec.canonicalName ?? spec.name] = value;
+		if (value === "true") {
+			args.push(`--${spec.name}`);
+		}
+	}
+
+	return { args, explicitFlags };
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
-	const args = argv.slice(2);
+	const rawArgs = argv.slice(2);
+	const normalized = normalizeCommanderBooleanAssignments(rawArgs);
 	const result: ParsedArgs = {
 		command: "",
 		subcommand: undefined,
@@ -341,52 +481,40 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		positional: [],
 	};
 
-	let i = 0;
-	while (i < args.length) {
-		const arg = args[i];
+	const unknownOption = createCliParserCommand()
+		.parseOptions(normalized.args)
+		.unknown.find(isUnknownOptionToken);
+	if (unknownOption) {
+		throw new CliError(`unknown option '${unknownOption}'`);
+	}
 
-		if (arg.startsWith("--")) {
-			const flagPart = arg.slice(2);
-			const eqIndex = flagPart.indexOf("=");
-			if (eqIndex !== -1) {
-				const key = canonicalFlagName(flagPart.slice(0, eqIndex));
-				const value = flagPart.slice(eqIndex + 1);
-				// Handle repeated flags by appending with an internal delimiter.
-				if (REPEATED_FLAGS.has(key)) {
-					result.flags[key] = appendRepeatedFlagValue(result.flags[key], value);
-				} else {
-					result.flags[key] = value;
-				}
-			} else {
-				const key = canonicalFlagName(flagPart);
-				if (shouldConsumeFlagValue(key, args[i + 1])) {
-					// Handle repeated flags with space-separated values.
-					if (REPEATED_FLAGS.has(key)) {
-						result.flags[key] = appendRepeatedFlagValue(
-							result.flags[key],
-							args[i + 1],
-						);
-					} else {
-						result.flags[key] = args[i + 1];
-					}
-					i++;
-				} else {
-					result.flags[key] = "true";
-				}
-			}
-		} else if (arg.startsWith("-") && arg.length === 2) {
-			// Handle short flags like -h
-			const key = arg.slice(1);
-			result.flags[key] = "true";
-		} else if (!result.command) {
-			result.command = arg;
-		} else if (!result.subcommand) {
-			result.subcommand = arg;
-		} else {
-			result.positional.push(arg);
+	const program = createCliParserCommand();
+	try {
+		program.parse(normalized.args, { from: "user" });
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new CliError(message.replace(/^error:\s*/i, ""));
+	}
+
+	for (const spec of COMMANDER_OPTION_SPECS) {
+		const value = program.getOptionValue(commanderAttributeName(spec.name));
+		const stringValue = stringifyCommanderFlagValue(value);
+		if (stringValue === undefined) continue;
+		result.flags[spec.canonicalName ?? spec.name] = stringValue;
+		if (spec.short && value === true) {
+			result.flags[spec.short.slice(1)] = "true";
 		}
+	}
+	Object.assign(result.flags, normalized.explicitFlags);
 
-		i++;
+	for (const arg of program.args) {
+		if (!result.command) {
+			result.command = String(arg);
+		} else if (!result.subcommand) {
+			result.subcommand = String(arg);
+		} else {
+			result.positional.push(String(arg));
+		}
 	}
 
 	return result;

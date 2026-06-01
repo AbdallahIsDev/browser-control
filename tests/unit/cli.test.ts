@@ -8,7 +8,7 @@ import test from "node:test";
 import { BrowserProfileManager, getProfilesDir } from "../../src/browser/profiles";
 import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
 import { resetStateStorage } from "../../src/state/index";
-import { parseArgs, runCli as runCliInProcess, VALUE_FLAGS } from "../../src/cli";
+import { COMMANDER_OPTION_SPECS, parseArgs, runCli as runCliInProcess } from "../../src/cli";
 
 function runCli(
   args: string[],
@@ -658,6 +658,22 @@ test("parseArgs keeps negative decimal values attached to value flags", () => {
   assert.deepEqual(result.positional, ["scroll"]);
 });
 
+test("parseArgs rejects unknown long flags instead of silently misparsing values", () => {
+	assert.throws(
+		() =>
+			parseArgs([
+				"node",
+				"cli.ts",
+				"browser",
+				"act",
+				"click",
+				"--new-value-flag",
+				"button",
+			]),
+		/unknown option '--new-value-flag'/i,
+	);
+});
+
 test("parseArgs keeps newly added command value flags space-separated", () => {
 	const result = parseArgs([
 		"node",
@@ -724,66 +740,28 @@ test("parseArgs normalizes legacy camelCase flags to kebab-case", () => {
 	assert.equal(result.flags.outputPath, undefined);
 });
 
-test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
+test("Commander option specs cover flags read by CLI handlers", () => {
 	const cliPath = path.join(process.cwd(), "src", "cli.ts");
 	const source = fs.readFileSync(cliPath, "utf8");
-	const rawList = /export const VALUE_FLAGS = new Set\(\[([\s\S]*?)\]\);/u.exec(source)?.[1] ?? "";
-	const rawValues = [...rawList.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
-	const duplicates = rawValues.filter((value, index) => rawValues.indexOf(value) !== index);
-	assert.deepEqual(duplicates, [], "VALUE_FLAGS should not contain duplicate entries");
-	assert.deepEqual(
-		rawValues.filter((value) => /[A-Z]/.test(value)),
-		[],
-		"VALUE_FLAGS should use canonical kebab-case flag names only",
-	);
+	assert.doesNotMatch(source, /VALUE_FLAGS/u);
 
-	const booleanOrPresenceFlags = new Set([
-		"all",
-		"allow-remote",
-		"allow-system-profile",
-		"annotate",
-		"background",
-		"capture",
-		"capture-on-success",
-		"cleanup",
-		"commit",
-		"create-dirs",
-		"dashboard",
-		"detect",
-		"force",
-		"full-page",
-		"h",
-		"hide",
-		"https",
-		"install",
-		"json",
-		"live",
-		"local-ca",
-		"non-interactive",
-		"overwrite",
-		"persist",
-		"purge-profiles",
-		"recursive",
-		"rotate",
-		"same-tab",
-		"skip-browser-test",
-		"skip-terminal-test",
-		"stale",
-		"stored",
-		"v",
-		"version",
-		"visible",
-		"wait",
-		"y",
-		"yes",
-	]);
+	const registeredNames = COMMANDER_OPTION_SPECS.map((spec) => spec.name);
+	const duplicateNames = registeredNames.filter((value, index) => registeredNames.indexOf(value) !== index);
+	assert.deepEqual(duplicateNames, [], "Commander option specs should not contain duplicate names");
+
+	const registeredFlags = new Set(
+		COMMANDER_OPTION_SPECS.map((spec) => spec.canonicalName ?? spec.name),
+	);
+	const shortFlags = new Set(
+		COMMANDER_OPTION_SPECS.flatMap((spec) => (spec.short ? [spec.short.slice(1)] : [])),
+	);
 	const usedFlags = new Set<string>();
 	for (const match of source.matchAll(/flags(?:\.([a-zA-Z_$][\w$]*)|\["([^"]+)"\])/gu)) {
 		usedFlags.add(match[1] ?? match[2]);
 	}
 
 	const missing = [...usedFlags]
-		.filter((flag) => !VALUE_FLAGS.has(flag) && !booleanOrPresenceFlags.has(flag))
+		.filter((flag) => !registeredFlags.has(flag) && !shortFlags.has(flag))
 		.sort();
 	assert.deepEqual(missing, []);
 });
@@ -839,7 +817,10 @@ test("parseArgs treats version as a presence flag", () => {
   const result = parseArgs(["node", "cli.ts", "--version", "browser"]);
   assert.equal(result.flags.version, "true");
   assert.equal(result.command, "browser");
-  assert.equal(VALUE_FLAGS.has("version"), false);
+  assert.equal(
+    COMMANDER_OPTION_SPECS.find((spec) => spec.name === "version")?.arity,
+    "boolean",
+  );
 });
 
 test("top-level --version prints package version only", () => {

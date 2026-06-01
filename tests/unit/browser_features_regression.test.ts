@@ -190,7 +190,8 @@ test("source guards cover prior browser feature review regressions", () => {
 	assert.match(actions, /data-browser-control-screencast-root/);
 
 	assert.match(cli, /const fileValues = \[flags\.file, flags\.files\]/);
-	assert.match(cli, /appendRepeatedFlagValue\(result\.flags\[key\], value\)/);
+	assert.match(cli, /option\.argParser\(\(value: string, previous: string\[\] \| undefined\)/);
+	assert.match(cli, /appendRepeatedFlagValue\(existing, String\(item\)\)/);
 	assert.match(cli, /splitRepeatedFlagValues\(filesRaw\)/);
 	assert.doesNotMatch(cli, /join\("\\0"\)/);
 	assert.match(cli, /const eqIndex = d\.indexOf\("="\)/);

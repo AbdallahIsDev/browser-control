@@ -119,6 +119,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.29.0",
+		"commander": "^14.0.3",
 		"dotenv": "^16.6.1",
 		"node-pty": "^1.1.0",
 		"playwright": "^1.60.0",
@@ -151,8 +152,8 @@
 		"@types/ws": "^8.18.1",
 		"electron": "^41.5.0",
 		"electron-builder": "^26.8.1",
-		"pngjs": "^7.0.0",
 		"node-gyp": "^12.2.0",
+		"pngjs": "^7.0.0",
 		"ts-node": "^10.9.2",
 		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.9.3"
