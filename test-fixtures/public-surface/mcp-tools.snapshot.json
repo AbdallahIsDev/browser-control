@@ -33,6 +33,11 @@
             "description": "Pixels to scroll. Default: 300.",
             "type": "number"
           },
+          "annotate": {
+            "default": false,
+            "description": "Annotate screenshot action with ref labels and boxes.",
+            "type": "boolean"
+          },
           "boxes": {
             "default": false,
             "description": "Include element bounds for capture/state.",
@@ -57,6 +62,11 @@
             "description": "Delay between keystrokes in ms. Default: 0.",
             "type": "number"
           },
+          "dialog": {
+            "default": true,
+            "description": "Include pending dialogs for state action. Default: true.",
+            "type": "boolean"
+          },
           "direction": {
             "description": "Scroll direction: up, down, left, right.",
             "enum": [
@@ -66,6 +76,11 @@
               "right"
             ],
             "type": "string"
+          },
+          "downloads": {
+            "default": false,
+            "description": "Include recent downloads for state action. Default: false.",
+            "type": "boolean"
           },
           "fields": {
             "description": "Fields for fillMany action. Each item requires target and text.",
@@ -100,6 +115,10 @@
           },
           "key": {
             "description": "Keyboard key to press. Required for press.",
+            "type": "string"
+          },
+          "refs": {
+            "description": "Comma-separated refs to annotate for screenshot action when annotate is true.",
             "type": "string"
           },
           "rootSelector": {
@@ -4625,6 +4644,11 @@
                   "description": "Scroll amount in pixels.",
                   "type": "number"
                 },
+                "annotate": {
+                  "default": false,
+                  "description": "Annotate screenshot steps with ref labels and boxes.",
+                  "type": "boolean"
+                },
                 "commit": {
                   "description": "Commit typed text with Enter when supported.",
                   "type": "boolean"
@@ -4645,6 +4669,11 @@
                   "description": "Delay between keystrokes in milliseconds.",
                   "type": "number"
                 },
+                "dialog": {
+                  "default": true,
+                  "description": "Include pending dialogs for state steps. Default: true.",
+                  "type": "boolean"
+                },
                 "direction": {
                   "description": "Scroll direction.",
                   "enum": [
@@ -4654,6 +4683,11 @@
                     "right"
                   ],
                   "type": "string"
+                },
+                "downloads": {
+                  "default": false,
+                  "description": "Include recent downloads for state steps. Default: false.",
+                  "type": "boolean"
                 },
                 "fields": {
                   "description": "Fields for fillMany action. Each item requires target and text.",
@@ -4686,6 +4720,10 @@
                 },
                 "key": {
                   "description": "Keyboard key for press action.",
+                  "type": "string"
+                },
+                "refs": {
+                  "description": "Comma-separated refs to annotate for screenshot steps when annotate is true.",
                   "type": "string"
                 },
                 "screenshot": {

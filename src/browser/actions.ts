@@ -159,9 +159,13 @@ export interface BrowserActOptions {
 	copyTo?: string;
 	outputPath?: string;
 	fullPage?: boolean;
+	annotate?: boolean;
+	refs?: string | string[];
 	captureOnSuccess?: boolean;
 	snapshot?: boolean;
 	screenshot?: boolean;
+	dialog?: boolean;
+	downloads?: boolean;
 	url?: string;
 	urls?: UrlEntry[];
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
@@ -194,7 +198,11 @@ export interface TaskStep {
 	copyTo?: string;
 	outputPath?: string;
 	fullPage?: boolean;
+	annotate?: boolean;
+	refs?: string | string[];
 	captureOnSuccess?: boolean;
+	dialog?: boolean;
+	downloads?: boolean;
 	url?: string;
 	urls?: string[];
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
@@ -5142,12 +5150,17 @@ export class BrowserActions {
 				break;
 			}
 			case "screenshot": {
+				const refs = typeof options.refs === "string"
+					? options.refs.split(",").map((ref) => ref.trim()).filter(Boolean)
+					: options.refs;
 				const r = await this.screenshot({
 					copyTo: options.copyTo,
 					outputPath: options.outputPath,
 					timeoutMs: options.timeoutMs,
 					fullPage: options.fullPage,
 					target: options.target,
+					annotate: options.annotate,
+					refs,
 					tabId: options.tabId,
 				});
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
@@ -5210,8 +5223,8 @@ export class BrowserActions {
 					snapshot: options.stateOptions?.snapshot ?? options.snapshot,
 					screenshot: options.stateOptions?.screenshot ?? options.screenshot,
 					fullPage: options.stateOptions?.fullPage ?? options.fullPage,
-					dialog: options.stateOptions?.dialog,
-					downloads: options.stateOptions?.downloads,
+					dialog: options.stateOptions?.dialog ?? options.dialog,
+					downloads: options.stateOptions?.downloads ?? options.downloads,
 				});
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;

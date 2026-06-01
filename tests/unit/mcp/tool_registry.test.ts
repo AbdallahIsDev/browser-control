@@ -360,6 +360,10 @@ describe("MCP Tool Registry", () => {
       assert.match(stepItems.properties.action.description, /click|fill|scroll/);
       assert.match(stepItems.properties.target.description, /click|fill|hover/);
       assert.match(stepItems.properties.copyTo.description, /Primary save remains/);
+      assert.ok("annotate" in stepItems.properties);
+      assert.ok("refs" in stepItems.properties);
+      assert.ok("dialog" in stepItems.properties);
+      assert.ok("downloads" in stepItems.properties);
       assert.equal(stepItems.properties.outputPath, undefined);
 
       const fieldsItems = stepItems.properties.fields.items;
@@ -375,9 +379,69 @@ describe("MCP Tool Registry", () => {
 
       assert.match((screenshotTool.inputSchema.properties.copyTo as any).description, /Primary screenshot/);
       assert.match((actTool.inputSchema.properties.copyTo as any).description, /Primary save remains/);
+      assert.ok("annotate" in actTool.inputSchema.properties, "bc_act should preserve bc_screenshot annotate");
+      assert.ok("refs" in actTool.inputSchema.properties, "bc_act should preserve bc_screenshot refs");
+      assert.ok("dialog" in actTool.inputSchema.properties, "bc_act should preserve bc_state dialog");
+      assert.ok("downloads" in actTool.inputSchema.properties, "bc_act should preserve bc_state downloads");
       assert.equal(screenshotTool.inputSchema.properties.outputPath, undefined);
       assert.equal(actTool.inputSchema.properties.outputPath, undefined);
       assert.equal(actTool.inputSchema.properties.captureOnSuccess, undefined);
+    });
+
+    it("bc_act accepts and forwards screenshot/state parity parameters", async () => {
+      const browser = api.browser as unknown as {
+        act: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
+      };
+      const originalAct = browser.act;
+      const capturedOptions: Record<string, unknown>[] = [];
+      browser.act = async (options) => {
+        capturedOptions.push(options);
+        return successResult(
+          { received: options },
+          { path: "a11y", sessionId: "test-session" },
+        );
+      };
+
+      const tools = buildToolRegistry(api);
+      const actTool = tools.find((t) => t.name === "bc_act")!;
+      try {
+        assert.equal(
+          validateToolParams(
+            actTool.name,
+            actTool.inputSchema,
+            { action: "screenshot", annotate: true, refs: "e1,e2" },
+            actTool.validation,
+          ),
+          null,
+        );
+        assert.equal(
+          validateToolParams(
+            actTool.name,
+            actTool.inputSchema,
+            { action: "state", dialog: false, downloads: true },
+            actTool.validation,
+          ),
+          null,
+        );
+
+        await actTool.handler({
+          action: "screenshot",
+          annotate: true,
+          refs: "e1, e2",
+        });
+        await actTool.handler({
+          action: "state",
+          dialog: false,
+          downloads: true,
+        });
+
+        assert.deepEqual(capturedOptions[0]?.refs, ["e1", "e2"]);
+        assert.equal(capturedOptions[0]?.annotate, true);
+        assert.equal(capturedOptions[1]?.dialog, false);
+        assert.equal(capturedOptions[1]?.downloads, true);
+      } finally {
+        browser.act = originalAct;
+      }
     });
 
     it("screencast start exposes copyTo and rejects deprecated path", () => {
