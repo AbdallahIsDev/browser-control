@@ -5,6 +5,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { getConfigValue, loadConfig, loadUserConfig, saveUserConfig, setUserConfigValue } from "../shared/config";
 import { ensureDataHomeAtPath, getUserConfigPath } from "../shared/paths";
 import { isDebugPortReady } from "../browser/core";
+import { formatLaunchBrowserCommand } from "../browser/launch_help";
 import { detectShell } from "../terminal/cross_platform";
 import { execCommand } from "../terminal/session";
 import type { SetupResult } from "./types";
@@ -155,8 +156,17 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   } else {
     const reachable = await isDebugPortReady(effective.chromeDebugPort);
     if (!reachable) {
-      warnings.push(`CDP port ${effective.chromeDebugPort} is not reachable yet.`);
-      success = false;
+      const launchCommand = formatLaunchBrowserCommand(effective.chromeDebugPort);
+      if (hadUserConfig) {
+        warnings.push(
+          `CDP port ${effective.chromeDebugPort} is not reachable yet. Run \`${launchCommand}\` when ready.`,
+        );
+        success = false;
+      } else {
+        warnings.push(
+          `Chrome not detected on CDP port ${effective.chromeDebugPort}. Run \`${launchCommand}\` when ready.`,
+        );
+      }
     }
   }
 

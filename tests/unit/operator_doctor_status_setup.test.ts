@@ -346,7 +346,7 @@ test("setup validates known flag values and rolls back invalid config writes", (
   }
 });
 
-test("setup reports browser test failures as unsuccessful", async () => {
+test("setup treats missing Chrome as informational on first run", async () => {
   const home = makeHome();
   try {
     const result = await runSetup({
@@ -356,8 +356,33 @@ test("setup reports browser test failures as unsuccessful", async () => {
       skipTerminalTest: true,
     });
 
+    assert.equal(result.success, true);
+    assert.equal(result.warnings.some((warning) => warning.includes("Chrome not detected on CDP port 9")), true);
+    assert.equal(result.warnings.some((warning) => warning.includes("bc browser launch --port 9")), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("setup keeps browser test failure unsuccessful after initial config exists", async () => {
+  const home = makeHome();
+  try {
+    fs.mkdirSync(path.join(home, "config"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, "config", "config.json"),
+      `${JSON.stringify({ browserMode: "attach", chromeDebugPort: 9 }, null, 2)}\n`,
+    );
+
+    const result = await runSetup({
+      env: { BROWSER_CONTROL_HOME: home },
+      nonInteractive: true,
+      chromeDebugPort: 9,
+      skipTerminalTest: true,
+    });
+
     assert.equal(result.success, false);
-    assert.equal(result.warnings.some((warning) => warning.includes("CDP port 9")), true);
+    assert.equal(result.warnings.some((warning) => warning.includes("CDP port 9 is not reachable")), true);
+    assert.equal(result.warnings.some((warning) => warning.includes("bc browser launch --port 9")), true);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
