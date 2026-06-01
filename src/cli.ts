@@ -1152,10 +1152,6 @@ Browser Namespace (compatibility):
   daemon status                                                      Show daemon-only status; use 'bc status' for full system status
   daemon health                                                      Run health checks
   daemon logs                                                        View daemon logs
-  memory stats                                                       Show memory stats
-  memory clear                                                       Clear memory
-  memory get <key>                                                   Get a memory key
-  memory set <key> <value>                                           Set a memory key
   report generate                                                    Generate report
   report view                                                        View report
   policy list                                                        List built-in policy profiles

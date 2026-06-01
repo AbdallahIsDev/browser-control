@@ -1628,46 +1628,6 @@
         },
         {
           "commandPath": [
-            "memory",
-            "stats"
-          ],
-          "description": "Show memory stats",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "memory stats"
-        },
-        {
-          "commandPath": [
-            "memory",
-            "clear"
-          ],
-          "description": "Clear memory",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "memory clear"
-        },
-        {
-          "commandPath": [
-            "memory",
-            "get"
-          ],
-          "description": "Get a memory key",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "memory get <key>"
-        },
-        {
-          "commandPath": [
-            "memory",
-            "set"
-          ],
-          "description": "Set a memory key",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "memory set <key> <value>"
-        },
-        {
-          "commandPath": [
             "report",
             "generate"
           ],
