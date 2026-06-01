@@ -165,6 +165,22 @@ describe("NetworkCapture", () => {
     assert.strictEqual(capture.getEntries("s1").length, 0);
   });
 
+  it("captures a replacement page for the same session when the old page did not close", () => {
+    const capture = new NetworkCapture();
+    const stalePage = new FakePage();
+    const replacementPage = new FakePage();
+    const request = new FakeRequest("https://example.com/reconnected");
+
+    capture.startCapture("s1", stalePage as any);
+    capture.startCapture("s1", replacementPage as any);
+    replacementPage.emit("request", request);
+    replacementPage.emit("response", new FakeResponse(request, 500));
+
+    const entries = capture.getEntries("s1");
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].url, "https://example.com/reconnected");
+  });
+
   it("preserves URL and method for loading failures", () => {
     const capture = new NetworkCapture();
     const page = new FakePage();

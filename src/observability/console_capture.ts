@@ -73,6 +73,8 @@ export class ConsoleCapture {
   private readonly buffers = new Map<string, RingBuffer<ConsoleEntry>>();
   private readonly options: Required<ConsoleCaptureOptions>;
   private pageListeners = new Map<string, (message: ConsoleMessage) => void>();
+  private pageListenerIds = new WeakMap<Page, number>();
+  private nextPageListenerId = 0;
 
   constructor(options: ConsoleCaptureOptions = {}) {
     this.options = {
@@ -88,14 +90,15 @@ export class ConsoleCapture {
    * @param page Playwright page to observe
    */
   startCapture(sessionId: string, page: Page): void {
-    if (this.pageListeners.has(sessionId)) return;
+    const listenerKey = this.getPageListenerKey(sessionId, page);
+    if (this.pageListeners.has(listenerKey)) return;
 
     const listener = (message: ConsoleMessage) => {
       this.handleConsoleMessage(sessionId, page, message);
     };
 
     page.on("console", listener);
-    this.pageListeners.set(sessionId, listener);
+    this.pageListeners.set(listenerKey, listener);
   }
 
   /**
@@ -105,11 +108,22 @@ export class ConsoleCapture {
     sessionId: string,
     page: Page,
   ): void {
-    const listener = this.pageListeners.get(sessionId);
+    const listenerKey = this.getPageListenerKey(sessionId, page);
+    const listener = this.pageListeners.get(listenerKey);
     if (listener) {
       page.off("console", listener);
-      this.pageListeners.delete(sessionId);
+      this.pageListeners.delete(listenerKey);
     }
+  }
+
+  private getPageListenerKey(sessionId: string, page: Page): string {
+    let pageId = this.pageListenerIds.get(page);
+    if (pageId === undefined) {
+      pageId = this.nextPageListenerId;
+      this.nextPageListenerId += 1;
+      this.pageListenerIds.set(page, pageId);
+    }
+    return `${sessionId}:${pageId}`;
   }
 
   /**

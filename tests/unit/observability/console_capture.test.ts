@@ -138,6 +138,20 @@ describe("ConsoleCapture", () => {
     assert.strictEqual(entries[0].pageUrl, "https://example.com/page");
   });
 
+  it("captures a replacement page for the same session when the old page did not close", () => {
+    const capture = new ConsoleCapture();
+    const stalePage = new FakePage();
+    const replacementPage = new FakePage();
+
+    capture.startCapture("s1", stalePage as any);
+    capture.startCapture("s1", replacementPage as any);
+    replacementPage.emit("console", new FakeConsoleMessage("error", "after-reconnect"));
+
+    const entries = capture.getEntries("s1");
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].message, "after-reconnect");
+  });
+
   it("removes Playwright console listener on stopCapture", () => {
     const capture = new ConsoleCapture();
     const page = new FakePage();

@@ -92,6 +92,8 @@ export class NetworkCapture {
   private readonly options: Required<NetworkCaptureOptions>;
   private pageListeners = new Map<string, PageListenerSet>();
   private requestMetadata = new WeakMap<Request, RequestMetadata>();
+  private pageListenerIds = new WeakMap<Page, number>();
+  private nextPageListenerId = 0;
 
   constructor(options: NetworkCaptureOptions = {}) {
     this.options = {
@@ -105,7 +107,8 @@ export class NetworkCapture {
    * Start capturing network events for a Playwright page.
    */
   startCapture(sessionId: string, page: Page): void {
-    if (this.pageListeners.has(sessionId)) return;
+    const listenerKey = this.getPageListenerKey(sessionId, page);
+    if (this.pageListeners.has(listenerKey)) return;
 
     const request: PageRequestHandler = (request) => {
       this.handleRequest(sessionId, request);
@@ -125,7 +128,7 @@ export class NetworkCapture {
     page.on("requestfinished", requestFinished);
     page.on("response", response);
 
-    this.pageListeners.set(sessionId, {
+    this.pageListeners.set(listenerKey, {
       request,
       requestFailed,
       requestFinished,
@@ -140,14 +143,25 @@ export class NetworkCapture {
     sessionId: string,
     page: Page,
   ): void {
-    const listeners = this.pageListeners.get(sessionId);
+    const listenerKey = this.getPageListenerKey(sessionId, page);
+    const listeners = this.pageListeners.get(listenerKey);
     if (listeners) {
       page.off("request", listeners.request);
       page.off("requestfailed", listeners.requestFailed);
       page.off("requestfinished", listeners.requestFinished);
       page.off("response", listeners.response);
-      this.pageListeners.delete(sessionId);
+      this.pageListeners.delete(listenerKey);
     }
+  }
+
+  private getPageListenerKey(sessionId: string, page: Page): string {
+    let pageId = this.pageListenerIds.get(page);
+    if (pageId === undefined) {
+      pageId = this.nextPageListenerId;
+      this.nextPageListenerId += 1;
+      this.pageListenerIds.set(page, pageId);
+    }
+    return `${sessionId}:${pageId}`;
   }
 
   /**

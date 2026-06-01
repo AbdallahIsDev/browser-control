@@ -448,7 +448,7 @@ export class BrowserActions {
 	private readonly context: BrowserActionContext;
 	private readonly refStore: RefStore;
 	private readonly dialogSupervisor = new BrowserDialogSupervisor();
-	private readonly observabilityPages = new Map<string, Page>();
+	private readonly observabilityPages = new Map<string, WeakSet<Page>>();
 	private readonly networkPrivacyPages = new WeakSet<Page>();
 	private readonly downloadPages = new WeakSet<Page>();
 	private readonly downloadContexts = new WeakSet<BrowserContext>();
@@ -1048,7 +1048,8 @@ export class BrowserActions {
 		page: Page,
 		sessionId: string,
 	): Promise<void> {
-		if (this.observabilityPages.has(sessionId)) return;
+		const observedPages = this.observabilityPages.get(sessionId);
+		if (observedPages?.has(page)) return;
 		if (typeof (page as unknown as { on?: unknown }).on !== "function") return;
 
 		try {
@@ -1057,9 +1058,11 @@ export class BrowserActions {
 			page.on("close", () => {
 				getGlobalConsoleCapture().stopCapture(sessionId, page);
 				getGlobalNetworkCapture({ captureSuccess: true }).stopCapture(sessionId, page);
-				this.observabilityPages.delete(sessionId);
+				this.observabilityPages.get(sessionId)?.delete(page);
 			});
-			this.observabilityPages.set(sessionId, page);
+			const pages = observedPages ?? new WeakSet<Page>();
+			pages.add(page);
+			this.observabilityPages.set(sessionId, pages);
 		} catch (error: unknown) {
 			log.warn(
 				`Observability capture unavailable: ${error instanceof Error ? error.message : String(error)}`,
