@@ -32,6 +32,7 @@ import { generateRecoveryGuidance } from "./recovery";
 import { redactObject, redactString } from "./redaction";
 import type { MemoryStore } from "../runtime/memory_store";
 import type { A11yElement } from "../a11y_snapshot";
+import { ensureDebugBundleDir, getDebugBundleDir } from "../shared/paths";
 
 // ── Bundle Builder Options ─────────────────────────────────────────────
 
@@ -310,14 +311,11 @@ function generateBundleId(): string {
 // ── Storage ────────────────────────────────────────────────────────────
 
 export function getBundleDir(): string {
-  const { getDataHome } = require("../shared/paths");
-  return path.join(getDataHome(), "debug-bundles");
+  return getDebugBundleDir();
 }
 
 export function ensureBundleDir(): string {
-  const dir = getBundleDir();
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensureDebugBundleDir();
 }
 
 const SAFE_BUNDLE_ID = /^bundle-[A-Za-z0-9_-]{1,128}$/;

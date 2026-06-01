@@ -566,9 +566,11 @@ export function getDebugBundleDir(dataHome?: string): string {
 }
 /** Ensure debug bundle directory exists */
 export function ensureDebugBundleDir(dataHome?: string): string {
-  const dir = getDebugBundleDir(dataHome);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  const home = dataHome ?? getDataHome();
+  const canonical = path.join(home, "evidence", "debug-bundles");
+  copyDirFilesIfMissing(path.join(home, "debug-bundles"), canonical);
+  fs.mkdirSync(canonical, { recursive: true });
+  return canonical;
 }
 /** Directory for observability reports */
 export function getObservabilityDir(dataHome?: string): string {

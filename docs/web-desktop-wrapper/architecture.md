@@ -153,7 +153,7 @@ Required route behavior:
 - providers registry: `~/.browser-control/providers/registry.json`
 - config: `~/.browser-control/config/config.json`
 - logs: `~/.browser-control/logs/`
-- debug bundles: `~/.browser-control/debug-bundles/`
+- debug bundles: `~/.browser-control/evidence/debug-bundles/`
 - observability: `~/.browser-control/observability/`
 - terminal buffers/session metadata: memory store keys managed by `TerminalBufferStore`
 - daemon/broker interop: `~/.browser-control/.interop/`

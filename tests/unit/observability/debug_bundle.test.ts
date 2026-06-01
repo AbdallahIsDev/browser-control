@@ -146,6 +146,56 @@ describe("buildDebugBundle", () => {
 });
 
 describe("saveDebugBundle / loadDebugBundle", () => {
+  it("writes new bundles under canonical evidence debug-bundles directory", () => {
+    const bundle = buildDebugBundleSync({
+      taskId: "task-1",
+      sessionId: "session-1",
+      executionPath: "a11y",
+      error: new Error("Test"),
+    });
+
+    const { filePath } = saveDebugBundle(bundle);
+
+    assert.equal(
+      path.dirname(filePath),
+      path.join(tempHome, "evidence", "debug-bundles"),
+    );
+    assert.equal(fs.existsSync(filePath), true);
+    assert.equal(fs.existsSync(path.join(tempHome, "debug-bundles")), false);
+  });
+
+  it("copies legacy debug bundles into canonical storage before writing", () => {
+    const legacyDir = path.join(tempHome, "debug-bundles");
+    const legacyBundleId = "bundle-00000000-0000-4000-8000-000000000999";
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(legacyDir, `${legacyBundleId}.json`),
+      JSON.stringify({
+        ...buildDebugBundleSync({
+          taskId: "legacy-task",
+          sessionId: "session-1",
+          executionPath: "a11y",
+          error: new Error("Legacy"),
+        }),
+        bundleId: legacyBundleId,
+      }),
+    );
+
+    saveDebugBundle(buildDebugBundleSync({
+      taskId: "task-1",
+      sessionId: "session-1",
+      executionPath: "a11y",
+      error: new Error("Test"),
+    }));
+
+    assert.equal(
+      fs.existsSync(
+        path.join(tempHome, "evidence", "debug-bundles", `${legacyBundleId}.json`),
+      ),
+      true,
+    );
+  });
+
   it("round-trips a bundle", () => {
     const bundle = buildDebugBundleSync({
       taskId: "task-1",
