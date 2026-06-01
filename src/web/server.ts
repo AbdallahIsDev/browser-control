@@ -1540,12 +1540,23 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/config/modelProvider") {
 			const body = await readJsonBody(request);
 			const { setUserConfigValue } = await import("../shared/config");
+			const modelKey = asOptionalString(body.modelKey);
+			if (modelKey && body.confirm !== "STORE_MODEL_API_KEY") {
+				json(response, 403, {
+					success: false,
+					code: "confirmation_required",
+					error: "Saving a model API key requires confirm=STORE_MODEL_API_KEY.",
+				});
+				return;
+			}
 			const saved = [
 				setUserConfigValue("modelProvider", body.modelProvider),
 				setUserConfigValue("modelEndpoint", body.modelEndpoint),
-				setUserConfigValue("modelApiKey", body.modelKey),
 				setUserConfigValue("modelName", body.modelName),
 			];
+			if (modelKey) {
+				saved.push(setUserConfigValue("modelApiKey", modelKey));
+			}
 			json(response, 200, { success: true, saved });
 			return;
 		}

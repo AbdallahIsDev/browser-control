@@ -775,14 +775,24 @@ export function SettingsView() {
 								onClick={async () => {
 									setMessage("Saving model config...");
 									try {
+										const body: {
+											modelProvider: string;
+											modelEndpoint: string;
+											modelName: string;
+											modelKey?: string;
+											confirm?: string;
+										} = {
+											modelProvider,
+											modelEndpoint,
+											modelName,
+										};
+										if (modelKey.trim()) {
+											body.modelKey = modelKey;
+											body.confirm = "STORE_MODEL_API_KEY";
+										}
 										await apiFetch("/api/config/modelProvider", {
 											method: "POST",
-											body: JSON.stringify({
-												modelProvider,
-												modelEndpoint,
-												modelKey,
-												modelName,
-											}),
+											body: JSON.stringify(body),
 										});
 										setMessage("Model config saved");
 									} catch (e: unknown) {

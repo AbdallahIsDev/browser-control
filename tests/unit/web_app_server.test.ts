@@ -1150,6 +1150,21 @@ test("web app server saves model config redacted and starts authenticated local 
 		authorization: "Bearer test-token",
 	};
 
+	const unconfirmed = await fetch(`${info.url}/api/config/modelProvider`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({
+			modelProvider: "openai-compatible",
+			modelEndpoint: upstream.url,
+			modelKey: "super-secret-model-key",
+			modelName: "fixture-model",
+		}),
+	});
+	assert.equal(unconfirmed.status, 403);
+	const unconfirmedText = await unconfirmed.text();
+	assert.doesNotMatch(unconfirmedText, /super-secret-model-key/);
+	assert.match(unconfirmedText, /confirmation_required/);
+
 	const saved = await fetch(`${info.url}/api/config/modelProvider`, {
 		method: "POST",
 		headers,
@@ -1158,6 +1173,7 @@ test("web app server saves model config redacted and starts authenticated local 
 			modelEndpoint: upstream.url,
 			modelKey: "super-secret-model-key",
 			modelName: "fixture-model",
+			confirm: "STORE_MODEL_API_KEY",
 		}),
 	});
 	assert.equal(saved.status, 200);
