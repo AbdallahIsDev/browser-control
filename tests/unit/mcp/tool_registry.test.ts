@@ -934,6 +934,18 @@ describe("MCP Tool Registry", () => {
       assert.doesNotMatch(tool.description, /index/i);
     });
 
+    it("browser MCP tool module does not keep stale type-only imports", () => {
+      const source = fs.readFileSync(path.join(process.cwd(), "src/mcp/tools/browser.ts"), "utf8");
+
+      for (const importName of ["ActionResult", "A11ySnapshot", "LocatorCandidate", "JSONSchema"]) {
+        assert.doesNotMatch(
+          source,
+          new RegExp(`import type \\{ ${importName} \\}`),
+          `${importName} should not be imported when unused`,
+        );
+      }
+    });
+
     it("terminal tools disambiguate Browser Control and terminal session IDs", () => {
       const tools = buildToolRegistry(api);
       const terminalTools = tools.filter((tool) => tool.name.startsWith("bc_terminal_"));

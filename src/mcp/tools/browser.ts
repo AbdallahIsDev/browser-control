@@ -29,11 +29,7 @@ import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
 import { buildSchema } from "../types";
 import type { ToolParameterValidation } from "../types";
-import type { ActionResult } from "../../shared/action_result";
-import type { A11ySnapshot } from "../../a11y_snapshot";
-import type { LocatorCandidate } from "../../browser/actions";
 import type { ScreencastOptions } from "../../observability/types";
-import type { JSONSchema } from "../../mcp/types";
 
 const BROWSER_TOOL_ALIASES: Record<string, string> = {
   bc_browser_open: "bc_open",
