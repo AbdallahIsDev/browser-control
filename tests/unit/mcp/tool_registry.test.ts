@@ -336,6 +336,18 @@ describe("MCP Tool Registry", () => {
       assert.ok(categories.debug.length > 0);
       assert.ok(categories.service.length > 0);
     });
+
+    it("caches category names per API without exposing mutable cache state", () => {
+      const first = getToolCategories(api);
+      const second = getToolCategories(api);
+
+      assert.equal(first, second);
+      assert.equal(Object.isFrozen(first), true);
+      assert.equal(Object.isFrozen(first.browser), true);
+      assert.throws(() => {
+        (first.browser as string[]).push("bc_fake_tool");
+      }, /object is not extensible|read only|Cannot add property/i);
+    });
   });
 
   describe("tool handlers", () => {

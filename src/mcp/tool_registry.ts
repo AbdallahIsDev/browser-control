@@ -205,11 +205,29 @@ export function filterToolRegistryForActivePolicy(
   );
 }
 
+export type ToolCategories = Readonly<Record<string, readonly string[]>>;
+
+const toolCategoriesCache = new WeakMap<BrowserControlAPI, ToolCategories>();
+
+function freezeToolCategories(
+  categories: Record<string, string[]>,
+): ToolCategories {
+  for (const names of Object.values(categories)) {
+    Object.freeze(names);
+  }
+  return Object.freeze(categories);
+}
+
 /**
  * Get tool names grouped by category for diagnostics.
  */
-export function getToolCategories(api: BrowserControlAPI): Record<string, string[]> {
-  return {
+export function getToolCategories(api: BrowserControlAPI): ToolCategories {
+  const cached = toolCategoriesCache.get(api);
+  if (cached) {
+    return cached;
+  }
+
+  const categories = freezeToolCategories({
     status: buildStatusTools(api).map((t) => t.name),
     session: buildSessionTools(api).map((t) => t.name),
     browser: buildBrowserTools(api).map((t) => t.name),
@@ -221,5 +239,7 @@ export function getToolCategories(api: BrowserControlAPI): Record<string, string
     security: buildSecurityTools(api).map((t) => t.name),
     workflow: buildWorkflowTools(api).map((t) => t.name),
     package: buildPackageTools(api).map((t) => t.name),
-  };
+  });
+  toolCategoriesCache.set(api, categories);
+  return categories;
 }
