@@ -14,6 +14,11 @@ import {
 	getDataHome,
 	getDataHomeManifestPath,
 	getEvidenceScreenshotsDir,
+	getSessionDownloadsDir,
+	getSessionReceiptDir,
+	getSessionRuntimeDir,
+	getSessionScreencastDir,
+	getSessionScreenshotsDir,
 	getStructuredSessionRuntimeDir,
 	getHelpersDir,
 	getInteropDir,
@@ -254,6 +259,62 @@ test("structured session runtime dir is stable outside created-at date folders",
 		);
 		assert.equal(runtimeDir.includes("2026-05-23"), false);
 		assert.equal(path.basename(runtimeDir).startsWith("23-07_"), false);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("session-scoped runtime paths reject traversal session IDs", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-session-paths-"));
+	try {
+		ensureDataHomeAtPath(home);
+		const safeRuntimeDir = getSessionRuntimeDir("session-ABC_123", home);
+		assert.equal(path.basename(safeRuntimeDir), "session-ABC_123");
+		assert.ok(safeRuntimeDir.startsWith(path.join(home, "runtime")));
+
+		for (const badSessionId of [
+			"../../outside",
+			"..",
+			"nested/session",
+			"nested\\session",
+			"session.name",
+			"session:name",
+			"",
+		]) {
+			assert.throws(
+				() => getSessionRuntimeDir(badSessionId, home),
+				/unsafe path characters/,
+			);
+			assert.throws(
+				() => getSessionScreenshotsDir(badSessionId, home),
+				/unsafe path characters/,
+			);
+			assert.throws(
+				() => getSessionDownloadsDir(badSessionId, home),
+				/unsafe path characters/,
+			);
+			assert.throws(
+				() => getSessionScreencastDir(badSessionId, home),
+				/unsafe path characters/,
+			);
+			assert.throws(
+				() => getSessionReceiptDir(badSessionId, home),
+				/unsafe path characters/,
+			);
+		}
+
+		assert.throws(
+			() =>
+				getStructuredSessionRuntimeDir(
+					{
+						id: "../../outside",
+						name: "unsafe",
+						createdAt: new Date().toISOString(),
+					},
+					home,
+				),
+			/session\.id contains unsafe path characters/,
+		);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}

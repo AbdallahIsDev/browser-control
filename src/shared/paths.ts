@@ -398,8 +398,14 @@ export function getRuntimeTempDir(dataHome?: string): string {
 export function getRuntimeLocksDir(dataHome?: string): string {
   return path.join(getRuntimeDir(dataHome), "locks");
 }
+function assertSafeSessionPathSegment(sessionId: string, label = "sessionId"): string {
+  if (!/^[A-Za-z0-9_-]+$/u.test(sessionId)) {
+    throw new Error(`${label} contains unsafe path characters`);
+  }
+  return sessionId;
+}
 export function getSessionRuntimeDir(sessionId: string, dataHome?: string): string {
-  return path.join(getRuntimeDir(dataHome), sessionId);
+  return path.join(getRuntimeDir(dataHome), assertSafeSessionPathSegment(sessionId));
 }
 function slugifyRuntimeName(value: string): string {
   const slug = value
@@ -410,7 +416,12 @@ function slugifyRuntimeName(value: string): string {
   return slug || "session";
 }
 export function getStructuredSessionRuntimeDir(session: RuntimeSessionInfo, dataHome?: string): string {
-  const shortId = session.id.replace(/-/gu, "").slice(0, 8) || "session";
+  const compactId = session.id.replace(/-/gu, "");
+  assertSafeSessionPathSegment(compactId || "session", "session.id");
+  const shortId = assertSafeSessionPathSegment(
+    compactId.slice(0, 8) || "session",
+    "session.id",
+  );
   const folderName = `${slugifyRuntimeName(session.name)}_${shortId}`;
   return path.join(getRuntimeDir(dataHome), folderName);
 }
@@ -572,7 +583,11 @@ export function ensureObservabilityDir(dataHome?: string): string {
 // ── Screencast and Debug Receipts (Section 26) ─────────────────────
 /** Directory for session screencast artifacts */
 export function getSessionScreencastDir(sessionId: string, dataHome?: string): string {
-  return path.join(getObservabilityDir(dataHome), "screencasts", sessionId);
+  return path.join(
+    getObservabilityDir(dataHome),
+    "screencasts",
+    assertSafeSessionPathSegment(sessionId),
+  );
 }
 /** Ensure session screencast directory exists */
 export function ensureSessionScreencastDir(sessionId: string, dataHome?: string): string {
@@ -582,7 +597,11 @@ export function ensureSessionScreencastDir(sessionId: string, dataHome?: string)
 }
 /** Directory for session debug receipt artifacts */
 export function getSessionReceiptDir(sessionId: string, dataHome?: string): string {
-  return path.join(getObservabilityDir(dataHome), "receipts", sessionId);
+  return path.join(
+    getObservabilityDir(dataHome),
+    "receipts",
+    assertSafeSessionPathSegment(sessionId),
+  );
 }
 /** Ensure session receipt directory exists */
 export function ensureSessionReceiptDir(sessionId: string, dataHome?: string): string {
