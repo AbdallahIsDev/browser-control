@@ -49,6 +49,106 @@ Use this priority for Codex, Hermes-like, OpenCode-like, Gemini CLI, Claude Code
 
 MCP Lite exists to reduce token overhead by exposing high-level tools such as `bc_state`, `bc_act`, and `bc_task_run` instead of forcing many tiny tool calls.
 
+## Security Considerations
+
+MCP runs Browser Control as a local stdio server under the same operating-system
+user that starts the MCP client. Treat that client as a privileged local agent:
+it can request browser automation, terminal commands, filesystem reads/writes,
+debug evidence, workflow/package execution, service resolution, and vault
+metadata through the tools exposed below.
+
+### Attack Surface
+
+Depending on the active policy and session, MCP tools can access:
+
+- browser pages, tabs, dialogs, downloads, screenshots, cookies/storage exports
+  where policy allows them, and logged-in web sessions visible to the automation
+  browser
+- terminal sessions and command output
+- filesystem paths reachable from the Browser Control process
+- debug bundles, captured console/network entries, visual evidence, and runtime
+  artifacts under the Browser Control data home
+- provider, session, service, package, workflow, and harness state
+- credential vault metadata through `bc_vault_list`; raw secret values are not
+  returned by that listing tool
+
+Do not point an untrusted MCP client at a sensitive browser profile, broad
+working directory, or data home containing secrets unless the policy profile and
+OS permissions are intentionally scoped for that client.
+
+### Policy Profiles
+
+All MCP tools route through the same policy/session model as CLI and API calls.
+Choose the default profile before connecting the MCP client:
+
+- `safe`: safest choice for untrusted agents. Low-risk actions are allowed,
+  moderate-risk actions require confirmation, high and critical actions are
+  denied. File upload/download, clipboard, credential submission, raw CDP, JS
+  eval, network interception, cookie import/export, and coordinate actions are
+  disabled.
+- `balanced`: default operator profile. Low-risk actions are allowed,
+  moderate-risk actions are audited, and high/critical actions require
+  confirmation. Browser upload/download and clipboard are allowed, but
+  credential submission, raw CDP, JS eval, network interception, and cookie
+  import/export remain disabled.
+- `trusted`: development/operator-only profile. Moderate and high-risk actions
+  are audited, critical actions still require confirmation, and powerful browser
+  capabilities such as raw CDP, JS eval, network interception, cookie
+  import/export, credential submission, and automatic dialog acceptance are
+  enabled. Do not use `trusted` for untrusted or web-content-driven agents.
+
+Create separate Browser Control sessions for agents with different trust levels
+instead of sharing a single privileged session.
+
+### Secrets
+
+Secrets should be stored in the credential vault and referenced through
+`secret://...` refs instead of being embedded in MCP prompts, tool arguments, or
+client configuration. Vault listings expose ids, scopes, names, timestamps, and
+presence flags, not raw secret values.
+
+Credential vault entries use OS-backed protection when available. The local
+fallback uses AES-256-GCM with a key file under
+`<data-home>/secrets/.vault-key`; if that key file is copied with the vault
+data, fallback-protected secrets should be treated as compromised. Never commit,
+sync, or share the data home, `.vault-key`, runtime artifacts, screenshots, or
+debug bundles unless they have been reviewed for sensitive content.
+
+Logs and evidence are redacted for known secret patterns, but redaction is not a
+global secrecy guarantee. Web pages, terminal output, screenshots, console logs,
+network records, and exception text can still contain private data.
+
+### Auditing
+
+MCP results preserve policy metadata from the shared `ActionResult` shape:
+`policyDecision`, `risk`, and `auditId` appear when available. Policy audit JSONL
+files are written under `<data-home>/reports/policy-audit/` when policy auditing
+is enabled. Session and workflow results may also contain audit ids for
+confirmation, denied, or audited actions.
+
+For review:
+
+- inspect MCP responses for `policyDecision`, `risk`, and `auditId`
+- use `bc status --json` to confirm the active policy profile and data home
+- use `bc debug console --json` and `bc debug network --json` only when the
+  active policy permits reading captured evidence
+- review `<data-home>/reports/policy-audit/` before sharing logs or reports
+
+### Hardening Checklist
+
+- Prefer CLI for command-capable agents and MCP Lite for MCP-native clients that
+  only need high-level browser automation.
+- Use `safe` or `balanced` for untrusted agents; reserve `trusted` for a local
+  operator or a tightly controlled development environment.
+- Scope the MCP client's working directory and OS account permissions. Browser
+  Control policy is not a full operating-system sandbox.
+- Avoid passing API keys or passwords through MCP client environment variables
+  unless that client truly needs them.
+- Keep MCP server names stable and explicit, for example `bc`, to avoid tool
+  confusion when multiple MCP servers are installed.
+- Review destructive filesystem, terminal, provider-switching, package,
+  workflow, and harness actions before approving them.
+
 ## Output Shape
 
 Tools return MCP content containing JSON for the same `ActionResult` shape used by CLI/API:
