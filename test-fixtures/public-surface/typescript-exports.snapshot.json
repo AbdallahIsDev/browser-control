@@ -193,7 +193,7 @@
         "receipt": "(receiptId: string): DebugReceipt | null"
       },
       "FsNamespace": {
-        "ls": "(options: { path: string; recursive?: boolean | undefined; extension?: string | undefined; }): Promise<ActionResult<ListResult>>",
+        "ls": "(options: { path: string; includeHidden?: boolean | undefined; recursive?: boolean | undefined; extension?: string | undefined; }): Promise<ActionResult<ListResult>>",
         "move": "(options: { src: string; dst: string; }): Promise<ActionResult<MoveResult>>",
         "read": "(options: { path: string; maxBytes?: number | undefined; }): Promise<ActionResult<FileReadResult>>",
         "rm": "(options: { path: string; recursive?: boolean | undefined; force?: boolean | undefined; }): Promise<ActionResult<DeleteResult>>",

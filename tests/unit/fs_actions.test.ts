@@ -522,6 +522,30 @@ describe("FsActions", () => {
       assert.ok(result.policyDecision, "ActionResult must have policyDecision");
     });
 
+    it("fs ls can include hidden entries on request", async () => {
+      const activeSession = sessionManager.getActiveSession()!;
+      const runtimeDir = activeSession.runtimeDir;
+      fs.writeFileSync(path.join(runtimeDir, ".env"), "hidden");
+      fs.writeFileSync(path.join(runtimeDir, "visible.txt"), "visible");
+
+      const defaultResult = await fsActions.ls({ path: runtimeDir });
+      const hiddenResult = await fsActions.ls({
+        path: runtimeDir,
+        includeHidden: true,
+      });
+
+      assert.equal(defaultResult.success, true, defaultResult.error);
+      assert.equal(hiddenResult.success, true, hiddenResult.error);
+      assert.equal(
+        defaultResult.data?.entries.some((entry) => entry.name === ".env"),
+        false,
+      );
+      assert.equal(
+        hiddenResult.data?.entries.some((entry) => entry.name === ".env"),
+        true,
+      );
+    });
+
     it("policy-denied fs action returns ActionResult with policyDecision", async () => {
       // Create a safe session — fs_write is high risk, safe denies high risk
       const safeStore = new MemoryStore({ filename: ":memory:" });

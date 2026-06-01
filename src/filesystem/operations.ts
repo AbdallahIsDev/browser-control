@@ -97,6 +97,8 @@ export interface WriteFileOptions {
 export interface ListOptions {
   /** Include file metadata. Default: true. */
   withStats?: boolean;
+  /** Include dotfiles and dot-directories. Default: false. */
+  includeHidden?: boolean;
   /** Recurse into subdirectories. Default: false. */
   recursive?: boolean;
   /** Max recursion depth. Default: 3. */
@@ -260,6 +262,7 @@ function readDirEntries(
   depth: number,
 ): ListEntry[] {
   const withStats = options.withStats ?? true;
+  const includeHidden = options.includeHidden === true;
   const recursive = options.recursive ?? false;
   const maxDepth = options.maxDepth ?? 3;
   const entries: ListEntry[] = [];
@@ -267,8 +270,7 @@ function readDirEntries(
   const names = fs.readdirSync(dirPath);
 
   for (const name of names) {
-    // Skip hidden files
-    if (name.startsWith(".")) continue;
+    if (!includeHidden && name.startsWith(".")) continue;
 
     const fullPath = path.join(dirPath, name);
     let entryStats: fs.Stats;

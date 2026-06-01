@@ -1191,6 +1191,11 @@
             "description": "Filter by file extension (e.g., '.ts').",
             "type": "string"
           },
+          "includeHidden": {
+            "default": false,
+            "description": "Include dotfiles and dot-directories.",
+            "type": "boolean"
+          },
           "path": {
             "default": ".",
             "description": "Directory path to list. Default: current working directory.",

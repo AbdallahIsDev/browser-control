@@ -1885,10 +1885,11 @@
           "description": "List directory",
           "flags": [
             "ext",
+            "include-hidden",
             "recursive"
           ],
           "jsonSupport": false,
-          "syntax": "fs ls <path> [--recursive] [--ext=<.ext>]"
+          "syntax": "fs ls <path> [--recursive] [--include-hidden] [--ext=<.ext>]"
         },
         {
           "commandPath": [

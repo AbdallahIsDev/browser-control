@@ -83,6 +83,8 @@ export interface FsWriteOutputOptions {
 export interface FsListOptions {
   /** Directory path to list. */
   path: string;
+  /** Include dotfiles and dot-directories. */
+  includeHidden?: boolean;
   /** Recurse into subdirectories. */
   recursive?: boolean;
   /** Filter by file extension. */
@@ -361,6 +363,7 @@ export class FsActions {
 
     try {
       const listOpts: ListOptions = {
+        includeHidden: options.includeHidden,
         recursive: options.recursive,
         extension: options.extension,
         cwd: this.getWorkingDirectory(),

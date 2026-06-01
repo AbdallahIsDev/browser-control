@@ -128,6 +128,30 @@ test("fs_operations: listDir returns entries with metadata", () => {
   }
 });
 
+test("fs_operations: listDir can opt into hidden entries", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-hidden-"));
+
+  try {
+    fs.writeFileSync(path.join(tmpDir, "visible.txt"), "visible");
+    fs.writeFileSync(path.join(tmpDir, ".env"), "secret");
+    fs.mkdirSync(path.join(tmpDir, ".github"));
+    fs.writeFileSync(path.join(tmpDir, ".github", "workflow.yml"), "name: test");
+
+    const defaultResult = listDir(tmpDir);
+    assert.deepEqual(
+      defaultResult.entries.map((entry) => entry.name).sort(),
+      ["visible.txt"],
+    );
+
+    const withHidden = listDir(tmpDir, { includeHidden: true, recursive: true });
+    assert.ok(withHidden.entries.some((entry) => entry.name === ".env"));
+    assert.ok(withHidden.entries.some((entry) => entry.name === ".github"));
+    assert.ok(withHidden.entries.some((entry) => entry.name === "workflow.yml"));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("fs_operations: listDir filters by extension", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-ext-"));
 

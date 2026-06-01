@@ -623,6 +623,27 @@ test("web app server protects API routes and exposes status/capabilities", async
 	);
 });
 
+test("web app server forwards includeHidden for filesystem list", async (t) => {
+	let captured: { includeHidden?: boolean } | undefined;
+	const api = mockApi();
+	api.fs.ls = async (options) => {
+		captured = options;
+		return actionResult({ path: ".", entries: [], totalEntries: 0 } as never);
+	};
+
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(
+		`${info.url}/api/fs/list?path=.&includeHidden=true`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+
+	assert.equal(response.status, 200, await response.text());
+	assert.equal(captured?.includeHidden, true);
+});
+
 test("web app server redacts status response secrets", async (t) => {
 	const api = mockApi();
 	api.status = async () =>

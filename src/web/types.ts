@@ -97,6 +97,7 @@ export interface BrowserTargetBody {
 export interface FsPathBody {
 	path?: unknown;
 	content?: unknown;
+	includeHidden?: unknown;
 	recursive?: unknown;
 	force?: unknown;
 	createDirs?: unknown;

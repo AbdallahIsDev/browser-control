@@ -2947,6 +2947,7 @@ export function createWebAppServer(
 		if (request.method === "GET" && pathname === "/api/fs/list") {
 			const result = await api.fs.ls({
 				path: requestUrl.searchParams.get("path") || ".",
+				includeHidden: requestUrl.searchParams.get("includeHidden") === "true",
 				recursive: requestUrl.searchParams.get("recursive") === "true",
 				extension: requestUrl.searchParams.get("extension") || undefined,
 			});

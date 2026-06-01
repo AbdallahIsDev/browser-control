@@ -211,7 +211,7 @@ export interface BrokerServerOptions {
 		termStatus?(sessionId: string): Promise<unknown>;
 		fsRead?(pathname: string): unknown;
 		fsWrite?(pathname: string, content: string): unknown;
-		fsList?(pathname: string, recursive?: boolean, extension?: string): unknown;
+		fsList?(pathname: string, recursive?: boolean, extension?: string, includeHidden?: boolean): unknown;
 		fsMove?(src: string, dst: string): unknown;
 		fsDelete?(pathname: string, recursive?: boolean, force?: boolean): unknown;
 		fsStat?(pathname: string): unknown;
@@ -952,6 +952,7 @@ function createCallbacksFromDaemon(
 						payload.path as string,
 						payload.recursive === true,
 						payload.extension as string | undefined,
+						payload.includeHidden === true,
 					);
 				case "move":
 					if (!daemon.fsMove)

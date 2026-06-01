@@ -260,6 +260,7 @@ const COMMANDER_BOOLEAN_OPTIONS = [
 	"full-page",
 	"hide",
 	"https",
+	"include-hidden",
 	"install",
 	"json",
 	"live",
@@ -1174,7 +1175,7 @@ Browser Commands:
   term status <sessionId>                                             Show resume status for a session
   fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>] [--yes]                           Write to a file
-  fs ls <path> [--recursive] [--ext=<.ext>]                           List directory
+  fs ls <path> [--recursive] [--include-hidden] [--ext=<.ext>]          List directory
   fs move <src> <dst> [--yes]                                          Move/rename
   fs rm <path> [--recursive] [--force] [--yes]                         Delete file/dir
   fs stat <path>                                                      File metadata
@@ -4704,6 +4705,7 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 				const dirPath = positional[0] ?? ".";
 				result = await fsActions.ls({
 					path: dirPath,
+					includeHidden: flags["include-hidden"] === "true",
 					recursive: flags.recursive === "true",
 					extension: flags.ext,
 				});

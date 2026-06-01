@@ -1388,10 +1388,11 @@ test("parseArgs handles fs read command", () => {
 });
 
 test("parseArgs handles fs ls command", () => {
-  const result = parseArgs(["node", "cli.ts", "fs", "ls", ".", "--json"]);
+  const result = parseArgs(["node", "cli.ts", "fs", "ls", ".", "--include-hidden", "--json"]);
   assert.equal(result.command, "fs");
   assert.equal(result.subcommand, "ls");
   assert.deepEqual(result.positional, ["."]);
+  assert.equal(result.flags["include-hidden"], "true");
   assert.equal(result.flags.json, "true");
 });
 

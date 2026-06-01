@@ -350,6 +350,7 @@ export interface FsNamespace {
 	}): Promise<ActionResult<FileWriteResult>>;
 	ls(options: {
 		path: string;
+		includeHidden?: boolean;
 		recursive?: boolean;
 		extension?: string;
 	}): Promise<ActionResult<ListResult>>;

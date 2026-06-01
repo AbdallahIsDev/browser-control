@@ -81,6 +81,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       description: "List the contents of a directory.",
       inputSchema: buildSchema({
         path: { type: "string", description: "Directory path to list. Default: current working directory.", default: "." },
+        includeHidden: { type: "boolean", description: "Include dotfiles and dot-directories.", default: false },
         recursive: { type: "boolean", description: "Recurse into subdirectories.", default: false },
         extension: { type: "string", description: "Filter by file extension (e.g., '.ts')." },
         sessionId: sessionIdSchema,
@@ -89,6 +90,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.fs.ls({
           path: (params.path as string | undefined) ?? ".",
+          includeHidden: params.includeHidden as boolean | undefined,
           recursive: params.recursive as boolean | undefined,
           extension: params.extension as string | undefined,
         });

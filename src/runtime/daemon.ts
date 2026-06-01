@@ -1288,10 +1288,11 @@ export class Daemon {
 		});
 	}
 
-	fsList(pathname: string, recursive = false, extension?: string): unknown {
+	fsList(pathname: string, recursive = false, extension?: string, includeHidden = false): unknown {
 		this.assertFilesystemPathsAllowed(pathname);
 		this.assertOperationAllowed("fs_list", { path: pathname });
 		return fsListDir(pathname, {
+			includeHidden,
 			recursive,
 			extension,
 			allowedRoots: this.getFilesystemAllowedRoots(),
@@ -2167,6 +2168,7 @@ export class Daemon {
 								(payload.path as string) ?? ".",
 								payload.recursive === true,
 								payload.extension as string | undefined,
+								payload.includeHidden === true,
 							);
 						case "move":
 							return this.fsMove(payload.src as string, payload.dst as string);

@@ -233,7 +233,7 @@ bc term exec "node --version" --json
 ```text
 fs read <path> [--max-bytes]
 fs write <path> [--content] [--create-dirs=false]
-fs ls [path] [--recursive] [--ext]
+fs ls [path] [--recursive] [--include-hidden] [--ext]
 fs move <src> <dst>
 fs rm <path> [--recursive] [--force]
 fs stat <path>
