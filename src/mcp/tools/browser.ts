@@ -27,7 +27,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
+import { buildSchema, sessionIdSchema } from "../types";
 import type { ToolParameterValidation } from "../types";
 import type { ScreencastOptions } from "../../observability/types";
 
@@ -233,7 +233,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         url: { type: "string", description: "URL to navigate to." },
         waitUntil: { type: "string", description: "Navigation wait condition: 'load', 'domcontentloaded', 'networkidle', or 'commit'. Default: 'domcontentloaded'.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["url"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -249,7 +249,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: preferBcAct("Open multiple URLs as tabs in the current browser session.", "openMany"),
       inputSchema: buildSchema({
         urls: { type: "array", description: "Array of URLs or { url, label, waitUntil } objects to open." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["urls"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -267,7 +267,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         url: { type: "string", description: "URL to navigate to." },
         waitUntil: { type: "string", description: "Navigation wait condition.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["url"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -287,7 +287,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         snapshot: { type: "boolean", description: "Include an accessibility snapshot.", default: true },
         screenshot: { type: "boolean", description: "Include a screenshot.", default: false },
         fullPage: { type: "boolean", description: "Capture full-page screenshot when screenshot is true.", default: false },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -308,7 +308,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         snapshot: { type: "boolean", description: "Include accessibility snapshots.", default: true },
         screenshot: { type: "boolean", description: "Include screenshots.", default: false },
         fullPage: { type: "boolean", description: "Capture full-page screenshots when screenshot is true.", default: false },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["tabIds"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -327,7 +327,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         rootSelector: { type: "string", description: "Optional CSS selector to scope the snapshot to a subtree." },
         boxes: { type: "boolean", description: "Include element bounds with viewport metadata in the snapshot." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -347,7 +347,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
         force: { type: "boolean", description: "Force click without actionability checks.", default: false },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["target"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -369,7 +369,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
         commit: { type: "boolean", description: "Press Tab after filling to move to the next field.", default: false },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["target", "text"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -391,7 +391,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         timeoutMs: { type: "number", description: "Timeout per field in milliseconds. Default: 5000." },
         continueOnFailure: { type: "boolean", description: "Continue filling subsequent fields if one fails.", default: false },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["fields"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -410,7 +410,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         target: { type: "string", description: "Element to hover: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["target"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -429,7 +429,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         text: { type: "string", description: "Text to type." },
         delayMs: { type: "number", description: "Delay between keystrokes in milliseconds. Default: 0.", default: 0 },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["text"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -449,7 +449,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         target: { type: "string", description: "Optional element to focus before pasting: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Focus/click timeout in milliseconds. Default: 5000." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["text"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -468,7 +468,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         key: { type: "string", description: "Key to press: Enter, Tab, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Escape, Backspace, etc." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["key"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -486,7 +486,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         direction: { type: "string", description: "Direction to scroll: up, down, left, right.", enum: ["up", "down", "left", "right"] },
         amount: { type: "number", description: "Pixels to scroll. Default: 300.", default: 300 },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["direction"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -508,7 +508,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         annotate: { type: "boolean", description: "Annotate screenshot with ref labels and boxes for interactive elements." },
         refs: { type: "string", description: "Comma-separated list of specific refs to annotate (if annotate is true). If omitted, annotates all interactive elements." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -533,7 +533,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         persist: { type: "boolean", description: "Whether to persist the highlight (default: false)." },
         hide: { type: "boolean", description: "Whether to hide the highlight (if true, removes all highlights)." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -553,7 +553,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         target: { type: "string", description: "Element ref (@e3), CSS selector, or text match to generate locators for." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["target"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -567,7 +567,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_tab_list",
       description: "List all browser tabs with their IDs, URLs, and titles.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -580,7 +580,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Switch to a browser tab by tab ID.",
       inputSchema: buildSchema({
         tabId: { type: "string", description: "Browser tab ID from tab list, state, or open results." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["tabId"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -593,7 +593,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: preferBcAct("Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.", "tab-close"),
       inputSchema: buildSchema({
         tabId: { type: "string", description: "Optional tab ID or index. If omitted, closes the active tab." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -607,7 +607,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_close",
       description: "Close the browser automation lifecycle. Managed Chrome is terminated; attached Chrome is detached without killing the user's browser.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -624,7 +624,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         showActions: { type: "boolean", description: "Display visible action labels during recording." },
         annotationPosition: { type: "string", description: "Position for action labels: top-left, top, top-right, bottom-left, bottom, bottom-right.", enum: ["top-left", "top", "top-right", "bottom-left", "bottom", "bottom-right"] },
         retention: { type: "string", description: "Retention policy: keep, delete-on-success, debug-only.", enum: ["keep", "delete-on-success", "debug-only"] },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -642,7 +642,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_screencast_stop",
       description: "Stop the current screencast recording and save the action timeline receipt.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -654,7 +654,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_screencast_status",
       description: "Get the current screencast recording status.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -669,7 +669,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "List attachable browsers on the local system. Probes CDP endpoints and returns browser metadata including channel, endpoint, and attachment status.",
       inputSchema: buildSchema({
         all: { type: "boolean", description: "List all discovered browsers including those not currently attached." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -687,7 +687,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         endpoint: { type: "string", description: "CDP endpoint URL alias (same as cdp)." },
         port: { type: "number", description: "CDP port number." },
         targetType: { type: "string", description: "Target type hint: chrome, chromium, msedge, electron, or unknown." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -704,7 +704,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_detach",
       description: "Detach from the current browser connection without closing attached browsers. For managed browsers, this is a no-op (use close instead). Returns structured detach result.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -719,7 +719,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         port: { type: "number", description: "CDP port number for the launched browser. Default: from config (9222)." },
         profile: { type: "string", description: "Launcher profile: 'system' (uses existing profile) or 'isolated' (clean profile). Default: from config.", enum: ["system", "isolated"] },
         provider: { type: "string", description: "Provider to use for launch (e.g., 'local', 'browserless'). Default: active provider." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -739,7 +739,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         files: { type: "array", description: "Local file paths to drop." },
         data: { type: "array", description: "MIME/value pairs for clipboard-like data drop (e.g., text/plain=hello)." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["target"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -756,7 +756,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_browser_downloads_list",
       description: "List recent downloads for the current session. Returns structured download information including filename, path, size, and status.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -772,7 +772,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         response: { type: "string", description: "Response type: accept or dismiss.", enum: ["accept", "dismiss"] },
         text: { type: "string", description: "Text to enter into prompt dialogs." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["action"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -796,7 +796,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         frameId: { type: "string", description: "CDP frame ID (optional)." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds." },
         tabId: { type: "string", description: "Optional tab ID." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["method", "timeoutMs"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -823,7 +823,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         fullPage: { type: "boolean", description: "Capture full-page screenshot when screenshot is true.", default: false },
         dialog: { type: "boolean", description: "Include pending dialogs. Default: true.", default: true },
         downloads: { type: "boolean", description: "Include recent downloads. Default: false (opt-in — high risk under balanced policy).", default: false },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -864,7 +864,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         continueOnFailure: { type: "boolean", description: "Continue on field failure for fillMany.", default: false },
         boxes: { type: "boolean", description: "Include element bounds for capture/state.", default: false },
         rootSelector: { type: "string", description: "Root CSS selector for scoped snapshot." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["action"]),
       validation: BROWSER_ACT_VALIDATION,
       handler: async (params) => {
@@ -902,7 +902,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         steps: { type: "array", description: "Array of browser task step objects. Each step must match the fields for its action.", items: BROWSER_STEP_SCHEMA },
         continueOnFailure: { type: "boolean", description: "Continue to next step if one fails. Default: false.", default: false },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["steps"]),
       validation: BROWSER_TASK_RUN_VALIDATION,
       handler: async (params) => {

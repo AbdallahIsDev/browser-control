@@ -621,8 +621,7 @@
             "type": "string"
           },
           "sessionId": {
-            "default": "system",
-            "description": "Session ID for policy context. Defaults to 'system'.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -669,8 +668,7 @@
         "additionalProperties": false,
         "properties": {
           "sessionId": {
-            "default": "default",
-            "description": "Session ID to get console entries for. Default: 'default'.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -717,8 +715,7 @@
         "additionalProperties": false,
         "properties": {
           "sessionId": {
-            "default": "default",
-            "description": "Session ID to get network entries for. Default: 'default'.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -770,8 +767,7 @@
             "type": "number"
           },
           "sessionId": {
-            "default": "system",
-            "description": "Session ID for policy context. Defaults to 'system'.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2340,8 +2336,7 @@
         "additionalProperties": false,
         "properties": {
           "sessionId": {
-            "default": "default",
-            "description": "Session ID. Default: default.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2386,7 +2381,12 @@
       "description": "List privacy network rules, including user rules and built-in tracker rules.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
         "required": [],
         "type": "object"
       },
@@ -4043,7 +4043,7 @@
         "additionalProperties": false,
         "properties": {
           "sessionId": {
-            "description": "Session ID to check. If omitted, uses the active session.",
+            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -5430,7 +5430,12 @@
       "description": "List credential vault entries without secret values. Raw secrets are never returned.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "sessionId": {
+            "description": "Browser Control session ID. If omitted, uses the active session.",
+            "type": "string"
+          }
+        },
         "required": [],
         "type": "object"
       },

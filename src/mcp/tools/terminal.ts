@@ -20,12 +20,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
-
-const browserControlSessionProperty = {
-  type: "string",
-  description: "Browser Control session ID. If omitted, uses the active session.",
-} as const;
+import { buildSchema, sessionIdSchema } from "../types";
 
 const terminalSessionIdProperty = {
   type: "string",
@@ -48,7 +43,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
         shell: { type: "string", description: "Shell to use (e.g., 'bash', 'powershell', 'zsh'). Auto-detected if omitted." },
         cwd: { type: "string", description: "Working directory for the terminal session." },
         name: { type: "string", description: "Human-readable name for the terminal session." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -67,7 +62,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
         command: { type: "string", description: "Command to execute." },
         terminalSessionId: { ...terminalSessionIdProperty, description: "Terminal session ID from bc_terminal_open. If omitted, runs as one-shot." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 30000." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["command"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -85,7 +80,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         terminalSessionId: terminalSessionIdProperty,
         maxBytes: { type: "number", description: "Maximum bytes to read." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -102,7 +97,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         terminalSessionId: terminalSessionIdProperty,
         text: { type: "string", description: "Text to type into the terminal." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId", "text"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -118,7 +113,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       description: "Send Ctrl+C to interrupt a running command in a terminal session.",
       inputSchema: buildSchema({
         terminalSessionId: terminalSessionIdProperty,
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -133,7 +128,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       description: "Take a snapshot of terminal state (buffer content, cursor position, prompt status).",
       inputSchema: buildSchema({
         terminalSessionId: { ...terminalSessionIdProperty, description: "Terminal session ID from bc_terminal_open. If omitted, snapshots all terminal sessions." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -147,7 +142,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_terminal_list",
       description: "List all active terminal sessions with their IDs, shells, working directories, and statuses.",
       inputSchema: buildSchema({
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -160,7 +155,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       description: "Close a terminal session and release its resources.",
       inputSchema: buildSchema({
         terminalSessionId: terminalSessionIdProperty,
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -175,7 +170,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       description: "Resume a terminal session from persisted daemon state after daemon restart or shutdown recovery.",
       inputSchema: buildSchema({
         terminalSessionId: { ...terminalSessionIdProperty, description: "Terminal session ID to resume from persisted state." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);
@@ -190,7 +185,7 @@ export function buildTerminalTools(api: BrowserControlAPI): McpTool[] {
       description: "Get resume status and metadata for a terminal session.",
       inputSchema: buildSchema({
         terminalSessionId: { ...terminalSessionIdProperty, description: "Terminal session ID to inspect." },
-        sessionId: browserControlSessionProperty,
+        sessionId: sessionIdSchema,
       }, ["terminalSessionId"]),
       handler: async (params) => {
         useBrowserControlSession(api, params);

@@ -10,7 +10,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
+import { buildSchema, resolveMcpSessionId, sessionIdSchema } from "../types";
 import { HealthCheck } from "../../runtime/health_check";
 import { isPolicyAllowed, type PolicyAllowResult } from "../../session_manager";
 import type { ActionResult } from "../../shared/action_result";
@@ -38,10 +38,10 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       description: "Run health checks on the Browser Control runtime: CDP connectivity, memory store, proxy pool, CAPTCHA config, OpenRouter config, disk space, browser state, data directories, config validity, daemon broker, and system memory. Returns an overall health status and per-check results.",
       inputSchema: buildSchema({
         port: { type: "number", description: "CDP port to check. Default: 9222.", default: 9222 },
-        sessionId: { type: "string", description: "Session ID for policy context. Defaults to 'system'.", default: "system" },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
-        const sessionId = (params.sessionId as string | undefined) ?? "system";
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = evaluateDebugPolicy(api, "debug_health", params, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
@@ -68,11 +68,11 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       description: "Retrieve a debug bundle by ID. Debug bundles contain structured evidence about failed actions including browser state, terminal output, console logs, network events, and recovery guidance.",
       inputSchema: buildSchema({
         bundleId: { type: "string", description: "The debug bundle ID to retrieve." },
-        sessionId: { type: "string", description: "Session ID for policy context. Defaults to 'system'.", default: "system" },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         const bundleId = params.bundleId as string;
-        const sessionId = (params.sessionId as string | undefined) ?? "system";
+        const sessionId = resolveMcpSessionId(api, params);
         if (!bundleId) {
           return {
             success: false,
@@ -116,10 +116,10 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_debug_get_console",
       description: "Get captured browser console entries for a session. Returns log, warn, error, info, and debug entries with timestamps and source locations.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Session ID to get console entries for. Default: 'default'.", default: "default" },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
-        const sessionId = (params.sessionId as string) ?? "default";
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = evaluateDebugPolicy(api, "debug_console_read", { sessionId }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
         const entries = getGlobalConsoleCapture().getEntries(sessionId);
@@ -140,10 +140,10 @@ export function buildDebugTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_debug_get_network",
       description: "Get captured browser network entries for a session. Returns request failures and HTTP errors with URL, method, status, and duration.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Session ID to get network entries for. Default: 'default'.", default: "default" },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
-        const sessionId = (params.sessionId as string) ?? "default";
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = evaluateDebugPolicy(api, "debug_network_read", { sessionId }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
         const entries = getGlobalNetworkCapture().getEntries(sessionId);

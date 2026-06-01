@@ -10,7 +10,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema, sessionIdSchema } from "../types";
+import { buildSchema, resolveMcpSessionId, sessionIdSchema } from "../types";
 import { isPolicyAllowed } from "../../session_manager";
 
 export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
@@ -19,12 +19,13 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_provider_list",
       description: "List available browser providers and the active provider.",
       inputSchema: buildSchema({ sessionId: sessionIdSchema }),
-      handler: async () => {
+      handler: async (params) => {
+        const sessionId = resolveMcpSessionId(api, params);
         const result = api.provider.list();
         return {
           success: true,
           path: "command",
-          sessionId: "mcp",
+          sessionId,
           data: result,
           completedAt: new Date().toISOString(),
         };
@@ -35,8 +36,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       description: "List supported browser provider types, setup requirements, capabilities, and risk labels.",
       inputSchema: buildSchema({ sessionId: sessionIdSchema }),
       handler: async (params) => {
-        const sessionId = (params.sessionId as string | undefined) ?? "mcp";
-        if (params.sessionId) api.session.use(sessionId);
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = api.sessionManager.evaluateAction("browser_provider_catalog", {}, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
@@ -66,8 +66,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
       }, ["name"]),
       handler: async (params) => {
         const name = String(params.name);
-        const sessionId = (params.sessionId as string | undefined) ?? "mcp";
-        if (params.sessionId) api.session.use(sessionId);
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = api.sessionManager.evaluateAction("browser_provider_use", { name }, sessionId);
         if (!isPolicyAllowed(policyEval)) return policyEval;
 
@@ -100,8 +99,7 @@ export function buildProviderTools(api: BrowserControlAPI): McpTool[] {
         },
       }),
       handler: async (params) => {
-        const sessionId = (params.sessionId as string | undefined) ?? "mcp";
-        if (params.sessionId) api.session.use(sessionId);
+        const sessionId = resolveMcpSessionId(api, params);
         const policyEval = api.sessionManager.evaluateAction(
           "browser_provider_health",
           { name: params.name },

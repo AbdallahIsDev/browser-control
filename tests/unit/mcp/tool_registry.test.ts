@@ -5,7 +5,7 @@ import {
   createLazyToolRegistry,
   getToolCategories,
 } from "../../../src/mcp/tool_registry";
-import { actionResultToMcpResult, mcpErrorResult, validateToolParams } from "../../../src/mcp/types";
+import { actionResultToMcpResult, mcpErrorResult, sessionIdSchema, validateToolParams } from "../../../src/mcp/types";
 import { createBrowserControl, type BrowserControlAPI } from "../../../src/browser_control";
 import { MemoryStore } from "../../../src/memory_store";
 import * as os from "node:os";
@@ -1066,13 +1066,15 @@ describe("MCP Tool Registry", () => {
       }
     });
 
-    it("debug health and failure bundle tools expose optional sessionId", () => {
+    it("all MCP sessionId inputs use the shared optional schema without defaults", () => {
       const tools = buildToolRegistry(api);
-      for (const name of ["bc_debug_health", "bc_debug_failure_bundle"]) {
-        const tool = tools.find((candidate) => candidate.name === name)!;
-        assert.ok("sessionId" in tool.inputSchema.properties, `${name} should expose sessionId`);
-        assert.equal(tool.inputSchema.properties.sessionId.default, "system");
-        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${name} should not require sessionId`);
+      for (const tool of tools) {
+        const property = tool.inputSchema.properties.sessionId;
+        if (!property) continue;
+
+        assert.deepEqual(property, sessionIdSchema, `${tool.name} should reuse shared sessionId schema`);
+        assert.equal((property as { default?: unknown }).default, undefined, `${tool.name} should not advertise a sessionId default`);
+        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${tool.name} should not require sessionId`);
       }
     });
 

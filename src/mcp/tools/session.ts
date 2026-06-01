@@ -12,7 +12,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
+import { buildSchema, sessionIdSchema } from "../types";
 
 /**
  * Build session MCP tools for a Browser Control instance.
@@ -65,7 +65,7 @@ export function buildSessionTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_session_status",
       description: "Get the status of the active session or a specific session.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Session ID to check. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) {

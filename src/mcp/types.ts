@@ -12,6 +12,7 @@
  */
 
 import type { ActionResult } from "../shared/action_result";
+import type { BrowserControlAPI } from "../browser_control";
 import { redactString } from "../observability/redaction";
 
 function stringifyMcpJson(value: unknown): string {
@@ -145,6 +146,17 @@ export const sessionIdSchema = {
   type: "string",
   description: "Browser Control session ID. If omitted, uses the active session.",
 } as const;
+
+export function resolveMcpSessionId(
+  api: BrowserControlAPI,
+  params: Record<string, unknown>,
+): string {
+  if (typeof params.sessionId === "string" && params.sessionId.length > 0) {
+    api.session.use(params.sessionId);
+    return params.sessionId;
+  }
+  return api.sessionManager.getActiveSession()?.id ?? "default";
+}
 
 /**
  * Build a tool input schema from properties and required fields.

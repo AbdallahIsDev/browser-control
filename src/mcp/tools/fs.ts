@@ -16,7 +16,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
+import { buildSchema, sessionIdSchema } from "../types";
 
 /**
  * Build filesystem MCP tools for a Browser Control instance.
@@ -29,7 +29,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         path: { type: "string", description: "File path to read." },
         maxBytes: { type: "number", description: "Maximum bytes to read." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["path"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -47,7 +47,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
         path: { type: "string", description: "File path to write." },
         content: { type: "string", description: "Content to write." },
         createDirs: { type: "boolean", description: "Create parent directories if they don't exist. Default: true.", default: true },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["path", "content"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -65,7 +65,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         filename: { type: "string", description: "Filename relative to the active session runtime directory." },
         content: { type: "string", description: "Content to write." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["filename", "content"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -83,7 +83,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
         path: { type: "string", description: "Directory path to list. Default: current working directory.", default: "." },
         recursive: { type: "boolean", description: "Recurse into subdirectories.", default: false },
         extension: { type: "string", description: "Filter by file extension (e.g., '.ts')." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -101,7 +101,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       inputSchema: buildSchema({
         src: { type: "string", description: "Source path." },
         dst: { type: "string", description: "Destination path." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["src", "dst"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -119,7 +119,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
         path: { type: "string", description: "Path to delete." },
         recursive: { type: "boolean", description: "Allow recursive directory deletion.", default: false },
         force: { type: "boolean", description: "Don't throw if path doesn't exist.", default: false },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["path"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -136,7 +136,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       description: "Get file or directory metadata (size, type, modified time, permissions).",
       inputSchema: buildSchema({
         path: { type: "string", description: "Path to stat." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["path"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);

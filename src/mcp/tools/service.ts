@@ -10,7 +10,7 @@
 
 import type { BrowserControlAPI } from "../../browser_control";
 import type { McpTool } from "../types";
-import { buildSchema } from "../types";
+import { buildSchema, sessionIdSchema } from "../types";
 
 /**
  * Build service MCP tools for a Browser Control instance.
@@ -21,7 +21,7 @@ export function buildServiceTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_service_list",
       description: "List all registered local services with their names, ports, protocols, and paths.",
       inputSchema: buildSchema({
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
@@ -34,7 +34,7 @@ export function buildServiceTools(api: BrowserControlAPI): McpTool[] {
       description: "Resolve a service name to its local URL. Supports explicit bc:// references and bare registered names. Returns an error if the service is unknown or not responding.",
       inputSchema: buildSchema({
         name: { type: "string", description: "Service name to resolve (e.g., 'trading-dashboard' or 'bc://trading-dashboard')." },
-        sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
+        sessionId: sessionIdSchema,
       }, ["name"]),
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);

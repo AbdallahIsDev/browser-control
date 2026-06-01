@@ -2,7 +2,7 @@ import type { BrowserControlAPI } from "../../browser_control";
 import { CredentialVault } from "../../security/credential_vault";
 import { NetworkRuleEngine } from "../../security/network_rules";
 import { successResult } from "../../shared/action_result";
-import { buildSchema, type McpTool } from "../types";
+import { buildSchema, resolveMcpSessionId, sessionIdSchema, type McpTool } from "../types";
 
 export function buildSecurityTools(api: BrowserControlAPI): McpTool[] {
 	return [
@@ -10,12 +10,13 @@ export function buildSecurityTools(api: BrowserControlAPI): McpTool[] {
 			name: "bc_vault_list",
 			description:
 				"List credential vault entries without secret values. Raw secrets are never returned.",
-			inputSchema: buildSchema({}),
-			handler: async () => {
+			inputSchema: buildSchema({ sessionId: sessionIdSchema }),
+			handler: async (params) => {
+				const sessionId = resolveMcpSessionId(api, params);
 				const vault = new CredentialVault(api.state);
 				return successResult(await vault.list(), {
 					path: "command",
-					sessionId: "system",
+					sessionId,
 				});
 			},
 		},
@@ -23,12 +24,13 @@ export function buildSecurityTools(api: BrowserControlAPI): McpTool[] {
 			name: "bc_network_rules_list",
 			description:
 				"List privacy network rules, including user rules and built-in tracker rules.",
-			inputSchema: buildSchema({}),
-			handler: async () => {
+			inputSchema: buildSchema({ sessionId: sessionIdSchema }),
+			handler: async (params) => {
+				const sessionId = resolveMcpSessionId(api, params);
 				const engine = new NetworkRuleEngine(api.state);
 				return successResult(await engine.listRules(), {
 					path: "command",
-					sessionId: "system",
+					sessionId,
 				});
 			},
 		},
@@ -37,15 +39,10 @@ export function buildSecurityTools(api: BrowserControlAPI): McpTool[] {
 			description:
 				"List recent blocked/aborted network request evidence for a session.",
 			inputSchema: buildSchema({
-				sessionId: {
-					type: "string",
-					description: "Session ID. Default: default.",
-					default: "default",
-				},
+				sessionId: sessionIdSchema,
 			}),
 			handler: async (params) => {
-				const sessionId =
-					typeof params.sessionId === "string" ? params.sessionId : "default";
+				const sessionId = resolveMcpSessionId(api, params);
 				const entries = api.debug.network({ sessionId }).filter((entry) => {
 					const status = (entry as { status?: number | string }).status;
 					const errorText = String((entry as { error?: unknown }).error ?? "");
