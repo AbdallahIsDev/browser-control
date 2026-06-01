@@ -58,6 +58,17 @@ test("scripts/launch_browser.cjs exists and bootstraps ts-node", () => {
   assert.match(shim, /tsconfig\.json/);
 });
 
+test("scripts/launch_browser.cjs checks Node.js version before ts-node bootstrap", () => {
+  const shim = fs.readFileSync(path.join(repoRoot, "scripts", "launch_browser.cjs"), "utf8");
+  const versionCheckIndex = shim.indexOf("process.versions.node");
+  const tsNodeIndex = shim.indexOf('require("ts-node")');
+
+  assert.ok(versionCheckIndex >= 0, "shim should inspect process.versions.node");
+  assert.ok(tsNodeIndex > versionCheckIndex, "Node version check should run before ts-node bootstrap");
+  assert.match(shim, /requires Node\.js >=\$\{MIN_NODE_MAJOR\}/);
+  assert.match(shim, /process\.exit\(1\)/);
+});
+
 // ── Behavioral tests of launcher helpers (loaded via ts-node) ────────
 
 let launcher;
