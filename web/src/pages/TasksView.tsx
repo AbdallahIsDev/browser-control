@@ -13,8 +13,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { apiFetch } from "../api";
-import type { Task, TaskListResponse } from "../types";
+import { ApiFetchError, apiFetch } from "../api";
+import type { ApiErrorBody, Task, TaskListResponse } from "../types";
 
 const TASKS_POLL_MS = 5000;
 
@@ -24,6 +24,24 @@ const STATUS_MAP: Record<string, "ok" | "warn" | "neutral" | "info"> = {
 	completed: "ok",
 	failed: "warn",
 };
+
+function taskAvailabilityFromError(error: unknown): TaskListResponse | null {
+	if (!(error instanceof ApiFetchError)) return null;
+	const body = error.body as ApiErrorBody | undefined;
+	if (body?.code !== "capability_unavailable") return null;
+	const details =
+		body.details && typeof body.details === "object"
+			? (body.details as Partial<TaskListResponse>)
+			: {};
+	return {
+		tasks: Array.isArray(details.tasks) ? details.tasks : [],
+		available: false,
+		code: body.code,
+		error: body.error,
+		recovery:
+			typeof details.recovery === "string" ? details.recovery : undefined,
+	};
+}
 
 export function TasksView() {
 	const [tasks, setTasks] = useState<Task[]>([]);
@@ -52,6 +70,13 @@ export function TasksView() {
 				})
 				.catch((err: unknown) => {
 					if (cancelled) return;
+					const unavailable = taskAvailabilityFromError(err);
+					if (unavailable) {
+						setTasks([]);
+						setAvailability(unavailable);
+						setError("");
+						return;
+					}
 					setError(err instanceof Error ? err.message : String(err));
 				})
 				.finally(() => {

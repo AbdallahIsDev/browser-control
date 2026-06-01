@@ -38,6 +38,16 @@ export interface TaskListResponse {
 	recovery?: string;
 }
 
+export interface ApiErrorBody {
+	success: false;
+
+	code: string;
+
+	error: string;
+
+	details?: unknown;
+}
+
 export interface Automation {
 	id: string;
 

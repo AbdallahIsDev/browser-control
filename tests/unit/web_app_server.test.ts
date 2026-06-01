@@ -2285,19 +2285,81 @@ test("web app server returns readable tasks availability when broker is unreacha
 	});
 	assert.equal(
 		tasks.status,
-		200,
-		"Tasks list should stay readable when broker is unreachable",
+		503,
+		"Tasks list should return a standard capability error when broker is unreachable",
 	);
 	const body = (await tasks.json()) as {
+		success: boolean;
 		code: string;
-		available: boolean;
-		tasks: unknown[];
 		error: string;
+		details: { available: boolean; tasks: unknown[]; recovery: string };
 	};
+	assert.equal(body.success, false);
 	assert.equal(body.code, "capability_unavailable");
-	assert.equal(body.available, false);
-	assert.deepEqual(body.tasks, []);
+	assert.equal(body.details.available, false);
+	assert.deepEqual(body.details.tasks, []);
+	assert.match(body.details.recovery, /bc daemon/);
 	assert.match(body.error, /task runtime is offline/i);
+});
+
+test("web app server uses standard API error contract", async (t) => {
+	const previousPort = process.env.BROKER_PORT;
+	process.env.BROKER_PORT = "19999";
+	t.after(() => {
+		if (previousPort === undefined) delete process.env.BROKER_PORT;
+		else process.env.BROKER_PORT = previousPort;
+	});
+
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+	const headers = {
+		"content-type": "application/json",
+		authorization: "Bearer test-token",
+	};
+
+	const cleanup = await fetch(`${info.url}/api/data/cleanup`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ dryRun: false }),
+	});
+	assert.equal(cleanup.status, 400);
+	assert.deepEqual(await cleanup.json(), {
+		success: false,
+		code: "confirmation_required",
+		error: "Destructive cleanup requires explicit confirmation.",
+		details: { requiredConfirm: "DELETE_RUNTIME_TEMP" },
+	});
+
+	const badGrant = await fetch(`${info.url}/api/vault/grants`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ action: "invalid" }),
+	});
+	assert.equal(badGrant.status, 400);
+	assert.deepEqual(await badGrant.json(), {
+		success: false,
+		code: "bad_request",
+		error: "Invalid grant action.",
+	});
+
+	const submitTask = await fetch(`${info.url}/api/tasks`, {
+		method: "POST",
+		headers,
+		body: JSON.stringify({ prompt: "offline" }),
+	});
+	assert.equal(submitTask.status, 503);
+	const taskBody = (await submitTask.json()) as {
+		success: boolean;
+		code: string;
+		error: string;
+		details?: unknown;
+	};
+	assert.equal(taskBody.success, false);
+	assert.equal(taskBody.code, "capability_unavailable");
+	assert.match(taskBody.error, /task runtime is offline/i);
+	assert.deepEqual(taskBody.details, { cause: "broker_unreachable" });
+	assert.doesNotMatch(JSON.stringify(taskBody), /fetch failed|ECONNREFUSED/iu);
 });
 
 test("web app server exposes data and package endpoints without trading product routes", async (t) => {

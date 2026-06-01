@@ -58,10 +58,14 @@ export interface WebApiError {
 		| "forbidden"
 		| "not_found"
 		| "method_not_allowed"
+		| "confirmation_required"
 		| "capability_unavailable"
+		| "policy_denied"
+		| "rate_limited"
 		| "internal_error";
 	error: string;
 	actionResult?: ActionResult;
+	details?: unknown;
 }
 
 export interface TerminalExecBody {

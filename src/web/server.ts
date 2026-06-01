@@ -48,6 +48,7 @@ import {
 } from "./security";
 import type {
 	PersistedWebAppServerInfo,
+	WebApiError,
 	WebAppServerInfo,
 	WebCapabilities,
 } from "./types";
@@ -57,6 +58,25 @@ const webLogger = logger.withComponent("web");
 function errorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	return String(error);
+}
+
+function apiError(
+	code: WebApiError["code"],
+	error: string,
+	options: {
+		actionResult?: WebApiError["actionResult"];
+		details?: unknown;
+	} = {},
+): WebApiError {
+	return {
+		success: false,
+		code,
+		error,
+		...(options.actionResult ? { actionResult: options.actionResult } : {}),
+		...(options.details !== undefined
+			? { details: redactObject(options.details) }
+			: {}),
+	};
 }
 
 function recordReplayAction(
@@ -92,6 +112,13 @@ const WEB_RATE_LIMIT_WINDOW_MS = 60_000;
 const WEB_UNAUTHENTICATED_RATE_LIMIT = 60;
 const WEB_AUTHENTICATED_RATE_LIMIT = 300;
 const WEB_RATE_LIMIT_MAX_BUCKETS = 10_000;
+const TASK_RUNTIME_OFFLINE_ERROR =
+	"Task runtime is offline. Start Browser Control daemon to queue and monitor tasks.";
+const TASK_RUNTIME_SUBMIT_OFFLINE_ERROR =
+	"Task runtime is offline. Start Browser Control daemon before submitting tasks.";
+const TASK_RUNTIME_RECOVERY =
+	"Run `bc daemon` or start the desktop app. Task history will load automatically when the runtime reconnects.";
+const BROKER_UNAVAILABLE_DETAILS = { cause: "broker_unreachable" };
 
 interface WebRateLimitEntry {
 	key: string;
@@ -1084,18 +1111,24 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/vault") {
 			const body = await readJsonBody(request);
 			if (body.yes !== true && body.confirm !== "STORE_SECRET") {
-				json(response, 400, {
-					success: false,
-					error: "Secret storage requires yes=true or confirm=STORE_SECRET.",
-				});
+				json(
+					response,
+					400,
+					apiError(
+						"confirmation_required",
+						"Secret storage requires yes=true or confirm=STORE_SECRET.",
+						{ details: { requiredConfirm: "STORE_SECRET" } },
+					),
+				);
 				return;
 			}
 			const scope = asString(body.scope, "scope");
 			if (scope !== "site" && scope !== "package" && scope !== "workflow") {
-				json(response, 400, {
-					success: false,
-					error: "scope must be site, package, or workflow.",
-				});
+				json(
+					response,
+					400,
+					apiError("bad_request", "scope must be site, package, or workflow."),
+				);
 				return;
 			}
 			const { CredentialVault } = await import("../security/credential_vault");
@@ -1134,10 +1167,15 @@ export function createWebAppServer(
 				unknown
 			>;
 			if (body.confirm !== "DELETE_SECRET") {
-				json(response, 400, {
-					success: false,
-					error: "Secret deletion requires confirm=DELETE_SECRET.",
-				});
+				json(
+					response,
+					400,
+					apiError(
+						"confirmation_required",
+						"Secret deletion requires confirm=DELETE_SECRET.",
+						{ details: { requiredConfirm: "DELETE_SECRET" } },
+					),
+				);
 				return;
 			}
 			const secretId = decodeURIComponent(vaultDeleteMatch[1] ?? "");
@@ -1189,7 +1227,7 @@ export function createWebAppServer(
 				actions.length === 0 ||
 				actions.some((action) => !validSecretActions.includes(action))
 			) {
-				json(response, 400, { success: false, error: "Invalid grant action." });
+				json(response, 400, apiError("bad_request", "Invalid grant action."));
 				return;
 			}
 			const { CredentialVault } = await import("../security/credential_vault");
@@ -1279,7 +1317,7 @@ export function createWebAppServer(
 				ruleType !== "denylist" &&
 				ruleType !== "tracker"
 			) {
-				json(response, 400, { success: false, error: "Invalid ruleType." });
+				json(response, 400, apiError("bad_request", "Invalid ruleType."));
 				return;
 			}
 			const { NetworkRuleEngine } = await import("../security/network_rules");
@@ -1424,10 +1462,11 @@ export function createWebAppServer(
 			const body = await readJsonBody(request);
 			const action = asString(body.action, "action");
 			if (action !== "list" && action !== "respond") {
-				json(response, 400, {
-					success: false,
-					error: "action must be 'list' or 'respond'.",
-				});
+				json(
+					response,
+					400,
+					apiError("bad_request", "action must be 'list' or 'respond'."),
+				);
 				return;
 			}
 			const result = await api.browser.dialog({
@@ -1542,11 +1581,15 @@ export function createWebAppServer(
 			const { setUserConfigValue } = await import("../shared/config");
 			const modelKey = asOptionalString(body.modelKey);
 			if (modelKey && body.confirm !== "STORE_MODEL_API_KEY") {
-				json(response, 403, {
-					success: false,
-					code: "confirmation_required",
-					error: "Saving a model API key requires confirm=STORE_MODEL_API_KEY.",
-				});
+				json(
+					response,
+					403,
+					apiError(
+						"confirmation_required",
+						"Saving a model API key requires confirm=STORE_MODEL_API_KEY.",
+						{ details: { requiredConfirm: "STORE_MODEL_API_KEY" } },
+					),
+				);
 				return;
 			}
 			const saved = [
@@ -1565,7 +1608,7 @@ export function createWebAppServer(
 			const body = await readJsonBody(request);
 			const token = asOptionalString(body.token);
 			if (!token) {
-				json(response, 400, { success: false, error: "token is required" });
+				json(response, 400, apiError("bad_request", "token is required"));
 				return;
 			}
 			const { startLocalApi } = await import("../model_router");
@@ -1612,11 +1655,13 @@ export function createWebAppServer(
 		if (request.method === "POST" && pathname === "/api/recordings/stop") {
 			const { getRecorder } = await import("../observability/recorder");
 			const session = getRecorder().stop();
-			json(response, session ? 200 : 404, {
-				success: Boolean(session),
-				data: session,
-				...(session ? {} : { error: "No active recording session" }),
-			});
+			json(
+				response,
+				session ? 200 : 404,
+				session
+					? { success: true, data: session }
+					: apiError("not_found", "No active recording session"),
+			);
 			return;
 		}
 
@@ -1632,10 +1677,11 @@ export function createWebAppServer(
 			} = await import("../observability/recorder");
 			const session = getRecorder().getSession(id);
 			if (!session) {
-				json(response, 404, {
-					success: false,
-					error: `Recording not found: ${id}`,
-				});
+				json(
+					response,
+					404,
+					apiError("not_found", `Recording not found: ${id}`),
+				);
 				return;
 			}
 			json(response, 200, {
@@ -1662,10 +1708,11 @@ export function createWebAppServer(
 			);
 			const session = getRecorder().getSession(id);
 			if (!session) {
-				json(response, 404, {
-					success: false,
-					error: `Recording not found: ${id}`,
-				});
+				json(
+					response,
+					404,
+					apiError("not_found", `Recording not found: ${id}`),
+				);
 				return;
 			}
 			try {
@@ -1683,10 +1730,7 @@ export function createWebAppServer(
 					...(install?.error ? { error: install.error } : {}),
 				});
 			} catch (error) {
-				json(response, 400, {
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
-				});
+				json(response, 400, apiError("bad_request", errorMessage(error)));
 			}
 			return;
 		}
@@ -1702,10 +1746,7 @@ export function createWebAppServer(
 			const key = decodeURIComponent(configKeyMatch[1] ?? "");
 			const mutationError = getDashboardConfigMutationError(key);
 			if (mutationError) {
-				json(response, 403, {
-					success: false,
-					error: mutationError,
-				});
+				json(response, 403, apiError("forbidden", mutationError));
 				return;
 			}
 			const body = await readJsonBody(request);
@@ -1764,11 +1805,11 @@ export function createWebAppServer(
 			);
 			const bundle = api.debug.bundle(bundleId);
 			if (!bundle) {
-				json(response, 404, {
-					success: false,
-					code: "not_found",
-					error: `Debug bundle not found: ${bundleId}`,
-				});
+				json(
+					response,
+					404,
+					apiError("not_found", `Debug bundle not found: ${bundleId}`),
+				);
 				return;
 			}
 			json(response, 200, bundle);
@@ -1803,11 +1844,14 @@ export function createWebAppServer(
 			const afterPath = asString(body.afterPath, "afterPath");
 			const { isSafeArtifactPath } = await import("../shared/paths");
 			if (!isSafeArtifactPath(beforePath) || !isSafeArtifactPath(afterPath)) {
-				json(response, 400, {
-					success: false,
-					error:
+				json(
+					response,
+					400,
+					apiError(
+						"bad_request",
 						"beforePath and afterPath must be under Browser Control data home",
-				});
+					),
+				);
 				return;
 			}
 			const { computePixelDiff } = await import("../observability/visual_diff");
@@ -1885,20 +1929,23 @@ export function createWebAppServer(
 			const { buildReplayView } = await import("../observability/visual_diff");
 			const session = getRecorder().getSession(replayId);
 			if (!session) {
-				json(response, 404, {
-					success: false,
-					error: "Replay recording not found",
-				});
+				json(
+					response,
+					404,
+					apiError("not_found", "Replay recording not found"),
+				);
 				return;
 			}
 			const workflow = convertRecordingToWorkflow(session);
 			const result = await api.workflow.run(JSON.stringify(workflow));
 			if (!result.success) {
-				json(response, 400, {
-					success: false,
-					error: result.error ?? "Replay execution failed",
-					policyDecision: result.policyDecision,
-				});
+				json(
+					response,
+					400,
+					apiError("policy_denied", result.error ?? "Replay execution failed", {
+						actionResult: result,
+					}),
+				);
 				return;
 			}
 			const run = result.data as import("../workflows/types").WorkflowRun;
@@ -2088,12 +2135,15 @@ export function createWebAppServer(
 			};
 
 			if (body.dryRun === false && body.confirm !== "DELETE_RUNTIME_TEMP") {
-				json(response, 400, {
-					success: false,
-					error: "Destructive cleanup requires explicit confirmation.",
-					code: "CONFIRMATION_REQUIRED",
-					requiredConfirm: "DELETE_RUNTIME_TEMP",
-				});
+				json(
+					response,
+					400,
+					apiError(
+						"confirmation_required",
+						"Destructive cleanup requires explicit confirmation.",
+						{ details: { requiredConfirm: "DELETE_RUNTIME_TEMP" } },
+					),
+				);
 				return;
 			}
 
@@ -2944,16 +2994,18 @@ export function createWebAppServer(
 			try {
 				json(response, 200, await fetchBrokerJson("/api/v1/tasks"));
 			} catch {
-				json(response, 200, {
-					success: false,
-					available: false,
-					tasks: [],
-					code: "capability_unavailable",
-					error:
-						"Task runtime is offline. Start Browser Control daemon to queue and monitor tasks.",
-					recovery:
-						"Run `bc daemon` or start the desktop app. Task history will load automatically when the runtime reconnects.",
-				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", TASK_RUNTIME_OFFLINE_ERROR, {
+						details: {
+							...BROKER_UNAVAILABLE_DETAILS,
+							available: false,
+							tasks: [],
+							recovery: TASK_RUNTIME_RECOVERY,
+						},
+					}),
+				);
 			}
 			return;
 		}
@@ -2973,13 +3025,18 @@ export function createWebAppServer(
 				});
 				json(response, 202, result);
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
-					error:
-						"Task runtime is offline. Start Browser Control daemon before submitting tasks.",
-					details: errorMessage(e),
+				webLogger.debug("Task submission broker request failed", {
+					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError(
+						"capability_unavailable",
+						TASK_RUNTIME_SUBMIT_OFFLINE_ERROR,
+						{ details: BROKER_UNAVAILABLE_DETAILS },
+					),
+				);
 			}
 			return;
 		}
@@ -2996,11 +3053,16 @@ export function createWebAppServer(
 					await fetchBrokerJson(`/api/v1/tasks/${id}/status`),
 				);
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
+				webLogger.debug("Task status broker request failed", {
 					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", "Task runtime is offline.", {
+						details: BROKER_UNAVAILABLE_DETAILS,
+					}),
+				);
 			}
 			return;
 		}
@@ -3009,11 +3071,16 @@ export function createWebAppServer(
 			try {
 				json(response, 200, await fetchBrokerJson("/api/v1/scheduler"));
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
+				webLogger.debug("Automation list broker request failed", {
 					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", "Automation runtime is offline.", {
+						details: BROKER_UNAVAILABLE_DETAILS,
+					}),
+				);
 			}
 			return;
 		}
@@ -3033,11 +3100,16 @@ export function createWebAppServer(
 				});
 				json(response, 200, result);
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
+				webLogger.debug("Automation schedule broker request failed", {
 					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", "Automation runtime is offline.", {
+						details: BROKER_UNAVAILABLE_DETAILS,
+					}),
+				);
 			}
 			return;
 		}
@@ -3058,11 +3130,16 @@ export function createWebAppServer(
 					}),
 				);
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
+				webLogger.debug("Automation state broker request failed", {
 					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", "Automation runtime is offline.", {
+						details: BROKER_UNAVAILABLE_DETAILS,
+					}),
+				);
 			}
 			return;
 		}
@@ -3083,11 +3160,16 @@ export function createWebAppServer(
 					}),
 				);
 			} catch (e: unknown) {
-				json(response, 503, {
-					success: false,
-					code: "capability_unavailable",
+				webLogger.debug("Automation delete broker request failed", {
 					error: errorMessage(e),
 				});
+				json(
+					response,
+					503,
+					apiError("capability_unavailable", "Automation runtime is offline.", {
+						details: BROKER_UNAVAILABLE_DETAILS,
+					}),
+				);
 			}
 			return;
 		}

@@ -26,6 +26,18 @@ if (hashToken) {
 	);
 }
 
+export class ApiFetchError extends Error {
+	status: number;
+	body: unknown;
+
+	constructor(message: string, status: number, body: unknown) {
+		super(message);
+		this.name = "ApiFetchError";
+		this.status = status;
+		this.body = body;
+	}
+}
+
 export async function apiFetch<T>(
 	path: string,
 	options: RequestInit = {},
@@ -60,7 +72,7 @@ export async function apiFetch<T>(
 			typeof body === "string"
 				? body || response.statusText
 				: (body as { error?: string })?.error || response.statusText;
-		throw new Error(errorMessage);
+		throw new ApiFetchError(errorMessage, response.status, body);
 	}
 
 	return body as T;
