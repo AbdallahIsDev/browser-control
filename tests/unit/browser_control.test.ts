@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createBrowserControl, type BrowserControlOptions } from "../../src/browser_control";
-import { MemoryStore } from "../../src/memory_store";
+import { MemoryStore } from "../../src/memory_store";
+import { successResult } from "../../src/shared/action_result";
 
 describe("createBrowserControl", () => {
   let store: MemoryStore;
@@ -40,7 +41,33 @@ describe("createBrowserControl", () => {
     }
   });
 
-  it("browser namespace exposes provider management per Section 15", () => {
+  it("direct browser actions do not fetch compact state by default", async () => {
+
+    const bc = createBrowserControl({ memoryStore: store });
+    let stateCalls = 0;
+
+    (bc.browserActions as any).runQueuedAction = async (_actionName: string, run: () => Promise<unknown>) => run();
+    (bc.browserActions as any).click = async () =>
+      successResult({ clicked: "@e1", tabId: "tab-1" }, { path: "a11y", sessionId: "test" });
+    (bc.browserActions as any).browserState = async () => {
+      stateCalls += 1;
+      return successResult(
+        { browserConnected: true, tabCount: 1, dialogCount: 0, warnings: [], status: {} },
+        { path: "a11y", sessionId: "test" },
+      );
+    };
+
+    const result = await bc.browser.click({ target: "@e1" });
+
+    assert.equal(result.success, true);
+    assert.equal(stateCalls, 0);
+    assert.equal((result.data as any).state, undefined);
+
+  });
+
+
+
+  it("browser namespace exposes provider management per Section 15", () => {
     const bc = createBrowserControl({ memoryStore: store });
 
     assert.ok(bc.browser.provider, "browser.provider namespace missing");

@@ -3502,7 +3502,7 @@ describe("BrowserActions", () => {
 			}
 		});
 
-		it("uses the remaining active tab for tab-close compact state", async () => {
+		it("uses the remaining active tab for requested tab-close compact state", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const targetPage = createMockPage("https://closing.example/");
 			const remainingPage = createMockPage("https://remaining.example/");
@@ -3524,6 +3524,7 @@ describe("BrowserActions", () => {
 				const result = await actions.browserAct({
 					action: "tab-close",
 					tabId: targetPage.targetId,
+					captureOnSuccess: true,
 				});
 
 				assert.equal(result.success, true);
@@ -3575,7 +3576,7 @@ describe("BrowserActions", () => {
 			}
 		});
 
-		it("includes compact state after a successful action by default", async () => {
+		it("does not fetch compact state after a successful action by default", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const page = createMockPage("https://example.test/");
 			const manager = createConnectedBrowserManager([page]);
@@ -3596,14 +3597,41 @@ describe("BrowserActions", () => {
 				assert.equal(result.success, true);
 				assert.ok(result.data);
 				const state = result.data!.state as BrowserStateResult | undefined;
+				assert.equal(state, undefined);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("includes post-action state when snapshot is requested", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "press",
+					key: "Tab",
+					snapshot: true,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				const state = result.data!.state as BrowserStateResult | undefined;
 				assert.ok(state);
 				assert.equal(state.browserConnected, true);
 				assert.equal(state.url, "https://example.test/");
 				assert.equal(state.tabCount, 1);
 				assert.equal(state.dialogCount, 0);
-				assert.equal(state.snapshot, undefined);
-				assert.equal(state.screenshot, undefined);
-				assert.equal(state.status.snapshot, "skipped");
+				assert.ok(state.snapshot);
+				assert.equal(state.status.snapshot, "ok");
 			} finally {
 				isolatedStore.close();
 			}

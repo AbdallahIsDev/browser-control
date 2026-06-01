@@ -843,7 +843,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_act",
-      description: "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). Auto-returns compact page state; call bc_snapshot explicitly for the full accessibility tree.",
+      description: "Perform one browser action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). For post-action page state, pass snapshot=true or screenshot=true, or call bc_state explicitly.",
       inputSchema: buildSchema({
         action: { type: "string", description: "Action to perform.", enum: ["click", "fill", "press", "hover", "scroll", "type", "paste", "screenshot", "tab-close", "open", "navigate", "openMany", "capture", "captureMany", "fillMany", "state"] },
         target: { type: "string", description: "Element ref (@e3), CSS selector, or text match. Required for click/fill/hover/paste/screenshot." },
@@ -860,8 +860,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         fullPage: { type: "boolean", description: "Full-page screenshot (screenshot action only).", default: false },
         annotate: { type: "boolean", description: "Annotate screenshot action with ref labels and boxes.", default: false },
         refs: { type: "string", description: "Comma-separated refs to annotate for screenshot action when annotate is true." },
-        snapshot: { type: "boolean", description: "Include snapshot for capture/captureMany/state actions. Default: true for capture/captureMany, false for state/capture-on-success." },
-        screenshot: { type: "boolean", description: "Include screenshot for capture/state actions. Default: false.", default: false },
+        snapshot: { type: "boolean", description: "Include snapshot for capture/captureMany/state actions, or request post-action state with a snapshot for other actions. Default: true for capture/captureMany, false for state/post-action state." },
+        screenshot: { type: "boolean", description: "Include screenshot for capture/state actions, or request post-action state with a screenshot for other actions. Default: false.", default: false },
         dialog: { type: "boolean", description: "Include pending dialogs for state action. Default: true.", default: true },
         downloads: { type: "boolean", description: "Include recent downloads for state action. Default: false.", default: false },
         url: { type: "string", description: "URL for open/navigate actions." },

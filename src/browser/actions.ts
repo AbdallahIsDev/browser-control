@@ -5242,13 +5242,25 @@ export class BrowserActions {
 		const actTabId = actResult.data?.tabId as string | undefined ?? options.tabId;
 		const stateTabId = options.action === "tab-close" ? undefined : actTabId ?? options.tabId;
 
+		const shouldCapturePostAction =
+			options.action !== "state" &&
+			options.action !== "capture" &&
+			options.action !== "captureMany" &&
+			(options.captureOnSuccess === true ||
+				options.snapshot === true ||
+				(options.action !== "screenshot" && options.screenshot === true));
+
 		const state = options.action === "state"
 			? { success: true, data: actResult.data as unknown as BrowserStateResult }
-			: await this.browserState({
-				tabId: stateTabId,
-				snapshot: options.captureOnSuccess === true && options.snapshot === true,
-				screenshot: options.captureOnSuccess === true && options.screenshot === true,
-			});
+			: shouldCapturePostAction
+				? await this.browserState({
+					tabId: stateTabId,
+					snapshot: options.snapshot === true,
+					screenshot: options.screenshot === true,
+					dialog: options.dialog,
+					downloads: options.downloads,
+				})
+				: null;
 
 		return successResult({
 			action: options.action,
@@ -5257,7 +5269,7 @@ export class BrowserActions {
 			auditId,
 			path: actPath,
 			tabId: actTabId,
-			...(state.success && state.data ? { state: state.data } : {}),
+			...(state?.success && state.data ? { state: state.data } : {}),
 		}, {
 			path: actPath ?? "a11y",
 			sessionId,

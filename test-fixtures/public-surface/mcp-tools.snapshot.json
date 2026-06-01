@@ -3,7 +3,7 @@
   "tools": [
     {
       "category": "browser",
-      "description": "Perform any single action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). Auto-returns compact page state; call bc_snapshot explicitly for the full accessibility tree.",
+      "description": "Perform one browser action (click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state). For post-action page state, pass snapshot=true or screenshot=true, or call bc_state explicitly.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -128,11 +128,11 @@
           },
           "screenshot": {
             "default": false,
-            "description": "Include screenshot for capture/state actions. Default: false.",
+            "description": "Include screenshot for capture/state actions, or request post-action state with a screenshot for other actions. Default: false.",
             "type": "boolean"
           },
           "snapshot": {
-            "description": "Include snapshot for capture/captureMany/state actions. Default: true for capture/captureMany, false for state/capture-on-success.",
+            "description": "Include snapshot for capture/captureMany/state actions, or request post-action state with a snapshot for other actions. Default: true for capture/captureMany, false for state/post-action state.",
             "type": "boolean"
           },
           "tabId": {
