@@ -1052,7 +1052,7 @@ Self-Healing Harness (Section 29):
                                                                      Generate a helper
   harness execute <helperId> [--input='<json>'] [--json]             Execute a helper
 
-Browser Commands:
+Browser Shortcuts (compatibility):
   attach [--port=9222] [--cdp-url=...] [--provider=<name>] [--yes]  Attach to running Chrome/Electron
   launch [--port=9222] [--profile=default] [--provider=<name>]       Launch managed automation browser
   list [--all] [--json]                                             List attachable browsers
@@ -1102,7 +1102,7 @@ Session:
   session destroy <name-or-id>                                       Destroy a session and release owned resources
   session cleanup                                                    Remove idle sessions and enforce session cap
 
-Browser Namespace (compatibility):
+Browser Commands:
   browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]
                                                                       Attach to running Chrome/Electron
   browser launch [--port=9222] [--profile=default] [--provider=<name>]  Launch managed automation browser

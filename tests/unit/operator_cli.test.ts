@@ -900,8 +900,9 @@ test("bc --help keeps promoted browser command guidance current", () => {
 		);
 
 		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.match(result.stdout, /Browser Shortcuts \(compatibility\):/);
 		assert.match(result.stdout, /Browser Commands:/);
-		assert.match(result.stdout, /Browser Namespace \(compatibility\):/);
+		assert.doesNotMatch(result.stdout, /Browser Namespace \(compatibility\):/);
 		assert.doesNotMatch(result.stdout, /term view <sessionId>/);
 		assert.doesNotMatch(result.stdout, /Shortcut for:/);
 		assert.doesNotMatch(

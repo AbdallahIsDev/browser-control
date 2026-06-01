@@ -996,7 +996,7 @@
           "syntax": "close"
         }
       ],
-      "section": "Browser Commands"
+      "section": "Browser Shortcuts (compatibility)"
     },
     {
       "entries": [
@@ -1927,7 +1927,7 @@
           "syntax": "fs stat <path>"
         }
       ],
-      "section": "Browser Namespace (compatibility)"
+      "section": "Browser Commands"
     },
     {
       "entries": [
