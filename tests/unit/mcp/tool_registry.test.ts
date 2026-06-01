@@ -194,6 +194,21 @@ describe("MCP Tool Registry", () => {
       );
     });
 
+    it("keeps README MCP Lite list aligned with lite registry", () => {
+      const expectedNames = buildToolRegistry(api, { mode: "lite" })
+        .map((tool) => tool.name)
+        .sort();
+      const readme = fs.readFileSync(path.join(process.cwd(), "README.md"), "utf8");
+      const liteSection = readme.match(/(?:^|\r?\n)### MCP Lite\r?\n([\s\S]*?)(?:\r?\n### |\r?\n<br\/>|$)/)?.[1];
+      assert.ok(liteSection, "README.md should contain an MCP Lite section");
+
+      const documentedNames = [...liteSection.matchAll(/`(bc_[^`]+)`/g)]
+        .map((match) => match[1])
+        .sort();
+      assert.ok(documentedNames.length > 0, "README MCP Lite section should contain tool names");
+      assert.deepEqual(documentedNames, expectedNames);
+    });
+
     it("lite mode excludes single-action tools covered by bc_act", () => {
       const registry = createLazyToolRegistry(api, { mode: "lite" });
       const redundantActionTools = [

@@ -149,17 +149,17 @@ Browser Control exposes its full action surface as an MCP stdio server. AI agent
 
 | Category | Key Tools |
 |----------|----------|
-| **Status** | `status`, `bc_status` |
+| **Status** | `bc_status` |
 | **Session** | `bc_session_create`, `bc_session_list`, `bc_session_select`, `bc_session_status` |
-| **Browser** | Short primary tools such as `bc_open`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_screenshot`, `bc_tab_list`; legacy `bc_browser_*` names remain compatibility aliases |
-| **Terminal** | `terminal_open`, `terminal_exec`, `bc_terminal_read`, `write`, `interrupt`, `snapshot`, `list`, `resume`, `status` |
-| **Filesystem** | `fs_read`, `fs_write`, `fs_list`, `bc_fs_move`, `delete`, `stat` |
+| **Browser** | `bc_open`, `bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_screenshot`, `bc_close` |
+| **Terminal** | `bc_terminal_open`, `bc_terminal_exec`, `bc_terminal_read`, `bc_terminal_write`, `bc_terminal_interrupt`, `bc_terminal_snapshot`, `bc_terminal_list`, `bc_terminal_resume`, `bc_terminal_status` |
+| **Filesystem** | `bc_fs_read`, `bc_fs_write`, `bc_fs_list`, `bc_fs_move`, `bc_fs_delete`, `bc_fs_stat`, `bc_fs_write_output` |
 | **Network + Vault** | `bc_network_rules_list`, `bc_network_blocked_requests`, `bc_vault_list` |
-| **Debug** | `debug_health`, `debug_failure_bundle`, `bc_debug_get_console`, `bc_debug_get_network` |
+| **Debug** | `bc_debug_health`, `bc_debug_failure_bundle`, `bc_debug_get_console`, `bc_debug_get_network` |
 | **Service** | `bc_service_list`, `bc_service_resolve` |
-| **Workflow** | `bc_workflow_run`, `status`, `resume`, `approve`, `cancel`, `events`, `edit_state` |
-| **Harness** | `bc_harness_list`, `find_helper`, `validate_helper`, `rollback`, `generate`, `execute` |
-| **Packages** | `bc_package_install`, `list`, `info`, `update`, `remove`, `run`, `eval`, `grant`, `review`, `review_history`, `eval_history` |
+| **Workflow** | `bc_workflow_run`, `bc_workflow_status`, `bc_workflow_resume`, `bc_workflow_approve`, `bc_workflow_cancel`, `bc_workflow_events`, `bc_workflow_edit_state` |
+| **Harness** | `bc_harness_list`, `bc_harness_find_helper`, `bc_harness_validate_helper`, `bc_harness_rollback`, `bc_harness_generate`, `bc_harness_execute` |
+| **Packages** | `bc_package_install`, `bc_package_list`, `bc_package_info`, `bc_package_update`, `bc_package_remove`, `bc_package_run`, `bc_package_eval`, `bc_package_grant`, `bc_package_review`, `bc_package_review_history`, `bc_package_eval_history` |
 
 Full tool reference: [docs/mcp.md](docs/mcp.md)
 
@@ -167,9 +167,7 @@ Full tool reference: [docs/mcp.md](docs/mcp.md)
 
 MCP Lite exposes a smaller high-level toolset for lower token overhead:
 
-`bc_status`, `bc_session_status`, `bc_open`, `bc_open_many`, `bc_capture`, `bc_capture_many`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`
-
-Legacy `bc_browser_*` MCP names are still registered for compatibility, but new agents should prefer the shorter `bc_*` tools.
+`bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
 
 Set `BROWSER_CONTROL_MCP_MODE=lite` for Lite mode. Full MCP mode keeps the complete tool surface.
 
