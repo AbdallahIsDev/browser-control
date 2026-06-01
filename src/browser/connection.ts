@@ -97,18 +97,19 @@ export function attachEndpointCandidates(
 
 function wslAttachHelp(port: number): string {
 	if (!isLikelyWsl()) return "";
+	const launchCommand = formatLaunchBrowserCommand(port);
 	return (
 		" Running in WSL. To control visible Windows Chrome, start the Windows launcher with " +
 		"`BROWSER_ENABLE_WSL_CDP_BRIDGE=1` and attach again. Example from WSL: " +
 		`/mnt/c/Windows/System32/cmd.exe /C "set BROWSER_ENABLE_WSL_CDP_BRIDGE=1&& ` +
-		`bc browser launch --port ${port}", then ` +
+		`${launchCommand}", then ` +
 		`bc browser attach --port ${port} --yes`
 	);
 }
 
-function wslChromeLaunchHelp(): string {
+function wslChromeLaunchHelp(port: number): string {
 	if (!isLikelyWsl()) return "";
-	return " Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run `bc browser attach --port 9222 --yes`.";
+	return ` Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run \`bc browser attach --port ${port} --yes\`.`;
 }
 
 function delay(ms: number): Promise<void> {
@@ -650,7 +651,7 @@ export class BrowserConnectionManager {
 			this.connection = null;
 			this.managedProcess = null;
 			log.error(`Failed to launch managed browser: ${message}`);
-			const wslHelp = wslChromeLaunchHelp();
+			const wslHelp = wslChromeLaunchHelp(port);
 			throw new Error(
 				`Failed to launch managed automation browser on port ${port}. ` +
 					(wslHelp

@@ -36,6 +36,19 @@ describe("browser launch help", () => {
     }
   });
 
+  it("keeps WSL connection recovery guidance npm-safe and user-port aware", () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, "../..", "src/browser/connection.ts"),
+      "utf8",
+    );
+
+    assert.doesNotMatch(source, /C:\\Users\\11\\browser-control/u);
+    assert.doesNotMatch(source, /node cli\.js browser attach/u);
+    assert.doesNotMatch(source, /launch_browser\.bat \$\{port\}/u);
+    assert.match(source, /formatLaunchBrowserCommand\(port\)/u);
+    assert.match(source, /browser attach --port \$\{port\} --yes/u);
+  });
+
   it("does not expose source-checkout launch scripts through the shared user-facing helper", () => {
     for (const platform of ["win32", "linux", "darwin"] as NodeJS.Platform[]) {
       const command = formatLaunchBrowserCommand(9222, platform);
