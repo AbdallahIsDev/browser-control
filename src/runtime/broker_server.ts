@@ -2268,10 +2268,3 @@ export async function startStandaloneBroker(): Promise<BrokerServer> {
 	brokerLog.info(`Listening on http://${address.address}:${address.port}`);
 	return broker;
 }
-
-if (require.main === module) {
-	void startStandaloneBroker().catch((error: unknown) => {
-		brokerLog.critical(error instanceof Error ? error.message : String(error));
-		process.exitCode = 1;
-	});
-}

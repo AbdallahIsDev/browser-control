@@ -2738,9 +2738,9 @@ export class Daemon {
 	}
 }
 
-if (require.main === module) {
+export async function startStandaloneDaemon(argv: string[] = process.argv): Promise<Daemon> {
 	const daemon = new Daemon({
-		schedulerEnabled: !process.argv.includes("--dev"),
+		schedulerEnabled: !argv.includes("--dev"),
 	});
 	installGlobalFatalHandlers({
 		component: "daemon",
@@ -2748,8 +2748,6 @@ if (require.main === module) {
 		shutdown: () => daemon.stop(),
 	});
 
-	daemon.start().catch((error: unknown) => {
-		logger.critical(error instanceof Error ? error.message : String(error));
-		process.exit(1);
-	});
+	await daemon.start();
+	return daemon;
 }

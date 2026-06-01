@@ -10,7 +10,6 @@ test("CLI, web, and daemon entrypoints install global fatal handlers", () => {
 	for (const file of [
 		"src/cli.ts",
 		"src/web/server.ts",
-		"src/daemon.ts",
 		"src/runtime/daemon.ts",
 	]) {
 		const source = fs.readFileSync(path.join(root, file), "utf8");
@@ -20,6 +19,9 @@ test("CLI, web, and daemon entrypoints install global fatal handlers", () => {
 			`${file} must install fatal process handlers`,
 		);
 	}
+
+	const daemonBin = fs.readFileSync(path.join(root, "src/bin/daemon.ts"), "utf8");
+	assert.match(daemonBin, /startStandaloneDaemon/u);
 });
 
 test("fatal handler logs, sets exitCode, and runs shutdown once", async () => {

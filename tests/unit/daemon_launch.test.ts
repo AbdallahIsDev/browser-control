@@ -26,15 +26,15 @@ test("resolveDaemonEntryPoint resolves a runnable daemon entrypoint", () => {
   assert.ok(resolved.args.length >= 1);
   const daemonArg = resolved.args[resolved.args.length - 1];
   assert.ok(daemonArg);
-  assert.ok(path.basename(daemonArg).startsWith("daemon."));
+  assert.match(daemonArg.replace(/\\/g, "/"), /(?:^|\/)(?:src\/)?(?:bin\/)?daemon\.(?:js|ts)$/u);
 });
 
-test("resolveDaemonEntryPoint resolves a compiled package daemon from package root", () => {
+test("resolveDaemonEntryPoint resolves a compiled package daemon bin from package root", () => {
   const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
   try {
-    const distDir = path.join(packageRoot, "dist");
-    fs.mkdirSync(distDir, { recursive: true });
-    const daemonJs = path.join(distDir, "daemon.js");
+    const distBinDir = path.join(packageRoot, "dist", "bin");
+    fs.mkdirSync(distBinDir, { recursive: true });
+    const daemonJs = path.join(distBinDir, "daemon.js");
     fs.writeFileSync(daemonJs, "");
 
     const resolved = resolveDaemonEntryPoint(packageRoot);
@@ -49,15 +49,50 @@ test("resolveDaemonEntryPoint resolves a compiled package daemon from package ro
 test("resolveDaemonEntryPoint resolves when cwd is compiled dist directory", () => {
   const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
   try {
-    const distDir = path.join(packageRoot, "dist");
-    fs.mkdirSync(distDir, { recursive: true });
-    const daemonJs = path.join(distDir, "daemon.js");
+    const distBinDir = path.join(packageRoot, "dist", "bin");
+    fs.mkdirSync(distBinDir, { recursive: true });
+    const daemonJs = path.join(distBinDir, "daemon.js");
     fs.writeFileSync(daemonJs, "");
 
-    const resolved = resolveDaemonEntryPoint(distDir);
+    const resolved = resolveDaemonEntryPoint(path.join(packageRoot, "dist"));
 
     assert.equal(resolved.command, process.execPath);
     assert.deepEqual(resolved.args, [daemonJs]);
+  } finally {
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveDaemonEntryPoint resolves source bin from src cwd", () => {
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
+  try {
+    const sourceBinDir = path.join(packageRoot, "src", "bin");
+    fs.mkdirSync(sourceBinDir, { recursive: true });
+    const daemonTs = path.join(sourceBinDir, "daemon.ts");
+    fs.writeFileSync(daemonTs, "");
+
+    const resolved = resolveDaemonEntryPoint(path.join(packageRoot, "src"));
+
+    assert.equal(resolved.command, process.execPath);
+    assert.deepEqual(resolved.args, [require.resolve("ts-node/dist/bin.js"), daemonTs]);
+  } finally {
+    fs.rmSync(packageRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveDaemonEntryPoint resolves source bin from package root before library shims", () => {
+  const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bc-daemon-entry-"));
+  try {
+    const sourceBinDir = path.join(packageRoot, "src", "bin");
+    fs.mkdirSync(sourceBinDir, { recursive: true });
+    const daemonTs = path.join(sourceBinDir, "daemon.ts");
+    fs.writeFileSync(daemonTs, "");
+    fs.writeFileSync(path.join(packageRoot, "src", "daemon.ts"), "export * from './runtime/daemon';");
+
+    const resolved = resolveDaemonEntryPoint(packageRoot);
+
+    assert.equal(resolved.command, process.execPath);
+    assert.deepEqual(resolved.args, [require.resolve("ts-node/dist/bin.js"), daemonTs]);
   } finally {
     fs.rmSync(packageRoot, { recursive: true, force: true });
   }

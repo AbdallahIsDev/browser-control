@@ -179,6 +179,7 @@ async function startDaemon(
   const root = path.resolve(__dirname, "..", "..");
 
   const distEntry = path.join(root, "dist", "daemon.js");
+  const distBinEntry = path.join(root, "dist", "bin", "daemon.js");
 
 
 
@@ -188,11 +189,15 @@ async function startDaemon(
 
   const tsNodeBin = require.resolve("ts-node/dist/bin.js");
 
-  const args = fs.existsSync(distEntry)
+  const args = fs.existsSync(distBinEntry)
+
+    ? [distBinEntry]
+
+    : fs.existsSync(distEntry)
 
     ? [distEntry]
 
-    : [tsNodeBin, path.join(root, "src", "daemon.ts")];
+    : [tsNodeBin, path.join(root, "src", "bin", "daemon.ts")];
 
 
 
