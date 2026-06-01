@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { MemoryStore } from "../../src/memory_store";
 import { loadAuthSnapshot, saveAuthSnapshotToStore, type AuthSnapshot } from "../../src/browser_auth_state";
+import { SessionManager } from "../../src/session_manager";
 
 function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-auth-policy-"));
@@ -91,6 +92,37 @@ test("stored browser auth export honors --output after explicit confirmation", (
     const exported = JSON.parse(fs.readFileSync(outputPath, "utf8")) as AuthSnapshot;
     assert.equal(exported.profileId, "default");
     assert.equal(exported.cookies[0]?.name, "session");
+  } finally {
+    if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+    else process.env.BROWSER_CONTROL_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("CLI policy checks honor persisted active session policy", async () => {
+  const home = makeHome();
+  const previousHome = process.env.BROWSER_CONTROL_HOME;
+  const outputPath = path.join(home, "active-session-export.json");
+  try {
+    process.env.BROWSER_CONTROL_HOME = home;
+    const store = new MemoryStore();
+    const manager = new SessionManager({ memoryStore: store, sessionSweepIntervalMs: 0 });
+    await manager.create("safe-active", { policyProfile: "safe" });
+    saveAuthSnapshotToStore(store, "default", sampleSnapshot());
+    manager.close();
+    store.close();
+
+    const result = runCli(
+      ["browser", "auth", "export", "--stored", "--output", outputPath, "--yes", "--json"],
+      {
+        BROWSER_CONTROL_HOME: home,
+        POLICY_PROFILE: "balanced",
+      },
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /browser_auth_export|exceeds allowed threshold|deny/i);
+    assert.equal(fs.existsSync(outputPath), false);
   } finally {
     if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
     else process.env.BROWSER_CONTROL_HOME = previousHome;

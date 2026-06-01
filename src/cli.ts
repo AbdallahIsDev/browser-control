@@ -718,9 +718,10 @@ async function requireCliPolicy(
 			import("./runtime/memory_store"),
 			import("./session_manager"),
 		]);
-	const store = new MemoryStore({ filename: ":memory:" });
+	const store = new MemoryStore();
+	let manager: InstanceType<typeof SessionManager> | undefined;
 	try {
-		const manager = new SessionManager({ memoryStore: store });
+		manager = new SessionManager({ memoryStore: store });
 		if (!jsonOutput && !confirmed && process.stdin.isTTY && process.stderr.isTTY) {
 			manager.setConfirmationHandler({
 				confirm: async (_step, evaluation) => promptCliConfirmation(evaluation.reason),
@@ -744,6 +745,7 @@ async function requireCliPolicy(
 			throw commandFailed();
 		}
 	} finally {
+		manager?.close();
 		store.close();
 	}
 }
