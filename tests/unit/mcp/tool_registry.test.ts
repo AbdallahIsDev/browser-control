@@ -898,6 +898,18 @@ describe("MCP Tool Registry", () => {
       assert.ok("tabId" in tool.inputSchema.properties, "bc_tab_close should have tabId property");
     });
 
+    it("bc_tab_switch schema describes tabId as a tab ID, not an index", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_tab_switch")!;
+      assert.ok(tool, "bc_tab_switch tool should exist");
+
+      const tabId = tool.inputSchema.properties.tabId as { type?: string; description?: string };
+      assert.equal(tabId.type, "string");
+      assert.match(tabId.description ?? "", /tab ID/i);
+      assert.doesNotMatch(tabId.description ?? "", /0-based|index/i);
+      assert.doesNotMatch(tool.description, /index/i);
+    });
+
     it("terminal tools disambiguate Browser Control and terminal session IDs", () => {
       const tools = buildToolRegistry(api);
       const terminalTools = tools.filter((tool) => tool.name.startsWith("bc_terminal_"));

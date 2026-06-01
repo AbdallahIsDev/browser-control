@@ -577,9 +577,9 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_tab_switch",
-      description: "Switch to a browser tab by index.",
+      description: "Switch to a browser tab by tab ID.",
       inputSchema: buildSchema({
-        tabId: { type: "string", description: "Tab index to activate (0-based)." },
+        tabId: { type: "string", description: "Browser tab ID from tab list, state, or open results." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
       }, ["tabId"]),
       handler: async (params) => {

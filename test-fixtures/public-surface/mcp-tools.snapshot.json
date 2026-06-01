@@ -4360,7 +4360,7 @@
     },
     {
       "category": "browser",
-      "description": "Switch to a browser tab by index.",
+      "description": "Switch to a browser tab by tab ID.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4369,7 +4369,7 @@
             "type": "string"
           },
           "tabId": {
-            "description": "Tab index to activate (0-based).",
+            "description": "Browser tab ID from tab list, state, or open results.",
             "type": "string"
           }
         },
