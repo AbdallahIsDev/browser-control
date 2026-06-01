@@ -4,9 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  Daemon,
+  type DaemonConfig,
+  type DaemonStatusRecord,
+  type ResumePolicy,
+  type TaskIntent,
+} from "../../src/daemon";
 import { MemoryStore } from "../../src/memory_store";
+import type { StateStorage, StoredTask } from "../../src/state/index";
 import { Telemetry } from "../../src/telemetry";
-import { Daemon, type DaemonStatusRecord, type TaskIntent, type ResumePolicy } from "../../src/daemon";
 
 function createTestConfig(overrides: Record<string, unknown> = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "daemon-test-"));
@@ -56,7 +63,120 @@ async function waitFor(
   assert.fail(message);
 }
 
+function createNoopStateStorage(
+  overrides: Partial<StateStorage> = {},
+): StateStorage {
+  return {
+    saveTask: async () => {},
+    getTask: async () => null,
+    listTasks: async () => [],
+    deleteTask: async () => {},
+    saveAutomation: async () => {},
+    getAutomation: async () => null,
+    listAutomations: async () => [],
+    deleteAutomation: async () => {},
+    saveWorkflowDefinition: async () => {},
+    getWorkflowDefinition: async () => null,
+    listWorkflowDefinitions: async () => [],
+    deleteWorkflowDefinition: async () => {},
+    saveWorkflowRun: async () => {},
+    getWorkflowRun: async () => null,
+    listWorkflowRuns: async () => [],
+    saveApproval: async () => {},
+    getApproval: async () => null,
+    listApprovals: async () => [],
+    saveEvidence: async () => {},
+    listEvidence: async () => [],
+    saveAuditEvent: async () => {},
+    listAuditEvents: async () => [],
+    saveTradePlan: async () => {},
+    listTradePlans: async () => [],
+    saveOrderTicket: async () => {},
+    listOrderTickets: async () => [],
+    saveSupervisorJob: async () => {},
+    listSupervisorJobs: async () => [],
+    saveSupervisorDecision: async () => {},
+    listSupervisorDecisions: async () => [],
+    savePackageEval: async () => {},
+    listPackageEvals: async () => [],
+    saveSecret: async () => {},
+    getSecret: async () => null,
+    listSecrets: async () => [],
+    deleteSecret: async () => {},
+    saveGrant: async () => {},
+    listGrants: async () => [],
+    revokeGrant: async () => {},
+    saveNetworkRule: async () => {},
+    listNetworkRules: async () => [],
+    deleteNetworkRule: async () => {},
+    saveSecretAuditEvent: async () => {},
+    listSecretAuditEvents: async () => [],
+    close: () => {},
+    ...overrides,
+  };
+}
+
 // ── Basic lifecycle ──────────────────────────────────────────────────
+
+test("Daemon state storage wiring uses typed ESM imports", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "src/runtime/daemon.ts"), "utf8");
+
+  assert.doesNotMatch(source, /require\(["']\.\.\/state\/index["']\)/);
+  assert.doesNotMatch(source, /\(this\.config as any\)\.state/);
+});
+
+test("Daemon uses typed injected state storage for task persistence", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "daemon-state-test-"));
+  const pidPath = path.join(tempDir, "daemon.pid");
+  const store = new MemoryStore({ filename: ":memory:" });
+  const telemetry = new Telemetry({ reportsDir: tempDir });
+  const savedTasks: StoredTask[] = [];
+  const state = createNoopStateStorage({
+    saveTask: async (task) => {
+      savedTasks.push(task);
+    },
+  });
+
+  const config: DaemonConfig = {
+    heartbeatIntervalMs: 60000,
+    pidFilePath: pidPath,
+    memoryStore: store,
+    telemetry,
+    state,
+    healthCheck: {
+      runCritical: async () => true,
+      runAll: async () => ({
+        overall: "healthy" as const,
+        checks: [],
+        timestamp: new Date().toISOString(),
+      }),
+    },
+    brokerFactory: async () => ({
+      start: async () => {},
+      stop: async () => {},
+    }),
+  };
+
+  let daemon: Daemon | null = null;
+  try {
+    daemon = new Daemon(config);
+    await daemon.start();
+
+    const result = daemon.submitSkillTask("typed-state-task", "missing-skill", "run", {
+      value: 1,
+    });
+
+    assert.equal(result.accepted, true);
+    assert.equal(savedTasks.length, 1);
+    assert.equal(savedTasks[0]?.id, "typed-state-task");
+  } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("Daemon start and stop manage pid lifecycle and daemon-status.json", async () => {
   const { tempDir, pidPath, store, telemetry, config } = createTestConfig();

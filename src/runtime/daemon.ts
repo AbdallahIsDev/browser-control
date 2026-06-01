@@ -33,7 +33,7 @@ import {
 import type { SkillContext } from "../skill";
 import { SkillMemoryStore } from "../skill_memory";
 import { SkillRegistry } from "../skill_registry";
-import type { StoredTask } from "../state/index";
+import { getStateStorage, type StateStorage, type StoredTask } from "../state/index";
 import { validateResize } from "../terminal/actions";
 import { TerminalBufferStore } from "../terminal/buffer_store";
 import {
@@ -155,6 +155,7 @@ export interface DaemonConfig {
 	taskStatusRetentionMs?: number;
 	healthCheck?: HealthCheckLike;
 	memoryStore?: MemoryStore;
+	state?: StateStorage;
 	telemetry?: Telemetry;
 	pidFilePath?: string;
 	brokerFactory?: (
@@ -168,7 +169,7 @@ export class Daemon {
 	private readonly config: DaemonConfig;
 
 	private memoryStore!: MemoryStore;
-	private state!: import("../state/index").StateStorage;
+	private state!: StateStorage;
 
 	private telemetry!: Telemetry;
 
@@ -295,9 +296,7 @@ export class Daemon {
 		this.acceptNewTasks = true;
 		this.appConfig = loadConfig({ validate: false });
 		this.memoryStore = this.config.memoryStore ?? new MemoryStore();
-		this.state =
-			(this.config as any).state ??
-			require("../state/index").getStateStorage(this.appConfig.dataHome);
+		this.state = this.config.state ?? getStateStorage(this.appConfig.dataHome);
 		this.telemetry = this.config.telemetry ?? new Telemetry();
 		this.telemetry.onAlert(
 			createTelegramAlertHandler(
