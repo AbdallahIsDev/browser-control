@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { detectShell, resolveNamedShell, isWindowsPlatform, platformShellName } from "../../src/cross_platform";
 import { isPromptDetected, registerCustomPrompt, unregisterCustomPrompt, extractCwdFromPrompt } from "../../src/terminal_prompt";
-import { TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../src/terminal_session";
+import { PtyTerminalSession, TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../src/terminal_session";
 
 // Ensure clean state before each test group
 test.afterEach(async () => {
@@ -95,6 +95,46 @@ test("terminal_prompt: extractCwdFromPrompt extracts PowerShell path", () => {
 test("terminal_prompt: extractCwdFromPrompt returns null for unrecognized", () => {
   const cwd = extractCwdFromPrompt("just some text");
   assert.equal(cwd, null);
+});
+
+test("terminal_session: interrupt waits for prompt before marking idle", { timeout: 5000 }, async () => {
+  const session = new PtyTerminalSession(
+    "interrupt-unit",
+    {
+      name: "mock-shell",
+      path: "mock-shell",
+      args: [],
+      family: "posix",
+      ptyCapable: true,
+    },
+    {},
+  );
+  const internals = session as unknown as {
+    _process: { write(data: string): void };
+    _outputBuffer: string;
+    _status: string;
+    _runningCommand?: string;
+  };
+  const writes: string[] = [];
+  internals._process = {
+    write(data: string) {
+      writes.push(data);
+      setTimeout(() => {
+        internals._outputBuffer += "\n$ ";
+      }, 180);
+    },
+  };
+  internals._status = "running";
+  internals._runningCommand = "sleep 10";
+
+  const start = Date.now();
+  await session.interrupt();
+  const elapsedMs = Date.now() - start;
+
+  assert.deepEqual(writes, ["\x03"]);
+  assert.ok(elapsedMs >= 150, `interrupt returned before prompt: ${elapsedMs}ms`);
+  assert.equal(session.status, "idle");
+  assert.equal(internals._runningCommand, undefined);
 });
 
 function sessionEchoCommand(): string {

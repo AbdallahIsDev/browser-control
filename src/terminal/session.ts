@@ -54,6 +54,7 @@ const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const DEFAULT_MAX_OUTPUT = 1024 * 1024; // 1MB
 const PROMPT_READY_TIMEOUT = 8000; // ms to wait for prompt after spawn/exec
+const INTERRUPT_READY_TIMEOUT = 5000; // ms to wait for prompt after Ctrl+C
 
 // ── PTY Session Implementation ───────────────────────────────────────
 
@@ -209,7 +210,7 @@ export class PtyTerminalSession implements ITerminalSession {
 
 	async exec(command: string, options: ExecOptions = {}): Promise<ExecResult> {
 		this.assertNotClosed();
-		if (this._status === "running") {
+		if (this._status === "running" || this._status === "interrupted") {
 			throw new Error(
 				`Terminal session ${this.id} is already executing a command.`,
 			);
@@ -392,10 +393,11 @@ export class PtyTerminalSession implements ITerminalSession {
 			this._process.write("\x03");
 			this._status = "interrupted";
 			this._lastActivityAt = new Date().toISOString();
-			// Brief wait for the interrupt to take effect
-			await sleep(100);
-			this._status = "idle";
-			this._runningCommand = undefined;
+			const ready = await this.waitForPromptAfterInterrupt(INTERRUPT_READY_TIMEOUT);
+			if (ready && !this._closed) {
+				this._status = "idle";
+				this._runningCommand = undefined;
+			}
 		}
 	}
 
@@ -428,6 +430,27 @@ export class PtyTerminalSession implements ITerminalSession {
 		// Timeout — clean up the PTY before throwing
 		await this.close();
 		throw new Error(`Shell prompt did not appear within ${timeoutMs}ms`);
+	}
+
+	private async waitForPromptAfterInterrupt(timeoutMs: number): Promise<boolean> {
+		const deadline = Date.now() + timeoutMs;
+		const pollInterval = 50;
+
+		while (Date.now() < deadline) {
+			if (isPromptDetected(this._outputBuffer, this.id)) {
+				return true;
+			}
+			if (this._processExited || this._closed) {
+				return false;
+			}
+			await new Promise((r) => setTimeout(r, pollInterval));
+		}
+
+		log.warn("Terminal interrupt timed out waiting for prompt", {
+			sessionId: this.id,
+			timeoutMs,
+		});
+		return false;
 	}
 
 	onData(listener: (data: string) => void): { dispose(): void } {
