@@ -6,10 +6,12 @@ import { getMemoryStorePath } from "../shared/paths";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("memory-store");
+const DEFAULT_EXPIRED_KEY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 interface MemoryStoreOptions {
   filename?: string;
   now?: () => number;
+  expiredKeyCleanupIntervalMs?: number | false;
 }
 
 type CookieRecord = {
@@ -55,12 +57,15 @@ export class MemoryStore {
 
   private db: DatabaseSync;
 
+  private expiredKeyCleanupTimer?: ReturnType<typeof setInterval>;
+
   constructor(options: MemoryStoreOptions = {}) {
     this.filename = options.filename ?? getDefaultMemoryStorePath();
     this.now = options.now ?? Date.now;
 
     this.db = this.initDb();
     this.initSchema();
+    this.startExpiredKeyCleanup(options.expiredKeyCleanupIntervalMs);
   }
 
   private initDb(): DatabaseSync {
@@ -192,6 +197,10 @@ export class MemoryStore {
   }
 
   close(): void {
+    if (this.expiredKeyCleanupTimer) {
+      clearInterval(this.expiredKeyCleanupTimer);
+      this.expiredKeyCleanupTimer = undefined;
+    }
     this.db.close();
   }
 
@@ -229,6 +238,25 @@ export class MemoryStore {
       WHERE expires_at IS NOT NULL
         AND expires_at <= ?
     `).run(this.now());
+  }
+
+  private startExpiredKeyCleanup(intervalMs: number | false | undefined): void {
+    if (this.filename === ":memory:" || intervalMs === false) return;
+    const cleanupIntervalMs = intervalMs ?? DEFAULT_EXPIRED_KEY_CLEANUP_INTERVAL_MS;
+    if (!Number.isFinite(cleanupIntervalMs) || cleanupIntervalMs <= 0) return;
+
+    this.expiredKeyCleanupTimer = setInterval(() => {
+      try {
+        this.safeExecute(() => {
+          this.deleteExpiredKeys();
+        });
+      } catch (error) {
+        log.warn(
+          `MemoryStore expired key cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }, cleanupIntervalMs);
+    this.expiredKeyCleanupTimer.unref?.();
   }
 
   private deleteExpiredKey(key: string): void {

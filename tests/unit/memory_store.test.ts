@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
@@ -9,6 +10,27 @@ import {
   restoreContextCookies,
   saveContextCookies,
 } from "../../src/memory_store";
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(predicate(), true);
+}
+
+function countRawRows(databasePath: string): number {
+  const db = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const row = db.prepare("SELECT COUNT(*) AS count FROM memory_store").get() as {
+      count: number;
+    };
+    return row.count;
+  } finally {
+    db.close();
+  }
+}
 
 test("MemoryStore supports CRUD, TTL, prefix keys, and clear", () => {
   let now = 1_000;
@@ -63,6 +85,33 @@ test("MemoryStore reports stats and collection counts", () => {
     assert.equal(stats.filename, databasePath);
     store.close();
   } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("MemoryStore proactively prunes expired file-backed keys", async () => {
+  let now = 1_000;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-store-prune-"));
+  const databasePath = path.join(tempDir, "memory.sqlite");
+  let store: MemoryStore | undefined;
+
+  try {
+    store = new MemoryStore({
+      filename: databasePath,
+      now: () => now,
+      expiredKeyCleanupIntervalMs: 10,
+    });
+
+    store.set("ttl:expired", { stale: true }, 5);
+    store.set("ttl:kept", { stale: false }, 60_000);
+    assert.equal(countRawRows(databasePath), 2);
+
+    now += 20;
+    await waitFor(() => countRawRows(databasePath) === 1);
+
+    assert.deepEqual(store.get("ttl:kept"), { stale: false });
+  } finally {
+    store?.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
