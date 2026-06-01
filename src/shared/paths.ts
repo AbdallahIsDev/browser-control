@@ -415,9 +415,6 @@ export function getAutomationsDir(dataHome?: string): string {
 export function getWorkflowsDir(dataHome?: string): string {
   return path.join(dataHome ?? getDataHome(), "workflows");
 }
-export function getTradingDir(dataHome?: string): string {
-  return path.join(dataHome ?? getDataHome(), "trading");
-}
 // ── Knowledge Directories (Section 9) ────────────────────────────────
 /** Top-level knowledge directory */
 export function getKnowledgeDir(): string {

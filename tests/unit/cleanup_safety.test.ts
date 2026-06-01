@@ -7,8 +7,6 @@ import { cleanupDataHome } from "../../src/data_home";
 import {
   ensureDataHomeAtPath,
   getRuntimeTempDir,
-  getProfilesDir,
-  getTradingDir,
 } from "../../src/shared/paths";
 
 test("cleanupDataHome: omitted options means dry-run true", () => {
