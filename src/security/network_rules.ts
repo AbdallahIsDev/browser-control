@@ -331,7 +331,6 @@ export class NetworkRuleEngine {
 		},
 		options?: PrivacyProfileName | ApplyNetworkRulesOptions,
 	): Promise<void> {
-		const rules = await this.listRules();
 		const applyOptions =
 			typeof options === "string" ? { profile: options } : (options ?? {});
 		const profile = applyOptions.profile ?? "balanced";
@@ -343,6 +342,7 @@ export class NetworkRuleEngine {
 			const resourceType = request.resourceType
 				? normalizeResourceType(request.resourceType())
 				: detectResourceType(requestUrl);
+			const rules = await this.listRules();
 			const result = this.evaluateRequest(requestUrl, resourceType, rules, profile);
 
 			if (result.decision === "block") {

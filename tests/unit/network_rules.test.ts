@@ -98,6 +98,38 @@ describe("NetworkRuleEngine", () => {
 		assert.ok(auditEvents[0]?.details?.includes("tracker.example"));
 	});
 
+	it("route handler evaluates rules added after applyToPage", async () => {
+		const storage = getStateStorage();
+		const engine = new NetworkRuleEngine(storage);
+		const routes = new Map<string, MockRouteHandler>();
+
+		await engine.applyToPage({
+			route: async (pattern, handler) => {
+				routes.set(String(pattern), handler);
+			},
+		});
+		await engine.addRule("late-block.example", "denylist", ["script"]);
+
+		let abortedWith: string | undefined;
+		let continued = false;
+		await routes.get("**/*")?.({
+			request: () => ({
+				url: () => "https://late-block.example/app.js",
+				method: () => "GET",
+				resourceType: () => "script",
+			}),
+			abort: async (code?: string) => {
+				abortedWith = code;
+			},
+			continue: async () => {
+				continued = true;
+			},
+		});
+
+		assert.equal(abortedWith, "blockedbyclient");
+		assert.equal(continued, false);
+	});
+
 	it("gives allowlist precedence over denylist and ignores disabled rules", () => {
 		const engine = new NetworkRuleEngine();
 		const rules: NetworkRule[] = [
