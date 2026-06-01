@@ -104,6 +104,41 @@ test("Scheduler killzone helper uses UTC session windows", () => {
   assert.equal(scheduler.isWithinKillzone("asia"), false);
 });
 
+test("Scheduler jumps to the next allowed cron minute without minute-by-minute scanning", () => {
+  const originalGetUTCMinutes = Date.prototype.getUTCMinutes;
+  let minuteReads = 0;
+
+  Date.prototype.getUTCMinutes = function countedGetUTCMinutes() {
+    minuteReads += 1;
+    return originalGetUTCMinutes.call(this);
+  };
+
+  try {
+    const scheduler = new Scheduler({
+      now: () => new Date("2026-04-13T10:00:00.000Z"),
+    });
+
+    scheduler.schedule({
+      id: "hourly-report",
+      name: "Hourly Report",
+      cronExpression: "55 * * * *",
+      enabled: true,
+    });
+
+    assert.deepEqual(scheduler.getQueue(), [
+      {
+        id: "hourly-report",
+        name: "Hourly Report",
+        nextRun: new Date("2026-04-13T10:55:00.000Z"),
+        enabled: true,
+      },
+    ]);
+    assert.ok(minuteReads < 10, `expected indexed minute jump, read ${minuteReads} minutes`);
+  } finally {
+    Date.prototype.getUTCMinutes = originalGetUTCMinutes;
+  }
+});
+
 test("Scheduler reuses timezone formatter while finding next run", () => {
   const OriginalDateTimeFormat = Intl.DateTimeFormat;
   let formatterCreations = 0;

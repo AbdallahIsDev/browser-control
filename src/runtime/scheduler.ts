@@ -183,8 +183,58 @@ function fieldMatches(set: Set<number | "*">, value: number): boolean {
   return set.has("*") || set.has(value);
 }
 
+function sortedNumericFieldValues(set: Set<number | "*">): number[] {
+  return Array.from(set)
+    .filter((value): value is number => typeof value === "number")
+    .sort((left, right) => left - right);
+}
+
+function minutesUntilNextAllowedMinute(set: Set<number | "*">, currentMinute: number): number {
+  if (set.has("*") || set.has(currentMinute)) {
+    return 0;
+  }
+
+  const values = sortedNumericFieldValues(set);
+  if (values.length === 0) {
+    return 60;
+  }
+
+  const nextInHour = values.find((value) => value > currentMinute);
+  if (nextInHour !== undefined) {
+    return nextInHour - currentMinute;
+  }
+
+  return 60 - currentMinute + values[0];
+}
+
 function minutesUntilNextLocalHour(parts: DateParts): number {
   return Math.max(1, 60 - parts.minute);
+}
+
+function minutesUntilNextAllowedHour(
+  set: Set<number | "*">,
+  parts: DateParts,
+  timezone?: string,
+): number {
+  if (set.has("*") || set.has(parts.hour)) {
+    return 0;
+  }
+
+  if (timezone) {
+    return minutesUntilNextLocalHour(parts);
+  }
+
+  const values = sortedNumericFieldValues(set);
+  if (values.length === 0) {
+    return minutesUntilNextLocalDay(parts);
+  }
+
+  const nextToday = values.find((value) => value > parts.hour);
+  if (nextToday !== undefined) {
+    return Math.max(1, (nextToday - parts.hour) * 60 - parts.minute);
+  }
+
+  return Math.max(1, (24 - parts.hour + values[0]) * 60 - parts.minute);
 }
 
 function minutesUntilNextLocalDay(parts: DateParts, timezone?: string): number {
@@ -226,21 +276,21 @@ function getNextRunDate(parsed: ParsedCronExpression, now: Date, timezone?: stri
       continue;
     }
 
-    if (!fieldMatches(parsed.hours, parts.hour)) {
-      const skipMinutes = minutesUntilNextLocalHour(parts);
+    const hourSkipMinutes = minutesUntilNextAllowedHour(parsed.hours, parts, timezone);
+    if (hourSkipMinutes > 0) {
+      const skipMinutes = hourSkipMinutes;
       candidate.setUTCMinutes(candidate.getUTCMinutes() + skipMinutes);
       minutesAhead += skipMinutes;
       continue;
     }
 
-    if (
-      fieldMatches(parsed.minutes, parts.minute)
-    ) {
+    const minuteSkipMinutes = minutesUntilNextAllowedMinute(parsed.minutes, parts.minute);
+    if (minuteSkipMinutes === 0) {
       return new Date(candidate);
     }
 
-    candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);
-    minutesAhead += 1;
+    candidate.setUTCMinutes(candidate.getUTCMinutes() + minuteSkipMinutes);
+    minutesAhead += minuteSkipMinutes;
   }
 
   return null;
