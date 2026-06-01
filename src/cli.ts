@@ -3631,11 +3631,12 @@ export async function runCli(argv = process.argv): Promise<void> {
 	}
 
 	if (args.flags.help || args.flags.h || args.command === "help") {
-		if (args.command === "package") {
+		const helpTopic = args.command === "help" ? args.subcommand : args.command;
+		if (helpTopic === "package") {
 			printPackageHelp();
 			return;
 		}
-		if (args.command === "schedule") {
+		if (helpTopic === "schedule") {
 			printScheduleHelp();
 			return;
 		}
