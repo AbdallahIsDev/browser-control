@@ -72,6 +72,16 @@ export interface PrivacyProfile {
 	trackerProfileKey?: string;
 }
 
+interface IndexedNetworkRule {
+	rule: NetworkRule;
+	index: number;
+}
+
+interface NetworkRuleIndex {
+	exactDomains: Map<string, IndexedNetworkRule[]>;
+	wildcardSuffixes: Map<string, IndexedNetworkRule[]>;
+}
+
 export const PRIVACY_PROFILES: Record<PrivacyProfileName, PrivacyProfile> = {
 	strict: {
 		name: "strict",
@@ -94,18 +104,56 @@ export const PRIVACY_PROFILES: Record<PrivacyProfileName, PrivacyProfile> = {
 
 // ── Domain Matching ─────────────────────────────────────────────────
 
-function domainMatches(pattern: string, url: string): boolean {
-	try {
-		const parsed = new URL(url);
-		const hostname = parsed.hostname.toLowerCase();
-		if (pattern.startsWith("*.")) {
-			const suffix = pattern.slice(2).toLowerCase();
-			return hostname === suffix || hostname.endsWith("." + suffix);
+function indexNetworkRules(rules: readonly NetworkRule[]): NetworkRuleIndex {
+	const exactDomains = new Map<string, IndexedNetworkRule[]>();
+	const wildcardSuffixes = new Map<string, IndexedNetworkRule[]>();
+
+	rules.forEach((rule, index) => {
+		if (!rule.enabled) return;
+		const normalized = rule.pattern.trim().toLowerCase();
+		if (!normalized) return;
+
+		if (normalized.startsWith("*.")) {
+			const suffix = normalized.slice(2);
+			if (!suffix) return;
+			const entries = wildcardSuffixes.get(suffix) ?? [];
+			entries.push({ rule, index });
+			wildcardSuffixes.set(suffix, entries);
+			return;
 		}
-		return hostname === pattern.toLowerCase();
-	} catch {
-		return false;
+
+		const entries = exactDomains.get(normalized) ?? [];
+		entries.push({ rule, index });
+		exactDomains.set(normalized, entries);
+	});
+
+	return { exactDomains, wildcardSuffixes };
+}
+
+function getHostnameSuffixes(hostname: string): string[] {
+	const suffixes = [hostname];
+	let offset = hostname.indexOf(".");
+	while (offset !== -1 && offset < hostname.length - 1) {
+		const suffix = hostname.slice(offset + 1);
+		suffixes.push(suffix);
+		offset = hostname.indexOf(".", offset + 1);
 	}
+	return suffixes;
+}
+
+function getCandidateRules(
+	index: NetworkRuleIndex,
+	hostname: string | undefined,
+): IndexedNetworkRule[] {
+	if (!hostname) return [];
+	const candidates: IndexedNetworkRule[] = [
+		...(index.exactDomains.get(hostname) ?? []),
+	];
+	for (const suffix of getHostnameSuffixes(hostname)) {
+		candidates.push(...(index.wildcardSuffixes.get(suffix) ?? []));
+	}
+	candidates.sort((left, right) => left.index - right.index);
+	return candidates;
 }
 
 function hostnameFromUrl(url: string): string | undefined {
@@ -172,6 +220,7 @@ function normalizeResourceType(value: string | undefined): ResourceType {
 export class NetworkRuleEngine {
 	private storage: StateStorage;
 	private policyEngine: DefaultPolicyEngine;
+	private readonly ruleIndexCache = new WeakMap<NetworkRule[], NetworkRuleIndex>();
 	private loadedBuiltIn = false;
 
 	constructor(storage?: StateStorage, policyEngine?: DefaultPolicyEngine) {
@@ -274,24 +323,29 @@ export class NetworkRuleEngine {
 	): { decision: "allow" | "block" | "audit"; matchedRule?: NetworkRule } {
 		const activeRules = rules ?? [];
 		const privacyProfile = profile ?? "balanced";
-		const matches = activeRules.filter((rule) => {
-			if (!rule.enabled) return false;
-			if (!domainMatches(rule.pattern, url)) return false;
-			if (
-				rule.resourceTypes?.length &&
-				resourceType &&
-				!rule.resourceTypes.includes(resourceType)
-			) {
-				return false;
-			}
-			return true;
-		});
+		let ruleIndex = this.ruleIndexCache.get(activeRules);
+		if (!ruleIndex) {
+			ruleIndex = indexNetworkRules(activeRules);
+			this.ruleIndexCache.set(activeRules, ruleIndex);
+		}
+		const domain = hostnameFromUrl(url);
+		const matches = getCandidateRules(ruleIndex, domain)
+			.map((candidate) => candidate.rule)
+			.filter((rule) => {
+				if (
+					rule.resourceTypes?.length &&
+					resourceType &&
+					!rule.resourceTypes.includes(resourceType)
+				) {
+					return false;
+				}
+				return true;
+			});
 
 		const matchedRule =
 			matches.find((rule) => rule.ruleType === "allowlist") ??
 			matches.find((rule) => rule.ruleType === "denylist") ??
 			matches.find((rule) => rule.ruleType === "tracker");
-		const domain = hostnameFromUrl(url);
 		const risk = matchedRule?.ruleType === "allowlist"
 			? "low"
 			: matchedRule || privacyProfile === "strict" ? "moderate" : "low";

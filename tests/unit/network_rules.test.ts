@@ -173,6 +173,72 @@ describe("NetworkRuleEngine", () => {
 		);
 	});
 
+	it("uses indexed exact and wildcard domain candidates without changing precedence", () => {
+		const engine = new NetworkRuleEngine();
+		const noiseRules: NetworkRule[] = Array.from({ length: 1_000 }, (_, index) => ({
+			id: `noise-${index}`,
+			pattern: `noise-${index}.example`,
+			ruleType: "denylist",
+			enabled: true,
+			source: "user",
+			createdAt: new Date(index).toISOString(),
+		}));
+		const wildcardDeny: NetworkRule = {
+			id: "wildcard-deny",
+			pattern: "*.example.com",
+			ruleType: "denylist",
+			enabled: true,
+			source: "user",
+			createdAt: new Date(2_000).toISOString(),
+		};
+		const imageDeny: NetworkRule = {
+			id: "image-deny",
+			pattern: "assets.example.com",
+			ruleType: "denylist",
+			resourceTypes: ["image"],
+			enabled: true,
+			source: "user",
+			createdAt: new Date(2_001).toISOString(),
+		};
+		const exactDeny: NetworkRule = {
+			id: "exact-deny",
+			pattern: "assets.example.com",
+			ruleType: "denylist",
+			enabled: true,
+			source: "user",
+			createdAt: new Date(2_002).toISOString(),
+		};
+		const exactAllow: NetworkRule = {
+			id: "exact-allow",
+			pattern: "assets.example.com",
+			ruleType: "allowlist",
+			resourceTypes: ["script"],
+			enabled: true,
+			source: "user",
+			createdAt: new Date(2_003).toISOString(),
+		};
+		const rules = [
+			...noiseRules,
+			imageDeny,
+			wildcardDeny,
+			exactDeny,
+			exactAllow,
+		];
+
+		assert.deepEqual(
+			engine.evaluateRequest("https://assets.example.com/app.js", "script", rules),
+			{ decision: "allow", matchedRule: exactAllow },
+		);
+		assert.deepEqual(
+			engine.evaluateRequest("https://assets.example.com/logo.png", "image", rules),
+			{ decision: "block", matchedRule: imageDeny },
+		);
+		assert.deepEqual(
+			engine.evaluateRequest("https://cdn.example.com/app.js", "script", rules),
+			{ decision: "block", matchedRule: wildcardDeny },
+		);
+	});
+
 	it("uses the audit profile to audit tracker matches without blocking them", () => {
 		const engine = new NetworkRuleEngine();
 		const trackerRule: NetworkRule = {
