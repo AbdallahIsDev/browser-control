@@ -4854,11 +4854,13 @@ async function handleData(args: ParsedArgs): Promise<void> {
 	const { cleanupDataHome, exportDataHome, formatDataHomeReport, inspectDataHome } =
 		await import("./data_home");
 	const runCleanup = async (): Promise<void> => {
-		const dryRunRequested = flags["dry-run"] === "false";
+		const destructiveCleanupRequested = flags["dry-run"] === "false";
 		const confirm = flags.confirm;
 		if (flags["purge-profiles"] === "true") {
-			const dryRun = !dryRunRequested || !hasConfirmation(flags, "PURGE_PROFILES");
-			if (dryRunRequested && dryRun) {
+			const profilePurgeConfirmed = hasConfirmation(flags, "PURGE_PROFILES");
+			const profilePurgeDryRun =
+				!destructiveCleanupRequested || !profilePurgeConfirmed;
+			if (destructiveCleanupRequested && !profilePurgeConfirmed) {
 				console.error(
 					"Error: profile purge requires --yes (or legacy --confirm=PURGE_PROFILES).",
 				);
@@ -4872,7 +4874,7 @@ async function handleData(args: ParsedArgs): Promise<void> {
 			}
 			const result = manager.purgeStaleProfiles({
 				olderThanDays,
-				dryRun,
+				dryRun: profilePurgeDryRun,
 			});
 			if (jsonOutput) outputJson(result, false);
 			else {
@@ -4884,9 +4886,10 @@ async function handleData(args: ParsedArgs): Promise<void> {
 		}
 		const includeStaleLegacy = flags.stale === "true";
 		const requiredConfirm = includeStaleLegacy ? "MOVE_STALE_LEGACY" : "DELETE_RUNTIME_TEMP";
-		const dryRun = !dryRunRequested || confirm !== requiredConfirm;
+		const destructiveMode =
+			destructiveCleanupRequested && confirm === requiredConfirm;
 
-		if (dryRunRequested && confirm !== requiredConfirm) {
+		if (destructiveCleanupRequested && !destructiveMode) {
 			console.error(
 				"Error: Destructive cleanup requires explicit confirmation.",
 			);
@@ -4898,17 +4901,13 @@ async function handleData(args: ParsedArgs): Promise<void> {
 			throw commandFailed();
 		}
 
+		const dryRun = !destructiveMode;
 		const result = cleanupDataHome(undefined, { dryRun, confirm, includeStaleLegacy });
 		if (jsonOutput) outputJson(result, false);
 		else {
 			console.log(
 				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.deleted.length} deleted, ${result.moved.length} moved, ${result.reclaimedBytes} bytes reclaimed.`,
 			);
-			if (result.dryRun && dryRunRequested) {
-				console.log(
-					"Note: This was a dry run because confirmation was invalid or missing.",
-				);
-			}
 		}
 	};
 

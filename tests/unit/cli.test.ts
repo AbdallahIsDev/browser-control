@@ -381,6 +381,20 @@ test("CLI validation errors do not end with generic Command failed", () => {
   }
 });
 
+test("data cleanup destructive mode uses positive confirmation logic", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "src", "cli.ts"), "utf8");
+  const handleDataStart = source.indexOf("async function handleData");
+  const handleHarnessStart = source.indexOf("async function handleHarness", handleDataStart);
+  const handleDataSource = source.slice(handleDataStart, handleHarnessStart);
+
+  assert.match(handleDataSource, /const destructiveCleanupRequested = flags\["dry-run"\] === "false"/);
+  assert.match(
+    handleDataSource,
+    /const destructiveMode =\s*destructiveCleanupRequested && confirm === requiredConfirm/,
+  );
+  assert.doesNotMatch(handleDataSource, /dryRunRequested/);
+});
+
 test("CLI unknown subcommands preserve command context", () => {
   const result = runCli(["config", "wat", "--json"], {
     cwd: process.cwd(),
