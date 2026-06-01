@@ -1361,6 +1361,79 @@ test("bc browser provider add accepts explicit sandbox extension providers", asy
 	}
 });
 
+test("bc browser provider add verifies reachable endpoint before saving", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	const server = http.createServer((_req, res) => {
+		res.writeHead(200, { "content-type": "text/plain" });
+		res.end("ok");
+	});
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve());
+		});
+		const address = server.address() as AddressInfo;
+		const output = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"browser",
+				"provider",
+				"add",
+				"reachable-custom",
+				"--type=custom",
+				`--endpoint=http://127.0.0.1:${address.port}`,
+				"--yes",
+				"--json",
+			]);
+		});
+		const parsed = JSON.parse(output);
+		assert.equal(parsed.success, true);
+	} finally {
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc browser provider add rejects unreachable endpoint before saving", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const deadPort = await getFreePort();
+		const output = await captureStdout(async () => {
+			await runCli([
+				"node",
+				"cli.ts",
+				"browser",
+				"provider",
+				"add",
+				"dead-custom",
+				"--type=custom",
+				`--endpoint=http://127.0.0.1:${deadPort}`,
+				"--yes",
+				"--json",
+			]);
+		});
+		const parsed = JSON.parse(output);
+		assert.equal(parsed.success, false);
+		assert.equal(parsed.persisted, false);
+		assert.match(parsed.error, /not reachable/i);
+		const registryPath = path.join(home, "providers", "registry.json");
+		if (fs.existsSync(registryPath)) {
+			assert.doesNotMatch(fs.readFileSync(registryPath, "utf8"), /dead-custom/u);
+		}
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc service proxy background reloads service registry updates", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;

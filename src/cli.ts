@@ -2544,6 +2544,28 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					};
 					if (endpoint) config.endpoint = endpoint;
 					if (apiKey) config.apiKey = apiKey;
+					if (
+						endpoint &&
+						(providerType === "custom" || providerType === "browserless")
+					) {
+						const { checkProviderHealth } = await import("./providers/health");
+						const health = await checkProviderHealth(config);
+						if (health.endpointReachable === false) {
+							const result = {
+								success: false,
+								persisted: false,
+								error: `Provider endpoint is not reachable: ${health.summary}`,
+								health,
+							};
+							if (jsonOutput) {
+								outputJson(result);
+							} else {
+								console.error(`Error: ${result.error}`);
+								throw commandFailed();
+							}
+							break;
+						}
+					}
 					const result = registry.add(config);
 					if (jsonOutput) {
 						outputJson(result);
