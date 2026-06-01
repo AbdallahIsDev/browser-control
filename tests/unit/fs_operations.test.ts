@@ -27,7 +27,7 @@ import {
   resolvePath,
   resolvePathSafe,
   FsError,
-} from "../../src/fs_operations";
+} from "../../src/filesystem/operations";
 
 test("fs_operations: readFile returns content and metadata", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-fs-test-"));

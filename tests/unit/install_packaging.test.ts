@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import { getConfigEntries } from "../../src/config";
+import { getConfigEntries } from "../../src/shared/config";
 
 const root = process.cwd();
 

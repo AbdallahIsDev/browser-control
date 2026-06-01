@@ -8,19 +8,19 @@ import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
 
-import { Daemon } from "../../src/daemon";
+import { Daemon } from "../../src/runtime/daemon";
 import { resetStateStorage } from "../../src/state";
 import {
   createBrokerServer,
   normalizeClientIp,
   type BrokerServer,
-} from "../../src/broker_server";
+} from "../../src/runtime/broker_server";
 import { MemoryStore } from "../../src/runtime/memory_store";
 import type { PolicyEngine } from "../../src/policy/types";
 import type {
   BrokerRunTaskRequest,
   BrokerTaskStatusEntry,
-} from "../../src/broker_types";
+} from "../../src/runtime/broker_types";
 
 async function waitForOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) {

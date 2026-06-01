@@ -9,8 +9,8 @@ import {
   formatActionResult,
   policyDeniedResult,
   successResult,
-} from "../../src/action_result";
-import { getConfigEntries } from "../../src/config";
+} from "../../src/shared/action_result";
+import { getConfigEntries } from "../../src/shared/config";
 import {
   buildToolRegistry,
   getToolCategories,
@@ -27,14 +27,14 @@ import {
   TERMINAL_BUFFER_KEY,
   TERMINAL_METADATA_KEY,
   TERMINAL_PENDING_KEY,
-} from "../../src/terminal_buffer_store";
+} from "../../src/terminal/buffer_store";
 import {
   validateSerializedSession,
-} from "../../src/terminal_serialize";
+} from "../../src/terminal/serialize";
 import type {
   SerializedTerminalSession,
   TerminalBufferRecord,
-} from "../../src/terminal_resume_types";
+} from "../../src/terminal/resume_types";
 
 export const PUBLIC_SURFACE_FIXTURE_DIR = path.join(
   process.cwd(),

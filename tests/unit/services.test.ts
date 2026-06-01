@@ -23,8 +23,8 @@ import {
 import {
   getServicesDir,
   getServiceRegistryPath,
-} from "../../src/paths";
-import type { BrowserConnectionManager } from "../../src/browser_connection";
+} from "../../src/shared/paths";
+import type { BrowserConnectionManager } from "../../src/browser/connection";
 
 function createNoopBrowserManager(): BrowserConnectionManager {
   return {} as BrowserConnectionManager;

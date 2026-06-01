@@ -4,7 +4,7 @@ import type { Page } from "playwright-core";
 
 import { AIAgent, GuardrailError } from "../../src/ai_agent";
 import type { AIGuardrails } from "../../src/ai_agent";
-import { loadConfig } from "../../src/config";
+import { loadConfig } from "../../src/shared/config";
 
 /** Create a minimal mock page for testing */
 function createMockPage(overrides: Record<string, unknown> = {}): Page {

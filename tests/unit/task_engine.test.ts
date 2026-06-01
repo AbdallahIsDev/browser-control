@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MemoryStore } from "../../src/memory_store";
 
-import { TaskEngine, type TaskContext } from "../../src/task_engine";
+import { TaskEngine, type TaskContext } from "../../src/runtime/task_engine";
 
 test("TaskEngine runs steps sequentially and follows nextStep overrides", async () => {
   const visited: string[] = [];

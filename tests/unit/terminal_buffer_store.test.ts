@@ -5,7 +5,7 @@ import os from "node:os";
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-import { TerminalBufferStore, TERMINAL_PENDING_KEY } from "../../src/terminal_buffer_store";
+import { TerminalBufferStore, TERMINAL_PENDING_KEY } from "../../src/terminal/buffer_store";
 import { MemoryStore } from "../../src/memory_store";
 import { createCredentialProtectionService } from "../../src/security/credential_provider";
 

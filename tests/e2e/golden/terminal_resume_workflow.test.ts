@@ -4,9 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { MemoryStore } from "../../../src/memory_store";
-import { TerminalBufferStore } from "../../../src/terminal_buffer_store";
-import { buildResumeResult, decideResume, loadPersistedState, rebuildOutputBuffer } from "../../../src/terminal_resume";
-import type { SerializedTerminalSession } from "../../../src/terminal_resume_types";
+import { TerminalBufferStore } from "../../../src/terminal/buffer_store";
+import { buildResumeResult, decideResume, loadPersistedState, rebuildOutputBuffer } from "../../../src/terminal/resume";
+import type { SerializedTerminalSession } from "../../../src/terminal/resume_types";
 import { createRunReport, finishRunReport, recordWorkflow, writeReliabilityReport } from "../support/reliability_report";
 import { scanForBrowserControlLeftovers, summarizeCleanupFailure } from "../support/process_cleanup";
 

@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { chromium } from "playwright-core";
 
 import { MemoryStore } from "../../src/memory_store";
-import { DefaultPolicyEngine } from "../../src/policy_engine";
+import { DefaultPolicyEngine } from "../../src/policy/engine";
 import {
   BrowserConnectionManager,
   attachEndpointCandidates,
@@ -15,8 +15,8 @@ import {
   type BrowserConnectionMode,
   type BrowserTargetType,
   type BrowserConnectionStatus,
-} from "../../src/browser_connection";
-import { BrowserProfileManager } from "../../src/browser_profiles";
+} from "../../src/browser/connection";
+import { BrowserProfileManager } from "../../src/browser/profiles";
 import { ProviderRegistry } from "../../src/providers/registry";
 
 let testHome = "";
@@ -356,7 +356,7 @@ describe("BrowserConnectionManager", () => {
       const originalBind = process.env.BROWSER_BIND_ADDRESS;
       const childProcess = require("node:child_process") as typeof import("node:child_process");
       const launcherPath = require.resolve("../../src/runtime/launch_browser");
-      const connectionPath = require.resolve("../../src/browser_connection");
+      const connectionPath = require.resolve("../../src/browser/connection");
       const launcher = require(launcherPath) as typeof import("../../src/runtime/launch_browser");
       const originalSpawn = childProcess.spawn;
       const originalResolveChromePath = launcher.resolveChromePath;
@@ -386,7 +386,7 @@ describe("BrowserConnectionManager", () => {
       (launcher as unknown as { getWslHostCandidates: unknown }).getWslHostCandidates = () => [];
 
       try {
-        const fresh = require(connectionPath) as typeof import("../../src/browser_connection");
+        const fresh = require(connectionPath) as typeof import("../../src/browser/connection");
         const manager = new fresh.BrowserConnectionManager({ memoryStore: store, policyEngine: trustedEngine });
         await assert.rejects(() => manager.launchManaged({ port: 19998 }), /Failed to launch managed automation browser/);
         assert.equal(capturedBindAddress, "127.0.0.1");

@@ -15,7 +15,7 @@ import {
   getProfileRegistryPath,
   type BrowserProfile,
   type ProfileType,
-} from "../../src/browser_profiles";
+} from "../../src/browser/profiles";
 
 describe("BrowserProfileManager", () => {
   let manager: BrowserProfileManager;

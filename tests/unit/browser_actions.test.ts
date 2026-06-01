@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { BrowserActions, type BrowserStateResult } from "../../src/browser_actions";
-import type { BrowserConnectionManager } from "../../src/browser_connection";
+import { BrowserActions, type BrowserStateResult } from "../../src/browser/actions";
+import type { BrowserConnectionManager } from "../../src/browser/connection";
 import { MemoryStore } from "../../src/memory_store";
 import {
 	getGlobalNetworkCapture,

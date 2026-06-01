@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { MemoryStore } from "../../src/memory_store";
-import { HealthCheck } from "../../src/health_check";
+import { HealthCheck } from "../../src/runtime/health_check";
 import { ensureDataHome, getChromeDebugPath } from "../../src/shared/paths";
 
 test("HealthCheck runAll derives healthy, degraded, and unhealthy states", async () => {

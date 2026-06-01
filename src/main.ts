@@ -3,13 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { Browser } from "playwright-core";
-import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser_core";
+import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser/core";
 import { formatLaunchBrowserCommand } from "./browser/launch_help";
-import { connectStagehand, disconnectStagehand } from "./stagehand_core";
+import { connectStagehand, disconnectStagehand } from "./browser/stagehand_core";
 import { publishSite } from "./skills/examples/framer_skill";
 import { discoverSelectors, getSelectors } from "./selectors";
-import { TaskEngine } from "./task_engine";
-import { Telemetry, createTelegramAlertHandler } from "./telemetry";
+import { TaskEngine } from "./runtime/task_engine";
+import { Telemetry, createTelegramAlertHandler } from "./runtime/telemetry";
 
 const setupSchema = z.object({
   cdp_port: z.number().default(9222),

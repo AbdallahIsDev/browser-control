@@ -19,7 +19,7 @@ import {
   importAuthSnapshot,
   normalizeAuthSnapshot,
   type AuthSnapshot,
-} from "../../src/browser_auth_state";
+} from "../../src/browser/auth_state";
 
 describe("browser_auth_state", () => {
   let store: MemoryStore;

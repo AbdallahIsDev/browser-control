@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { SessionManager, isPolicyAllowed, LocalTerminalRuntime, DaemonTerminalRuntime, BrokerTerminalRuntime, probeDaemonHealth, probeTerminalReadiness, type SessionState, type SessionListEntry, type TerminalRuntime } from "../../src/session_manager";
 import { MemoryStore } from "../../src/memory_store";
-import { loadConfig } from "../../src/config";
+import { loadConfig } from "../../src/shared/config";
 import { stopDefaultDaemon } from "../helpers/daemon_helpers";
 
 describe("SessionManager", () => {
@@ -531,7 +531,7 @@ describe("SessionManager", () => {
     it("auditId is present when audit applies", async () => {
       // Enable audit on the policy engine
       const auditStore = new MemoryStore({ filename: ":memory:" });
-      const { DefaultPolicyEngine } = await import("../../src/policy_engine");
+      const { DefaultPolicyEngine } = await import("../../src/policy/engine");
       const engine = new DefaultPolicyEngine({ profileName: "balanced", auditEnabled: true });
       const auditManager = new SessionManager({ memoryStore: auditStore, policyEngine: engine });
       await auditManager.create("audit-test", { policyProfile: "balanced" });
@@ -787,7 +787,7 @@ describe("SessionManager", () => {
         termInterrupt: async () => ({ ok: true }),
         termClose: async () => ({ ok: true }),
         termList: () => [],
-      } as unknown as import("../../src/daemon").Daemon;
+      } as unknown as import("../../src/runtime/daemon").Daemon;
 
       assert.equal(manager.hasDaemon(), false, "should not have daemon initially");
 

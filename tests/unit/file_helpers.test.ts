@@ -11,7 +11,7 @@ import {
   uploadFile,
   uploadFiles,
   uploadWithDragDrop,
-} from "../../src/file_helpers";
+} from "../../src/browser/file_helpers";
 
 /** Create a minimal mock page that supports waitForEvent("download") and click. */
 function createMockPageWithDownload(downloadFile: { name: string; content: string; dir: string }) {

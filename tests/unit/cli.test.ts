@@ -1411,9 +1411,9 @@ test("parseArgs handles fs write command with --content", () => {
 // internally, so this verifies the --json output shape.
 
 test("formatActionResult produces correct JSON shape for term exec", async () => {
-  const { formatActionResult } = await import("../../src/action_result");
+  const { formatActionResult } = await import("../../src/shared/action_result");
   const { SessionManager } = await import("../../src/session_manager");
-  const { TerminalActions } = await import("../../src/terminal_actions");
+  const { TerminalActions } = await import("../../src/terminal/actions");
   const { MemoryStore } = await import("../../src/memory_store");
 
   const store = new MemoryStore({ filename: ":memory:" });
@@ -1441,9 +1441,9 @@ test("formatActionResult produces correct JSON shape for term exec", async () =>
 });
 
 test("formatActionResult produces correct JSON shape for fs read", async () => {
-  const { formatActionResult } = await import("../../src/action_result");
+  const { formatActionResult } = await import("../../src/shared/action_result");
   const { SessionManager } = await import("../../src/session_manager");
-  const { FsActions } = await import("../../src/fs_actions");
+  const { FsActions } = await import("../../src/filesystem/actions");
   const { MemoryStore } = await import("../../src/memory_store");
   const fs = await import("node:fs");
   const path = await import("node:path");
@@ -1478,9 +1478,9 @@ test("formatActionResult produces correct JSON shape for fs read", async () => {
 });
 
 test("formatActionResult produces correct JSON shape for term list", async () => {
-  const { formatActionResult } = await import("../../src/action_result");
+  const { formatActionResult } = await import("../../src/shared/action_result");
   const { SessionManager } = await import("../../src/session_manager");
-  const { TerminalActions } = await import("../../src/terminal_actions");
+  const { TerminalActions } = await import("../../src/terminal/actions");
   const { MemoryStore } = await import("../../src/memory_store");
 
   const store = new MemoryStore({ filename: ":memory:" });
@@ -1506,7 +1506,7 @@ test("formatActionResult produces correct JSON shape for term list", async () =>
 });
 
 test("formatActionResult includes policy metadata for denied actions", async () => {
-  const { formatActionResult, policyDeniedResult } = await import("../../src/action_result");
+  const { formatActionResult, policyDeniedResult } = await import("../../src/shared/action_result");
 
   const denied = policyDeniedResult("High-risk action under safe profile", {
     path: "command",
@@ -1523,7 +1523,7 @@ test("formatActionResult includes policy metadata for denied actions", async () 
 });
 
 test("formatActionResult includes policy metadata for confirmation-required", async () => {
-  const { formatActionResult, confirmationRequiredResult } = await import("../../src/action_result");
+  const { formatActionResult, confirmationRequiredResult } = await import("../../src/shared/action_result");
 
   const confirm = confirmationRequiredResult("Needs human approval", {
     path: "a11y",

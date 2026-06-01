@@ -10,10 +10,10 @@ import {
   type DaemonStatusRecord,
   type ResumePolicy,
   type TaskIntent,
-} from "../../src/daemon";
+} from "../../src/runtime/daemon";
 import { MemoryStore } from "../../src/memory_store";
 import type { StateStorage, StoredTask } from "../../src/state/index";
-import { Telemetry } from "../../src/telemetry";
+import { Telemetry } from "../../src/runtime/telemetry";
 
 function createTestConfig(overrides: Record<string, unknown> = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "daemon-test-"));

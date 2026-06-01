@@ -4,9 +4,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { BrowserConnectionManager } from "../../src/browser_connection";
+import { BrowserConnectionManager } from "../../src/browser/connection";
 import { MemoryStore } from "../../src/memory_store";
-import { DefaultPolicyEngine } from "../../src/policy_engine";
+import { DefaultPolicyEngine } from "../../src/policy/engine";
 
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {

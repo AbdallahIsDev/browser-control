@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { installLoggerExitHandlers, Logger, type LogLevel, type LogRecord } from "../../src/logger";
+import { installLoggerExitHandlers, Logger, type LogLevel, type LogRecord } from "../../src/shared/logger";
 
 /** Capture writes to stdout/stderr for inspection. */
 function captureOutput(fn: () => void): { stdout: string; stderr: string } {

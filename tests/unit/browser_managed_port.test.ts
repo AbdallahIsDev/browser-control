@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import net from "node:net";
 import { describe, it } from "node:test";
 
-import { resolveManagedLaunchPort } from "../../src/browser_connection";
+import { resolveManagedLaunchPort } from "../../src/browser/connection";
 
 async function withOccupiedPort<T>(
 	callback: (port: number) => Promise<T>,

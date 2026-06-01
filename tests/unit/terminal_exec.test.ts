@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import test from "node:test";
 
-import { exec, execStdout, execTest, ExecError } from "../../src/terminal_exec";
+import { exec, execStdout, execTest, ExecError } from "../../src/terminal/exec";
 
 function echoCommand(): string {
   return os.platform() === "win32"

@@ -7,7 +7,7 @@ import {
   confirmationRequiredResult,
   formatActionResult,
   type ActionResult,
-} from "../../src/action_result";
+} from "../../src/shared/action_result";
 
 describe("ActionResult", () => {
   describe("successResult", () => {

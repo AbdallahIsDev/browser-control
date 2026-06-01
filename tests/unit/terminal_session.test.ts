@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import test from "node:test";
 
-import { detectShell, resolveNamedShell, isWindowsPlatform, platformShellName } from "../../src/cross_platform";
-import { isPromptDetected, registerCustomPrompt, unregisterCustomPrompt, extractCwdFromPrompt } from "../../src/terminal_prompt";
-import { PtyTerminalSession, TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../src/terminal_session";
+import { detectShell, resolveNamedShell, isWindowsPlatform, platformShellName } from "../../src/terminal/cross_platform";
+import { isPromptDetected, registerCustomPrompt, unregisterCustomPrompt, extractCwdFromPrompt } from "../../src/terminal/prompt";
+import { PtyTerminalSession, TerminalSessionManager, getDefaultSessionManager, resetDefaultSessionManager } from "../../src/terminal/session";
 
 // Ensure clean state before each test group
 test.afterEach(async () => {

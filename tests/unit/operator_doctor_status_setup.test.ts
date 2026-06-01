@@ -8,7 +8,7 @@ import test from "node:test";
 import { buildDoctorChecks, runDoctor } from "../../src/operator/doctor";
 import { runSetup } from "../../src/operator/setup";
 import { collectStatus } from "../../src/operator/status";
-import { loadUserConfig } from "../../src/config";
+import { loadUserConfig } from "../../src/shared/config";
 import { cleanupStaleDaemonFiles } from "../../src/runtime/daemon_cleanup";
 import { getInteropDir } from "../../src/shared/paths";
 

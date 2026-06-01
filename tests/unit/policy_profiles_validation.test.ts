@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TRUSTED_PROFILE, validateProfile } from "../../src/policy_profiles";
-import type { PolicyProfile } from "../../src/policy";
+import { TRUSTED_PROFILE, validateProfile } from "../../src/policy/profiles";
+import type { PolicyProfile } from "../../src/policy/types";
 
 test("validateProfile rejects malformed policy field types", () => {
 	const malformed = {

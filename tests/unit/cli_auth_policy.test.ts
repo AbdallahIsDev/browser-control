@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { MemoryStore } from "../../src/memory_store";
-import { loadAuthSnapshot, saveAuthSnapshotToStore, type AuthSnapshot } from "../../src/browser_auth_state";
+import { loadAuthSnapshot, saveAuthSnapshotToStore, type AuthSnapshot } from "../../src/browser/auth_state";
 import { SessionManager } from "../../src/session_manager";
 
 function makeHome(): string {

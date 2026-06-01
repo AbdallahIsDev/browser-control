@@ -1,6 +1,6 @@
 import type { Page } from "playwright-core";
-import { retryAction, waitForAny, waitForElement } from "../../browser_core";
-import { act } from "../../stagehand_core";
+import { retryAction, waitForAny, waitForElement } from "../../browser/core";
+import { act } from "../../browser/stagehand_core";
 import { resolveSelector } from "../../selector_store";
 import { getSelectors, getSelectorsPath, selectorDescriptions } from "../../selectors";
 import type { Skill, SkillContext, SkillManifest } from "../../skill";

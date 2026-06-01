@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { Daemon } from "../../src/daemon";
+import { Daemon } from "../../src/runtime/daemon";
 import { MemoryStore } from "../../src/memory_store";
-import { TerminalBufferStore } from "../../src/terminal_buffer_store";
-import type { SerializedTerminalSession } from "../../src/terminal_resume_types";
+import { TerminalBufferStore } from "../../src/terminal/buffer_store";
+import type { SerializedTerminalSession } from "../../src/terminal/resume_types";
 
 test("daemon terminal resume lifecycle persists and restores metadata/buffer without redacted env", async () => {
   const memoryStore = new MemoryStore({ filename: ":memory:" });

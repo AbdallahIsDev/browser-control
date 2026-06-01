@@ -5,7 +5,7 @@ import { MemoryStore } from "../../src/memory_store";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getChromeDebugPath } from "../../src/paths";
+import { getChromeDebugPath } from "../../src/shared/paths";
 
 import {
   createAutomationContext,
@@ -18,7 +18,7 @@ import {
   smartClick,
   smartFill,
   type DebugInteropState,
-} from "../../src/browser_core";
+} from "../../src/browser/core";
 
 test("getDebugEndpointCandidates prefers explicit env override", () => {
   const candidates = getDebugEndpointCandidates(9222, {

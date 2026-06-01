@@ -11,8 +11,6 @@ function readSource(relativePath: string): string {
 
 test("daemon and broker library modules are import-safe", () => {
 	for (const file of [
-		"src/daemon.ts",
-		"src/broker_server.ts",
 		"src/runtime/daemon.ts",
 		"src/runtime/broker_server.ts",
 	]) {

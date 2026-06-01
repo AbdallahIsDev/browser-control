@@ -7,7 +7,7 @@ import {
 	failureResult,
 	formatActionResult,
 	successResult,
-} from "../../src/action_result";
+} from "../../src/shared/action_result";
 import { runCli } from "../../src/cli";
 import {
 	buildSnapshot,

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { getConfigEntries, getConfigEnvEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../src/config";
+import { getConfigEntries, getConfigEnvEntries, getConfigValue, loadConfig, type BrowserControlConfig } from "../../src/shared/config";
 
 // ── Config Loader: Defaults ──────────────────────────────────────────
 
