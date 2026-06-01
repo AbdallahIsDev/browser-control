@@ -84,17 +84,17 @@ test("cleanupDataHome: never auto-delete critical folders", () => {
     fs.utimesSync(profileDir, oldTime, oldTime);
     fs.utimesSync(path.join(profileDir, "History"), oldTime, oldTime);
 
-    // Trading journal
-    const journal = path.join(home, "trading", "journals", "2024-01-01.md");
-    fs.mkdirSync(path.dirname(journal), { recursive: true });
-    fs.writeFileSync(journal, "notes");
-    fs.utimesSync(journal, oldTime, oldTime);
+    // User-owned legacy file
+    const legacyNote = path.join(home, "legacy", "custom", "2024-01-01.md");
+    fs.mkdirSync(path.dirname(legacyNote), { recursive: true });
+    fs.writeFileSync(legacyNote, "notes");
+    fs.utimesSync(legacyNote, oldTime, oldTime);
 
     // Run cleanup with dryRun: false and confirm
     const result = cleanupDataHome(home, { dryRun: false, confirm: "DELETE_RUNTIME_TEMP" });
     
     assert.equal(fs.existsSync(path.join(profileDir, "History")), true, "Should NOT delete browser profiles");
-    assert.equal(fs.existsSync(journal), true, "Should NOT delete trading journals");
+    assert.equal(fs.existsSync(legacyNote), true, "Should NOT delete user-owned legacy files");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

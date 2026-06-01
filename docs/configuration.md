@@ -51,7 +51,7 @@ Sensitive values are redacted in config output.
   legacy/
 ```
 
-Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run by default and only targets retention-safe runtime temp files. Older non-core folders such as `trading/` are reported as legacy/non-core when present; `bc data cleanup --stale --dry-run=false --confirm=MOVE_STALE_LEGACY` moves them under `legacy/` without deleting user data.
+Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run by default and only targets retention-safe runtime temp files. The `legacy/` directory is preserved for manual review and export; cleanup does not move or delete user data from legacy folders.
 
 ## Main Config Keys
 

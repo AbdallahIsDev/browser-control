@@ -378,18 +378,18 @@ test("data cleanup dry run only targets retention-safe temp files", () => {
 		const oldTime = new Date(Date.now() - 48 * 60 * 60 * 1000);
 		fs.utimesSync(staleTemp, oldTime, oldTime);
 
-		const journal = path.join(home, "trading", "journals", "keep.md");
-		fs.mkdirSync(path.dirname(journal), { recursive: true });
-		fs.writeFileSync(journal, "never delete");
-		fs.utimesSync(journal, oldTime, oldTime);
+		const legacyNote = path.join(home, "legacy", "custom", "keep.md");
+		fs.mkdirSync(path.dirname(legacyNote), { recursive: true });
+		fs.writeFileSync(legacyNote, "never delete");
+		fs.utimesSync(legacyNote, oldTime, oldTime);
 
 		const result = cleanupDataHome(home, { dryRun: true, now: new Date() });
 		assert.equal(result.dryRun, true);
 		assert.ok(result.candidates.some((entry) => entry.path === staleTemp));
 		assert.equal(
-			result.candidates.some((entry) => entry.path === journal),
+			result.candidates.some((entry) => entry.path === legacyNote),
 			false,
-			"trading journals are never auto-cleaned",
+			"legacy user files are never auto-cleaned",
 		);
 		assert.equal(fs.existsSync(staleTemp), true, "dry run does not delete");
 	} finally {
@@ -397,53 +397,8 @@ test("data cleanup dry run only targets retention-safe temp files", () => {
 	}
 });
 
-test("data cleanup stale dry run reports top-level trading without moving user data", () => {
-	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-stale-dry-"));
-	try {
-		ensureDataHomeAtPath(home);
-		const journal = path.join(home, "trading", "journals", "keep.md");
-		fs.mkdirSync(path.dirname(journal), { recursive: true });
-		fs.writeFileSync(journal, "keep");
-
-		const result = cleanupDataHome(home, { dryRun: true, includeStaleLegacy: true });
-
-		assert.equal(result.dryRun, true);
-		assert.ok(result.candidates.some((entry) => entry.path === path.join(home, "trading")));
-		assert.equal(fs.existsSync(journal), true);
-		assert.equal(fs.existsSync(path.join(home, "legacy", "trading", "journals", "keep.md")), false);
-	} finally {
-		fs.rmSync(home, { recursive: true, force: true });
-	}
-});
-
-test("data cleanup stale moves top-level trading to legacy with explicit confirmation", () => {
-	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-stale-move-"));
-	try {
-		ensureDataHomeAtPath(home);
-		const journal = path.join(home, "trading", "journals", "keep.md");
-		fs.mkdirSync(path.dirname(journal), { recursive: true });
-		fs.writeFileSync(journal, "keep");
-
-		const result = cleanupDataHome(home, {
-			dryRun: false,
-			confirm: "MOVE_STALE_LEGACY",
-			includeStaleLegacy: true,
-		});
-
-		assert.equal(result.dryRun, false);
-		assert.equal(fs.existsSync(path.join(home, "trading")), false);
-		const movedJournal = path.join(home, "legacy", "trading", "journals", "keep.md");
-		assert.equal(fs.existsSync(movedJournal), true);
-		assert.equal(fs.readFileSync(movedJournal, "utf8"), "keep");
-		assert.ok(result.moved.some((entry) => entry.from === path.join(home, "trading")));
-		assert.equal(result.deleted.length, 0);
-	} finally {
-		fs.rmSync(home, { recursive: true, force: true });
-	}
-});
-
-test("data home report classifies trading as legacy non-core when present", () => {
-	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-legacy-"));
+test("data home report does not special-case removed trading product data", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-no-trading-alias-"));
 	try {
 		ensureDataHomeAtPath(home);
 		fs.mkdirSync(path.join(home, "trading", "journals"), { recursive: true });
@@ -451,13 +406,13 @@ test("data home report classifies trading as legacy non-core when present", () =
 
 		const report = inspectDataHome(home);
 
-		assert.ok(
+		assert.equal(
 			report.legacyAliases.some((entry) =>
 				entry.legacy.endsWith(`${path.sep}trading`) &&
-				entry.present === true &&
-				entry.current.endsWith(path.join("legacy", "trading")),
+				entry.current.endsWith(path.join("legacy", "trading"))
 			),
-			"trading directory should be reported as legacy/non-core, not product surface",
+			false,
+			"removed product directories should not have product-specific aliases",
 		);
 		assert.equal(
 			report.userEditable.some((entry) => entry.includes(`${path.sep}trading${path.sep}`)),

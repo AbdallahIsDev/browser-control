@@ -685,13 +685,6 @@
         "src/data_home.ts"
       ],
       "kind": "type",
-      "name": "CleanupMove"
-    },
-    {
-      "declarations": [
-        "src/data_home.ts"
-      ],
-      "kind": "type",
       "name": "CleanupResult"
     },
     {

@@ -949,7 +949,7 @@ Operator:
   captcha test [--json]                                               Check CAPTCHA provider configuration
   network rules list|add|remove [--json]                             Manage network privacy rules
   network proxy list|add|remove|test [--json]                        Manage outbound proxy inventory
-  data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]
+  data doctor [--cleanup|--purge-profiles] | cleanup [--purge-profiles] | export [--json]
                                                                       Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
@@ -5065,29 +5065,32 @@ async function handleData(args: ParsedArgs): Promise<void> {
 			}
 			return;
 		}
-		const includeStaleLegacy = flags.stale === "true";
-		const requiredConfirm = includeStaleLegacy ? "MOVE_STALE_LEGACY" : "DELETE_RUNTIME_TEMP";
+		if (flags.stale === "true") {
+			console.error(
+				"Error: data cleanup --stale was removed. Cleanup only targets retention-safe runtime temp files.",
+			);
+			throw commandFailed();
+		}
+
 		const destructiveMode =
-			destructiveCleanupRequested && confirm === requiredConfirm;
+			destructiveCleanupRequested && confirm === "DELETE_RUNTIME_TEMP";
 
 		if (destructiveCleanupRequested && !destructiveMode) {
 			console.error(
 				"Error: Destructive cleanup requires explicit confirmation.",
 			);
 			console.error(
-				includeStaleLegacy
-					? "Use: data cleanup --stale --dry-run=false --confirm=MOVE_STALE_LEGACY"
-					: "Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
+				"Use: data cleanup --dry-run=false --confirm=DELETE_RUNTIME_TEMP",
 			);
 			throw commandFailed();
 		}
 
 		const dryRun = !destructiveMode;
-		const result = cleanupDataHome(undefined, { dryRun, confirm, includeStaleLegacy });
+		const result = cleanupDataHome(undefined, { dryRun, confirm });
 		if (jsonOutput) outputJson(result, false);
 		else {
 			console.log(
-				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.deleted.length} deleted, ${result.moved.length} moved, ${result.reclaimedBytes} bytes reclaimed.`,
+				`${result.dryRun ? "Dry run" : "Cleanup"}: ${result.candidates.length} candidates, ${result.deleted.length} deleted, ${result.reclaimedBytes} bytes reclaimed.`,
 			);
 		}
 	};

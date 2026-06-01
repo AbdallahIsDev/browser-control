@@ -52,21 +52,13 @@ export interface CleanupCandidate {
 	reason: string;
 	sizeBytes: number;
 	ageHours: number;
-	kind?: "runtime-temp" | "legacy-trading";
-}
-
-export interface CleanupMove {
-	from: string;
-	to: string;
-	reason: string;
-	sizeBytes: number;
+	kind?: "runtime-temp";
 }
 
 export interface CleanupResult {
 	dryRun: boolean;
 	candidates: CleanupCandidate[];
 	deleted: string[];
-	moved: CleanupMove[];
 	reclaimedBytes: number;
 }
 
@@ -443,19 +435,6 @@ function readSchemaVersion(manifestPath: string): number {
 	}
 }
 
-function uniqueLegacyTradingTarget(home: string): string {
-	const base = path.join(home, "legacy", "trading");
-	if (!fs.existsSync(base)) return base;
-	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-	let candidate = `${base}-${stamp}`;
-	let counter = 1;
-	while (fs.existsSync(candidate)) {
-		candidate = `${base}-${stamp}-${counter}`;
-		counter += 1;
-	}
-	return candidate;
-}
-
 export function inspectDataHome(home = getDataHome()): DataHomeReport {
 	ensureDataHomeAtPath(home);
 	const manifestPath = getDataHomeManifestPath(home);
@@ -514,12 +493,6 @@ export function inspectDataHome(home = getDataHome()): DataHomeReport {
 			present: fs.existsSync(path.join(home, "automation-helpers")),
 			aliased: fs.existsSync(getAutomationHelpersRegistryPath(home)),
 		},
-		{
-			legacy: path.join(home, "trading"),
-			current: path.join(home, "legacy", "trading"),
-			present: fs.existsSync(path.join(home, "trading")),
-			aliased: fs.existsSync(path.join(home, "legacy", "trading")),
-		},
 	];
 
 	return {
@@ -541,7 +514,6 @@ export function cleanupDataHome(
 		now?: Date;
 		tempTtlHours?: number;
 		confirm?: string;
-		includeStaleLegacy?: boolean;
 	} = {},
 ): CleanupResult {
 	ensureDataHomeAtPath(home);
@@ -564,42 +536,14 @@ export function cleanupDataHome(
 		}
 	}
 
-	if (options.includeStaleLegacy) {
-		const tradingDir = path.join(home, "trading");
-		if (fs.existsSync(tradingDir) && fs.statSync(tradingDir).isDirectory()) {
-			const stat = fs.statSync(tradingDir);
-			candidates.push({
-				path: tradingDir,
-				reason: "legacy trading product data should live under legacy/trading",
-				sizeBytes: sizeOfPath(tradingDir),
-				ageHours: (now.getTime() - stat.mtime.getTime()) / 3_600_000,
-				kind: "legacy-trading",
-			});
-		}
-	}
-
 	// Default is always dry-run (true). Deletion only happens when dryRun is false AND confirmation is provided.
 	const isDryRunRequested = options.dryRun === false;
 	const canDeleteRuntimeTemp = isDryRunRequested && options.confirm === "DELETE_RUNTIME_TEMP";
-	const canMoveStaleLegacy = isDryRunRequested && options.confirm === "MOVE_STALE_LEGACY";
 
 	const deleted: string[] = [];
-	const moved: CleanupMove[] = [];
 	let reclaimedBytes = 0;
 	if (isDryRunRequested) {
 		for (const candidate of candidates) {
-			if (candidate.kind === "legacy-trading" && canMoveStaleLegacy) {
-				const target = uniqueLegacyTradingTarget(home);
-				fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-				fs.renameSync(candidate.path, target);
-				moved.push({
-					from: candidate.path,
-					to: target,
-					reason: candidate.reason,
-					sizeBytes: candidate.sizeBytes,
-				});
-				continue;
-			}
 			if (candidate.kind !== "runtime-temp" || !canDeleteRuntimeTemp) continue;
 			fs.rmSync(candidate.path, { force: true });
 			deleted.push(candidate.path);
@@ -608,10 +552,9 @@ export function cleanupDataHome(
 	}
 
 	return {
-		dryRun: deleted.length === 0 && moved.length === 0,
+		dryRun: deleted.length === 0,
 		candidates,
 		deleted,
-		moved,
 		reclaimedBytes,
 	};
 }
@@ -653,7 +596,6 @@ export function exportDataHome(
 		"workflows/definitions",
 		"helpers/registry.json",
 		"packages/registry.json",
-		"legacy/trading/journals",
 	]) {
 		filesCopied += safeCopyIfExists(home, exportDir, rel);
 	}

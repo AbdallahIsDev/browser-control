@@ -375,11 +375,10 @@
             "cleanup",
             "json",
             "purge-profiles",
-            "purge-profiles",
-            "stale"
+            "purge-profiles"
           ],
           "jsonSupport": true,
-          "syntax": "data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]"
+          "syntax": "data doctor [--cleanup|--purge-profiles] | cleanup [--purge-profiles] | export [--json]"
         },
         {
           "commandPath": [

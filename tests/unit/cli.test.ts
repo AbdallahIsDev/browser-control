@@ -230,7 +230,7 @@ test("top-level provider list routes to browser provider list", () => {
   }
 });
 
-test("data cleanup --stale moves legacy trading only with explicit confirmation", () => {
+test("data cleanup --stale is rejected and preserves user data", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-stale-cleanup-"));
   try {
     const journal = path.join(home, "trading", "journals", "keep.md");
@@ -241,39 +241,9 @@ test("data cleanup --stale moves legacy trading only with explicit confirmation"
       cwd: process.cwd(),
       env: { BROWSER_CONTROL_HOME: home },
     });
-    assert.equal(dryRun.status, 0, dryRun.stderr);
-    const dryRunJson = JSON.parse(dryRun.stdout) as {
-      dryRun: boolean;
-      candidates: Array<{ path: string }>;
-      moved: Array<{ from: string; to: string }>;
-    };
-    assert.equal(dryRunJson.dryRun, true);
-    assert.ok(dryRunJson.candidates.some((entry) => entry.path === path.join(home, "trading")));
-    assert.deepEqual(dryRunJson.moved, []);
+    assert.notEqual(dryRun.status, 0);
+    assert.match(dryRun.stderr, /data cleanup --stale was removed/);
     assert.equal(fs.existsSync(journal), true);
-
-    const move = runCli([
-      "data",
-      "cleanup",
-      "--stale",
-      "--dry-run=false",
-      "--confirm=MOVE_STALE_LEGACY",
-      "--json",
-    ], {
-      cwd: process.cwd(),
-      env: { BROWSER_CONTROL_HOME: home },
-    });
-    assert.equal(move.status, 0, move.stderr);
-    const moveJson = JSON.parse(move.stdout) as {
-      dryRun: boolean;
-      moved: Array<{ from: string; to: string }>;
-      deleted: string[];
-    };
-    assert.equal(moveJson.dryRun, false);
-    assert.ok(moveJson.moved.some((entry) => entry.from === path.join(home, "trading")));
-    assert.deepEqual(moveJson.deleted, []);
-    assert.equal(fs.existsSync(path.join(home, "trading")), false);
-    assert.equal(fs.existsSync(path.join(home, "legacy", "trading", "journals", "keep.md")), true);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -390,7 +360,7 @@ test("data cleanup destructive mode uses positive confirmation logic", () => {
   assert.match(handleDataSource, /const destructiveCleanupRequested = flags\["dry-run"\] === "false"/);
   assert.match(
     handleDataSource,
-    /const destructiveMode =\s*destructiveCleanupRequested && confirm === requiredConfirm/,
+    /const destructiveMode =\s*destructiveCleanupRequested && confirm === "DELETE_RUNTIME_TEMP"/,
   );
   assert.doesNotMatch(handleDataSource, /dryRunRequested/);
 });
