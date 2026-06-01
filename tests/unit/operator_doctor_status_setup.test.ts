@@ -190,6 +190,54 @@ test("setup non-interactive creates config and never waits for prompts", async (
   }
 });
 
+test("setup non-interactive defaults fresh AI provider to local ollama", async () => {
+  const home = makeHome();
+  try {
+    const env = { BROWSER_CONTROL_HOME: home };
+    const result = await runSetup({
+      env,
+      nonInteractive: true,
+      skipBrowserTest: true,
+      skipTerminalTest: true,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.warnings.some((warning) => warning.includes("OpenRouter")), false);
+    const userConfig = loadUserConfig({ env });
+    assert.equal(userConfig.modelProvider, "ollama");
+    assert.equal(userConfig.modelName, undefined);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("setup non-interactive warns when OpenRouter is selected without an API key", async () => {
+  const home = makeHome();
+  try {
+    const env = { BROWSER_CONTROL_HOME: home };
+    const result = await runSetup({
+      env,
+      nonInteractive: true,
+      modelProvider: "openrouter",
+      skipBrowserTest: true,
+      skipTerminalTest: true,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(
+      result.warnings.some((warning) =>
+        warning.includes("OpenRouter is a cloud provider") &&
+        warning.includes("requires an API key"),
+      ),
+      true,
+    );
+    const userConfig = loadUserConfig({ env });
+    assert.equal(userConfig.modelProvider, "openrouter");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("setup --json emits only JSON and never prompts interactively", () => {
   const home = makeHome();
   try {

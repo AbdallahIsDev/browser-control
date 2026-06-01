@@ -46,13 +46,24 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   const skipped: string[] = [];
   const warnings: string[] = [];
   const current = loadConfig({ env, validate: false });
+  const currentModelProvider = getConfigValue("modelProvider", {
+    env,
+    validate: false,
+  });
 
   let profile = options.profile ?? current.policyProfile ?? "balanced";
   let browserMode = options.browserMode ?? current.browserMode ?? "attach";
   let chromeDebugPort = options.chromeDebugPort ?? current.chromeDebugPort ?? 9222;
   let chromeBindAddress = options.chromeBindAddress ?? current.chromeBindAddress ?? "127.0.0.1";
-  let modelProvider = options.modelProvider ?? current.modelProvider ?? "openrouter";
-  let modelName = options.modelName ?? current.modelName ?? current.openrouterModel ?? "";
+  let modelProvider =
+    options.modelProvider ??
+    (currentModelProvider.source === "default" ? "ollama" : current.modelProvider) ??
+    "ollama";
+  let modelName =
+    options.modelName ??
+    current.modelName ??
+    (modelProvider === "openrouter" ? current.openrouterModel : "") ??
+    "";
   let modelEndpoint = options.modelEndpoint ?? current.modelEndpoint ?? "";
   let modelApiKey = options.modelApiKey ?? "";
 
@@ -62,9 +73,9 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     chromeDebugPort = Number(await ask("Chrome debug port", String(chromeDebugPort)));
     chromeBindAddress = await ask("Chrome bind address", chromeBindAddress);
     modelProvider = ((await ask(
-      "AI model provider: openrouter, ollama, openai-compatible",
+      "AI model provider: ollama (local, no API key), openrouter (cloud, requires API key/billing), openai-compatible",
       modelProvider,
-    )) as SetupOptions["modelProvider"]) ?? "openrouter";
+    )) as SetupOptions["modelProvider"]) ?? "ollama";
     modelName = await ask("AI model name; leave blank for provider default", modelName);
     modelEndpoint = await ask("AI model endpoint URL; leave blank for provider default", modelEndpoint);
     modelApiKey = await ask("AI model API key; leave blank to skip storing a key", "");
@@ -99,6 +110,17 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   if (modelName.trim()) writes.push(["modelName", modelName.trim()]);
   if (modelEndpoint.trim()) writes.push(["modelEndpoint", modelEndpoint.trim()]);
   if (modelApiKey.trim()) writes.push(["modelApiKey", modelApiKey.trim()]);
+
+  const hasModelApiKey = Boolean(
+    modelApiKey.trim() ||
+      current.modelApiKey?.trim() ||
+      current.openrouterApiKey?.trim(),
+  );
+  if (modelProvider === "openrouter" && !hasModelApiKey) {
+    warnings.push(
+      "OpenRouter is a cloud provider that requires an API key and may incur billing; set BROWSER_CONTROL_MODEL_API_KEY/OPENROUTER_API_KEY or choose modelProvider=ollama for local setup.",
+    );
+  }
 
   let configPath = "";
   let success = true;
