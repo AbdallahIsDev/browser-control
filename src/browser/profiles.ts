@@ -183,7 +183,7 @@ function updateRegistry(mutator: (registry: ProfileRegistry) => void): ProfileRe
   });
 }
 
-function sizeOfPath(target: string): number {
+export function sizeOfPath(target: string): number {
   try {
     const stat = fs.lstatSync(target);
     if (stat.isSymbolicLink()) return 0;

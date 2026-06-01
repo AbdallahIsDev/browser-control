@@ -4,11 +4,13 @@ import path from "node:path";
 
 import { isDebugPortReady } from "../browser/core";
 import { formatLaunchBrowserCommand } from "../browser/launch_help";
+import { sizeOfPath } from "../browser/profiles";
 import { getConfigValue, loadConfig, loadUserConfig } from "../shared/config";
 import { MemoryStore } from "../runtime/memory_store";
 import { ProviderRegistry } from "../providers/registry";
 import { loadProxyConfigs } from "../proxy_manager";
 import { getLocalhostCaStatus } from "../services/local_ca";
+import { getProfilesDir } from "../shared/paths";
 import { detectShell, resolveNamedShell } from "../terminal/cross_platform";
 import { probeDaemonHealth } from "../session_manager";
 import { resolveChromePath } from "../runtime/launch_browser";
@@ -20,7 +22,10 @@ interface DoctorOptions {
   env?: NodeJS.ProcessEnv;
   cwd?: string;
   checks?: DoctorCheck[];
+  profileSizeWarnBytes?: number;
 }
+
+const DEFAULT_PROFILE_SIZE_WARN_BYTES = 500 * 1024 * 1024;
 
 function result(
   id: string,
@@ -71,6 +76,13 @@ function canConnectToLoopbackPort(port: number): Promise<boolean> {
   });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${bytes}B`;
+}
+
 async function runCheck(check: DoctorCheck): Promise<DoctorCheckResult> {
   try {
     return await check();
@@ -91,6 +103,7 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const config = loadConfig({ env, validate: false });
+  const profileSizeWarnBytes = options.profileSizeWarnBytes ?? DEFAULT_PROFILE_SIZE_WARN_BYTES;
 
   return [
     async () => {
@@ -152,6 +165,52 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
           `Close Chrome and run ${formatLaunchBrowserCommand(config.chromeDebugPort)}, or configure BROWSER_DEBUG_URL when browser automation is needed.`,
           false,
         );
+    },
+    async () => {
+      const profilesDir = getProfilesDir(config.dataHome);
+      if (!fs.existsSync(profilesDir)) {
+        return result(
+          "browser.profileSize",
+          "Browser Profile Size",
+          "browser",
+          "pass",
+          "No browser profile directory exists yet.",
+          "No action needed.",
+          false,
+        );
+      }
+      const oversized = fs
+        .readdirSync(profilesDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => {
+          const profilePath = path.join(profilesDir, entry.name);
+          return { name: entry.name, sizeBytes: sizeOfPath(profilePath) };
+        })
+        .filter((entry) => entry.sizeBytes >= profileSizeWarnBytes)
+        .sort((a, b) => b.sizeBytes - a.sizeBytes);
+      if (oversized.length === 0) {
+        return result(
+          "browser.profileSize",
+          "Browser Profile Size",
+          "browser",
+          "pass",
+          `No browser profile exceeds ${formatBytes(profileSizeWarnBytes)}.`,
+          "No action needed.",
+          false,
+        );
+      }
+      return result(
+        "browser.profileSize",
+        "Browser Profile Size",
+        "browser",
+        "warn",
+        `Oversized browser profile(s): ${oversized
+          .slice(0, 5)
+          .map((entry) => `${entry.name}=${formatBytes(entry.sizeBytes)}`)
+          .join(", ")}.`,
+        "Review browser/profiles usage and remove stale named profiles with bc data cleanup --purge-profiles --dry-run=false --yes.",
+        false,
+      );
     },
     async () => {
       try {

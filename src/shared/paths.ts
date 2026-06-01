@@ -484,8 +484,8 @@ export function getPolicyProfilesDir(): string {
  * - If only legacy profiles/ exists, returns it (it will be migrated next time ensureDataHome is called).
  * - Defaults to canonical path for first-run.
  */
-export function getProfilesDir(): string {
-  const home = getDataHome();
+export function getProfilesDir(dataHome?: string): string {
+  const home = dataHome ?? getDataHome();
   const canonical = path.join(home, "browser", "profiles");
   const legacy = path.join(home, "profiles");
   const canonicalExists = fs.existsSync(canonical);

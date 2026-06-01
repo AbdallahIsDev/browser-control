@@ -76,6 +76,32 @@ test("doctor treats missing Chrome as degraded browser capability, not total fai
   }
 });
 
+test("doctor warns when a browser profile exceeds configured size threshold", async () => {
+  const home = makeHome();
+  try {
+    const profileDir = path.join(home, "browser", "profiles", "large-profile");
+    fs.mkdirSync(profileDir, { recursive: true });
+    fs.writeFileSync(path.join(profileDir, "Cache"), "0123456789abcdef");
+
+    const result = await runDoctor({
+      env: {
+        BROWSER_CONTROL_HOME: home,
+        BROWSER_CHROME_PATH: path.join(home, "missing-chrome.exe"),
+        BROKER_PORT: "1",
+      },
+      profileSizeWarnBytes: 8,
+    });
+
+    const profileSize = result.report.checks.find((check) => check.id === "browser.profileSize");
+    assert.equal(profileSize?.status, "warn");
+    assert.equal(profileSize?.critical, false);
+    assert.match(profileSize?.details ?? "", /large-profile/);
+    assert.equal(fs.existsSync(path.join(profileDir, "Cache")), true);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("doctor node version check does not depend on caller cwd", async () => {
   const home = makeHome();
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-doctor-cwd-"));
