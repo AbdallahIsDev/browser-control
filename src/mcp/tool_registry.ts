@@ -305,11 +305,22 @@ const TOOL_POLICY_PROBES: Record<string, ToolPolicyProbe> = {
   bc_package_eval_history: { action: "package_eval_history" },
 };
 
+const filteredToolsByPolicyCache = new WeakMap<McpTool[], Map<string, McpTool[]>>();
+
 function filterToolsForPolicyProfile(
   tools: McpTool[],
   profileName: string,
   explicitSession: boolean,
 ): McpTool[] {
+  const cacheKey = `${profileName}:${explicitSession ? "explicit" : "implicit"}`;
+  let toolsCache = filteredToolsByPolicyCache.get(tools);
+  if (!toolsCache) {
+    toolsCache = new Map<string, McpTool[]>();
+    filteredToolsByPolicyCache.set(tools, toolsCache);
+  }
+  const cached = toolsCache.get(cacheKey);
+  if (cached) return cached;
+
   const policyEngine = new DefaultPolicyEngine({ profileName });
   const context = {
     sessionId: "mcp-list-tools",
@@ -317,7 +328,7 @@ function filterToolsForPolicyProfile(
     profileName,
     explicitSession,
   };
-  return tools.filter((tool) => {
+  const filtered = tools.filter((tool) => {
     const probe = TOOL_POLICY_PROBES[tool.name];
     if (!probe) return true;
     const step = defaultRouter.buildRoutedStep(
@@ -334,6 +345,8 @@ function filterToolsForPolicyProfile(
     const evaluation = policyEngine.evaluate(step, context);
     return evaluation.decision === "allow" || evaluation.decision === "allow_with_audit";
   });
+  toolsCache.set(cacheKey, filtered);
+  return filtered;
 }
 
 export function isToolVisibleForActivePolicy(api: BrowserControlAPI, tool: McpTool): boolean {
@@ -396,6 +409,7 @@ export function createLazyToolRegistry(
   const mode = resolveToolRegistryMode(options);
   const categoryCache = new Map<ToolCategoryName, McpTool[]>();
   const toolCache = new Map<string, McpTool>();
+  let allToolsCache: McpTool[] | undefined;
 
   const categoryHasVisibleTools = (category: ToolCategoryDefinition): boolean =>
     mode === "full" || category.toolNames.some((toolName) => LITE_TOOL_NAMES.has(toolName));
@@ -425,9 +439,11 @@ export function createLazyToolRegistry(
       return loadCategory(category).find((tool) => tool.name === name);
     },
     getTools(): McpTool[] {
-      return TOOL_CATEGORY_DEFINITIONS
+      if (allToolsCache) return allToolsCache;
+      allToolsCache = TOOL_CATEGORY_DEFINITIONS
         .filter(categoryHasVisibleTools)
         .flatMap((category) => loadCategory(category));
+      return allToolsCache;
     },
     getLoadedCategoryNames(): ToolCategoryName[] {
       return [...categoryCache.keys()];

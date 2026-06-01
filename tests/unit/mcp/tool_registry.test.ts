@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildToolRegistry,
   createLazyToolRegistry,
+  filterToolRegistryForActivePolicy,
   getToolCategories,
 } from "../../../src/mcp/tool_registry";
 import { actionResultToMcpResult, mcpErrorResult, validateToolParams } from "../../../src/mcp/types";
@@ -18,6 +19,7 @@ import {
 } from "../../../src/security/credential_vault";
 import type { ActionResult } from "../../../src/shared/action_result";
 import { successResult } from "../../../src/shared/action_result";
+import { DefaultPolicyEngine } from "../../../src/policy/engine";
 import { getStateStorage, resetStateStorage } from "../../../src/state/index";
 
 describe("MCP Tool Registry", () => {
@@ -225,6 +227,45 @@ describe("MCP Tool Registry", () => {
         "bc_status",
         "bc_task_run",
       ].sort());
+    });
+
+    it("lazy registry returns a stable all-tools array for policy filtering caches", () => {
+      const registry = createLazyToolRegistry(api);
+
+      const first = registry.getTools();
+      const second = registry.getTools();
+
+      assert.equal(first, second);
+    });
+
+    it("caches policy-filtered tool lists per active profile", async () => {
+      const registry = createLazyToolRegistry(api);
+      const tools = registry.getTools();
+      const originalEvaluate = DefaultPolicyEngine.prototype.evaluate;
+      let evaluateCalls = 0;
+
+      DefaultPolicyEngine.prototype.evaluate = function (...args: Parameters<typeof originalEvaluate>) {
+        evaluateCalls += 1;
+        return originalEvaluate.apply(this, args);
+      };
+
+      try {
+        const first = filterToolRegistryForActivePolicy(api, tools);
+        const callsAfterFirst = evaluateCalls;
+        const second = filterToolRegistryForActivePolicy(api, tools);
+
+        assert.ok(callsAfterFirst > 0);
+        assert.equal(evaluateCalls, callsAfterFirst);
+        assert.equal(first, second);
+
+        const safeSession = await api.session.create("safe-cache-test", { policyProfile: "safe" });
+        assert.ok(safeSession.data?.id);
+        api.session.use(safeSession.data.id);
+        filterToolRegistryForActivePolicy(api, tools);
+        assert.ok(evaluateCalls > callsAfterFirst);
+      } finally {
+        DefaultPolicyEngine.prototype.evaluate = originalEvaluate;
+      }
     });
 
     it("static tool categories match the built full registry", () => {
