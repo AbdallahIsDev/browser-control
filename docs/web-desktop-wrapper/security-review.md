@@ -110,7 +110,8 @@ Mitigations:
 Mitigations:
 
 - auth before upgrade
-- prefer header token; query token only if unavoidable and redacted
+- use `Sec-WebSocket-Protocol` for event-stream auth
+- reject query-string tokens for WebSocket upgrades
 - event payload redaction
 - bounded replay buffer
 - close unauthenticated sockets immediately

@@ -90,7 +90,7 @@ Security review notes:
 
 - Server binds loopback by default and rejects non-loopback unless `allowRemote` is explicit.
 - HTTP API requires bearer or `X-API-Key` token.
-- Query token is accepted only for WebSocket upgrade, not HTTP API routes.
+- WebSocket auth uses `Sec-WebSocket-Protocol`; query-string tokens are rejected.
 - Browser URL printed by CLI no longer includes token.
 - CORS only reflects configured allowed origins.
 - Event payloads and JSON responses pass through redaction.

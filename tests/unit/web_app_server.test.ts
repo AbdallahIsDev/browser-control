@@ -1763,7 +1763,8 @@ test("web app server executes terminal route and emits event", async (t) => {
 	unauthorizedSocket.close();
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=test-token`,
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"test-token",
 	);
 	t.after(() => socket.close());
 	const replayEvent = once(socket, "message");
@@ -2329,7 +2330,8 @@ test("terminal output WebSocket event uses correct payload shape", async (t) => 
 	const address = server.address() as AddressInfo;
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=test-token`,
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"test-token",
 	);
 	t.after(() => socket.close());
 
@@ -2356,9 +2358,9 @@ test("terminal output WebSocket supports per-session subscription filtering", as
 	t.after(() => server.close());
 	await server.listen(0, "127.0.0.1");
 	const address = server.address() as AddressInfo;
-	const wsBase = `${baseUrl(address).replace("http", "ws")}/events?token=test-token`;
+	const wsBase = `${baseUrl(address).replace("http", "ws")}/events`;
 
-	const socket = new WebSocket(`${wsBase}&sessionId=session-a`);
+	const socket = new WebSocket(`${wsBase}?sessionId=session-a`, "test-token");
 	t.after(() => socket.close());
 	const replayEvent = once(socket, "message");
 	await once(socket, "open");
@@ -2400,7 +2402,8 @@ test("terminal output WebSocket accepts dynamic subscribe messages", async (t) =
 	const address = server.address() as AddressInfo;
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=test-token`,
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"test-token",
 	);
 	t.after(() => socket.close());
 	const replayEvent = once(socket, "message");
@@ -2466,7 +2469,8 @@ test("server.close() closes WebSocket event clients", async (_t) => {
 	const address = server.address() as AddressInfo;
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=test-token`,
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"test-token",
 	);
 	const openPromise = once(socket, "open");
 	const closePromise = once(socket, "close");
@@ -2497,7 +2501,8 @@ test("port 0 server computes correct origin after listen", async (t) => {
 
 	// Test that WebSocket with correct Origin connects
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=test-token`,
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		"test-token",
 		{ origin: info.url },
 	);
 	t.after(() => socket.close());
@@ -2515,7 +2520,8 @@ test("port 0 server rejects wrong origin on WebSocket", async (t) => {
 	const info = await server.listen(0, "127.0.0.1");
 
 	const socket = new WebSocket(
-		`${info.url.replace("http", "ws")}/events?token=test-token`,
+		`${info.url.replace("http", "ws")}/events`,
+		"test-token",
 		{ origin: "http://evil.com:9999" },
 	);
 	t.after(() => {
@@ -2855,24 +2861,45 @@ test("WebSocket connects via Sec-WebSocket-Protocol header instead of query stri
 	assert.ok(Array.isArray(event.events));
 });
 
-test("WebSocket auth via query string still works for backward compatibility", async (t) => {
+test("WebSocket rejects auth token in query string", async (t) => {
 	const server = createWebAppServer({
 		api: mockApi(),
-		token: "query-token-works",
+		token: "query-token-rejected",
 	});
 	t.after(() => server.close());
 	await server.listen(0, "127.0.0.1");
 	const address = server.address() as AddressInfo;
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events?token=query-token-works`,
+		`${baseUrl(address).replace("http", "ws")}/events?token=query-token-rejected`,
 	);
 	t.after(() => socket.close());
 
-	const [msg] = await once(socket, "message");
-	const event = JSON.parse(msg.toString());
-	assert.equal(event.type, "runtime.status");
-	assert.ok(Array.isArray(event.events));
+	const [err] = await once(socket, "error");
+	assert.match(String(err), /401/);
+});
+
+test("WebSocket rejects bearer auth header without protocol token", async (t) => {
+	const server = createWebAppServer({
+		api: mockApi(),
+		token: "ws-header-rejected",
+	});
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+
+	const socket = new WebSocket(
+		`${baseUrl(address).replace("http", "ws")}/events`,
+		{
+			headers: {
+				authorization: "Bearer ws-header-rejected",
+			},
+		},
+	);
+	t.after(() => socket.close());
+
+	const [err] = await once(socket, "error");
+	assert.match(String(err), /401/);
 });
 
 test("WebSocket without token (no query, no protocol) gets 401", async (t) => {

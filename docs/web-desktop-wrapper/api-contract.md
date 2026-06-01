@@ -200,7 +200,7 @@ interface AutomationCreateRequest {
 - `GET /events`
 - `GET /api/events`
 
-WebSocket auth uses same token header. If browser WebSocket header constraints require it, token may be accepted as `?token=` only for loopback and redacted from logs.
+WebSocket auth uses `Sec-WebSocket-Protocol` with the app-local token as the requested subprotocol. Query-string tokens are rejected so auth material does not land in URLs, browser history, access logs, or proxy logs.
 
 ## Event Stream Schema
 

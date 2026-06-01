@@ -195,9 +195,7 @@ function getWebSocketProtocolTokens(request: IncomingMessage): string[] {
 function isAuthorizedWebSocketRequest(
 	request: IncomingMessage,
 	token: string,
-	requestUrl: URL,
 ): boolean {
-	if (isAuthorizedRequest(request, token, requestUrl, true)) return true;
 	return getWebSocketProtocolTokens(request).some((protocolToken) =>
 		constantTimeTokenEqual(protocolToken, token),
 	);
@@ -283,7 +281,7 @@ function createRateLimitEntries(
 			? getWebSocketProtocolTokens(request)
 			: [];
 	const presentedToken =
-		extractAuthToken(request, requestUrl, requestUrl.pathname === "/events") ??
+		extractAuthToken(request, requestUrl) ??
 		protocolTokens.find((protocolToken) =>
 			constantTimeTokenEqual(protocolToken, token),
 		) ??
@@ -3180,7 +3178,7 @@ export function createWebAppServer(
 			socket.destroy();
 			return;
 		}
-		const authorized = isAuthorizedWebSocketRequest(request, token, requestUrl);
+		const authorized = isAuthorizedWebSocketRequest(request, token);
 		const rateLimitDecision = rateLimiter.consume(
 			createRateLimitEntries(request, token, requestUrl, authorized),
 		);
