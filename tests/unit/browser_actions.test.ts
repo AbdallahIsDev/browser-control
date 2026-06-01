@@ -404,6 +404,8 @@ function createMockPage(
 	options: {
 		hasBrowserWindow?: boolean;
 		windowState?: "normal" | "minimized" | "maximized" | "fullscreen";
+		gotoBlocker?: Promise<void>;
+		gotoErrors?: Error[];
 	} = {},
 ): MockPage {
 	const calls = {
@@ -432,6 +434,9 @@ function createMockPage(
 		},
 		goto: async (nextUrl: string) => {
 			calls.goto.push(nextUrl);
+			const nextError = options.gotoErrors?.shift();
+			if (nextError) throw nextError;
+			if (options.gotoBlocker) await options.gotoBlocker;
 			currentUrl = nextUrl;
 		},
 		route: async (
@@ -945,6 +950,73 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("retries transient navigation failures before succeeding", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://first.example/", {
+				gotoErrors: [new Error("net::ERR_ABORTED")],
+			});
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.navigate({
+					url: "https://replacement.example/",
+					tabId: "0",
+				});
+
+				assert.equal(result.success, true, result.error);
+				assert.deepEqual(page.calls.goto, [
+					"https://replacement.example/",
+					"https://replacement.example/",
+				]);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("does not retry navigation timeouts", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const timeout = new Error("Navigation timeout");
+			timeout.name = "TimeoutError";
+			const page = createMockPage("https://first.example/", {
+				gotoErrors: [timeout],
+			});
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.navigate({
+					url: "https://replacement.example/",
+					tabId: "0",
+				});
+
+				assert.equal(result.success, false);
+				assert.equal(page.calls.goto.length, 1);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
 		it("openMany opens multiple tabs in the same browser context", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const blankPage = createMockPage("about:blank");
@@ -986,6 +1058,51 @@ describe("BrowserActions", () => {
 					],
 				);
 			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("openMany can start independent tab navigations in parallel when requested", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			let releaseFirstNavigation!: () => void;
+			const firstNavigation = new Promise<void>((resolve) => {
+				releaseFirstNavigation = resolve;
+			});
+			const blankPage = createMockPage("about:blank", {
+				gotoBlocker: firstNavigation,
+			});
+			const state = { pages: [blankPage], newPages: 0 };
+			const manager = createConnectedBrowserManager(state.pages, state);
+
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("test", {
+					policyProfile: "balanced",
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const resultPromise = isolatedActions.openMany(
+					[
+						{ url: "https://one.example/", label: "one" },
+						{ url: "https://two.example/", label: "two" },
+					],
+					{ parallel: true },
+				);
+				await new Promise((resolve) => setImmediate(resolve));
+
+				assert.equal(state.newPages, 1);
+				assert.equal(state.pages[1]?.calls.goto[0], "https://two.example/");
+
+				releaseFirstNavigation();
+				const result = await resultPromise;
+				assert.equal(result.success, true, result.error);
+			} finally {
+				releaseFirstNavigation();
 				isolatedStore.close();
 			}
 		});

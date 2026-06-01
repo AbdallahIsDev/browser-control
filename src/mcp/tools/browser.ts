@@ -157,6 +157,8 @@ const BROWSER_STEP_PROPERTIES = {
   url: { type: "string", description: "URL for open/navigate actions." },
   urls: URLS_SCHEMA,
   waitUntil: WAIT_UNTIL_SCHEMA,
+  parallel: { type: "boolean", description: "For openMany, start independent tab navigations concurrently. Default: false.", default: false },
+  concurrency: { type: "number", description: "Maximum concurrent tab navigations when parallel is true. Default: 4." },
   fields: FIELDS_SCHEMA,
   continueOnFailure: { type: "boolean", description: "Continue within fillMany after an individual field failure." },
   snapshot: { type: "boolean", description: "Include accessibility snapshot for capture/captureMany/state steps. Default: true for capture/captureMany, false for state." },
@@ -255,6 +257,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: preferBcAct("Open multiple URLs as tabs in the current browser session.", "openMany"),
       inputSchema: buildSchema({
         urls: { type: "array", description: "Array of URLs or { url, label, waitUntil } objects to open." },
+        parallel: { type: "boolean", description: "Start independent tab navigations concurrently. Default: false.", default: false },
+        concurrency: { type: "number", description: "Maximum concurrent tab navigations when parallel is true. Default: 4." },
         sessionId: sessionIdSchema,
       }, ["urls"]),
       handler: async (params) => {
@@ -262,7 +266,10 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         const urls = params.urls as Array<string | { url: string; label?: string; waitUntil?: "domcontentloaded" | "load" | "networkidle" }>;
         return api.browser.openMany(urls.map((item) =>
           typeof item === "string" ? { url: item } : item,
-        ));
+        ), {
+          parallel: params.parallel as boolean | undefined,
+          concurrency: params.concurrency as number | undefined,
+        });
       },
     },
 
@@ -867,6 +874,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         url: { type: "string", description: "URL for open/navigate actions." },
         urls: URLS_SCHEMA,
         waitUntil: WAIT_UNTIL_SCHEMA,
+        parallel: { type: "boolean", description: "For openMany, start independent tab navigations concurrently. Default: false.", default: false },
+        concurrency: { type: "number", description: "Maximum concurrent tab navigations when parallel is true. Default: 4." },
         fields: FIELDS_SCHEMA,
         continueOnFailure: { type: "boolean", description: "Continue on field failure for fillMany.", default: false },
         boxes: { type: "boolean", description: "Include element bounds for capture/state.", default: false },
@@ -899,6 +908,8 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
           url: params.url as string | undefined,
           urls: params.urls as (string | { url: string; label?: string; waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit" })[] | undefined,
           waitUntil: params.waitUntil as any,
+          parallel: params.parallel as boolean | undefined,
+          concurrency: params.concurrency as number | undefined,
           fields: params.fields as any,
           continueOnFailure: params.continueOnFailure as boolean | undefined,
           boxes: params.boxes as boolean | undefined,

@@ -89,6 +89,9 @@ import {
 
 const log = logger.withComponent("browser_actions");
 const DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES = 200;
+const NAVIGATION_RETRY_ATTEMPTS = 3;
+const NAVIGATION_RETRY_INITIAL_DELAY_MS = 500;
+const OPEN_MANY_PARALLEL_LIMIT = 4;
 const BROWSER_LAUNCH_RECOVERY_GUIDANCE =
 	"Try 'bc browser launch --port=<other>' with another profile/provider, or 'bc browser open <url>' after fixing Chrome launch.";
 
@@ -173,6 +176,8 @@ export interface BrowserActOptions {
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 	fields?: Array<{ target: string; text: string }>;
 	continueOnFailure?: boolean;
+	parallel?: boolean;
+	concurrency?: number;
 	boxes?: boolean;
 	rootSelector?: string;
 	stateOptions?: {
@@ -216,6 +221,8 @@ export interface TaskStep {
 	screenshot?: boolean;
 	content?: string;
 	filename?: string;
+	parallel?: boolean;
+	concurrency?: number;
 }
 
 export interface TaskStepResult {
@@ -280,6 +287,13 @@ export interface OpenManyItem {
 	url: string;
 	label?: string;
 	waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+}
+
+export interface OpenManyOptions {
+	/** Open independent tabs concurrently. Sequential remains the default. */
+	parallel?: boolean;
+	/** Maximum concurrent tab navigations when parallel is true. */
+	concurrency?: number;
 }
 
 export interface OpenManyTabResult {
@@ -1563,6 +1577,53 @@ export class BrowserActions {
 		return retry;
 	}
 
+	private isTransientNavigationError(error: unknown): boolean {
+		if (!(error instanceof Error)) return false;
+		if (error.name === "TimeoutError") return false;
+		const message = error.message;
+		return (
+			message.includes("ERR_ABORTED") ||
+			/net::ERR_[A-Z_]+/u.test(message) ||
+			message.includes("Target closed") ||
+			message.includes("target closed") ||
+			message.includes("Navigation failed")
+		);
+	}
+
+	private async waitForNavigationRetry(attempt: number): Promise<void> {
+		const delayMs = NAVIGATION_RETRY_INITIAL_DELAY_MS * 2 ** attempt;
+		await new Promise((resolve) => setTimeout(resolve, delayMs));
+	}
+
+	private async navigateWithRetry(
+		page: Page,
+		url: string,
+		waitUntil: OpenOptions["waitUntil"],
+	): Promise<void> {
+		let lastError: unknown;
+		for (let attempt = 0; attempt < NAVIGATION_RETRY_ATTEMPTS; attempt += 1) {
+			try {
+				await page.goto(url, {
+					waitUntil: waitUntil ?? "domcontentloaded",
+				});
+				return;
+			} catch (error: unknown) {
+				lastError = error;
+				const canRetry =
+					attempt < NAVIGATION_RETRY_ATTEMPTS - 1 &&
+					this.isTransientNavigationError(error);
+				if (!canRetry) throw error;
+				log.warn("Retrying transient navigation failure", {
+					url,
+					attempt: attempt + 1,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				await this.waitForNavigationRetry(attempt);
+			}
+		}
+		throw lastError;
+	}
+
 	// ── Actions ─────────────────────────────────────────────────────────
 
 	/**
@@ -1645,9 +1706,7 @@ export class BrowserActions {
 
 			await this.startObservability(page, sessionId);
 			await this.applyNetworkPrivacyRules(page, sessionId);
-			await page.goto(resolvedUrl, {
-				waitUntil: options.waitUntil ?? "domcontentloaded",
-			});
+			await this.navigateWithRetry(page, resolvedUrl, options.waitUntil);
 			const openedTarget = await this.getWindowTarget(page);
 			if (openedTarget) {
 				await this.activateWindowTarget(openedTarget);
@@ -1770,9 +1829,7 @@ export class BrowserActions {
 			if ("success" in pageOrErr) return pageOrErr;
 			const page = pageOrErr;
 
-			await page.goto(resolvedUrl, {
-				waitUntil: options.waitUntil ?? "domcontentloaded",
-			});
+			await this.navigateWithRetry(page, resolvedUrl, options.waitUntil);
 			const title = await page.title();
 			await this.persistObservability(sessionId, page);
 			const finalTabId = await this.getTabIdForPage(page, options.tabId ?? "0");
@@ -1841,6 +1898,7 @@ export class BrowserActions {
 	 */
 	async openMany(
 		items: OpenManyItem[],
+		options: OpenManyOptions = {},
 	): Promise<ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[] }>> {
 		const sessionId = this.getSessionId();
 
@@ -1869,12 +1927,11 @@ export class BrowserActions {
 				);
 			}
 
-		const tabs: OpenManyTabResult[] = [];
-
-			for (const item of items) {
+			const tabs: OpenManyTabResult[] = new Array(items.length);
+			const openTab = async (item: OpenManyItem, index: number): Promise<void> => {
 				let page: Page;
 				const pages = context.pages();
-				if (pages.length === 1 && this.isBlankBrowserPage(pages[0])) {
+				if (index === 0 && pages.length === 1 && this.isBlankBrowserPage(pages[0])) {
 					page = pages[0];
 				} else {
 					page = await context.newPage();
@@ -1886,29 +1943,47 @@ export class BrowserActions {
 				this.dialogSupervisor.attachToPage(page, sessionId);
 
 				try {
-					await page.goto(item.url, {
-						waitUntil: item.waitUntil ?? "domcontentloaded",
-					});
+					await this.navigateWithRetry(page, item.url, item.waitUntil);
 					const tabId = await this.getTabIdForPage(page, "0");
 					const title = await page.title().catch(() => undefined);
-					tabs.push({
+					tabs[index] = {
 						tabId,
 						label: item.label,
 						url: page.url(),
 						title,
 						status: "loaded",
-					});
+					};
 				} catch (err: unknown) {
 					const tabId = await this.getTabIdForPage(page, "0");
 					const title = await page.title().catch(() => undefined);
-					tabs.push({
+					tabs[index] = {
 						tabId,
 						label: item.label,
 						url: page.url() || item.url,
 						title,
 						status: "failed",
 						error: err instanceof Error ? err.message : String(err),
-					});
+					};
+				}
+			};
+
+			if (options.parallel) {
+				const concurrency = Math.max(
+					1,
+					Math.min(options.concurrency ?? OPEN_MANY_PARALLEL_LIMIT, items.length),
+				);
+				let nextIndex = 0;
+				const workers = Array.from({ length: concurrency }, async () => {
+					while (nextIndex < items.length) {
+						const index = nextIndex;
+						nextIndex += 1;
+						await openTab(items[index], index);
+					}
+				});
+				await Promise.all(workers);
+			} else {
+				for (const [index, item] of items.entries()) {
+					await openTab(item, index);
 				}
 			}
 
@@ -5188,7 +5263,10 @@ export class BrowserActions {
 					if (typeof u === "string") return { url: u, waitUntil: options.waitUntil };
 					return { url: u.url, label: u.label, waitUntil: u.waitUntil ?? options.waitUntil ?? "domcontentloaded" as const };
 				});
-				const r = await this.openMany(items);
+				const r = await this.openMany(items, {
+					parallel: options.parallel,
+					concurrency: options.concurrency,
+				});
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
 				break;
 			}
@@ -5387,6 +5465,8 @@ export class BrowserActions {
 				waitUntil: step.waitUntil,
 				fields: step.fields,
 				continueOnFailure: step.continueOnFailure,
+				parallel: step.parallel,
+				concurrency: step.concurrency,
 				boxes: step.boxes,
 				rootSelector: step.rootSelector,
 				snapshot: step.snapshot,

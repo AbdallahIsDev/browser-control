@@ -115,7 +115,7 @@ browser downloads list [--json]
 - no URL launches a managed automation browser
 - URL opens a new tab
 - URL plus `--same-tab` navigates the current or selected tab
-- `--urls <json>` opens multiple tabs
+- `--urls <json>` opens multiple tabs; add `--parallel` for independent tabs that can load concurrently
 
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
 
@@ -307,7 +307,7 @@ browser navigate <url> [--tab] [--wait-until] [--json]
 part of a larger workflow.
 
 ```text
-browser open-many --urls <json> [--wait-until] [--json]
+browser open-many --urls <json> [--parallel] [--wait-until] [--json]
 ```
 
 ### Deprecated: `browser capture`

@@ -164,7 +164,7 @@
         "list": "(options?: { all?: boolean | undefined; } | undefined): Promise<ActionResult<AttachableBrowser[]>>",
         "navigate": "(options: { url: string; waitUntil?: \"load\" | \"domcontentloaded\" | \"networkidle\" | \"commit\" | undefined; tabId?: string | undefined; }): Promise<ActionResult<{ url: string; title: string; tabId: string; }>>",
         "open": "(options: { url: string; waitUntil?: \"load\" | \"domcontentloaded\" | \"networkidle\" | \"commit\" | undefined; }): Promise<ActionResult<{ url: string; title: string; }>>",
-        "openMany": "(items: OpenManyItem[]): Promise<ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[]; }>>",
+        "openMany": "(items: OpenManyItem[], options?: OpenManyOptions | undefined): Promise<ActionResult<{ browserSessionId: string; tabs: OpenManyTabResult[]; }>>",
         "paste": "(options: { text: string; target?: string | undefined; timeoutMs?: number | undefined; tabId?: string | undefined; }): Promise<ActionResult<{ pasted: string; tabId: string; }>>",
         "press": "(options: { key: string; tabId?: string | undefined; }): Promise<ActionResult<{ pressed: string; tabId: string; }>>",
         "provider": "ProviderNamespace",

@@ -49,6 +49,10 @@
             "description": "Press Tab after fill to move to the next field.",
             "type": "boolean"
           },
+          "concurrency": {
+            "description": "Maximum concurrent tab navigations when parallel is true. Default: 4.",
+            "type": "number"
+          },
           "continueOnFailure": {
             "default": false,
             "description": "Continue on field failure for fillMany.",
@@ -117,6 +121,11 @@
           "key": {
             "description": "Keyboard key to press. Required for press.",
             "type": "string"
+          },
+          "parallel": {
+            "default": false,
+            "description": "For openMany, start independent tab navigations concurrently. Default: false.",
+            "type": "boolean"
           },
           "refs": {
             "description": "Comma-separated refs to annotate for screenshot action when annotate is true.",
@@ -2349,6 +2358,15 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
+          "concurrency": {
+            "description": "Maximum concurrent tab navigations when parallel is true. Default: 4.",
+            "type": "number"
+          },
+          "parallel": {
+            "default": false,
+            "description": "Start independent tab navigations concurrently. Default: false.",
+            "type": "boolean"
+          },
           "urls": {
             "description": "Array of URLs or { url, label, waitUntil } objects to open.",
             "type": "array"
@@ -4372,6 +4390,10 @@
                   "description": "Commit typed text with Enter when supported.",
                   "type": "boolean"
                 },
+                "concurrency": {
+                  "description": "Maximum concurrent tab navigations when parallel is true. Default: 4.",
+                  "type": "number"
+                },
                 "content": {
                   "description": "File content for writeOutput steps. Empty string is allowed.",
                   "type": "string"
@@ -4440,6 +4462,11 @@
                 "key": {
                   "description": "Keyboard key for press action.",
                   "type": "string"
+                },
+                "parallel": {
+                  "default": false,
+                  "description": "For openMany, start independent tab navigations concurrently. Default: false.",
+                  "type": "boolean"
                 },
                 "refs": {
                   "description": "Comma-separated refs to annotate for screenshot steps when annotate is true.",

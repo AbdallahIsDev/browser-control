@@ -267,6 +267,7 @@ const COMMANDER_BOOLEAN_OPTIONS = [
 	"local-ca",
 	"non-interactive",
 	"overwrite",
+	"parallel",
 	"open",
 	"persist",
 	"purge-profiles",
@@ -1061,7 +1062,7 @@ Browser Shortcuts (compatibility):
   detach [--json]                                                   Detach from the active browser
   open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]
   navigate <url> [--tab=<id>] [--json]                              Navigate current or selected tab
-  open-many --urls='<json>' [--json]                                Open multiple tabs
+  open-many --urls='<json>' [--parallel] [--json]                   Open multiple tabs
   snapshot [--boxes] [--json]                                       Take accessibility snapshot
   state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]
                                                                      Return compact browser state
@@ -1113,7 +1114,7 @@ Browser Commands:
   browser status                                                     Show browser connection status
   browser open [url] [--urls='<json>'] [--same-tab] [--port=9222] [--profile=default] [--provider=<name>] [--json]
   browser navigate <url> [--tab=<id>] [--json]                       Navigate current or selected tab
-  browser open-many --urls='<json>' [--json]                         Open multiple tabs
+  browser open-many --urls='<json>' [--parallel] [--json]            Open multiple tabs
   browser snapshot [--boxes] [--json]                                Take accessibility snapshot
   browser state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]
                                                                       Return compact browser state
@@ -3207,6 +3208,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						action: "openMany",
 						urls,
 						waitUntil: parseWaitUntil(flags["wait-until"]),
+						parallel: flags.parallel === "true",
 					}),
 					timeoutMs ? Number(timeoutMs) : 60_000,
 					"browser open-many",
@@ -3245,6 +3247,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						action: "openMany",
 						urls,
 						waitUntil: parseWaitUntil(flags["wait-until"]),
+						parallel: flags.parallel === "true",
 					})
 					: url
 						? bc.browser.act({
@@ -3474,6 +3477,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 					waitUntil: flags["wait-until"] as any,
 					fields,
 					continueOnFailure: flags["continue-on-failure"] === "true",
+					parallel: flags.parallel === "true",
 					boxes: flags.boxes === "true",
 					rootSelector: flags["root-selector"],
 					snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,

@@ -628,10 +628,11 @@
           "description": "Open multiple tabs",
           "flags": [
             "json",
+            "parallel",
             "urls"
           ],
           "jsonSupport": true,
-          "syntax": "open-many --urls='<json>' [--json]"
+          "syntax": "open-many --urls='<json>' [--parallel] [--json]"
         },
         {
           "commandPath": [
@@ -1171,10 +1172,11 @@
           "description": "Open multiple tabs",
           "flags": [
             "json",
+            "parallel",
             "urls"
           ],
           "jsonSupport": true,
-          "syntax": "browser open-many --urls='<json>' [--json]"
+          "syntax": "browser open-many --urls='<json>' [--parallel] [--json]"
         },
         {
           "commandPath": [

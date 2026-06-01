@@ -325,7 +325,7 @@ Returns `browserConnected`, `url`, `title`, `tabId`, `tabs`, `dialogs`, `warning
 
 ## Unified Action
 
-Use `bc_act` to perform any action and automatically receive compact post-action state. Supports all actions: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state.
+Use `bc_act` to perform any action and automatically receive compact post-action state. Supports all actions: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state. For `openMany`, pass `parallel:true` only when the tabs are independent and safe to load concurrently.
 
 ```json
 {

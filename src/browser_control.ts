@@ -136,7 +136,7 @@ export interface BrowserNamespace {
 		waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
 		tabId?: string;
 	}): Promise<ActionResult<{ url: string; title: string; tabId: string }>>;
-	openMany(items: import("./browser/actions").OpenManyItem[]): Promise<ActionResult<{ browserSessionId: string; tabs: import("./browser/actions").OpenManyTabResult[] }>>;
+	openMany(items: import("./browser/actions").OpenManyItem[], options?: import("./browser/actions").OpenManyOptions): Promise<ActionResult<{ browserSessionId: string; tabs: import("./browser/actions").OpenManyTabResult[] }>>;
 	capture(options?: {
 		tabId?: string;
 		snapshot?: boolean;
@@ -1004,7 +1004,7 @@ export function createBrowserControl(
 		browser: {
 			open: (o) => queueBrowserAction("browser_open", () => browserActions.open(o)),
 			navigate: (o) => queueBrowserAction("browser_navigate", () => browserActions.navigate(o)),
-			openMany: (items) => queueBrowserAction("browser_open_many", () => browserActions.openMany(items)),
+			openMany: (items, options) => queueBrowserAction("browser_open_many", () => browserActions.openMany(items, options)),
 			capture: (o) => queueBrowserAction("browser_capture", () => browserActions.capture(o)),
 			captureMany: (ids, o) => queueBrowserAction("browser_capture_many", () => browserActions.captureMany(ids, o)),
 			snapshot: (o) => queueBrowserAction("browser_snapshot", () => browserActions.takeSnapshot(o)),
