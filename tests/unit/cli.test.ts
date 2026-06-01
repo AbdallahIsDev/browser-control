@@ -392,6 +392,40 @@ test("CLI unknown subcommands preserve command context", () => {
   assert.doesNotMatch(result.stderr, /Command failed/);
 });
 
+test("browser JSON flags report helpful validation errors", () => {
+  const cases = [
+    {
+      args: ["browser", "open-many", "--urls", "{not json", "--json"],
+      expected: /Invalid JSON in --urls/,
+    },
+    {
+      args: ["browser", "open", "--urls", "{not json", "--json"],
+      expected: /Invalid JSON in --urls/,
+    },
+    {
+      args: ["browser", "capture-many", "--urls", "{not json", "--json"],
+      expected: /Invalid JSON in --urls/,
+    },
+    {
+      args: ["browser", "act", "fill-many", "--fields", "{not json", "--json"],
+      expected: /Invalid JSON in --fields/,
+    },
+  ];
+
+  for (const item of cases) {
+    const result = runCli(item.args, {
+      cwd: process.cwd(),
+      env: {},
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, item.expected);
+    assert.doesNotMatch(result.stderr, /Fatal error/);
+    assert.doesNotMatch(result.stderr, /position \d+/);
+    assert.doesNotMatch(result.stderr, /Command failed/);
+  }
+});
+
 test("bc run sends broker authorization from generated key file", async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-auth-"));
   const previousHome = process.env.BROWSER_CONTROL_HOME;

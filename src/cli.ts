@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { BrowserActionName, LocatorCandidate, OpenOptions } from "./browser/actions";
+import type { BrowserActionName, LocatorCandidate, OpenOptions, UrlEntry } from "./browser/actions";
 import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
 import type { ScreencastOptions } from "./observability/types";
@@ -57,6 +57,14 @@ function commandFailed(options?: CliErrorOptions): CliError {
 	const reported = cliErrorContext !== undefined;
 	cliErrorContext = undefined;
 	return new CliError(message, { ...options, reported: options?.reported ?? reported });
+}
+
+function parseJsonFlag<T = unknown>(value: string, flagName: string): T {
+	try {
+		return JSON.parse(value) as T;
+	} catch {
+		throw new CliError(`Invalid JSON in --${flagName}`);
+	}
 }
 
 export class CliError extends Error {
@@ -2908,12 +2916,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 		case "open-many":
 		case "openMany": {
-			const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
-			if (!Array.isArray(urls) || urls.length === 0) {
-				console.error("Error: --urls is required (JSON array)");
-				throw commandFailed();
-			}
 			try {
+				const urls = flags.urls ? parseJsonFlag(flags.urls, "urls") : undefined;
+				if (!Array.isArray(urls) || urls.length === 0) {
+					console.error("Error: --urls is required (JSON array)");
+					throw commandFailed();
+				}
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
 				const timeoutMs = flags.timeout;
@@ -2942,7 +2950,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
 				const timeoutMs = flags.timeout;
-				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
+				const urls = flags.urls ? parseJsonFlag(flags.urls, "urls") : undefined;
 				if (urls !== undefined && (!Array.isArray(urls) || urls.length === 0)) {
 					console.error("Error: --urls must be a non-empty JSON array");
 					throw commandFailed();
@@ -3045,16 +3053,16 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 		case "capture-many":
 		case "captureMany": {
-			const tabIds = flags["tab-ids"]
-				? flags["tab-ids"].split(",").map((item) => item.trim()).filter(Boolean)
-				: flags.urls
-					? JSON.parse(flags.urls)
-					: undefined;
-			if (!Array.isArray(tabIds) || tabIds.length === 0) {
-				console.error("Error: --tab-ids or --urls is required");
-				throw commandFailed();
-			}
 			try {
+				const tabIds = flags["tab-ids"]
+					? flags["tab-ids"].split(",").map((item) => item.trim()).filter(Boolean)
+					: flags.urls
+						? parseJsonFlag(flags.urls, "urls")
+						: undefined;
+				if (!Array.isArray(tabIds) || tabIds.length === 0) {
+					console.error("Error: --tab-ids or --urls is required");
+					throw commandFailed();
+				}
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
 				const timeoutMs = flags.timeout;
@@ -3147,8 +3155,12 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			try {
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
-				const fields = flags.fields ? JSON.parse(flags.fields) : undefined;
-				const urls = flags.urls ? JSON.parse(flags.urls) : undefined;
+				const fields = flags.fields
+					? parseJsonFlag<Array<{ target: string; text: string }>>(flags.fields, "fields")
+					: undefined;
+				const urls = flags.urls
+					? parseJsonFlag<UrlEntry[]>(flags.urls, "urls")
+					: undefined;
 				const timeoutMs = flags.timeout;
 				const { result, timedOut } = await withCliTimeout(bc.browser.act({
 					action: parsedAction,
