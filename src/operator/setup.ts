@@ -28,6 +28,7 @@ export interface SetupOptions {
   generateMcpConfig?: boolean;
   skipBrowserTest?: boolean;
   skipTerminalTest?: boolean;
+  ask?: (question: string, fallback: string) => Promise<string>;
 }
 
 async function ask(question: string, fallback: string): Promise<string> {
@@ -51,6 +52,7 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     env,
     validate: false,
   });
+  const askUser = options.ask ?? ask;
 
   let profile = options.profile ?? current.policyProfile ?? "balanced";
   let browserMode = options.browserMode ?? current.browserMode ?? "attach";
@@ -67,19 +69,23 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     "";
   let modelEndpoint = options.modelEndpoint ?? current.modelEndpoint ?? "";
   let modelApiKey = options.modelApiKey ?? "";
+  let writeModelConfig = true;
 
   if (!nonInteractive) {
-    profile = await ask("Policy profile: safe, balanced, trusted", profile);
-    browserMode = await ask("Browser mode: managed or attach", browserMode) as "managed" | "attach";
-    chromeDebugPort = Number(await ask("Chrome debug port", String(chromeDebugPort)));
-    chromeBindAddress = await ask("Chrome bind address", chromeBindAddress);
-    modelProvider = ((await ask(
-      "AI model provider: ollama (local, no API key), openrouter (cloud, requires API key/billing), openai-compatible",
-      modelProvider,
-    )) as SetupOptions["modelProvider"]) ?? "ollama";
-    modelName = await ask("AI model name; leave blank for provider default", modelName);
-    modelEndpoint = await ask("AI model endpoint URL; leave blank for provider default", modelEndpoint);
-    modelApiKey = await ask("AI model API key; leave blank to skip storing a key", "");
+    profile = await askUser("Policy profile: safe, balanced, trusted", profile);
+    browserMode = await askUser("Browser mode: managed or attach", browserMode) as "managed" | "attach";
+    const providerAnswer = (
+      await askUser(
+        "AI model provider: skip, ollama (local), openrouter (cloud), openai-compatible",
+        "skip",
+      )
+    ).toLowerCase();
+    if (providerAnswer === "skip") {
+      writeModelConfig = false;
+      skipped.push("model-provider");
+    } else {
+      modelProvider = providerAnswer as NonNullable<SetupOptions["modelProvider"]>;
+    }
   }
 
   ensureDataHomeAtPath(current.dataHome);
@@ -103,21 +109,21 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     ["terminalShell", shell],
     ["terminalCols", 80],
     ["terminalRows", 24],
-    ["modelProvider", modelProvider],
   ];
+  if (writeModelConfig) writes.push(["modelProvider", modelProvider]);
 
   if (options.browserlessEndpoint) writes.push(["browserlessEndpoint", options.browserlessEndpoint]);
   if (options.browserlessApiKey) writes.push(["browserlessApiKey", options.browserlessApiKey]);
-  if (modelName.trim()) writes.push(["modelName", modelName.trim()]);
-  if (modelEndpoint.trim()) writes.push(["modelEndpoint", modelEndpoint.trim()]);
-  if (modelApiKey.trim()) writes.push(["modelApiKey", modelApiKey.trim()]);
+  if (writeModelConfig && modelName.trim()) writes.push(["modelName", modelName.trim()]);
+  if (writeModelConfig && modelEndpoint.trim()) writes.push(["modelEndpoint", modelEndpoint.trim()]);
+  if (writeModelConfig && modelApiKey.trim()) writes.push(["modelApiKey", modelApiKey.trim()]);
 
   const hasModelApiKey = Boolean(
     modelApiKey.trim() ||
       current.modelApiKey?.trim() ||
       current.openrouterApiKey?.trim(),
   );
-  if (modelProvider === "openrouter" && !hasModelApiKey) {
+  if (writeModelConfig && modelProvider === "openrouter" && !hasModelApiKey) {
     warnings.push(
       "OpenRouter is a cloud provider that requires an API key and may incur billing; set BROWSER_CONTROL_MODEL_API_KEY/OPENROUTER_API_KEY or choose modelProvider=ollama for local setup.",
     );

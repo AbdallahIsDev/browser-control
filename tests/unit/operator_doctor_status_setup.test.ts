@@ -274,6 +274,42 @@ test("setup --json emits only JSON and never prompts interactively", () => {
   }
 });
 
+test("setup interactive asks only primary first-run choices", async () => {
+  const home = makeHome();
+  try {
+    const questions: string[] = [];
+    const result = await runSetup({
+      env: { BROWSER_CONTROL_HOME: home },
+      skipBrowserTest: true,
+      skipTerminalTest: true,
+      ask: async (question) => {
+        questions.push(question);
+        if (question.startsWith("Policy profile")) return "safe";
+        if (question.startsWith("Browser mode")) return "managed";
+        if (question.startsWith("AI model provider")) return "skip";
+        throw new Error(`Unexpected setup question: ${question}`);
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.deepEqual(questions, [
+      "Policy profile: safe, balanced, trusted",
+      "Browser mode: managed or attach",
+      "AI model provider: skip, ollama (local), openrouter (cloud), openai-compatible",
+    ]);
+    assert.equal(result.skipped.includes("model-provider"), true);
+
+    const userConfig = loadUserConfig({
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(userConfig.policyProfile, "safe");
+    assert.equal(userConfig.browserMode, "managed");
+    assert.equal(userConfig.modelProvider, undefined);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("setup rejects unknown flags before writing config", () => {
   const home = makeHome();
   try {
