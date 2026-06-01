@@ -683,6 +683,30 @@ function isVerboseRequest(requestUrl: URL): boolean {
 	return requestUrl.searchParams.get("verbose") === "true";
 }
 
+const VAULT_VERBOSE_CONFIRMATION = "REVEAL_VAULT_METADATA";
+
+function hasVaultVerboseConfirmation(request: IncomingMessage): boolean {
+	return (
+		request.headers["x-browser-control-confirm"] === VAULT_VERBOSE_CONFIRMATION
+	);
+}
+
+function rejectUnconfirmedVaultVerbose(
+	request: IncomingMessage,
+	requestUrl: URL,
+	response: ServerResponse,
+): boolean {
+	if (!isVerboseRequest(requestUrl) || hasVaultVerboseConfirmation(request)) {
+		return false;
+	}
+	json(response, 403, {
+		success: false,
+		code: "confirmation_required",
+		error: `Verbose vault metadata requires X-Browser-Control-Confirm: ${VAULT_VERBOSE_CONFIRMATION}.`,
+	});
+	return true;
+}
+
 function summarizeVaultEntries(
 	entries: Array<{ scope: string; hasValue: boolean }>,
 ): {
@@ -1045,6 +1069,7 @@ export function createWebAppServer(
 
 		// ── Credential Vault and Privacy Network Control ───────────────
 		if (request.method === "GET" && pathname === "/api/vault") {
+			if (rejectUnconfirmedVaultVerbose(request, requestUrl, response)) return;
 			const { CredentialVault } = await import("../security/credential_vault");
 			const vault = new CredentialVault(optionalStateStorage(api));
 			const entries = await vault.list();
@@ -1133,6 +1158,7 @@ export function createWebAppServer(
 		}
 
 		if (request.method === "GET" && pathname === "/api/vault/grants") {
+			if (rejectUnconfirmedVaultVerbose(request, requestUrl, response)) return;
 			const secretId = requestUrl.searchParams.get("secretId") ?? undefined;
 			const { CredentialVault } = await import("../security/credential_vault");
 			const vault = new CredentialVault(optionalStateStorage(api));
