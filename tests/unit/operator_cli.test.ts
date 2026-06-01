@@ -1014,6 +1014,34 @@ test("bc --help omits internal memory store commands", () => {
 	}
 });
 
+test("bc --help omits internal telemetry report commands", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.doesNotMatch(result.stdout, /\breport generate\b/);
+		assert.doesNotMatch(result.stdout, /\breport view\b/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc --help documents security-sensitive operator commands", () => {
 	const home = makeHome();
 	try {

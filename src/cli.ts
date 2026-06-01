@@ -1151,8 +1151,6 @@ Browser Namespace (compatibility):
   daemon status                                                      Show daemon-only status; use 'bc status' for full system status
   daemon health                                                      Run health checks
   daemon logs                                                        View daemon logs
-  report generate                                                    Generate report
-  report view                                                        View report
   policy list                                                        List built-in policy profiles
   policy inspect <name>                                              Inspect a policy profile
   policy export <name> [file]                                         Export a policy profile to JSON

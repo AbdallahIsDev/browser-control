@@ -1616,26 +1616,6 @@
         },
         {
           "commandPath": [
-            "report",
-            "generate"
-          ],
-          "description": "Generate report",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "report generate"
-        },
-        {
-          "commandPath": [
-            "report",
-            "view"
-          ],
-          "description": "View report",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "report view"
-        },
-        {
-          "commandPath": [
             "policy",
             "list"
           ],

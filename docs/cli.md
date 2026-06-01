@@ -268,11 +268,10 @@ knowledge validate [--all]
 knowledge prune <name-or-domain>|--max-bytes <n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
 knowledge stats [--json]
 knowledge delete <name-or-domain>
-report generate|view
 mcp serve
 ```
 
-Legacy skill, proxy manager, CAPTCHA, and memory-store commands remain internal/compatibility-only and are not part of the public default CLI surface.
+Legacy skill, proxy manager, CAPTCHA, report, and memory-store commands remain internal/compatibility-only and are not part of the public default CLI surface.
 
 ## Compatibility Browser Commands
 
