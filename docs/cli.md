@@ -95,8 +95,6 @@ These commands are the preferred high-level path for agents that need fewer oper
 
 ```text
 browser open [url] [--urls <json>] [--same-tab] [--port] [--profile] [--provider] [--wait-until] [--json]
-browser navigate <url> [--tab] [--wait-until] [--json]
-browser open-many --urls <json> [--wait-until] [--json]
 browser snapshot [--root-selector] [--boxes] [--json]
 browser state [--snapshot] [--screenshot] [--downloads] [--dialog] [--tab-id] [--json]
 browser capture [--snapshot] [--screenshot] [--json]
@@ -117,8 +115,6 @@ browser downloads list [--json]
 - URL opens a new tab
 - URL plus `--same-tab` navigates the current or selected tab
 - `--urls <json>` opens multiple tabs
-
-`browser launch`, `browser navigate`, and `browser open-many` remain supported compatibility commands.
 
 `browser open` and `browser snapshot` are ergonomic aliases for the same browser action surface used by `browser act`.
 
@@ -170,7 +166,6 @@ Sessions bind policy, working directory, browser state, terminal state, and audi
 
 ```text
 browser attach [--port] [--cdp-url] [--target-type chrome|chromium|electron] [--provider]
-browser launch [--port] [--profile] [--provider]
 browser status
 browser provider list
 browser provider use <name>
@@ -274,3 +269,39 @@ mcp serve
 ```
 
 Legacy skill, proxy manager, and CAPTCHA commands remain internal/compatibility-only and are not part of the public default CLI surface.
+
+## Compatibility Browser Commands
+
+These commands remain supported for older scripts but are deprecated for new
+automation. Prefer the unified commands shown above so agents use fewer process
+starts and receive the same compact state shape across workflows.
+
+### Deprecated: `browser launch`
+
+**Deprecation banner:** compatibility command only. Prefer `browser open` with
+no URL to launch a managed automation browser, or `browser attach` to connect to
+an existing browser.
+
+```text
+browser launch [--port] [--profile] [--provider]
+```
+
+### Deprecated: `browser navigate`
+
+**Deprecation banner:** compatibility command only. Prefer `browser open <url>
+--same-tab` for same-tab navigation, or `browser act navigate --url <url>` when
+the navigation is one step in a larger action flow.
+
+```text
+browser navigate <url> [--tab] [--wait-until] [--json]
+```
+
+### Deprecated: `browser open-many`
+
+**Deprecation banner:** compatibility command only. Prefer `browser open --urls
+<json>` for opening several tabs, or `browser task run` when tab creation is
+part of a larger workflow.
+
+```text
+browser open-many --urls <json> [--wait-until] [--json]
+```
