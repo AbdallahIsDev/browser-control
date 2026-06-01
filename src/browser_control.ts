@@ -16,13 +16,18 @@
 
 import type { A11ySnapshot } from "./a11y_snapshot";
 import {
+	type BrowserActOptions,
 	type BrowserActionContext,
 	BrowserActions,
 	type BrowserCloseResult,
 	type BrowserLaunchResult,
+	type BrowserStateResult,
 	type DropOptions,
 	type HighlightOptions,
 	type LocatorCandidate,
+	type ScreenshotResult,
+	type TaskRunResult,
+	type TaskStep,
 } from "./browser/actions";
 import type {
 	AttachableBrowser,
@@ -30,7 +35,6 @@ import type {
 	BrowserDropResult,
 	BrowserTargetType,
 } from "./browser/connection";
-import type { BrowserActOptions, BrowserStateResult, ScreenshotResult, TaskRunResult, TaskStep } from "./browser/actions";
 import type { ExtendedDownloadResult } from "./browser/file_helpers";
 import { type FsActionContext, FsActions } from "./filesystem/actions";
 import type {

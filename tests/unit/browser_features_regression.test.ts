@@ -210,6 +210,10 @@ test("source guards cover prior browser feature review regressions", () => {
 		browserControl,
 		/getGlobalScreencastRecorder\(\s*sessionManager\.getMemoryStore\(\),?\s*\)/,
 	);
+	assert.equal(
+		browserControl.match(/^import(?:\s+type)?[\s\S]*?from "\.\/browser\/actions";/gm)?.length,
+		1,
+	);
 
 	assert.ok(OBSERVABILITY_KEYS.receiptPrefix.length > 0);
 });
