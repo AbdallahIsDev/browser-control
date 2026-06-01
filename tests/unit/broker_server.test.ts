@@ -577,7 +577,7 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
       BROKER_ALLOWED_DOMAINS: "allowed.example",
     },
     rateLimit: {
-      maxRequests: 2,
+      maxRequests: 1,
       windowMs: 60_000,
     },
     callbacks: {
@@ -594,9 +594,13 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
   await broker.listen(0, "127.0.0.1");
   const baseUrl = getBaseUrl(broker);
 
-  // Health is exempt from auth — always accessible
+  // Missing/invalid auth is bucketed by IP, while valid API key traffic uses
+  // a separate key bucket so shared-IP health probes do not consume user quota.
   const healthOk = await fetch(`${baseUrl}/api/v1/health`);
   assert.equal(healthOk.status, 200);
+  assert.equal(healthOk.headers.get("x-ratelimit-limit"), "1");
+  assert.equal(healthOk.headers.get("x-ratelimit-remaining"), "0");
+  assert.ok(healthOk.headers.get("x-ratelimit-reset"));
 
   const authorized = await fetch(`${baseUrl}/api/v1/health`, {
     headers: {
@@ -604,14 +608,22 @@ test("createBrokerServer rate limits HTTP requests, counts unauthorized attempts
     },
   });
   assert.equal(authorized.status, 200);
+  assert.equal(authorized.headers.get("x-ratelimit-limit"), "1");
+  assert.equal(authorized.headers.get("x-ratelimit-remaining"), "0");
 
-  // Third request should be rate-limited (maxRequests=2)
-  const rateLimited = await fetch(`${baseUrl}/api/v1/health`, {
+  const ipRateLimited = await fetch(`${baseUrl}/api/v1/health`);
+  assert.equal(ipRateLimited.status, 429);
+  assert.equal(ipRateLimited.headers.get("x-ratelimit-remaining"), "0");
+  assert.ok(ipRateLimited.headers.get("retry-after"));
+
+  const keyRateLimited = await fetch(`${baseUrl}/api/v1/health`, {
     headers: {
       "x-api-key": "limit-key",
     },
   });
-  assert.equal(rateLimited.status, 429);
+  assert.equal(keyRateLimited.status, 429);
+  assert.equal(keyRateLimited.headers.get("x-ratelimit-remaining"), "0");
+  assert.ok(keyRateLimited.headers.get("retry-after"));
 
   const domainBroker = createBrokerServer({
     env: {

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createHash } from "node:crypto";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
 import type { Duplex } from "node:stream";
@@ -239,6 +240,14 @@ interface BrokerResolvedConfig {
 interface RateLimitBucket {
 	requests: number[];
 	lastAccessedAt: number;
+}
+
+interface RateLimitDecision {
+	allowed: boolean;
+	limit: number;
+	remaining: number;
+	resetAt: number;
+	retryAfterSeconds: number;
 }
 
 interface BrokerTaskStatusRecord extends BrokerTaskStatusEntry {
@@ -651,6 +660,18 @@ function writeJson(
 	response.end(JSON.stringify(payload));
 }
 
+function setRateLimitHeaders(
+	response: ServerResponse,
+	decision: RateLimitDecision,
+): void {
+	response.setHeader("X-RateLimit-Limit", String(decision.limit));
+	response.setHeader("X-RateLimit-Remaining", String(decision.remaining));
+	response.setHeader("X-RateLimit-Reset", String(Math.ceil(decision.resetAt / 1000)));
+	if (!decision.allowed) {
+		response.setHeader("Retry-After", String(decision.retryAfterSeconds));
+	}
+}
+
 function setCorsHeaders(
 	response: ServerResponse,
 	request: IncomingMessage,
@@ -700,6 +721,10 @@ function extractApiKey(request: IncomingMessage): string | null {
 
 	const match = /^Bearer\s+(.+)$/i.exec(authorization);
 	return match?.[1]?.trim() || null;
+}
+
+function hashRateLimitSecret(value: string): string {
+	return createHash("sha256").update(value).digest("hex").slice(0, 32);
 }
 
 function isPolicyAllowed(decision: string): boolean {
@@ -1076,8 +1101,8 @@ export function createBrokerServer(
 	const taskStatusKey = (taskId: string): string =>
 		`${BROKER_TASK_STATUS_STORE_PREFIX}${taskId}`;
 
-	const rateLimitKey = (clientIp: string): string =>
-		`${BROKER_RATE_LIMIT_STORE_PREFIX}${encodeURIComponent(clientIp)}`;
+	const rateLimitKey = (identity: string): string =>
+		`${BROKER_RATE_LIMIT_STORE_PREFIX}${encodeURIComponent(identity)}`;
 
 	const restorePersistedState = (): void => {
 		if (!memoryStore) return;
@@ -1092,8 +1117,12 @@ export function createBrokerServer(
 		for (const key of memoryStore.keys(BROKER_RATE_LIMIT_STORE_PREFIX)) {
 			const bucket = memoryStore.get<RateLimitBucket>(key);
 			if (isRateLimitBucket(bucket)) {
-				const encodedIp = key.slice(BROKER_RATE_LIMIT_STORE_PREFIX.length);
-				rateLimitBuckets.set(decodeURIComponent(encodedIp), bucket);
+				const encodedIdentity = key.slice(BROKER_RATE_LIMIT_STORE_PREFIX.length);
+				const identity = decodeURIComponent(encodedIdentity);
+				rateLimitBuckets.set(
+					identity.includes(":") ? identity : `ip:${identity}`,
+					bucket,
+				);
 			} else {
 				memoryStore.delete(key);
 			}
@@ -1109,18 +1138,18 @@ export function createBrokerServer(
 	};
 
 	const persistRateLimitBucket = (
-		clientIp: string,
+		identity: string,
 		bucket: RateLimitBucket,
 	): void => {
 		memoryStore?.set(
-			rateLimitKey(clientIp),
+			rateLimitKey(identity),
 			bucket,
 			config.rateLimitBucketTtlMs,
 		);
 	};
 
-	const deletePersistedRateLimitBucket = (clientIp: string): void => {
-		memoryStore?.delete(rateLimitKey(clientIp));
+	const deletePersistedRateLimitBucket = (identity: string): void => {
+		memoryStore?.delete(rateLimitKey(identity));
 	};
 
 	restorePersistedState();
@@ -1132,15 +1161,15 @@ export function createBrokerServer(
 		lastRateLimitPruneAt = currentTime;
 		const windowStart = currentTime - config.rateLimitWindowMs;
 		const staleBefore = currentTime - config.rateLimitBucketTtlMs;
-		for (const [clientIp, bucket] of rateLimitBuckets) {
+		for (const [identity, bucket] of rateLimitBuckets) {
 			bucket.requests = bucket.requests.filter(
 				(timestamp) => timestamp > windowStart,
 			);
 			if (bucket.requests.length === 0 && bucket.lastAccessedAt <= staleBefore) {
-				rateLimitBuckets.delete(clientIp);
-				deletePersistedRateLimitBucket(clientIp);
+				rateLimitBuckets.delete(identity);
+				deletePersistedRateLimitBucket(identity);
 			} else {
-				persistRateLimitBucket(clientIp, bucket);
+				persistRateLimitBucket(identity, bucket);
 			}
 		}
 	};
@@ -1165,11 +1194,20 @@ export function createBrokerServer(
 		return publicEntry;
 	};
 
-	const consumeRateLimit = (request: IncomingMessage): boolean => {
+	const rateLimitIdentity = (request: IncomingMessage): string => {
 		const clientIp = normalizeClientIp(request.socket.remoteAddress);
+		const apiKey = extractApiKey(request);
+		if (config.authKey && constantTimeTokenEqual(apiKey, config.authKey)) {
+			return `api-key:${hashRateLimitSecret(apiKey ?? "")}`;
+		}
+		return `ip:${clientIp}`;
+	};
+
+	const consumeRateLimit = (request: IncomingMessage): RateLimitDecision => {
+		const identity = rateLimitIdentity(request);
 		const currentTime = now();
 		pruneRateLimitBuckets(currentTime);
-		const bucket = rateLimitBuckets.get(clientIp) ?? {
+		const bucket = rateLimitBuckets.get(identity) ?? {
 			requests: [],
 			lastAccessedAt: currentTime,
 		};
@@ -1178,17 +1216,31 @@ export function createBrokerServer(
 		bucket.requests = bucket.requests.filter(
 			(timestamp) => timestamp > windowStart,
 		);
+		const oldestRequest = bucket.requests[0] ?? currentTime;
+		const resetAt = oldestRequest + config.rateLimitWindowMs;
 
 		if (bucket.requests.length >= config.rateLimitMaxRequests) {
-			rateLimitBuckets.set(clientIp, bucket);
-			persistRateLimitBucket(clientIp, bucket);
-			return false;
+			rateLimitBuckets.set(identity, bucket);
+			persistRateLimitBucket(identity, bucket);
+			return {
+				allowed: false,
+				limit: config.rateLimitMaxRequests,
+				remaining: 0,
+				resetAt,
+				retryAfterSeconds: Math.max(1, Math.ceil((resetAt - currentTime) / 1000)),
+			};
 		}
 
 		bucket.requests.push(currentTime);
-		rateLimitBuckets.set(clientIp, bucket);
-		persistRateLimitBucket(clientIp, bucket);
-		return true;
+		rateLimitBuckets.set(identity, bucket);
+		persistRateLimitBucket(identity, bucket);
+		return {
+			allowed: true,
+			limit: config.rateLimitMaxRequests,
+			remaining: Math.max(0, config.rateLimitMaxRequests - bucket.requests.length),
+			resetAt,
+			retryAfterSeconds: 0,
+		};
 	};
 
 	const setTaskStatus = (
@@ -1348,7 +1400,9 @@ export function createBrokerServer(
 	server.on("request", async (request, response) => {
 		setCorsHeaders(response, request, config);
 
-		if (!consumeRateLimit(request)) {
+		const rateLimit = consumeRateLimit(request);
+		setRateLimitHeaders(response, rateLimit);
+		if (!rateLimit.allowed) {
 			writeJson(response, 429, { error: "Rate limit exceeded." });
 			return;
 		}
@@ -1724,7 +1778,8 @@ export function createBrokerServer(
 	});
 
 	server.on("upgrade", (request, socket, head) => {
-		if (!consumeRateLimit(request)) {
+		const rateLimit = consumeRateLimit(request);
+		if (!rateLimit.allowed) {
 			writeUpgradeError(socket, 429, "Rate limit exceeded.");
 			return;
 		}
