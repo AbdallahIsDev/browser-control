@@ -22,7 +22,7 @@
  *   - bc_browser_screencast_status
  *
  * All tools use the existing BrowserActions methods and preserve ref-based
- * targeting and snapshot semantics from Section 6.
+ * targeting and accessibility snapshot semantics.
  */
 
 import type { BrowserControlAPI } from "../../browser_control";
@@ -658,7 +658,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       },
     },
 
-    // ── Section 27: Browser Discovery and Attach UX ─────────────────────
+    // ── Browser Discovery and Attach UX ─────────────────────────────────
 
     {
       name: "bc_browser_list",
@@ -807,7 +807,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       },
     },
 
-    // ── Section 31: High-Level Composite Tools ─────────────────────────
+    // ── High-Level Composite Tools ──────────────────────────────────────
 
     {
       name: "bc_browser_state",

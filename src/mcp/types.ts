@@ -7,7 +7,7 @@
  *   - Common input schema pieces
  *   - Error normalization
  *
- * All MCP tools wrap the existing Section 5 action surface and preserve
+ * All MCP tools wrap the existing Browser Control action surface and preserve
  * Browser Control's ActionResult metadata in the MCP response.
  */
 

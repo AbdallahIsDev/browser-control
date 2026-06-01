@@ -1,5 +1,5 @@
 /**
- * MCP Workflow & Harness Tools — Section 29
+ * MCP Workflow & Harness Tools
  *
  * Exposes workflow and harness operations as MCP tools.
  * All tools return ActionResult-shaped responses.

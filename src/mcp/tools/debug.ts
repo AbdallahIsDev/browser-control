@@ -1,5 +1,5 @@
 /**
- * MCP Debug / Health Tools — Section 10 observability tools.
+ * MCP Debug / Health Tools — runtime observability tools.
  *
  * Tools:
  *   - bc_debug_health

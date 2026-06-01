@@ -3,7 +3,7 @@
  *
  * Uses the MCP SDK with stdio transport.
  * Registers all Browser Control tools (browser, terminal, filesystem, session, debug).
- * Wraps the Section 5 action surface via createBrowserControl().
+ * Wraps the Browser Control action surface via createBrowserControl().
  *
  * Entry point: `bc mcp serve` (see cli.ts)
  */
