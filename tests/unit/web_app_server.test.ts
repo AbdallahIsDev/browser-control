@@ -1816,7 +1816,7 @@ test("web app server executes terminal route and emits event", async (t) => {
 	unauthorizedSocket.close();
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events`,
+		`${baseUrl(address).replace("http", "ws")}/events?sessionId=system`,
 		"test-token",
 	);
 	t.after(() => socket.close());
@@ -2383,7 +2383,7 @@ test("terminal output WebSocket event uses correct payload shape", async (t) => 
 	const address = server.address() as AddressInfo;
 
 	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events`,
+		`${baseUrl(address).replace("http", "ws")}/events?sessionId=test-session`,
 		"test-token",
 	);
 	t.after(() => socket.close());
@@ -2404,6 +2404,60 @@ test("terminal output WebSocket event uses correct payload shape", async (t) => 
 	assert.equal(typeof event.payload, "object");
 	assert.equal(event.payload.sessionId, "test-session");
 	assert.equal(event.payload.data, "hello\n");
+});
+
+test("terminal output WebSocket replay excludes other sessions", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+	const wsBase = `${baseUrl(address).replace("http", "ws")}/events`;
+
+	server.events.emit(
+		"terminal.output",
+		{ sessionId: "session-a", data: "visible-a\n" },
+		{ sessionId: "session-a" },
+	);
+	server.events.emit(
+		"terminal.output",
+		{ sessionId: "session-b", data: "hidden-b\n" },
+		{ sessionId: "session-b" },
+	);
+	server.events.emit("browser.action", { action: "snapshot" });
+
+	const scopedSocket = new WebSocket(
+		`${wsBase}?sessionId=session-a`,
+		"test-token",
+	);
+	t.after(() => scopedSocket.close());
+	const scopedReplayEvent = once(scopedSocket, "message");
+	await once(scopedSocket, "open");
+	const [scopedReplayMsg] = await scopedReplayEvent;
+	const scopedReplay = JSON.parse(scopedReplayMsg.toString()) as {
+		events: Array<{ sessionId?: string; payload: { data?: string } }>;
+	};
+	assert.deepEqual(
+		scopedReplay.events.map((event) => event.payload.data),
+		["visible-a\n"],
+	);
+
+	const globalSocket = new WebSocket(wsBase, "test-token");
+	t.after(() => globalSocket.close());
+	const globalReplayEvent = once(globalSocket, "message");
+	await once(globalSocket, "open");
+	const [globalReplayMsg] = await globalReplayEvent;
+	const globalReplay = JSON.parse(globalReplayMsg.toString()) as {
+		events: Array<{ sessionId?: string; type: string }>;
+	};
+	assert.deepEqual(
+		globalReplay.events.map((event) => event.type),
+		["browser.action"],
+	);
+	assert.equal(
+		globalReplay.events.some((event) => event.sessionId),
+		false,
+		"unscoped replay must not include session-scoped events",
+	);
 });
 
 test("terminal output WebSocket supports per-session subscription filtering", async (t) => {
@@ -2453,11 +2507,9 @@ test("terminal output WebSocket accepts dynamic subscribe messages", async (t) =
 	t.after(() => server.close());
 	await server.listen(0, "127.0.0.1");
 	const address = server.address() as AddressInfo;
+	const wsBase = `${baseUrl(address).replace("http", "ws")}/events`;
 
-	const socket = new WebSocket(
-		`${baseUrl(address).replace("http", "ws")}/events`,
-		"test-token",
-	);
+	const socket = new WebSocket(`${wsBase}?sessionId=session-a`, "test-token");
 	t.after(() => socket.close());
 	const replayEvent = once(socket, "message");
 	await once(socket, "open");
@@ -2492,6 +2544,58 @@ test("terminal output WebSocket accepts dynamic subscribe messages", async (t) =
 	const event = JSON.parse(msg.toString());
 	assert.equal(event.type, "terminal.output");
 	assert.equal(event.payload.data, "visible-a\n");
+});
+
+test("terminal output WebSocket rejects unauthorized dynamic session subscriptions", async (t) => {
+	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
+	t.after(() => server.close());
+	await server.listen(0, "127.0.0.1");
+	const address = server.address() as AddressInfo;
+	const wsBase = `${baseUrl(address).replace("http", "ws")}/events`;
+
+	const unscopedSocket = new WebSocket(wsBase, "test-token");
+	t.after(() => unscopedSocket.close());
+	const replayEvent = once(unscopedSocket, "message");
+	await once(unscopedSocket, "open");
+	await replayEvent;
+
+	unscopedSocket.send(
+		JSON.stringify({ type: "subscribe", channels: ["terminal:session-a"] }),
+	);
+	const [unscopedAck] = await once(unscopedSocket, "message");
+	assert.deepEqual(JSON.parse(unscopedAck.toString()), {
+		type: "subscription.error",
+		error: "Session-scoped subscriptions require a sessionId filter.",
+	});
+
+	server.events.emit(
+		"terminal.output",
+		{ sessionId: "session-a", data: "hidden-a\n" },
+		{ sessionId: "session-a" },
+	);
+	const leakedToUnscoped = await Promise.race([
+		once(unscopedSocket, "message").then(() => true),
+		new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 150)),
+	]);
+	assert.equal(leakedToUnscoped, false);
+
+	const scopedSocket = new WebSocket(
+		`${wsBase}?sessionId=session-a`,
+		"test-token",
+	);
+	t.after(() => scopedSocket.close());
+	const scopedReplayEvent = once(scopedSocket, "message");
+	await once(scopedSocket, "open");
+	await scopedReplayEvent;
+
+	scopedSocket.send(
+		JSON.stringify({ type: "subscribe", channels: ["terminal:session-b"] }),
+	);
+	const [scopedAck] = await once(scopedSocket, "message");
+	assert.deepEqual(JSON.parse(scopedAck.toString()), {
+		type: "subscription.error",
+		error: "Cannot subscribe to a different session.",
+	});
 });
 
 // ── Regression 3: Subscription lifecycle ─────────────────────────────

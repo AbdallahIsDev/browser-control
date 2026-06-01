@@ -145,18 +145,25 @@ export class WebEventHub {
 	}
 
 	private filterRecent(filter: ClientEventFilter): WebAppEvent[] {
-		if (!filter.sessionId) return this.recent;
+		if (!filter.sessionId) {
+			return this.recent.filter((event) => !event.sessionId);
+		}
 		return this.recent.filter((event) => event.sessionId === filter.sessionId);
 	}
 
 	private matchesFilter(client: WebSocket, event: WebAppEvent): boolean {
 		const filter = this.clientFilters.get(client);
+		if (filter?.sessionId) {
+			if (event.sessionId !== filter.sessionId) return false;
+		} else if (event.sessionId) {
+			return false;
+		}
 		if (filter?.channels) {
 			return this.eventChannels(event).some((channel) =>
 				filter.channels?.has(channel),
 			);
 		}
-		return !filter?.sessionId || event.sessionId === filter.sessionId;
+		return true;
 	}
 
 	private handleClientMessage(client: WebSocket, data: RawData): void {
@@ -170,6 +177,21 @@ export class WebEventHub {
 		}
 
 		const current = this.clientFilters.get(client) ?? {};
+		const authorizationError = this.validateSubscriptionChannels(
+			current,
+			parsed.channels,
+		);
+		if (authorizationError) {
+			this.sendToClient(
+				client,
+				JSON.stringify({
+					type: "subscription.error",
+					error: authorizationError,
+				}),
+			);
+			return;
+		}
+
 		const channels = new Set(current.channels ?? []);
 		if (parsed.type === "subscribe") {
 			for (const channel of parsed.channels) channels.add(channel);
@@ -233,6 +255,31 @@ export class WebEventHub {
 			channels.push(channel);
 		}
 		return { ok: true, type: record.type, channels };
+	}
+
+	private validateSubscriptionChannels(
+		filter: ClientEventFilter,
+		channels: string[],
+	): string | undefined {
+		for (const channel of channels) {
+			const sessionChannel = this.sessionScopedChannelId(channel);
+			if (!sessionChannel) continue;
+			if (!filter.sessionId) {
+				return "Session-scoped subscriptions require a sessionId filter.";
+			}
+			if (sessionChannel !== filter.sessionId) {
+				return "Cannot subscribe to a different session.";
+			}
+		}
+		return undefined;
+	}
+
+	private sessionScopedChannelId(channel: string): string | undefined {
+		if (channel.startsWith("session:")) return channel.slice("session:".length);
+		if (channel.startsWith("terminal:")) {
+			return channel.slice("terminal:".length);
+		}
+		return undefined;
 	}
 
 	private eventChannels(event: WebAppEvent): string[] {

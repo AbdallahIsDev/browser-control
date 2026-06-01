@@ -66,12 +66,9 @@ test("web event hub isolates send failures per client", () => {
 	const healthy = fakeClient();
 	addClients(hub, [failing, healthy]);
 	try {
-		const event = hub.emit("terminal.output", {
-			sessionId: "session-a",
-			data: "hello",
-		});
+		const event = hub.emit("browser.action", { data: "hello" });
 
-		assert.equal(event.type, "terminal.output");
+		assert.equal(event.type, "browser.action");
 		assert.equal(failing.terminateCalls, 1);
 		assert.equal(healthy.sent.length, 1);
 		assert.equal(JSON.parse(healthy.sent[0]).payload.data, "hello");
@@ -92,7 +89,7 @@ test("web event hub drops backpressured clients before broadcasting", () => {
 	const healthy = fakeClient();
 	addClients(hub, [slow, healthy]);
 	try {
-		hub.emit("terminal.output", { sessionId: "session-a", data: "visible" });
+		hub.emit("browser.action", { data: "visible" });
 
 		assert.equal(slowSendCalled, false);
 		assert.equal(slow.terminateCalls, 1);
@@ -114,7 +111,7 @@ test("web event hub evicts clients after asynchronous send errors", async () => 
 	const healthy = fakeClient();
 	addClients(hub, [failing, healthy]);
 	try {
-		hub.emit("terminal.output", { sessionId: "session-a", data: "async" });
+		hub.emit("browser.action", { data: "async" });
 		await new Promise((resolve) => setImmediate(resolve));
 
 		assert.equal(failing.sent.length, 1);
@@ -135,7 +132,7 @@ test("web event hub terminates clients whose sends never complete", async () => 
 	});
 	addClients(hub, [stalled]);
 	try {
-		hub.emit("terminal.output", { sessionId: "session-a", data: "stalled" });
+		hub.emit("browser.action", { data: "stalled" });
 		await new Promise((resolve) => setTimeout(resolve, 25));
 
 		assert.equal(stalled.sent.length, 1);
