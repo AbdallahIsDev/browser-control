@@ -15,7 +15,7 @@ import {
 } from "../observability/recorder";
 import { redactObject, redactString } from "../observability/redaction";
 import { getAllProfiles } from "../policy/profiles";
-import { formatActionResult } from "../shared/action_result";
+import { type ActionResult, formatActionResult } from "../shared/action_result";
 import { constantTimeTokenEqual } from "../shared/auth";
 import {
 	getDashboardConfigMutationError,
@@ -77,6 +77,26 @@ function apiError(
 			? { details: redactObject(options.details) }
 			: {}),
 	};
+}
+
+const FILESYSTEM_ERROR_PATH_PATTERN =
+	/:\s+(?:[A-Za-z]:[\\/][^\r\n]*|\/[^\r\n]*)/g;
+
+function redactFilesystemErrorPaths(message: string): string {
+	return message.replace(FILESYSTEM_ERROR_PATH_PATTERN, ": [redacted path]");
+}
+
+function formatFilesystemActionResult<T>(
+	result: ActionResult<T>,
+): Record<string, unknown> {
+	const formatted = formatActionResult(result);
+	if (!result.success) {
+		if (typeof formatted.error === "string") {
+			formatted.error = redactFilesystemErrorPaths(formatted.error);
+		}
+		delete formatted.debugBundlePath;
+	}
+	return formatted;
 }
 
 function recordReplayAction(
@@ -2930,8 +2950,9 @@ export function createWebAppServer(
 				recursive: requestUrl.searchParams.get("recursive") === "true",
 				extension: requestUrl.searchParams.get("extension") || undefined,
 			});
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 
@@ -2942,8 +2963,9 @@ export function createWebAppServer(
 			};
 			const result = await api.fs.read(params);
 			recordReplayAction("fs-read", params, result);
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 
@@ -2956,8 +2978,9 @@ export function createWebAppServer(
 			};
 			const result = await api.fs.write(params);
 			recordReplayAction("fs-write", params, result);
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 
@@ -2967,8 +2990,9 @@ export function createWebAppServer(
 				src: asString(body.src, "src"),
 				dst: asString(body.dst, "dst"),
 			});
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 
@@ -2976,8 +3000,9 @@ export function createWebAppServer(
 			const result = await api.fs.stat({
 				path: requestUrl.searchParams.get("path") || "",
 			});
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 
@@ -2988,8 +3013,9 @@ export function createWebAppServer(
 				recursive: body.recursive === true,
 				force: body.force === true,
 			});
-			events.emit("filesystem.action", formatActionResult(result));
-			json(response, result.success ? 200 : 403, formatActionResult(result));
+			const formatted = formatFilesystemActionResult(result);
+			events.emit("filesystem.action", formatted);
+			json(response, result.success ? 200 : 403, formatted);
 			return;
 		}
 

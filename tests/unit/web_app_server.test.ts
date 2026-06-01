@@ -1465,6 +1465,42 @@ test("web app server records real browser terminal and filesystem actions into r
 	);
 });
 
+test("web app server redacts filesystem error paths from API responses", async (t) => {
+	const api = mockApi();
+	const leakedPath = path.join(os.tmpdir(), "bc-secret-root", "missing.txt");
+	const debugPath = path.join(os.tmpdir(), "bc-secret-root", "debug.json");
+	api.fs.read = async () => ({
+		success: false,
+		path: "command",
+		sessionId: "system",
+		error: `Read failed: File not found: ${leakedPath}`,
+		debugBundleId: "dbg_1",
+		debugBundlePath: debugPath,
+		completedAt: "2026-05-02T00:00:00.000Z",
+	});
+	const server = createWebAppServer({ api, token: "test-token" });
+	t.after(() => server.close());
+	const info = await server.listen(0, "127.0.0.1");
+
+	const response = await fetch(
+		`${info.url}/api/fs/read?path=${encodeURIComponent(leakedPath)}`,
+		{ headers: { authorization: "Bearer test-token" } },
+	);
+	assert.equal(response.status, 403);
+	const text = await response.text();
+	assert.doesNotMatch(text, /bc-secret-root/u);
+	assert.doesNotMatch(text, /missing\.txt/u);
+	assert.doesNotMatch(text, /debug\.json/u);
+	const body = JSON.parse(text) as {
+		error: string;
+		debugBundleId?: string;
+		debugBundlePath?: string;
+	};
+	assert.equal(body.error, "Read failed: File not found: [redacted path]");
+	assert.equal(body.debugBundleId, "dbg_1");
+	assert.equal(body.debugBundlePath, undefined);
+});
+
 test("web app server exposes visual, DOM, and filtered audit evidence safely", async (t) => {
 	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-evidence-"));
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
