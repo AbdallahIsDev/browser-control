@@ -1396,7 +1396,7 @@ export class BrowserActions {
 				element.role === previous.role &&
 				(previous.name
 					? element.name === previous.name
-					: element.name === previous.name) &&
+					: !element.name) &&
 				(previous.text ? element.text === previous.text : true),
 		);
 		if (matches.length === 0) return null;

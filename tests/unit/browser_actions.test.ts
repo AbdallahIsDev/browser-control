@@ -99,6 +99,13 @@ type MockLocator = {
 
 type BrowserActionsInternals = {
 	tabIdMap: Map<string, MockPage>;
+	findReplacementRef: (
+		previous: { ref: string; role: string; name?: string; text?: string },
+		snap: {
+			elements: Array<{ ref: string; role: string; name?: string; text?: string }>;
+			generatedAt: string;
+		},
+	) => string | null;
 	resolveTarget: (
 		target: string,
 		page: MockPage,
@@ -786,6 +793,22 @@ describe("BrowserActions", () => {
 						candidate.value === `locator("${selector.replace(/"/g, '\\"')}")`,
 				),
 			);
+		});
+
+		it("finds unnamed stale-ref replacements when the previous element had no name", () => {
+			const replacementRef = (browserActions as unknown as BrowserActionsInternals)
+				.findReplacementRef(
+					{ ref: "e1", role: "button", text: "Open" },
+					{
+						generatedAt: new Date().toISOString(),
+						elements: [
+							{ ref: "e2", role: "button", name: "Open", text: "Open" },
+							{ ref: "e3", role: "button", name: "", text: "Open" },
+						],
+					},
+				);
+
+			assert.equal(replacementRef, "e3");
 		});
 	});
 
