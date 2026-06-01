@@ -173,6 +173,14 @@ function filterToolsForPolicyProfile(
   });
 }
 
+export function isToolVisibleForActivePolicy(api: BrowserControlAPI, tool: McpTool): boolean {
+  return filterToolsForPolicyProfile(
+    [tool],
+    api.sessionManager.getActivePolicyProfile(),
+    true,
+  ).length === 1;
+}
+
 export function buildToolRegistry(
   api: BrowserControlAPI,
   options: ToolRegistryOptions = {},

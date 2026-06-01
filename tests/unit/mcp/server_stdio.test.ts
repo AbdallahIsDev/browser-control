@@ -186,6 +186,20 @@ describe("MCP stdio server", () => {
     assert.ok(!names.includes("bc_cdp"));
     assert.ok(!names.includes("bc_fs_delete"));
     assert.ok(!names.includes("bc_terminal_exec"));
+
+    const hiddenCdp = await harness.client.callTool({
+      name: "bc_cdp",
+      arguments: { method: "Runtime.evaluate", timeoutMs: 1000 },
+    }) as ToolCallResult;
+    assert.equal(hiddenCdp.isError, true);
+    assert.match(hiddenCdp.content[0].text, /Unknown tool: bc_cdp/);
+
+    const hiddenFsDelete = await harness.client.callTool({
+      name: "bc_fs_delete",
+      arguments: { path: "hidden-tool-check.txt" },
+    }) as ToolCallResult;
+    assert.equal(hiddenFsDelete.isError, true);
+    assert.match(hiddenFsDelete.content[0].text, /Unknown tool: bc_fs_delete/);
   });
 
   it("rejects unknown and invalid tool parameters before handlers run", async () => {

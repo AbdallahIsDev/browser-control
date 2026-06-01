@@ -17,7 +17,11 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { createBrowserControl, type BrowserControlAPI } from "../browser_control";
-import { buildToolRegistry, filterToolRegistryForActivePolicy } from "./tool_registry";
+import {
+  buildToolRegistry,
+  filterToolRegistryForActivePolicy,
+  isToolVisibleForActivePolicy,
+} from "./tool_registry";
 import { actionResultToMcpResult, normalizeError, mcpErrorResult, validateToolParams } from "./types";
 import type { McpTool } from "./types";
 import { logger } from "../shared/logger";
@@ -209,7 +213,7 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
     const { name, arguments: args } = request.params;
 
     const tool = toolMap.get(name);
-    if (!tool) {
+    if (!tool || !isToolVisibleForActivePolicy(bc, tool)) {
       return mcpErrorResult(`Unknown tool: ${name}`);
     }
 
