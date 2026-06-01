@@ -274,18 +274,6 @@
         },
         {
           "commandPath": [
-            "captcha",
-            "test"
-          ],
-          "description": "Check CAPTCHA provider configuration",
-          "flags": [
-            "json"
-          ],
-          "jsonSupport": true,
-          "syntax": "captcha test [--json]"
-        },
-        {
-          "commandPath": [
             "network",
             "rules",
             "list|add|remove"

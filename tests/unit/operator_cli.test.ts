@@ -1037,7 +1037,7 @@ test("bc --help documents security-sensitive operator commands", () => {
 		assert.equal(result.status, 0, result.stderr || result.stdout);
 		assert.match(result.stdout, /vault list\|set\|delete\|grants/);
 		assert.match(result.stdout, /Manage local credential vault secrets and grants/);
-		assert.match(result.stdout, /captcha test \[--json\]/);
+		assert.doesNotMatch(result.stdout, /captcha test \[--json\]/);
 		assert.match(result.stdout, /network rules list\|add\|remove/);
 		assert.match(result.stdout, /proxy list\|add\|remove\|test/);
 		assert.doesNotMatch(result.stdout, /network proxy list\|add\|remove\|test/);
