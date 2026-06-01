@@ -309,6 +309,7 @@ export function ensureDataHomeAtPath(home: string): string {
   copyFileIfMissing(path.join(home, "memory.sqlite-shm"), path.join(home, "memory", "memory.sqlite-shm"));
   copyFileIfMissing(path.join(home, "memory.sqlite-wal"), path.join(home, "memory", "memory.sqlite-wal"));
   migrateProfiles(home);
+  migratePolicyProfiles(home);
   return home;
 }
 /**
@@ -352,6 +353,47 @@ function migrateProfiles(home: string): void {
           migrated,
           conflicts,
           note: "Legacy profiles were preserved. Conflicts mean both locations had a profile with the same name; canonical was preferred.",
+        },
+        null,
+        2,
+      ),
+      { mode: 0o600 },
+    );
+  }
+}
+function migratePolicyProfiles(home: string): void {
+  const legacy = path.join(home, "policy-profiles");
+  const canonical = path.join(home, "policy", "profiles");
+  if (!fs.existsSync(legacy) || !fs.statSync(legacy).isDirectory()) return;
+  const entries = fs.readdirSync(legacy, { withFileTypes: true });
+  const profileFiles = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json"));
+  if (profileFiles.length === 0) return;
+  fs.mkdirSync(canonical, { recursive: true, mode: 0o700 });
+  const migrated: string[] = [];
+  const conflicts: string[] = [];
+  for (const entry of profileFiles) {
+    const source = path.join(legacy, entry.name);
+    const target = path.join(canonical, entry.name);
+    if (!fs.existsSync(target)) {
+      fs.copyFileSync(source, target);
+      migrated.push(entry.name);
+    } else {
+      conflicts.push(entry.name);
+    }
+  }
+  if (migrated.length > 0 || conflicts.length > 0) {
+    const reportPath = path.join(home, "reports", "migrations", `policy-profiles-${Date.now()}.json`);
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          legacyPath: legacy,
+          canonicalPath: canonical,
+          migrated,
+          conflicts,
+          note: "Legacy policy profiles were preserved. Conflicts mean both locations had a profile with the same filename; canonical was preferred.",
         },
         null,
         2,
@@ -485,8 +527,10 @@ export function getSkillsDataDir(): string {
 export function getDaemonStatusPath(): string {
   return path.join(getInteropDir(), "daemon-status.json");
 }
-export function getPolicyProfilesDir(): string {
-  return path.join(getDataHome(), "policy-profiles");
+export function getPolicyProfilesDir(dataHome?: string): string {
+  const home = dataHome ?? getDataHome();
+  migratePolicyProfiles(home);
+  return path.join(home, "policy", "profiles");
 }
 /**
  * Get the browser profiles directory, respecting legacy compatibility.

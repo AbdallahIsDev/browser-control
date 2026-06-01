@@ -745,7 +745,7 @@ export function getPersistedFormatInventory(): unknown {
         ".interop/daemon.pid",
         ".interop/daemon-status.json",
         "skills/",
-        "policy-profiles/",
+        "policy/profiles/",
         "profiles/",
         "knowledge/interaction-skills/",
         "knowledge/domain-skills/",

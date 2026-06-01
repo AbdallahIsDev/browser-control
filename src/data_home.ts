@@ -127,7 +127,6 @@ const INVENTORY_DIRS = [
 	"workflows/runs",
 	"workflows/approvals",
 	"skills",
-	"policy-profiles",
 	"profiles",
 	"knowledge",
 	"knowledge/interaction-skills",
@@ -334,10 +333,6 @@ const DIRECTORY_DESCRIPTIONS: Record<string, { purpose: string; safeToDelete: st
 	skills: {
 		purpose: "Installed or generated skill data retained for compatibility.",
 		safeToDelete: "Only after confirming no workflows or packages need it.",
-	},
-	"policy-profiles": {
-		purpose: "Legacy policy profile location retained for compatibility.",
-		safeToDelete: "Only after migration to policy/profiles is confirmed.",
 	},
 	profiles: {
 		purpose: "Legacy browser profile location retained for compatibility.",

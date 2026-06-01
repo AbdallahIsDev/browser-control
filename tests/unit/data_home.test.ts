@@ -22,6 +22,7 @@ import {
 	getStructuredSessionRuntimeDir,
 	getHelpersDir,
 	getInteropDir,
+	getPolicyProfilesDir,
 	getRuntimeTempDir,
 } from "../../src/shared/paths";
 
@@ -435,6 +436,45 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 	}
 });
 
+test("policy profiles use canonical policy/profiles with legacy migration", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-policy-profiles-"));
+	try {
+		const legacyDir = path.join(home, "policy-profiles");
+		const canonicalDir = path.join(home, "policy", "profiles");
+		fs.mkdirSync(legacyDir, { recursive: true });
+		fs.mkdirSync(canonicalDir, { recursive: true });
+		fs.writeFileSync(path.join(legacyDir, "legacy-only.json"), '{"name":"legacy-only"}');
+		fs.writeFileSync(path.join(legacyDir, "conflict.json"), '{"name":"legacy"}');
+		fs.writeFileSync(path.join(canonicalDir, "conflict.json"), '{"name":"canonical"}');
+
+		ensureDataHomeAtPath(home);
+
+		assert.equal(getPolicyProfilesDir(home), canonicalDir);
+		assert.equal(
+			fs.readFileSync(path.join(canonicalDir, "legacy-only.json"), "utf8"),
+			'{"name":"legacy-only"}',
+		);
+		assert.equal(
+			fs.readFileSync(path.join(canonicalDir, "conflict.json"), "utf8"),
+			'{"name":"canonical"}',
+		);
+		assert.equal(fs.existsSync(path.join(legacyDir, "legacy-only.json")), true);
+
+		const report = inspectDataHome(home);
+		assert.ok(
+			report.directories.inventory.some((entry) => entry.path === "policy/profiles"),
+			"canonical policy profile path should be inventoried",
+		);
+		assert.equal(
+			report.directories.inventory.some((entry) => entry.path === "policy-profiles"),
+			false,
+			"legacy policy-profiles should not be advertised as a normal inventory folder",
+		);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("data home manifest migrates flat aliases and prunes expired aliases", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-alias-expiry-"));
 	try {
@@ -568,6 +608,13 @@ test("data home report includes folder purpose, size, and staleness inventory", 
 		assert.ok(profiles, "browser/profiles should be inventoried");
 		assert.match(profiles.purpose, /browser profiles/i);
 		assert.equal(profiles.stale, false);
+		const policyProfiles = inventory.find((entry) => entry.path === "policy/profiles");
+		assert.ok(policyProfiles, "policy/profiles should be inventoried");
+		assert.equal(
+			inventory.some((entry) => entry.path === "policy-profiles"),
+			false,
+			"legacy policy-profiles should not appear in inventory",
+		);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}
