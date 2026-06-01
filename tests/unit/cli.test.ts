@@ -8,7 +8,12 @@ import test from "node:test";
 import { BrowserProfileManager, getProfilesDir } from "../../src/browser/profiles";
 import { CredentialVault, resetCredentialVault } from "../../src/security/credential_vault";
 import { resetStateStorage } from "../../src/state/index";
-import { COMMANDER_OPTION_SPECS, parseArgs, runCli as runCliInProcess } from "../../src/cli";
+import {
+  COMMANDER_OPTION_SPECS,
+  parseArgs,
+  resolveMcpServeMode,
+  runCli as runCliInProcess,
+} from "../../src/cli";
 
 function runCli(
   args: string[],
@@ -1402,6 +1407,53 @@ test("parseArgs handles fs write command with --content", () => {
   assert.equal(result.subcommand, "write");
   assert.deepEqual(result.positional, ["/tmp/out.txt"]);
   assert.equal(result.flags.content, "hello");
+});
+
+test("parseArgs handles fs write-output command with content positional", () => {
+  const result = parseArgs(["node", "cli.ts", "fs", "write-output", "result.json", "{\"ok\":true}", "--json"]);
+  assert.equal(result.command, "fs");
+  assert.equal(result.subcommand, "write-output");
+  assert.deepEqual(result.positional, ["result.json", "{\"ok\":true}"]);
+  assert.equal(result.flags.json, "true");
+});
+
+test("fs write-output writes under the active session runtime directory", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-write-output-"));
+  try {
+    const created = runCli(["session", "create", "output-session", "--policy=trusted", "--yes", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(created.status, 0, created.stderr);
+    const session = JSON.parse(created.stdout);
+    const runtimeDir = session.data.runtimeDir as string;
+
+    const result = runCli(["fs", "write-output", "result.txt", "hello", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data.path, path.join(runtimeDir, "result.txt"));
+    assert.equal(fs.readFileSync(parsed.data.path, "utf8"), "hello");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("resolveMcpServeMode accepts --mode and -m lite", () => {
+  const longFlag = parseArgs(["node", "cli.ts", "mcp", "serve", "--mode=lite"]);
+  assert.equal(resolveMcpServeMode(longFlag), "lite");
+
+  const shortFlag = parseArgs(["node", "cli.ts", "mcp", "serve", "-m", "full"]);
+  assert.equal(resolveMcpServeMode(shortFlag), "full");
+});
+
+test("resolveMcpServeMode rejects invalid mode", () => {
+  const args = parseArgs(["node", "cli.ts", "mcp", "serve", "--mode=fast"]);
+  assert.throws(() => resolveMcpServeMode(args), /Invalid MCP mode/);
 });
 
 // ── CLI ActionResult JSON shape verification ───────────────────────

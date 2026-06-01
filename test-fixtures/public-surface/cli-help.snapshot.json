@@ -1880,6 +1880,18 @@
         {
           "commandPath": [
             "fs",
+            "write-output"
+          ],
+          "description": "Write under active session runtime",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "fs write-output <filename> <content> [--json]"
+        },
+        {
+          "commandPath": [
+            "fs",
             "ls"
           ],
           "description": "List directory",
@@ -2111,9 +2123,11 @@
             "serve"
           ],
           "description": "Start MCP stdio server",
-          "flags": [],
+          "flags": [
+            "mode"
+          ],
           "jsonSupport": false,
-          "syntax": "mcp serve"
+          "syntax": "mcp serve [--mode=full|lite]"
         }
       ],
       "section": "MCP"

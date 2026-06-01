@@ -174,12 +174,17 @@ describe("MCP Tool Registry", () => {
       assert.equal(unique.size, names.length, `Duplicate tool names found: ${names.filter((n, i) => names.indexOf(n) !== i)}`);
     });
 
+    it("keeps full MCP mode tool count explicit", () => {
+      assert.equal(buildToolRegistry(api).length, 94);
+    });
+
     it("lite mode exposes only the reduced high-level toolset", () => {
       const tools = buildToolRegistry(api, { mode: "lite" });
       const names = tools.map((t) => t.name).sort();
 
       assert.deepEqual(names, [
         "bc_act",
+        "bc_navigate",
         "bc_snapshot",
         "bc_tab_list",
         "bc_fs_write_output",
@@ -214,7 +219,6 @@ describe("MCP Tool Registry", () => {
       const redundantActionTools = [
         "bc_open",
         "bc_open_many",
-        "bc_navigate",
         "bc_capture",
         "bc_capture_many",
         "bc_click",
@@ -256,6 +260,7 @@ describe("MCP Tool Registry", () => {
       assert.deepEqual(registry.getLoadedCategoryNames(), ["status", "session", "browser", "fs"]);
       assert.deepEqual(names, [
         "bc_act",
+        "bc_navigate",
         "bc_snapshot",
         "bc_tab_list",
         "bc_fs_write_output",

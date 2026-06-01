@@ -233,6 +233,7 @@ bc term exec "node --version" --json
 ```text
 fs read <path> [--max-bytes]
 fs write <path> [--content] [--create-dirs=false]
+fs write-output <filename> <content>
 fs ls [path] [--recursive] [--include-hidden] [--ext]
 fs move <src> <dst>
 fs rm <path> [--recursive] [--force]
@@ -268,7 +269,7 @@ knowledge validate [--all]
 knowledge prune <name-or-domain>|--max-bytes <n> [--dry-run=false --confirm=DELETE_OLD_KNOWLEDGE]
 knowledge stats [--json]
 knowledge delete <name-or-domain>
-mcp serve
+mcp serve [--mode full|lite]
 ```
 
 Legacy skill, proxy manager, CAPTCHA, report, and memory-store commands remain internal/compatibility-only and are not part of the public default CLI surface.

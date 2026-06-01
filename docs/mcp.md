@@ -376,9 +376,9 @@ Use `bc_fs_write_output` to write a file under the active session runtime direct
 
 ## MCP Lite
 
-Set `BROWSER_CONTROL_MCP_MODE=lite` or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes the short primary browser tools:
+Set `BROWSER_CONTROL_MCP_MODE=lite`, run `bc mcp serve --mode=lite`, or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes the short primary browser tools:
 
-`bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
+`bc_navigate`, `bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
 
 Full MCP mode exposes the complete Browser Control surface with canonical `bc_*` tool names. Single-action browser tools such as `bc_click`, `bc_fill`, `bc_open`, and `bc_state` are deprecated in full mode because `bc_act` covers the same actions with less tool-schema overhead.
 

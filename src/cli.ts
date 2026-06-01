@@ -284,6 +284,7 @@ const COMMANDER_BOOLEAN_OPTIONS = [
 export const COMMANDER_OPTION_SPECS: CommanderOptionSpec[] = [
 	{ name: "help", short: "-h", arity: "boolean" },
 	{ name: "version", short: "-v", arity: "boolean" },
+	{ name: "mode", short: "-m", arity: "value" },
 	{ name: "yes", short: "-y", arity: "boolean" },
 	...COMMANDER_BOOLEAN_OPTIONS.map((name) => ({ name, arity: "boolean" as const })),
 	...COMMANDER_OPTIONAL_VALUE_OPTIONS.map((name) => ({ name, arity: "optional" as const })),
@@ -1175,6 +1176,7 @@ Browser Commands:
   term status <sessionId>                                             Show resume status for a session
   fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>] [--yes]                           Write to a file
+  fs write-output <filename> <content> [--json]                         Write under active session runtime
   fs ls <path> [--recursive] [--include-hidden] [--ext=<.ext>]          List directory
   fs move <src> <dst> [--yes]                                          Move/rename
   fs rm <path> [--recursive] [--force] [--yes]                         Delete file/dir
@@ -1198,7 +1200,7 @@ Debug:
   debug receipt <id>                                                  Get a debug receipt by ID (Section 26)
 
 MCP:
-  mcp serve                                                           Start MCP stdio server
+  mcp serve [--mode=full|lite]                                        Start MCP stdio server
 
 Flags:
   --json                                                             Raw JSON output
@@ -4299,11 +4301,20 @@ async function handleKnowledge(args: ParsedArgs): Promise<void> {
 
 // ── MCP Handler (Section 7) ───────────────────────────────────────────
 
+export function resolveMcpServeMode(args: ParsedArgs): "full" | "lite" {
+	const mode = args.flags.mode;
+	if (mode === undefined) return "full";
+	if (mode === "full" || mode === "lite") return mode;
+	throw new CliError(`Invalid MCP mode "${mode}". Expected "full" or "lite".`);
+}
+
 async function handleMcp(args: ParsedArgs): Promise<void> {
 	const { subcommand } = args;
 
 	switch (subcommand) {
 		case "serve": {
+			const mode = resolveMcpServeMode(args);
+			process.env.BROWSER_CONTROL_MCP_MODE = mode;
 			const { startMcpServer } = await import("./mcp/server");
 			await startMcpServer();
 			break;
@@ -4698,6 +4709,21 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 					createDirs: flags["create-dirs"] !== "false",
 					confirmed,
 				});
+				break;
+			}
+
+			case "write-output": {
+				const filename = positional[0];
+				const content = positional[1] ?? flags.content;
+				if (!filename) {
+					console.error("Error: Output filename is required");
+					throw commandFailed();
+				}
+				if (content === undefined) {
+					console.error("Error: Output content is required");
+					throw commandFailed();
+				}
+				result = await fsActions.writeOutput({ filename, content });
 				break;
 			}
 

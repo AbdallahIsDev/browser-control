@@ -167,9 +167,9 @@ Full tool reference: [docs/mcp.md](docs/mcp.md)
 
 MCP Lite exposes a smaller high-level toolset for lower token overhead:
 
-`bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
+`bc_navigate`, `bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
 
-Set `BROWSER_CONTROL_MCP_MODE=lite` for Lite mode. Full MCP mode keeps the complete tool surface.
+Set `BROWSER_CONTROL_MCP_MODE=lite` or run `bc mcp serve --mode=lite` for Lite mode. Full MCP mode keeps the complete tool surface.
 
 ### Security with MCP
 
