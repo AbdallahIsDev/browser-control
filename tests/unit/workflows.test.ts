@@ -135,6 +135,8 @@ describe("Workflow Store", () => {
   it("persists graphs and runs without plaintext workflow state", () => {
     const { store: ms, storePath, cleanup } = makeFileStore();
     const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-workflow-secrets-"));
+    const originalVaultPassphrase = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+    process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "workflow-store-vault-passphrase";
     const store = new WorkflowStore(ms, {
       credentialProtection: createCredentialProtectionService({
         dataHome: secretsDir,
@@ -189,6 +191,9 @@ describe("Workflow Store", () => {
       }
     } finally {
       db.close();
+      if (originalVaultPassphrase === undefined)
+        delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+      else process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = originalVaultPassphrase;
       fs.rmSync(secretsDir, { force: true, recursive: true });
       cleanup();
     }
@@ -617,8 +622,10 @@ describe("Workflow Runtime", () => {
     const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-workflow-vault-"));
     const previousHome = process.env.BROWSER_CONTROL_HOME;
     const previousBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+    const previousVaultPassphrase = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
     process.env.BROWSER_CONTROL_HOME = dataHome;
     process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+    process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "workflow-api-vault-passphrase";
     resetCredentialVault();
     resetStateStorage();
 
@@ -675,6 +682,8 @@ describe("Workflow Runtime", () => {
       else process.env.BROWSER_CONTROL_HOME = previousHome;
       if (previousBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
       else process.env.BROWSER_CONTROL_STATE_BACKEND = previousBackend;
+      if (previousVaultPassphrase === undefined) delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+      else process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = previousVaultPassphrase;
       fs.rmSync(dataHome, { recursive: true, force: true });
     }
   });

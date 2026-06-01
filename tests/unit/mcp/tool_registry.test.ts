@@ -27,14 +27,17 @@ describe("MCP Tool Registry", () => {
   let sessionRuntimeDir: string;
   let originalHome: string | undefined;
   let originalBackend: string | undefined;
+  let originalVaultPassphrase: string | undefined;
 
   beforeEach(async () => {
     originalHome = process.env.BROWSER_CONTROL_HOME;
     originalBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+    originalVaultPassphrase = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
     store = new MemoryStore({ filename: ":memory:" });
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-mcp-tools-"));
     process.env.BROWSER_CONTROL_HOME = tempDir;
     process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+    process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "mcp-tools-vault-passphrase";
     resetStateStorage();
     resetCredentialVault();
     api = createBrowserControl({ memoryStore: store });
@@ -55,6 +58,8 @@ describe("MCP Tool Registry", () => {
     else process.env.BROWSER_CONTROL_HOME = originalHome;
     if (originalBackend === undefined) delete process.env.BROWSER_CONTROL_STATE_BACKEND;
     else process.env.BROWSER_CONTROL_STATE_BACKEND = originalBackend;
+    if (originalVaultPassphrase === undefined) delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+    else process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = originalVaultPassphrase;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 

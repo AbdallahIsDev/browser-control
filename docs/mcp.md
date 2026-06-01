@@ -108,11 +108,14 @@ client configuration. Vault listings expose ids, scopes, names, timestamps, and
 presence flags, not raw secret values.
 
 Credential vault entries use OS-backed protection when available. The local
-fallback uses AES-256-GCM with a key file under
-`<data-home>/secrets/.vault-key`; if that key file is copied with the vault
-data, fallback-protected secrets should be treated as compromised. Never commit,
-sync, or share the data home, `.vault-key`, runtime artifacts, screenshots, or
-debug bundles unless they have been reviewed for sensitive content.
+fallback uses AES-256-GCM with a v2 key descriptor under
+`<data-home>/secrets/.vault-key`. Set `BROWSER_CONTROL_VAULT_PASSPHRASE` to
+derive the fallback key from an operator-controlled passphrase; without it,
+Browser Control stores a random local key for unattended local operation. If
+`.vault-key` or `.vault-key.v2` is copied with the vault data, random-file
+fallback secrets should be treated as compromised. Never commit, sync, or share
+the data home, vault key files, runtime artifacts, screenshots, or debug bundles
+unless they have been reviewed for sensitive content.
 
 Logs and evidence are redacted for known secret patterns, but redaction is not a
 global secrecy guarantee. Web pages, terminal output, screenshots, console logs,

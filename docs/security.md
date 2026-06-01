@@ -82,7 +82,7 @@ Runtime data is local:
 ~/.browser-control/
 ```
 
-Credential vault entries use OS protection when available. The local fallback uses AES-256-GCM with a key file at `~/.browser-control/secrets/.vault-key`. This fallback security model is file-permission-level: if `.vault-key` is copied with the vault data, all local fallback credentials should be treated as compromised. Never commit, sync, or back up `.vault-key` alongside vault contents. On Windows, POSIX-style file modes are advisory; rely on user/account-level folder access controls.
+Credential vault entries use OS protection when available. The local fallback uses AES-256-GCM with a v2 key descriptor at `~/.browser-control/secrets/.vault-key`. If `BROWSER_CONTROL_VAULT_PASSPHRASE` is set, the encryption key is derived from that passphrase and a random salt; otherwise Browser Control stores a random local key in the descriptor for unattended local operation. This fallback security model is file-permission-level unless a passphrase is configured: if `.vault-key` or `.vault-key.v2` is copied with the vault data, random-file fallback credentials should be treated as compromised. Never commit, sync, or back up vault key files alongside vault contents. On Windows, POSIX-style file modes are advisory; rely on DPAPI and user/account-level folder access controls.
 
 ## Provider Tokens
 

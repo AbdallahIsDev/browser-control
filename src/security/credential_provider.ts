@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { getSecretsDir } from "../shared/paths";
 import { logger } from "../shared/logger";
 
 const LOCAL_VAULT_KEY_PBKDF2_ITERATIONS = 600_000;
+const LOCAL_VAULT_PASSPHRASE_ENV = "BROWSER_CONTROL_VAULT_PASSPHRASE";
 const log = logger.withComponent("credential-provider");
 
 export type CredentialProtectionProviderName =
@@ -34,14 +34,25 @@ interface CredentialEnvelope {
 	payload: string;
 }
 
+interface LocalVaultKeyDescriptor {
+	version: 2;
+	provider: "local-aes-gcm";
+	keySource: "passphrase" | "random-file";
+	kdf?: "pbkdf2-sha256";
+	iterations?: number;
+	salt?: string;
+	key?: string;
+	createdAt: string;
+}
+
+interface LocalEncryptedPayload {
+	version: 2;
+	ciphertext: string;
+}
+
 export interface CredentialProtectionServiceOptions {
 	dataHome?: string;
 	preferWindowsDpapi?: boolean;
-}
-
-function machineIdentity(): string {
-	const userInfo = os.userInfo();
-	return `${os.hostname()}:${userInfo.username}:${os.homedir()}`;
 }
 
 function vaultKeyPath(dataHome?: string): string {
@@ -61,48 +72,170 @@ function writeVaultKeyAtomic(keyPath: string, value: Buffer): boolean {
 	return true;
 }
 
-function ensureVaultKey(dataHome?: string): Buffer {
+function isLocalVaultKeyDescriptor(value: unknown): value is LocalVaultKeyDescriptor {
+	if (!value || typeof value !== "object") return false;
+	const descriptor = value as Partial<LocalVaultKeyDescriptor>;
+	return (
+		descriptor.version === 2 &&
+		descriptor.provider === "local-aes-gcm" &&
+		(descriptor.keySource === "passphrase" ||
+			descriptor.keySource === "random-file") &&
+		typeof descriptor.createdAt === "string"
+	);
+}
+
+function parseLocalVaultKeyDescriptor(value: Buffer): LocalVaultKeyDescriptor | null {
+	try {
+		const parsed = JSON.parse(value.toString("utf8")) as unknown;
+		return isLocalVaultKeyDescriptor(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+function isLocalEncryptedPayload(value: unknown): value is LocalEncryptedPayload {
+	if (!value || typeof value !== "object") return false;
+	const payload = value as Partial<LocalEncryptedPayload>;
+	return payload.version === 2 && typeof payload.ciphertext === "string";
+}
+
+function parseLocalEncryptedPayload(value: string): LocalEncryptedPayload | null {
+	try {
+		const parsed = JSON.parse(value) as unknown;
+		return isLocalEncryptedPayload(parsed) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+function readLocalVaultKeyFile(filePath: string): Buffer | null {
+	try {
+		return fs.readFileSync(filePath);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+		throw error;
+	}
+}
+
+function readLegacyVaultKey(dataHome?: string): Buffer | null {
 	const keyPath = vaultKeyPath(dataHome);
-	if (fs.existsSync(keyPath)) {
-		const stored = fs.readFileSync(keyPath);
-		if (stored.length === 64) return stored.subarray(32);
-		if (stored.length === 32) return stored;
-		throw new Error(
-			`Invalid local vault key file at ${keyPath}: expected 32 or 64 bytes, found ${stored.length}. Refusing to regenerate because existing vault data would become undecryptable.`,
-		);
+	const stored = readLocalVaultKeyFile(keyPath);
+	if (!stored) return null;
+	if (parseLocalVaultKeyDescriptor(stored)) return null;
+	if (stored.length === 64) return stored.subarray(32);
+	if (stored.length === 32) return stored;
+	throw new Error(
+		`Invalid local vault key file at ${keyPath}: expected JSON descriptor, 32 bytes, or 64 bytes; found ${stored.length}. Refusing to regenerate because existing vault data would become undecryptable.`,
+	);
+}
+
+function currentVaultKeyDescriptorPath(dataHome?: string): string {
+	const keyPath = vaultKeyPath(dataHome);
+	const stored = readLocalVaultKeyFile(keyPath);
+	if (!stored || parseLocalVaultKeyDescriptor(stored)) return keyPath;
+	return `${keyPath}.v2`;
+}
+
+function readCurrentVaultKeyDescriptor(dataHome?: string): LocalVaultKeyDescriptor | null {
+	const keyPath = currentVaultKeyDescriptorPath(dataHome);
+	const stored = readLocalVaultKeyFile(keyPath);
+	if (!stored) return null;
+	const descriptor = parseLocalVaultKeyDescriptor(stored);
+	if (descriptor) return descriptor;
+	throw new Error(
+		`Invalid local vault key descriptor at ${keyPath}: expected JSON descriptor. Refusing to regenerate because existing vault data would become undecryptable.`,
+	);
+}
+
+function getVaultPassphrase(): string | null {
+	const passphrase = process.env[LOCAL_VAULT_PASSPHRASE_ENV];
+	if (typeof passphrase !== "string" || passphrase.length === 0) {
+		return null;
+	}
+	return passphrase;
+}
+
+function writeVaultKeyDescriptorAtomic(
+	keyPath: string,
+	descriptor: LocalVaultKeyDescriptor,
+): boolean {
+	return writeVaultKeyAtomic(keyPath, Buffer.from(JSON.stringify(descriptor), "utf8"));
+}
+
+function ensureCurrentVaultKey(dataHome?: string): Buffer {
+	const passphrase = getVaultPassphrase();
+	const keyPath = currentVaultKeyDescriptorPath(dataHome);
+	const existing = readCurrentVaultKeyDescriptor(dataHome);
+	const descriptor = existing ?? (
+		passphrase
+			? {
+				version: 2,
+				provider: "local-aes-gcm",
+				keySource: "passphrase",
+				kdf: "pbkdf2-sha256",
+				iterations: LOCAL_VAULT_KEY_PBKDF2_ITERATIONS,
+				salt: crypto.randomBytes(32).toString("base64"),
+				createdAt: new Date().toISOString(),
+			}
+			: {
+				version: 2,
+				provider: "local-aes-gcm",
+				keySource: "random-file",
+				key: crypto.randomBytes(32).toString("base64"),
+				createdAt: new Date().toISOString(),
+			}
+	) satisfies LocalVaultKeyDescriptor;
+
+	if (!existing) {
+		fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
+		if (!writeVaultKeyDescriptorAtomic(keyPath, descriptor)) {
+			return ensureCurrentVaultKey(dataHome);
+		}
 	}
 
-	fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
-	const salt = crypto.randomBytes(32);
-	const key = crypto.pbkdf2Sync(
-		machineIdentity(),
-		salt,
+	if (descriptor.keySource === "random-file") {
+		const key = Buffer.from(descriptor.key ?? "", "base64");
+		if (key.length !== 32) {
+			throw new Error(
+				`Invalid local vault key descriptor at ${keyPath}: expected 32-byte random key.`,
+			);
+		}
+		return key;
+	}
+
+	if (!passphrase) {
+		throw new Error(
+			`Local AES-GCM credential protection requires ${LOCAL_VAULT_PASSPHRASE_ENV} for this passphrase-protected vault key.`,
+		);
+	}
+	if (
+		descriptor.kdf !== "pbkdf2-sha256" ||
+		descriptor.iterations !== LOCAL_VAULT_KEY_PBKDF2_ITERATIONS ||
+		typeof descriptor.salt !== "string"
+	) {
+		throw new Error(
+			`Invalid local vault key descriptor at ${keyPath}: expected passphrase KDF metadata.`,
+		);
+	}
+	const descriptorSalt = Buffer.from(descriptor.salt, "base64");
+	if (descriptorSalt.length !== 32) {
+		throw new Error(
+			`Invalid local vault key descriptor at ${keyPath}: expected 32-byte salt.`,
+		);
+	}
+	return crypto.pbkdf2Sync(
+		passphrase,
+		descriptorSalt,
 		LOCAL_VAULT_KEY_PBKDF2_ITERATIONS,
 		32,
 		"sha256",
 	);
-	if (!writeVaultKeyAtomic(keyPath, Buffer.concat([salt, key]))) {
-		return ensureVaultKey(dataHome);
-	}
-	return key;
 }
 
-function localEncrypt(plaintext: string, dataHome?: string): string {
-	const key = ensureVaultKey(dataHome);
-	const iv = crypto.randomBytes(16);
-	const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-	const encrypted = Buffer.concat([
-		cipher.update(plaintext, "utf8"),
-		cipher.final(),
-	]);
-	return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
-}
-
-function localDecrypt(payload: string | Buffer, dataHome?: string): string {
+function decryptWithKey(payload: string | Buffer, key: Buffer): string {
 	const ciphertext = Buffer.isBuffer(payload)
 		? payload
 		: Buffer.from(payload, "base64");
-	const key = ensureVaultKey(dataHome);
 	const iv = ciphertext.subarray(0, 16);
 	const authTag = ciphertext.subarray(16, 32);
 	const encrypted = ciphertext.subarray(32);
@@ -112,6 +245,29 @@ function localDecrypt(payload: string | Buffer, dataHome?: string): string {
 		decipher.update(encrypted),
 		decipher.final(),
 	]).toString("utf8");
+}
+
+function localEncrypt(plaintext: string, dataHome?: string): string {
+	const key = ensureCurrentVaultKey(dataHome);
+	const iv = crypto.randomBytes(16);
+	const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+	const encrypted = Buffer.concat([
+		cipher.update(plaintext, "utf8"),
+		cipher.final(),
+	]);
+	const ciphertext = Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
+	return JSON.stringify({ version: 2, ciphertext } satisfies LocalEncryptedPayload);
+}
+
+function localDecrypt(payload: string | Buffer, dataHome?: string): string {
+	if (typeof payload === "string") {
+		const structured = parseLocalEncryptedPayload(payload);
+		if (structured) return decryptWithKey(structured.ciphertext, ensureCurrentVaultKey(dataHome));
+	}
+
+	const legacyKey = readLegacyVaultKey(dataHome);
+	if (legacyKey) return decryptWithKey(payload, legacyKey);
+	return decryptWithKey(payload, ensureCurrentVaultKey(dataHome));
 }
 
 function dpapiScript(mode: "protect" | "unprotect"): string {

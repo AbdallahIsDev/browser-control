@@ -27,6 +27,17 @@ function createTempStore(): { store: MemoryStore; storePath: string; cleanup: ()
   };
 }
 
+function withVaultPassphrase<T>(fn: () => T): T {
+  const original = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+  process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "terminal-buffer-vault-passphrase";
+  try {
+    return fn();
+  } finally {
+    if (original === undefined) delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+    else process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = original;
+  }
+}
+
 test("TerminalBufferStore: save and load buffer", () => {
   const { store, cleanup } = createTempStore();
   const bufferStore = new TerminalBufferStore(store);
@@ -50,84 +61,88 @@ test("TerminalBufferStore: save and load buffer", () => {
 });
 
 test("TerminalBufferStore: persists scrollback without plaintext terminal output", () => {
-  const { store, storePath, cleanup } = createTempStore();
-  const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-test-secrets-"));
-  const bufferStore = new TerminalBufferStore(store, {
-    credentialProtection: createCredentialProtectionService({
-      dataHome: secretsDir,
-      preferWindowsDpapi: false,
-    }),
+  withVaultPassphrase(() => {
+    const { store, storePath, cleanup } = createTempStore();
+    const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-test-secrets-"));
+    const bufferStore = new TerminalBufferStore(store, {
+      credentialProtection: createCredentialProtectionService({
+        dataHome: secretsDir,
+        preferWindowsDpapi: false,
+      }),
+    });
+    const secretMarker = "terminal-marker-secret";
+
+    bufferStore.saveBuffer("session-secret", {
+      sessionId: "session-secret",
+      scrollback: [`token=${secretMarker}`],
+      visibleContent: `token=${secretMarker}`,
+      capturedAt: new Date().toISOString(),
+    });
+
+    const loaded = bufferStore.loadBuffer("session-secret");
+    assert.equal(loaded?.visibleContent, `token=${secretMarker}`);
+    assert.deepEqual(loaded?.scrollback, [`token=${secretMarker}`]);
+
+    store.close();
+    const db = new DatabaseSync(storePath, { readOnly: true });
+    try {
+      const row = db.prepare("SELECT value_json FROM memory_store WHERE key = ?").get("terminal:buffer:session-secret") as {
+        value_json: string;
+      };
+      assert.ok(row);
+      assert.doesNotMatch(row.value_json, /terminal-marker-secret/);
+    } finally {
+      db.close();
+      fs.rmSync(secretsDir, { force: true, recursive: true });
+      cleanup();
+    }
   });
-  const secretMarker = "terminal-marker-secret";
-
-  bufferStore.saveBuffer("session-secret", {
-    sessionId: "session-secret",
-    scrollback: [`token=${secretMarker}`],
-    visibleContent: `token=${secretMarker}`,
-    capturedAt: new Date().toISOString(),
-  });
-
-  const loaded = bufferStore.loadBuffer("session-secret");
-  assert.equal(loaded?.visibleContent, `token=${secretMarker}`);
-  assert.deepEqual(loaded?.scrollback, [`token=${secretMarker}`]);
-
-  store.close();
-  const db = new DatabaseSync(storePath, { readOnly: true });
-  try {
-    const row = db.prepare("SELECT value_json FROM memory_store WHERE key = ?").get("terminal:buffer:session-secret") as {
-      value_json: string;
-    };
-    assert.ok(row);
-    assert.doesNotMatch(row.value_json, /terminal-marker-secret/);
-  } finally {
-    db.close();
-    fs.rmSync(secretsDir, { force: true, recursive: true });
-    cleanup();
-  }
 });
 
 test("TerminalBufferStore: persists session metadata without plaintext terminal state", () => {
-  const { store, storePath, cleanup } = createTempStore();
-  const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-test-secrets-"));
-  const bufferStore = new TerminalBufferStore(store, {
-    credentialProtection: createCredentialProtectionService({
-      dataHome: secretsDir,
-      preferWindowsDpapi: false,
-    }),
+  withVaultPassphrase(() => {
+    const { store, storePath, cleanup } = createTempStore();
+    const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "bc-test-secrets-"));
+    const bufferStore = new TerminalBufferStore(store, {
+      credentialProtection: createCredentialProtectionService({
+        dataHome: secretsDir,
+        preferWindowsDpapi: false,
+      }),
+    });
+    const secretMarker = "terminal-session-marker-secret";
+
+    bufferStore.saveSession("session-secret", {
+      sessionId: "session-secret",
+      shell: "pwsh",
+      cwd: "C:\\work",
+      env: { TOKEN: secretMarker },
+      history: [`echo ${secretMarker}`],
+      scrollbackBuffer: [`output ${secretMarker}`],
+      status: "idle",
+      resumeLevel: 2,
+      serializedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+    });
+
+    const loaded = bufferStore.loadSession("session-secret") as { env?: Record<string, string>; history?: string[] };
+    assert.equal(loaded.env?.TOKEN, secretMarker);
+    assert.deepEqual(loaded.history, [`echo ${secretMarker}`]);
+
+    store.close();
+    const db = new DatabaseSync(storePath, { readOnly: true });
+    try {
+      const row = db.prepare("SELECT value_json FROM memory_store WHERE key = ?").get("terminal:session:session-secret") as {
+        value_json: string;
+      };
+      assert.ok(row);
+      assert.doesNotMatch(row.value_json, /terminal-session-marker-secret/);
+    } finally {
+      db.close();
+      fs.rmSync(secretsDir, { force: true, recursive: true });
+      cleanup();
+    }
   });
-  const secretMarker = "terminal-session-marker-secret";
-
-  bufferStore.saveSession("session-secret", {
-    sessionId: "session-secret",
-    shell: "pwsh",
-    cwd: "C:\\work",
-    env: { TOKEN: secretMarker },
-    history: [`echo ${secretMarker}`],
-    scrollbackBuffer: [`output ${secretMarker}`],
-    status: "idle",
-    resumeLevel: 2,
-    serializedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    lastActivityAt: new Date().toISOString(),
-  });
-
-  const loaded = bufferStore.loadSession("session-secret") as { env?: Record<string, string>; history?: string[] };
-  assert.equal(loaded.env?.TOKEN, secretMarker);
-  assert.deepEqual(loaded.history, [`echo ${secretMarker}`]);
-
-  store.close();
-  const db = new DatabaseSync(storePath, { readOnly: true });
-  try {
-    const row = db.prepare("SELECT value_json FROM memory_store WHERE key = ?").get("terminal:session:session-secret") as {
-      value_json: string;
-    };
-    assert.ok(row);
-    assert.doesNotMatch(row.value_json, /terminal-session-marker-secret/);
-  } finally {
-    db.close();
-    fs.rmSync(secretsDir, { force: true, recursive: true });
-    cleanup();
-  }
 });
 
 test("TerminalBufferStore: loads legacy plaintext buffer records", () => {

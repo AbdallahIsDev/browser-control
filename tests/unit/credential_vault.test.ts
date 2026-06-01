@@ -16,13 +16,16 @@ describe("CredentialVault", () => {
 	let dataHome: string;
 	let originalHome: string | undefined;
 	let originalBackend: string | undefined;
+	let originalVaultPassphrase: string | undefined;
 
 	beforeEach(() => {
 		originalHome = process.env.BROWSER_CONTROL_HOME;
 		originalBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+		originalVaultPassphrase = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
 		dataHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-vault-test-"));
 		process.env.BROWSER_CONTROL_HOME = dataHome;
 		process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+		process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "test-vault-passphrase";
 		resetStateStorage();
 		resetCredentialVault();
 	});
@@ -35,6 +38,9 @@ describe("CredentialVault", () => {
 		if (originalBackend === undefined)
 			delete process.env.BROWSER_CONTROL_STATE_BACKEND;
 		else process.env.BROWSER_CONTROL_STATE_BACKEND = originalBackend;
+		if (originalVaultPassphrase === undefined)
+			delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+		else process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = originalVaultPassphrase;
 		fs.rmSync(dataHome, { recursive: true, force: true });
 	});
 

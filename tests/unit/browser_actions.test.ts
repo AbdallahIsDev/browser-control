@@ -466,17 +466,20 @@ describe("BrowserActions", () => {
 	let originalBrowserMode: string | undefined;
 	let originalBrowserAutoLaunch: string | undefined;
 	let originalBackend: string | undefined;
+	let originalVaultPassphrase: string | undefined;
 
 	beforeEach(async () => {
 		originalHome = process.env.BROWSER_CONTROL_HOME;
 		originalBrowserMode = process.env.BROWSER_MODE;
 		originalBrowserAutoLaunch = process.env.BROWSER_AUTO_LAUNCH;
 		originalBackend = process.env.BROWSER_CONTROL_STATE_BACKEND;
+		originalVaultPassphrase = process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
 		dataHome = fs.mkdtempSync(
 			path.join(os.tmpdir(), "bc-browser-actions-test-"),
 		);
 		process.env.BROWSER_CONTROL_HOME = dataHome;
 		process.env.BROWSER_CONTROL_STATE_BACKEND = "json";
+		process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = "browser-actions-vault-passphrase";
 		resetStateStorage();
 		resetCredentialVault();
 		delete process.env.BROWSER_MODE;
@@ -514,6 +517,11 @@ describe("BrowserActions", () => {
 			delete process.env.BROWSER_CONTROL_STATE_BACKEND;
 		} else {
 			process.env.BROWSER_CONTROL_STATE_BACKEND = originalBackend;
+		}
+		if (originalVaultPassphrase === undefined) {
+			delete process.env.BROWSER_CONTROL_VAULT_PASSPHRASE;
+		} else {
+			process.env.BROWSER_CONTROL_VAULT_PASSPHRASE = originalVaultPassphrase;
 		}
 		fs.rmSync(dataHome, { recursive: true, force: true });
 	});
