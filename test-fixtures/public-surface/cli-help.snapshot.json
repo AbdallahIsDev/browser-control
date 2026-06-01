@@ -63,17 +63,16 @@
         {
           "commandPath": [
             "package",
-            "materialize",
-            "Materialize"
+            "materialize"
           ],
-          "description": "",
+          "description": "Materialize a recording as a package draft",
           "flags": [
             "install",
             "json",
             "overwrite"
           ],
           "jsonSupport": true,
-          "syntax": "package materialize <recording-id> [--overwrite] [--install] [--json] Materialize a recording as a package draft"
+          "syntax": "package materialize <recording-id> [--overwrite] [--install] [--json]"
         },
         {
           "commandPath": [
@@ -150,17 +149,16 @@
         {
           "commandPath": [
             "package",
-            "review",
-            "Record"
+            "review"
           ],
-          "description": "",
+          "description": "Record package trust review",
           "flags": [
             "by",
             "json",
             "reason"
           ],
           "jsonSupport": true,
-          "syntax": "package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json] Record package trust review"
+          "syntax": "package review <name> <approved|rejected|pending> [--by=<name>] [--reason=<text>] [--json]"
         },
         {
           "commandPath": [
@@ -189,17 +187,16 @@
         {
           "commandPath": [
             "package",
-            "sign",
-            "Compute"
+            "sign"
           ],
-          "description": "",
+          "description": "Compute package digest and optional signature",
           "flags": [
             "json",
             "private-key",
             "signer"
           ],
           "jsonSupport": true,
-          "syntax": "package sign <source> [--private-key=<pem>] [--signer=<name>] [--json] Compute package digest and optional signature"
+          "syntax": "package sign <source> [--private-key=<pem>] [--signer=<name>] [--json]"
         }
       ],
       "section": "Automation Packages (primary)"
@@ -221,77 +218,26 @@
           "commandPath": [
             "setup"
           ],
-          "description": "",
+          "description": "Create/update user config",
           "flags": [
             "browser-mode",
-            "json",
-            "non-interactive",
-            "profile"
-          ],
-          "jsonSupport": true,
-          "syntax": "setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach]"
-        },
-        {
-          "commandPath": [],
-          "description": "",
-          "flags": [
-            "chrome-bind-address",
-            "chrome-debug-port"
-          ],
-          "jsonSupport": false,
-          "syntax": "[--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1]"
-        },
-        {
-          "commandPath": [],
-          "description": "",
-          "flags": [
-            "browserless-endpoint",
-            "terminal-shell"
-          ],
-          "jsonSupport": false,
-          "syntax": "[--terminal-shell=pwsh] [--browserless-endpoint=<url>]"
-        },
-        {
-          "commandPath": [],
-          "description": "",
-          "flags": [
             "browserless-api-key",
-            "model-provider"
-          ],
-          "jsonSupport": false,
-          "syntax": "[--browserless-api-key=<key>] [--model-provider=openrouter|ollama|openai-compatible]"
-        },
-        {
-          "commandPath": [],
-          "description": "",
-          "flags": [
+            "browserless-endpoint",
+            "chrome-bind-address",
+            "chrome-debug-port",
+            "json",
             "model-api-key",
             "model-endpoint",
-            "model-name"
-          ],
-          "jsonSupport": false,
-          "syntax": "[--model-name=<name>] [--model-endpoint=<url>] [--model-api-key=<key>]"
-        },
-        {
-          "commandPath": [],
-          "description": "",
-          "flags": [
+            "model-name",
+            "model-provider",
+            "non-interactive",
+            "profile",
             "skip-browser-test",
-            "skip-terminal-test"
+            "skip-terminal-test",
+            "terminal-shell"
           ],
-          "jsonSupport": false,
-          "syntax": "[--skip-browser-test] [--skip-terminal-test]"
-        },
-        {
-          "commandPath": [
-            "Create/update",
-            "user",
-            "config"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Create/update user config"
+          "jsonSupport": true,
+          "syntax": "setup [--json] [--non-interactive] [--profile=balanced] [--browser-mode=managed|attach] [--chrome-debug-port=9222] [--chrome-bind-address=127.0.0.1] [--terminal-shell=pwsh] [--browserless-endpoint=<url>] [--browserless-api-key=<key>] [--model-provider=openrouter|ollama|openai-compatible] [--model-name=<name>] [--model-endpoint=<url>] [--model-api-key=<key>] [--skip-browser-test] [--skip-terminal-test]"
         },
         {
           "commandPath": [
@@ -369,7 +315,7 @@
             "doctor",
             "|"
           ],
-          "description": "",
+          "description": "Inspect, clean, or export local data home",
           "flags": [
             "cleanup",
             "json",
@@ -378,17 +324,6 @@
           ],
           "jsonSupport": true,
           "syntax": "data doctor [--cleanup|--purge-profiles] | cleanup [--purge-profiles] | export [--json]"
-        },
-        {
-          "commandPath": [
-            "Inspect,",
-            "clean,",
-            "or"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Inspect, clean, or export local data home"
         },
         {
           "commandPath": [
@@ -433,7 +368,7 @@
             "web",
             "serve"
           ],
-          "description": "",
+          "description": "Start local web app server; optionally launch browser",
           "flags": [
             "host",
             "json",
@@ -444,17 +379,6 @@
           ],
           "jsonSupport": true,
           "syntax": "web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>] [--open] [--wait]"
-        },
-        {
-          "commandPath": [
-            "Start",
-            "local",
-            "web"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Start local web app server; optionally launch browser"
         },
         {
           "commandPath": [
@@ -603,7 +527,7 @@
             "harness",
             "generate"
           ],
-          "description": "",
+          "description": "Generate a helper",
           "flags": [
             "files",
             "id",
@@ -612,17 +536,6 @@
           ],
           "jsonSupport": true,
           "syntax": "harness generate --id=<id> --purpose=<purpose> [--files=<path:content>] [--json]"
-        },
-        {
-          "commandPath": [
-            "Generate",
-            "a",
-            "helper"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Generate a helper"
         },
         {
           "commandPath": [
@@ -786,18 +699,16 @@
         },
         {
           "commandPath": [
-            "act",
-            "Run",
-            "one"
+            "act"
           ],
-          "description": "",
+          "description": "Run one composite browser action",
           "flags": [
             "json",
             "text",
             "url"
           ],
           "jsonSupport": true,
-          "syntax": "act <action> [target] [text] [--text=<text>] [--url=<url>] [--json] Run one composite browser action"
+          "syntax": "act <action> [target] [text] [--text=<text>] [--url=<url>] [--json]"
         },
         {
           "commandPath": [
@@ -1184,7 +1095,7 @@
             "browser",
             "attach"
           ],
-          "description": "",
+          "description": "Attach to running Chrome/Electron",
           "flags": [
             "cdp-url",
             "port",
@@ -1194,17 +1105,6 @@
           ],
           "jsonSupport": false,
           "syntax": "browser attach [--port=9222] [--cdp-url=...] [--target-type=chrome|chromium|electron] [--provider=<name>] [--yes]"
-        },
-        {
-          "commandPath": [
-            "Attach",
-            "to",
-            "running"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Attach to running Chrome/Electron"
         },
         {
           "commandPath": [
@@ -1359,7 +1259,7 @@
             "browser",
             "act"
           ],
-          "description": "",
+          "description": "Run one composite browser action",
           "flags": [
             "json",
             "text",
@@ -1371,22 +1271,11 @@
         },
         {
           "commandPath": [
-            "Run",
-            "one",
-            "composite"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Run one composite browser action"
-        },
-        {
-          "commandPath": [
             "browser",
             "task",
             "run"
           ],
-          "description": "",
+          "description": "Run multiple browser/fs-output steps",
           "flags": [
             "continue-on-failure",
             "json",
@@ -1394,7 +1283,7 @@
             "steps-file"
           ],
           "jsonSupport": true,
-          "syntax": "browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps"
+          "syntax": "browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json]"
         },
         {
           "commandPath": [
@@ -1597,7 +1486,7 @@
             "auth",
             "export"
           ],
-          "description": "",
+          "description": "Export auth state (cookies/storage)",
           "flags": [
             "live",
             "output",
@@ -1610,22 +1499,11 @@
         },
         {
           "commandPath": [
-            "Export",
-            "auth",
-            "state"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Export auth state (cookies/storage)"
-        },
-        {
-          "commandPath": [
             "browser",
             "auth",
             "import"
           ],
-          "description": "",
+          "description": "Import auth state from file",
           "flags": [
             "live",
             "profile",
@@ -1634,17 +1512,6 @@
           ],
           "jsonSupport": false,
           "syntax": "browser auth import <file> [--live | --stored] [--profile=default] [--yes]"
-        },
-        {
-          "commandPath": [
-            "Import",
-            "auth",
-            "state"
-          ],
-          "description": "",
-          "flags": [],
-          "jsonSupport": false,
-          "syntax": "Import auth state from file"
         },
         {
           "commandPath": [
@@ -1665,14 +1532,14 @@
             "*",
             "*"
           ],
-          "description": "",
+          "description": "Schedule a daemon task",
           "flags": [
             "action",
             "cron",
             "skill"
           ],
           "jsonSupport": false,
-          "syntax": "schedule <id> --cron=\"*/5 * * * *\" --skill=<name> --action=<name> Schedule a daemon task"
+          "syntax": "schedule <id> --cron=\"*/5 * * * *\" --skill=<name> --action=<name>"
         },
         {
           "commandPath": [
@@ -2206,7 +2073,7 @@
             "proxy",
             "start"
           ],
-          "description": "",
+          "description": "Start .localhost proxy",
           "flags": [
             "allow-remote",
             "background",
@@ -2217,7 +2084,7 @@
             "port"
           ],
           "jsonSupport": false,
-          "syntax": "service proxy start [--port=80|0] [--allow-remote=true] [--background=true] [--https=true --cert=<pem> --key=<pem>|--local-ca=true] Start .localhost proxy"
+          "syntax": "service proxy start [--port=80|0] [--allow-remote=true] [--background=true] [--https=true --cert=<pem> --key=<pem>|--local-ca=true]"
         },
         {
           "commandPath": [
@@ -2236,13 +2103,13 @@
             "proxy",
             "startup"
           ],
-          "description": "",
+          "description": "Manage per-user OS startup",
           "flags": [
             "port",
             "yes"
           ],
           "jsonSupport": false,
-          "syntax": "service proxy startup status|install|uninstall [--port=80] [--yes] Manage per-user OS startup"
+          "syntax": "service proxy startup status|install|uninstall [--port=80] [--yes]"
         },
         {
           "commandPath": [
@@ -2250,14 +2117,14 @@
             "proxy",
             "ca"
           ],
-          "description": "",
+          "description": "Manage trusted .localhost CA",
           "flags": [
             "ca-dir",
             "rotate",
             "yes"
           ],
           "jsonSupport": false,
-          "syntax": "service proxy ca status|create|install|uninstall [--ca-dir=<dir>] [--rotate=true] [--yes] Manage trusted .localhost CA"
+          "syntax": "service proxy ca status|create|install|uninstall [--ca-dir=<dir>] [--rotate=true] [--yes]"
         }
       ],
       "section": "Service Management"

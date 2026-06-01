@@ -167,8 +167,18 @@ export async function getCliCommandInventory(): Promise<unknown> {
     }
     | null = null;
 
+  const logicalLines: Array<{ line: string; continuations: string[] }> = [];
   for (const rawLine of helpText.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
+    if (line.startsWith("    ") && logicalLines.length > 0) {
+      logicalLines[logicalLines.length - 1].continuations.push(line.trim());
+      continue;
+    }
+    logicalLines.push({ line, continuations: [] });
+  }
+
+  for (const logicalLine of logicalLines) {
+    const { line, continuations } = logicalLine;
     if (!line.trim()) continue;
     if (!line.startsWith(" ") && line.endsWith(":")) {
       current = { section: line.slice(0, -1), entries: [] };
@@ -179,12 +189,25 @@ export async function getCliCommandInventory(): Promise<unknown> {
 
     const trimmed = line.trim();
     const [syntax, ...descriptionParts] = trimmed.split(/\s{2,}/);
+    let fullSyntax = syntax;
+    let description = descriptionParts.join(" ").trim();
+    for (const continuation of continuations) {
+      const optionAndDescription = /^(.+\])\s+([A-Z][\s\S]*)$/u.exec(continuation);
+      if (!description && continuation.startsWith("[") && optionAndDescription) {
+        fullSyntax = `${fullSyntax} ${optionAndDescription[1]}`;
+        description = optionAndDescription[2].trim();
+      } else if (!description && continuation.startsWith("[")) {
+        fullSyntax = `${fullSyntax} ${continuation}`;
+      } else {
+        description = `${description} ${continuation}`.trim();
+      }
+    }
     current.entries.push({
-      syntax,
-      commandPath: commandPathFromSyntax(syntax),
-      flags: extractFlagNames(syntax),
-      jsonSupport: extractFlagNames(syntax).includes("json"),
-      description: descriptionParts.join(" ").trim(),
+      syntax: fullSyntax,
+      commandPath: commandPathFromSyntax(fullSyntax),
+      flags: extractFlagNames(fullSyntax),
+      jsonSupport: extractFlagNames(fullSyntax).includes("json"),
+      description,
     });
   }
 

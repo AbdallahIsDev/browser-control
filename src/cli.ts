@@ -905,8 +905,119 @@ function printVersion(): void {
 	console.log(readPackageVersion());
 }
 
+const HELP_DESCRIPTION_VERBS = [
+	"Activate",
+	"Add",
+	"Attach",
+	"Capture",
+	"Check",
+	"Clear",
+	"Click",
+	"Close",
+	"Compute",
+	"Create",
+	"Delete",
+	"Destroy",
+	"Detach",
+	"Draft",
+	"Drop",
+	"Evaluate",
+	"Execute",
+	"Export",
+	"Fill",
+	"Generate",
+	"Get",
+	"Grant",
+	"Highlight",
+	"Hover",
+	"Import",
+	"Inspect",
+	"Install",
+	"Launch",
+	"List",
+	"Manage",
+	"Materialize",
+	"Move",
+	"Navigate",
+	"Open",
+	"Paste",
+	"Pause",
+	"Press",
+	"Read",
+	"Remove",
+	"Resume",
+	"Return",
+	"Rollback",
+	"Run",
+	"Save",
+	"Schedule",
+	"Scroll",
+	"Set",
+	"Show",
+	"Start",
+	"Stop",
+	"Submit",
+	"Switch",
+	"Take",
+	"Type",
+	"Update",
+	"Validate",
+	"View",
+	"Write",
+] as const;
+
+const HELP_INLINE_DESCRIPTION_RE = new RegExp(
+	`^(\\s{2})(.+?)\\s+(${HELP_DESCRIPTION_VERBS.join("|")})\\b([\\s\\S]*)$`,
+	"u",
+);
+
+function wrapHelpLine(line: string, maxWidth = 80): string[] {
+	if (line.length <= maxWidth) return [line.trimEnd()];
+	const entryMatch = /^(\s{2})(\S.*?)(\s{2,})(\S.*)$/u.exec(line);
+	if (entryMatch) {
+		const [, indent, syntax, , description] = entryMatch;
+		return [
+			...wrapHelpLine(`${indent}${syntax}`, maxWidth),
+			...wrapHelpLine(`${indent}  ${description}`, maxWidth),
+		];
+	}
+	const inlineDescriptionMatch = HELP_INLINE_DESCRIPTION_RE.exec(line);
+	if (inlineDescriptionMatch) {
+		const [, indent, syntax, verb, descriptionRest] = inlineDescriptionMatch;
+		return [
+			...wrapHelpLine(`${indent}${syntax}`, maxWidth),
+			...wrapHelpLine(`${indent}  ${verb}${descriptionRest}`, maxWidth),
+		];
+	}
+	const indentMatch = /^(\s*)/u.exec(line);
+	const indent = indentMatch?.[1] ?? "";
+	const continuationIndent = indent.length > 0 ? "    " : "";
+	const lines: string[] = [];
+	let remaining = line.trimEnd();
+	while ((lines.length === 0 ? remaining.length : remaining.length + continuationIndent.length) > maxWidth) {
+		const width = lines.length === 0 ? maxWidth : maxWidth - continuationIndent.length;
+		const search = remaining.slice(0, width + 1);
+		const breakAt = Math.max(search.lastIndexOf(" "), search.lastIndexOf("\t"));
+		const splitAt = breakAt > indent.length ? breakAt : width;
+		const chunk = remaining.slice(0, splitAt).trimEnd();
+		lines.push(lines.length === 0 ? chunk : `${continuationIndent}${chunk.trimStart()}`);
+		remaining = remaining.slice(splitAt).trimStart();
+	}
+	lines.push(lines.length === 0 ? remaining : `${continuationIndent}${remaining}`);
+	return lines;
+}
+
+function wrapHelpText(text: string, maxWidth = 80): string {
+	return text
+		.trim()
+		.split(/\r?\n/u)
+		.map((line) => (line.startsWith("    ") ? `    ${line.trimStart()}` : line))
+		.flatMap((line) => wrapHelpLine(line, maxWidth))
+		.join("\n");
+}
+
 function printHelp(): void {
-	console.log(`
+	console.log(wrapHelpText(`
 Browser Control CLI
 
 Usage: bc <command> [subcommand] [options]
@@ -1127,7 +1238,7 @@ Flags:
 
 Environment:
   BROKER_PORT                                                        Broker API port (default: 7788)
-`);
+`));
 }
 
 function printPackageHelp(): void {

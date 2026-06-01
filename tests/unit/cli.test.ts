@@ -837,6 +837,8 @@ test("top-level help documents implemented run and schedule flags", () => {
     assert.match(result.stdout, /schedule <id> .*--skill=<name> --action=<name>/);
     assert.doesNotMatch(result.stdout, /run --package=<name> --workflow=<name>/);
     assert.doesNotMatch(result.stdout, /schedule <id> .*--package=<name> --workflow=<name>/);
+    const longLines = result.stdout.split(/\r?\n/).filter((line) => line.length > 80);
+    assert.deepEqual(longLines, []);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
