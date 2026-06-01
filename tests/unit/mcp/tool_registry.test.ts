@@ -146,6 +146,27 @@ describe("MCP Tool Registry", () => {
       assert.ok(names.includes("bc_network_blocked_requests"));
     });
 
+    it("keeps MCP docs tool list limited to registered canonical names", () => {
+      const registeredNames = new Set(buildToolRegistry(api).map((tool) => tool.name));
+      const doc = fs.readFileSync(path.join(process.cwd(), "docs", "mcp.md"), "utf8");
+      const toolsSection = doc.match(/(?:^|\r?\n)## Tools\r?\n([\s\S]*?)(?:\r?\n## bc_close|$)/)?.[1];
+      assert.ok(toolsSection, "docs/mcp.md should contain a Tools section before tool details");
+
+      const documentedNames = [...toolsSection.matchAll(/^- `([^`]+)`$/gm)].map((match) => match[1]);
+      assert.ok(documentedNames.length > 0, "docs/mcp.md should document MCP tool names");
+
+      assert.deepEqual(
+        documentedNames.filter((name) => !name.startsWith("bc_")),
+        [],
+        "MCP docs must not advertise bare short tool names",
+      );
+      assert.deepEqual(
+        [...new Set(documentedNames.filter((name) => !registeredNames.has(name)))],
+        [],
+        "MCP docs must not advertise unregistered tool names",
+      );
+    });
+
     it("has no duplicate tool names", () => {
       const tools = buildToolRegistry(api);
       const names = tools.map((t) => t.name);

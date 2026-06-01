@@ -4,9 +4,9 @@ Browser Control exposes its action surface as an MCP stdio server.
 
 For terminal-capable agents working in this repo, prefer the CLI first (`bc status --json`, `bc browser state --json`, `bc browser act`, `bc browser task run`). CLI-first execution usually uses fewer LLM tool calls than MCP while preserving the same policy/audit `ActionResult` model. Use MCP Lite for MCP-native clients that need a reduced high-level surface; use full MCP when the full tool set is required.
 
-Browser Control exposes short tool names such as `status`, `open`, `snapshot`, `click`, `fill`, and `screenshot`. Canonical `bc_*` names remain supported for clients that prefer namespaced tools.
+Browser Control exposes canonical `bc_*` MCP tool names only, such as `bc_status`, `bc_open`, `bc_snapshot`, `bc_act`, and `bc_task_run`.
 
-Some clients prefix tool names with the MCP server name. In those clients, name the server `bc` if you want surfaced names like `mcp_bc_status` and `mcp_bc_open`.
+Some clients prefix tool names with the MCP server name. In those clients, a server named `bc` may surface canonical tools with an extra client-side prefix, for example `mcp_bc_bc_status`.
 
 MCP tool inputs are strict. Unknown parameters are rejected before handlers run, for example `expression` on `bc_scroll` fails closed instead of being ignored.
 
@@ -172,7 +172,6 @@ MCP marks failed tool results as errors.
 
 Status:
 
-- `status`
 - `bc_status`
 
 Session:
@@ -184,16 +183,6 @@ Session:
 
 Browser:
 
-- `open`
-- `snapshot`
-- `click`
-- `fill`
-- `screenshot`
-- `browser_list`
-- `drop`
-- `downloads_list`
-- `generate_locator`
-- `highlight`
 - `bc_attach`
 - `bc_detach`
 - `bc_launch`
@@ -239,8 +228,6 @@ Provider:
 
 Terminal:
 
-- `terminal_open`
-- `terminal_exec`
 - `bc_terminal_open`
 - `bc_terminal_exec`
 - `bc_terminal_read`
@@ -254,9 +241,6 @@ Terminal:
 
 Filesystem:
 
-- `fs_read`
-- `fs_write`
-- `fs_list`
 - `bc_fs_read`
 - `bc_fs_write`
 - `bc_fs_list`
@@ -274,8 +258,6 @@ Vault:
 
 Debug:
 
-- `debug_health`
-- `debug_failure_bundle`
 - `bc_debug_health`
 - `bc_debug_failure_bundle`
 - `bc_debug_get_console`
