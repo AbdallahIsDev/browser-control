@@ -148,7 +148,7 @@
 		"node": ">=22"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.14",
+		"@biomejs/biome": "2.4.16",
 		"@types/node": "^22.19.17",
 		"@types/pngjs": "^6.0.5",
 		"@types/ws": "^8.18.1",
