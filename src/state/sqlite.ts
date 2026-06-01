@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isMalformedError, quarantineDatabase, safeInitDatabase } from "../shared/sqlite_util";
+import { runSqliteMigrations, type SqliteMigration } from "../shared/sqlite_migrations";
 import { getStateDir } from "../shared/paths";
 import { logger } from "../shared/logger";
 import type {
@@ -25,56 +26,12 @@ import type {
 } from "./index";
 
 const log = logger.withComponent("sqlite-state");
-
-export class SqliteStateStorage implements StateStorage {
-  private db: DatabaseSync;
-  private readonly dbPath: string;
-
-	constructor(dataHome?: string) {
-		const stateDir = getStateDir(dataHome);
-		this.dbPath = path.join(stateDir, "app.sqlite");
-
-		try {
-			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-			this.db = safeInitDatabase(this.dbPath, { component: "state-storage" });
-
-			// Enable WAL mode
-			this.db.exec("PRAGMA journal_mode=WAL");
-
-			this.initSchema();
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			throw new Error(`Failed to initialize SQLite state storage at ${this.dbPath}: ${message}`);
-		}
-	}
-
-  private safeExecute<T>(fn: () => T): T {
-    try {
-      return fn();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (isMalformedError(message)) {
-        log.error(`Runtime malformed database error in SqliteStateStorage: ${message}. Quarantining...`);
-        try {
-          this.db.close();
-          quarantineDatabase(this.dbPath, message, { component: "state-storage" });
-        } catch (quarantineErr) {
-          log.error(`Failed to quarantine state database: ${quarantineErr}`);
-        }
-        // For durable state, we fail clearly after quarantine instead of
-        // auto-recreating a fresh (empty) DB at runtime, to prevent
-        // surprising the user with lost data.
-        throw new Error(
-          `Critical: SQLite state database at ${this.dbPath} is malformed. ` +
-          "It has been moved to quarantine. The application must be restarted to initialize a fresh database.",
-        );
-      }
-      throw error;
-    }
-  }
-
-  private initSchema() {
-    this.db.exec(`
+const STATE_SCHEMA_VERSION = 1;
+const STATE_MIGRATIONS: SqliteMigration[] = [
+  {
+    version: 1,
+    statements: [
+      `
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         data_json TEXT NOT NULL,
@@ -215,7 +172,64 @@ export class SqliteStateStorage implements StateStorage {
       
       CREATE INDEX IF NOT EXISTS idx_secret_grants_secret_id ON secret_grants(secret_id);
       CREATE INDEX IF NOT EXISTS idx_secret_audit_secret_id ON secret_audit_events(secret_id);
-    `);
+      `,
+    ],
+  },
+];
+
+export class SqliteStateStorage implements StateStorage {
+  private db: DatabaseSync;
+  private readonly dbPath: string;
+
+	constructor(dataHome?: string) {
+		const stateDir = getStateDir(dataHome);
+		this.dbPath = path.join(stateDir, "app.sqlite");
+
+		try {
+			fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+			this.db = safeInitDatabase(this.dbPath, { component: "state-storage" });
+
+			// Enable WAL mode
+			this.db.exec("PRAGMA journal_mode=WAL");
+
+			this.initSchema();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to initialize SQLite state storage at ${this.dbPath}: ${message}`);
+		}
+	}
+
+  private safeExecute<T>(fn: () => T): T {
+    try {
+      return fn();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isMalformedError(message)) {
+        log.error(`Runtime malformed database error in SqliteStateStorage: ${message}. Quarantining...`);
+        try {
+          this.db.close();
+          quarantineDatabase(this.dbPath, message, { component: "state-storage" });
+        } catch (quarantineErr) {
+          log.error(`Failed to quarantine state database: ${quarantineErr}`);
+        }
+        // For durable state, we fail clearly after quarantine instead of
+        // auto-recreating a fresh (empty) DB at runtime, to prevent
+        // surprising the user with lost data.
+        throw new Error(
+          `Critical: SQLite state database at ${this.dbPath} is malformed. ` +
+          "It has been moved to quarantine. The application must be restarted to initialize a fresh database.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  private initSchema() {
+    runSqliteMigrations(this.db, {
+      component: "state-storage",
+      currentVersion: STATE_SCHEMA_VERSION,
+      migrations: STATE_MIGRATIONS,
+    });
   }
 
   // ── Tasks ──

@@ -32,6 +32,16 @@ function countRawRows(databasePath: string): number {
   }
 }
 
+function readUserVersion(databasePath: string): number {
+  const db = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+    return row.user_version;
+  } finally {
+    db.close();
+  }
+}
+
 test("MemoryStore supports CRUD, TTL, prefix keys, and clear", () => {
   let now = 1_000;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-store-test-"));
@@ -84,6 +94,35 @@ test("MemoryStore reports stats and collection counts", () => {
     assert.equal(stats.collections.extracted_data, 1);
     assert.equal(stats.filename, databasePath);
     store.close();
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("MemoryStore migrates legacy v0 databases without losing rows", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "memory-store-migration-"));
+  const databasePath = path.join(tempDir, "memory.sqlite");
+
+  try {
+    const db = new DatabaseSync(databasePath);
+    db.exec(`
+      CREATE TABLE memory_store (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        expires_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO memory_store (key, value_json, expires_at, updated_at)
+      VALUES ('sessions:legacy', '{"token":"kept"}', NULL, 1);
+      PRAGMA user_version = 0;
+    `);
+    db.close();
+
+    const store = new MemoryStore({ filename: databasePath });
+    assert.deepEqual(store.get("sessions:legacy"), { token: "kept" });
+    store.close();
+
+    assert.equal(readUserVersion(databasePath), 1);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

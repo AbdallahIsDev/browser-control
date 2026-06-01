@@ -2,11 +2,32 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isMalformedError, quarantineDatabase, safeInitDatabase } from "../shared/sqlite_util";
+import { runSqliteMigrations, type SqliteMigration } from "../shared/sqlite_migrations";
 import { getMemoryStorePath } from "../shared/paths";
 import { logger } from "../shared/logger";
 
 const log = logger.withComponent("memory-store");
 const DEFAULT_EXPIRED_KEY_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const MEMORY_STORE_SCHEMA_VERSION = 1;
+const MEMORY_STORE_MIGRATIONS: SqliteMigration[] = [
+  {
+    version: 1,
+    statements: [
+      `
+        CREATE TABLE IF NOT EXISTS memory_store (
+          key TEXT PRIMARY KEY,
+          value_json TEXT NOT NULL,
+          expires_at INTEGER,
+          updated_at INTEGER NOT NULL
+        );
+      `,
+      `
+        CREATE INDEX IF NOT EXISTS idx_memory_store_expires_at
+        ON memory_store (expires_at);
+      `,
+    ],
+  },
+];
 
 interface MemoryStoreOptions {
   filename?: string;
@@ -108,16 +129,11 @@ export class MemoryStore {
   }
 
   private initSchema(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS memory_store (
-        key TEXT PRIMARY KEY,
-        value_json TEXT NOT NULL,
-        expires_at INTEGER,
-        updated_at INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_memory_store_expires_at
-      ON memory_store (expires_at);
-    `);
+    runSqliteMigrations(this.db, {
+      component: "memory-store",
+      currentVersion: MEMORY_STORE_SCHEMA_VERSION,
+      migrations: MEMORY_STORE_MIGRATIONS,
+    });
   }
 
   get<T>(key: string): T | null {

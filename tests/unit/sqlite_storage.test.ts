@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { SqliteStateStorage } from "../../src/state/sqlite";
 import { resetStateStorage, type StoredTask } from "../../src/state/index";
@@ -10,6 +11,16 @@ function makeSqliteStorage(): { storage: SqliteStateStorage; home: string } {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-sqlite-"));
   const storage = new SqliteStateStorage(home);
   return { storage, home };
+}
+
+function readUserVersion(databasePath: string): number {
+  const db = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+    return row.user_version;
+  } finally {
+    db.close();
+  }
 }
 
 test("SqliteStateStorage: saves and retrieves tasks", async () => {
@@ -31,6 +42,47 @@ test("SqliteStateStorage: saves and retrieves tasks", async () => {
     assert.ok(all.some(t => t.id === "task-sqlite"));
   } finally {
     storage.close();
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("SqliteStateStorage: migrates legacy v0 databases without losing tasks", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-sqlite-migration-"));
+  const dbPath = path.join(home, "state", "app.sqlite");
+  const task: StoredTask = {
+    id: "legacy-task",
+    prompt: "Keep me",
+    status: "queued",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE tasks (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      PRAGMA user_version = 0;
+    `);
+    db.prepare(`
+      INSERT INTO tasks (id, data_json, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(task.id, JSON.stringify(task), task.status, task.createdAt, task.updatedAt);
+    db.close();
+
+    const storage = new SqliteStateStorage(home);
+    const retrieved = await storage.getTask("legacy-task");
+    storage.close();
+
+    assert.equal(retrieved?.id, "legacy-task");
+    assert.equal(readUserVersion(dbPath), 1);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
