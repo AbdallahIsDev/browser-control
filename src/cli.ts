@@ -217,7 +217,6 @@ export const VALUE_FLAGS = new Set([
 	"url",
 	"usage",
 	"value",
-	"version",
 	"wait-until",
 	"annotation-position",
 	"continue-on-failure",
@@ -762,6 +761,25 @@ async function promptCliConfirmation(reason: string): Promise<boolean> {
 	} finally {
 		rl.close();
 	}
+}
+
+function readPackageVersion(): string {
+	const packageJsonPath = path.resolve(__dirname, "..", "package.json");
+	try {
+		const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+			version?: unknown;
+		};
+		if (typeof parsed.version === "string" && parsed.version.length > 0) {
+			return parsed.version;
+		}
+	} catch {
+		/* fall through */
+	}
+	return "unknown";
+}
+
+function printVersion(): void {
+	console.log(readPackageVersion());
 }
 
 function printHelp(): void {
@@ -3307,6 +3325,11 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 
 export async function runCli(argv = process.argv): Promise<void> {
 	const args = parseArgs(argv);
+
+	if (args.flags.version === "true" || args.flags.v === "true" || args.command === "version") {
+		printVersion();
+		return;
+	}
 
 	if (args.flags.help || args.flags.h || args.command === "help") {
 		if (args.command === "package") {

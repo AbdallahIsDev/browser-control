@@ -770,6 +770,8 @@ test("VALUE_FLAGS covers non-boolean flags read by CLI handlers", () => {
 		"skip-terminal-test",
 		"stale",
 		"stored",
+		"v",
+		"version",
 		"visible",
 		"wait",
 		"y",
@@ -831,6 +833,34 @@ test("parseArgs handles help flags", () => {
 
   const result2 = parseArgs(["node", "cli.ts", "-h"]);
   assert.equal(result2.flags.h, "true");
+});
+
+test("parseArgs treats version as a presence flag", () => {
+  const result = parseArgs(["node", "cli.ts", "--version", "browser"]);
+  assert.equal(result.flags.version, "true");
+  assert.equal(result.command, "browser");
+  assert.equal(VALUE_FLAGS.has("version"), false);
+});
+
+test("top-level --version prints package version only", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-version-"));
+  const home = path.join(cwd, "data");
+  try {
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { version: string };
+    const result = runCli(["--version"], {
+      cwd,
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), packageJson.version);
+    assert.doesNotMatch(result.stdout, /Usage:/);
+    assert.equal(result.stderr, "");
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("parseArgs handles complex schedule command", () => {
