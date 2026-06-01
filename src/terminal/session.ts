@@ -259,7 +259,7 @@ export class PtyTerminalSession implements ITerminalSession {
 			// Write the command sequence
 			if (this._process) {
 				this._process.write(startCmd);
-				await new Promise((r) => setTimeout(r, 50));
+				await this.waitForDelayOrClose(50);
 				if (this._process && !this._closed) {
 					this._process.write(execCmd);
 				}
@@ -500,6 +500,26 @@ export class PtyTerminalSession implements ITerminalSession {
 				this._stateListeners.delete(listener);
 			},
 		};
+	}
+
+	private async waitForDelayOrClose(ms: number): Promise<void> {
+		if (this._closed) return;
+		await new Promise<void>((resolve) => {
+			let settled = false;
+			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+			let stateSubscription: { dispose(): void } | undefined;
+			const settle = (): void => {
+				if (settled) return;
+				settled = true;
+				if (timeoutHandle) clearTimeout(timeoutHandle);
+				stateSubscription?.dispose();
+				resolve();
+			};
+			timeoutHandle = setTimeout(settle, ms);
+			stateSubscription = this.onStateChange(() => {
+				if (this._closed) settle();
+			});
+		});
 	}
 
 	private notifyStateListeners(): void {
