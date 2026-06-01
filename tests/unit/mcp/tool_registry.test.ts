@@ -1003,6 +1003,15 @@ describe("MCP Tool Registry", () => {
       assert.ok("sessionId" in tool.inputSchema.properties, "bc_cdp should have sessionId property");
     });
 
+    it("bc_attach schema exposes one CDP endpoint parameter", () => {
+      const tools = buildToolRegistry(api);
+      const tool = tools.find((t) => t.name === "bc_attach")!;
+
+      assert.ok("cdp" in tool.inputSchema.properties, "bc_attach should expose cdp");
+      assert.ok(!("endpoint" in tool.inputSchema.properties), "bc_attach should not expose endpoint alias");
+      assert.ok("port" in tool.inputSchema.properties, "bc_attach should expose port");
+    });
+
     it("bc_drop schema has tabId", () => {
       const tools = buildToolRegistry(api);
       const tool = tools.find((t) => t.name === "bc_drop")!;

@@ -681,10 +681,9 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_attach",
-      description: "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (--cdp, --endpoint, or --port) and never falls back to launch.",
+      description: "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (cdp or port) and never falls back to launch.",
       inputSchema: buildSchema({
         cdp: { type: "string", description: "CDP endpoint URL (e.g., http://localhost:9222)." },
-        endpoint: { type: "string", description: "CDP endpoint URL alias (same as cdp)." },
         port: { type: "number", description: "CDP port number." },
         targetType: { type: "string", description: "Target type hint: chrome, chromium, msedge, electron, or unknown." },
         sessionId: sessionIdSchema,
@@ -693,7 +692,6 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.attach({
           cdp: params.cdp as string | undefined,
-          endpoint: params.endpoint as string | undefined,
           port: params.port as number | undefined,
           targetType: params.targetType as string | undefined,
         });

@@ -228,16 +228,12 @@
     },
     {
       "category": "browser",
-      "description": "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (--cdp, --endpoint, or --port) and never falls back to launch.",
+      "description": "Explicitly attach to a running browser via CDP endpoint. Requires an explicit target (cdp or port) and never falls back to launch.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "cdp": {
             "description": "CDP endpoint URL (e.g., http://localhost:9222).",
-            "type": "string"
-          },
-          "endpoint": {
-            "description": "CDP endpoint URL alias (same as cdp).",
             "type": "string"
           },
           "port": {
