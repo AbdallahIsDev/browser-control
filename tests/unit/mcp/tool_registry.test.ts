@@ -1,6 +1,10 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { buildToolRegistry, getToolCategories } from "../../../src/mcp/tool_registry";
+import {
+  buildToolRegistry,
+  createLazyToolRegistry,
+  getToolCategories,
+} from "../../../src/mcp/tool_registry";
 import { actionResultToMcpResult, mcpErrorResult, validateToolParams } from "../../../src/mcp/types";
 import { createBrowserControl, type BrowserControlAPI } from "../../../src/browser_control";
 import { MemoryStore } from "../../../src/memory_store";
@@ -167,6 +171,49 @@ describe("MCP Tool Registry", () => {
         [],
         "lite mode should omit compatibility browser aliases to reduce tool schema tokens",
       );
+    });
+
+    it("lazy registry loads no categories until a tool is requested", () => {
+      const registry = createLazyToolRegistry(api);
+
+      assert.deepEqual(registry.getLoadedCategoryNames(), []);
+
+      const statusTool = registry.getTool("bc_status");
+
+      assert.equal(statusTool?.name, "bc_status");
+      assert.deepEqual(registry.getLoadedCategoryNames(), ["status"]);
+    });
+
+    it("lazy lite registry builds only categories that contain lite tools", () => {
+      const registry = createLazyToolRegistry(api, { mode: "lite" });
+
+      const tools = registry.getTools();
+      const names = tools.map((tool) => tool.name).sort();
+
+      assert.deepEqual(registry.getLoadedCategoryNames(), ["status", "session", "browser", "fs"]);
+      assert.deepEqual(names, [
+        "bc_act",
+        "bc_capture",
+        "bc_capture_many",
+        "bc_click",
+        "bc_fill",
+        "bc_open",
+        "bc_open_many",
+        "bc_snapshot",
+        "bc_state",
+        "bc_tab_list",
+        "bc_fs_write_output",
+        "bc_session_status",
+        "bc_status",
+        "bc_task_run",
+      ].sort());
+    });
+
+    it("static tool categories match the built full registry", () => {
+      const categoryNames = Object.values(getToolCategories(api)).flat().sort();
+      const builtNames = buildToolRegistry(api).map((tool) => tool.name).sort();
+
+      assert.deepEqual(categoryNames, builtNames);
     });
 
     it("all tools have descriptions", () => {

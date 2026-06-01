@@ -44,6 +44,176 @@ const LITE_TOOL_NAMES = new Set([
   "bc_status",
 ]);
 
+export type ToolCategoryName =
+  | "status"
+  | "session"
+  | "browser"
+  | "provider"
+  | "terminal"
+  | "fs"
+  | "debug"
+  | "service"
+  | "security"
+  | "workflow"
+  | "package";
+
+type ToolCategoryDefinition = Readonly<{
+  name: ToolCategoryName;
+  toolNames: readonly string[];
+  build: (api: BrowserControlAPI) => McpTool[];
+}>;
+
+const TOOL_CATEGORY_DEFINITIONS: readonly ToolCategoryDefinition[] = [
+  {
+    name: "status",
+    toolNames: ["bc_status"],
+    build: buildStatusTools,
+  },
+  {
+    name: "session",
+    toolNames: ["bc_session_create", "bc_session_list", "bc_session_select", "bc_session_status"],
+    build: buildSessionTools,
+  },
+  {
+    name: "browser",
+    toolNames: [
+      "bc_open",
+      "bc_open_many",
+      "bc_navigate",
+      "bc_capture",
+      "bc_capture_many",
+      "bc_snapshot",
+      "bc_click",
+      "bc_fill",
+      "bc_fill_many",
+      "bc_hover",
+      "bc_type",
+      "bc_paste",
+      "bc_press",
+      "bc_scroll",
+      "bc_screenshot",
+      "bc_highlight",
+      "bc_generate_locator",
+      "bc_tab_list",
+      "bc_tab_switch",
+      "bc_tab_close",
+      "bc_close",
+      "bc_screencast_start",
+      "bc_screencast_stop",
+      "bc_screencast_status",
+      "bc_list",
+      "bc_attach",
+      "bc_detach",
+      "bc_launch",
+      "bc_drop",
+      "bc_downloads_list",
+      "bc_dialog",
+      "bc_cdp",
+      "bc_state",
+      "bc_act",
+      "bc_task_run",
+    ],
+    build: buildBrowserTools,
+  },
+  {
+    name: "provider",
+    toolNames: ["bc_provider_list", "bc_provider_catalog", "bc_provider_use", "bc_provider_health"],
+    build: buildProviderTools,
+  },
+  {
+    name: "terminal",
+    toolNames: [
+      "bc_terminal_open",
+      "bc_terminal_exec",
+      "bc_terminal_read",
+      "bc_terminal_write",
+      "bc_terminal_interrupt",
+      "bc_terminal_snapshot",
+      "bc_terminal_list",
+      "bc_terminal_close",
+      "bc_terminal_resume",
+      "bc_terminal_status",
+    ],
+    build: buildTerminalTools,
+  },
+  {
+    name: "fs",
+    toolNames: [
+      "bc_fs_read",
+      "bc_fs_write",
+      "bc_fs_write_output",
+      "bc_fs_list",
+      "bc_fs_move",
+      "bc_fs_delete",
+      "bc_fs_stat",
+    ],
+    build: buildFsTools,
+  },
+  {
+    name: "debug",
+    toolNames: [
+      "bc_debug_health",
+      "bc_debug_failure_bundle",
+      "bc_debug_get_console",
+      "bc_debug_get_network",
+    ],
+    build: buildDebugTools,
+  },
+  {
+    name: "service",
+    toolNames: ["bc_service_list", "bc_service_resolve"],
+    build: buildServiceTools,
+  },
+  {
+    name: "security",
+    toolNames: ["bc_vault_list", "bc_network_rules_list", "bc_network_blocked_requests"],
+    build: buildSecurityTools,
+  },
+  {
+    name: "workflow",
+    toolNames: [
+      "bc_workflow_run",
+      "bc_workflow_status",
+      "bc_workflow_resume",
+      "bc_workflow_approve",
+      "bc_workflow_cancel",
+      "bc_workflow_events",
+      "bc_workflow_edit_state",
+      "bc_harness_list",
+      "bc_harness_find_helper",
+      "bc_harness_validate_helper",
+      "bc_harness_rollback",
+      "bc_harness_generate",
+      "bc_harness_execute",
+    ],
+    build: buildWorkflowTools,
+  },
+  {
+    name: "package",
+    toolNames: [
+      "bc_package_install",
+      "bc_package_list",
+      "bc_package_info",
+      "bc_package_run",
+      "bc_package_remove",
+      "bc_package_update",
+      "bc_package_grant",
+      "bc_package_eval",
+      "bc_package_review",
+      "bc_package_review_history",
+      "bc_package_eval_history",
+    ],
+    build: buildPackageTools,
+  },
+];
+
+const TOOL_CATEGORY_BY_TOOL_NAME = new Map<string, ToolCategoryDefinition>();
+for (const category of TOOL_CATEGORY_DEFINITIONS) {
+  for (const toolName of category.toolNames) {
+    TOOL_CATEGORY_BY_TOOL_NAME.set(toolName, category);
+  }
+}
+
 interface ToolPolicyProbe {
   action: string;
   params?: Record<string, unknown>;
@@ -185,21 +355,7 @@ export function buildToolRegistry(
   api: BrowserControlAPI,
   options: ToolRegistryOptions = {},
 ): McpTool[] {
-  const tools = [
-    ...buildStatusTools(api),
-    ...buildSessionTools(api),
-    ...buildBrowserTools(api),
-    ...buildProviderTools(api),
-    ...buildTerminalTools(api),
-    ...buildFsTools(api),
-    ...buildDebugTools(api),
-    ...buildServiceTools(api),
-    ...buildSecurityTools(api),
-    ...buildWorkflowTools(api),
-    ...buildPackageTools(api),
-  ];
-  const mode = options.mode ?? (process.env.BROWSER_CONTROL_MCP_MODE === "lite" ? "lite" : "full");
-  return mode === "lite" ? tools.filter((tool) => LITE_TOOL_NAMES.has(tool.name)) : tools;
+  return createLazyToolRegistry(api, options).getTools();
 }
 
 export function filterToolRegistryForActivePolicy(
@@ -211,6 +367,62 @@ export function filterToolRegistryForActivePolicy(
     api.sessionManager.getActivePolicyProfile(),
     true,
   );
+}
+
+export interface LazyToolRegistry {
+  getTool(name: string): McpTool | undefined;
+  getTools(): McpTool[];
+  getLoadedCategoryNames(): ToolCategoryName[];
+}
+
+function resolveToolRegistryMode(options: ToolRegistryOptions): "full" | "lite" {
+  return options.mode ?? (process.env.BROWSER_CONTROL_MCP_MODE === "lite" ? "lite" : "full");
+}
+
+export function createLazyToolRegistry(
+  api: BrowserControlAPI,
+  options: ToolRegistryOptions = {},
+): LazyToolRegistry {
+  const mode = resolveToolRegistryMode(options);
+  const categoryCache = new Map<ToolCategoryName, McpTool[]>();
+  const toolCache = new Map<string, McpTool>();
+
+  const categoryHasVisibleTools = (category: ToolCategoryDefinition): boolean =>
+    mode === "full" || category.toolNames.some((toolName) => LITE_TOOL_NAMES.has(toolName));
+
+  const loadCategory = (category: ToolCategoryDefinition): McpTool[] => {
+    const cached = categoryCache.get(category.name);
+    if (cached) return cached;
+
+    const tools = category.build(api).filter((tool) =>
+      mode === "full" || LITE_TOOL_NAMES.has(tool.name),
+    );
+    categoryCache.set(category.name, tools);
+    for (const tool of tools) {
+      toolCache.set(tool.name, tool);
+    }
+    return tools;
+  };
+
+  return {
+    getTool(name: string): McpTool | undefined {
+      const cached = toolCache.get(name);
+      if (cached) return cached;
+      if (mode === "lite" && !LITE_TOOL_NAMES.has(name)) return undefined;
+
+      const category = TOOL_CATEGORY_BY_TOOL_NAME.get(name);
+      if (!category || !categoryHasVisibleTools(category)) return undefined;
+      return loadCategory(category).find((tool) => tool.name === name);
+    },
+    getTools(): McpTool[] {
+      return TOOL_CATEGORY_DEFINITIONS
+        .filter(categoryHasVisibleTools)
+        .flatMap((category) => loadCategory(category));
+    },
+    getLoadedCategoryNames(): ToolCategoryName[] {
+      return [...categoryCache.keys()];
+    },
+  };
 }
 
 export type ToolCategories = Readonly<Record<string, readonly string[]>>;
@@ -226,6 +438,14 @@ function freezeToolCategories(
   return Object.freeze(categories);
 }
 
+function buildStaticToolCategories(): ToolCategories {
+  const categories: Record<string, string[]> = {};
+  for (const category of TOOL_CATEGORY_DEFINITIONS) {
+    categories[category.name] = [...category.toolNames];
+  }
+  return freezeToolCategories(categories);
+}
+
 /**
  * Get tool names grouped by category for diagnostics.
  */
@@ -235,19 +455,7 @@ export function getToolCategories(api: BrowserControlAPI): ToolCategories {
     return cached;
   }
 
-  const categories = freezeToolCategories({
-    status: buildStatusTools(api).map((t) => t.name),
-    session: buildSessionTools(api).map((t) => t.name),
-    browser: buildBrowserTools(api).map((t) => t.name),
-    provider: buildProviderTools(api).map((t) => t.name),
-    terminal: buildTerminalTools(api).map((t) => t.name),
-    fs: buildFsTools(api).map((t) => t.name),
-    debug: buildDebugTools(api).map((t) => t.name),
-    service: buildServiceTools(api).map((t) => t.name),
-    security: buildSecurityTools(api).map((t) => t.name),
-    workflow: buildWorkflowTools(api).map((t) => t.name),
-    package: buildPackageTools(api).map((t) => t.name),
-  });
+  const categories = buildStaticToolCategories();
   toolCategoriesCache.set(api, categories);
   return categories;
 }

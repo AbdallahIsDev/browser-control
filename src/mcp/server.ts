@@ -18,7 +18,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { createBrowserControl, type BrowserControlAPI } from "../browser_control";
 import {
-  buildToolRegistry,
+  createLazyToolRegistry,
   filterToolRegistryForActivePolicy,
   isToolVisibleForActivePolicy,
 } from "./tool_registry";
@@ -179,9 +179,8 @@ export function bindMcpShutdownHandlers({
 export function createMcpServer(api?: BrowserControlAPI): Server {
   const bc = api ?? createBrowserControl();
 
-  // Build tool registry
-  const tools = buildToolRegistry(bc);
-  const toolMap = new Map(tools.map((t) => [t.name, t]));
+  // Build tool categories on first list/call instead of during MCP startup.
+  const toolRegistry = createLazyToolRegistry(bc);
 
   // Create MCP server
   const server = new Server(
@@ -198,6 +197,7 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
 
   // ListTools handler — expose all registered tools with schemas
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const tools = toolRegistry.getTools();
     const visibleTools = filterToolRegistryForActivePolicy(bc, tools);
     return {
       tools: visibleTools.map((tool) => ({
@@ -212,7 +212,7 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    const tool = toolMap.get(name);
+    const tool = toolRegistry.getTool(name);
     if (!tool || !isToolVisibleForActivePolicy(bc, tool)) {
       return mcpErrorResult(`Unknown tool: ${name}`);
     }
