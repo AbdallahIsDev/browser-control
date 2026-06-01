@@ -4,8 +4,9 @@ export function getLaunchBrowserScriptName(platform: NodeJS.Platform = process.p
 
 export function formatLaunchBrowserCommand(
 	port?: number,
-	platform: NodeJS.Platform = process.platform,
+	_platform: NodeJS.Platform = process.platform,
 ): string {
-	const script = getLaunchBrowserScriptName(platform);
-	return typeof port === "number" ? `${script} ${port}` : script;
+	return typeof port === "number"
+		? `bc browser launch --port ${port}`
+		: "bc browser launch";
 }

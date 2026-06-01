@@ -9,12 +9,13 @@ import {
 } from "../../src/browser/launch_help";
 
 describe("browser launch help", () => {
-  it("suggests platform-specific browser launch scripts", () => {
+  it("keeps developer script names separate from npm-safe user guidance", () => {
     assert.equal(getLaunchBrowserScriptName("win32"), "launch_browser.bat");
     assert.equal(getLaunchBrowserScriptName("linux"), "scripts/launch_browser.sh");
     assert.equal(getLaunchBrowserScriptName("darwin"), "scripts/launch_browser.sh");
-    assert.equal(formatLaunchBrowserCommand(9222, "win32"), "launch_browser.bat 9222");
-    assert.equal(formatLaunchBrowserCommand(9222, "linux"), "scripts/launch_browser.sh 9222");
+    assert.equal(formatLaunchBrowserCommand(9222, "win32"), "bc browser launch --port 9222");
+    assert.equal(formatLaunchBrowserCommand(9222, "linux"), "bc browser launch --port 9222");
+    assert.equal(formatLaunchBrowserCommand(undefined, "linux"), "bc browser launch");
   });
 
   it("keeps user-facing generic launch guidance on the shared helper", () => {
@@ -30,8 +31,16 @@ describe("browser launch help", () => {
       assert.match(
         source,
         /formatLaunchBrowserCommand/u,
-        `${file} should use platform-aware launch guidance`,
+        `${file} should use npm-safe launch guidance`,
       );
+    }
+  });
+
+  it("does not expose source-checkout launch scripts through the shared user-facing helper", () => {
+    for (const platform of ["win32", "linux", "darwin"] as NodeJS.Platform[]) {
+      const command = formatLaunchBrowserCommand(9222, platform);
+      assert.doesNotMatch(command, /launch_browser|scripts\//u);
+      assert.match(command, /^bc browser launch --port 9222$/u);
     }
   });
 

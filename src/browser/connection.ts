@@ -101,14 +101,14 @@ function wslAttachHelp(port: number): string {
 		" Running in WSL. To control visible Windows Chrome, start the Windows launcher with " +
 		"`BROWSER_ENABLE_WSL_CDP_BRIDGE=1` and attach again. Example from WSL: " +
 		`/mnt/c/Windows/System32/cmd.exe /C "set BROWSER_ENABLE_WSL_CDP_BRIDGE=1&& ` +
-		`C:\\Users\\11\\browser-control\\launch_browser.bat ${port}", then ` +
-		`node cli.js browser attach --port=${port} --yes`
+		`bc browser launch --port ${port}", then ` +
+		`bc browser attach --port ${port} --yes`
 	);
 }
 
 function wslChromeLaunchHelp(): string {
 	if (!isLikelyWsl()) return "";
-	return " Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run `node cli.js browser attach --port=9222`.";
+	return " Chrome was not found in WSL. To control visible Windows Chrome from WSL, start the Windows launcher/bridge, then run `bc browser attach --port 9222 --yes`.";
 }
 
 function delay(ms: number): Promise<void> {
@@ -655,7 +655,7 @@ export class BrowserConnectionManager {
 				`Failed to launch managed automation browser on port ${port}. ` +
 					(wslHelp
 						? `${wslHelp}`
-						: `Ensure Chrome can start or use 'bc browser launch' / '${formatLaunchBrowserCommand(port)}'.`),
+						: `Ensure Chrome can start or use ${formatLaunchBrowserCommand(port)}.`),
 			);
 		}
 	}
