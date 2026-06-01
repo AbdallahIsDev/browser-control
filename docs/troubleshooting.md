@@ -9,6 +9,203 @@ bc doctor --json
 bc status --json
 ```
 
+## Top 10 Common Issues
+
+### 1. Port 9222 Already in Use
+
+Symptom:
+
+```text
+Managed launch failed: Port 9222 is already in use by an existing process.
+```
+
+Fix:
+
+```powershell
+bc browser attach --port 9222 --yes
+```
+
+If the process on `9222` is not the browser you want, close that browser or use
+a different debug port:
+
+```powershell
+bc browser open https://example.com --port 9223
+```
+
+### 2. Cannot Attach to Chrome
+
+Symptoms:
+
+- `CDP port 9222 is not reachable`
+- attach tries multiple candidates and fails
+- Chrome is visibly open, but Browser Control cannot connect
+
+Chrome cannot add remote debugging to an already-running non-CDP profile. Close
+all Chrome windows first, then let Browser Control start the managed browser:
+
+```powershell
+bc browser open https://example.com
+```
+
+For attach-only mode, start Chrome with remote debugging enabled and then attach:
+
+```powershell
+bc config set browserMode attach
+bc browser attach --cdp-url http://127.0.0.1:9222 --yes
+```
+
+### 3. CDP Port Not Reachable
+
+Symptom:
+
+```text
+CDP port 9222 is not reachable from this environment.
+```
+
+Fix:
+
+```powershell
+bc doctor --json
+bc browser state --json
+bc browser open https://example.com --json
+```
+
+In WSL, use the Windows Chrome bridge documented in `docs/wsl-windows-chrome.md`
+instead of assuming `127.0.0.1:9222` points to Windows Chrome.
+
+### 4. Policy Denied or Requires Confirmation
+
+Symptoms:
+
+- `Policy denied`
+- `Policy requires confirmation`
+- `Rerun with --yes to confirm this high-risk action`
+
+Fix:
+
+```powershell
+bc status --json
+bc config get policyProfile
+```
+
+Use `--yes` only when you understand the action. For untrusted agents, prefer
+`safe` or `balanced`. Reserve `trusted` for local operator-controlled
+development:
+
+```powershell
+bc config set policyProfile balanced
+```
+
+### 5. Broker Is Not Reachable
+
+Symptom:
+
+```text
+Broker is not reachable at http://127.0.0.1:7788.
+```
+
+Fix:
+
+```powershell
+bc daemon status
+bc daemon start
+bc status --json
+```
+
+Most browser actions do not require the daemon. Daemon-backed task, schedule,
+and broker API commands do.
+
+### 6. Broker Authentication Fails
+
+Symptom:
+
+```text
+broker rejected CLI authentication
+```
+
+Fix:
+
+```powershell
+Remove-Item Env:BROKER_API_KEY -ErrorAction SilentlyContinue
+bc daemon stop
+bc daemon start
+```
+
+If you intentionally set `BROKER_API_KEY`, restart the daemon with the same
+value used by the CLI.
+
+### 7. MCP Tool List Hangs or Emits Invalid JSON
+
+Symptoms:
+
+- MCP client reports invalid JSON
+- tool list hangs
+- stdout contains banners, npm lifecycle text, or logs
+
+Fix:
+
+```json
+{
+  "command": "bc",
+  "args": ["mcp", "serve"]
+}
+```
+
+Do not start MCP through `npm run` wrappers or scripts that print to stdout.
+
+### 8. Invalid JSON in CLI Flags
+
+Symptoms:
+
+- `Invalid JSON in --params`
+- `--steps or --steps-file is required (JSON array of step objects)`
+- `--steps must be valid JSON`
+
+Fix:
+
+Prefer files for complex JSON, especially on Windows:
+
+```powershell
+bc browser task run --steps-file .\steps.json --json
+```
+
+### 9. Target Element Not Found or Stale Ref
+
+Symptoms:
+
+- `Target element not found`
+- click/fill works once, then fails after the page updates
+
+Fix:
+
+Refresh state before acting and prefer semantic targets when refs are stale:
+
+```powershell
+bc browser snapshot --json
+bc browser act click "Submit" --json
+```
+
+For modal dialogs or duplicate text, take a fresh snapshot after the modal opens.
+
+### 10. Provider Endpoint Is Not Reachable
+
+Symptom:
+
+```text
+Provider endpoint is not reachable
+```
+
+Fix:
+
+```powershell
+bc browser provider list
+bc browser provider health <name>
+bc browser provider use local
+```
+
+For Browserless/custom providers, verify the endpoint URL, token, firewall, and
+TLS certificate before saving or using the provider.
+
 ## Chrome or CDP Unavailable
 
 Symptoms:
