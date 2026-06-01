@@ -735,6 +735,28 @@ describe("MCP Tool Registry", () => {
       }
     });
 
+    it("provider list honors explicit sessionId", async () => {
+      const originalUse = api.session.use.bind(api.session);
+      let selectedSession: string | undefined;
+      api.session.use = ((sessionId: string) => {
+        selectedSession = sessionId;
+        return successResult({ id: sessionId }, { path: "command", sessionId });
+      }) as typeof api.session.use;
+
+      try {
+        const tools = buildToolRegistry(api);
+        const providerListTool = tools.find((t) => t.name === "bc_provider_list")!;
+        const result = await providerListTool.handler({ sessionId: "provider-session" });
+
+        assert.equal(result.success, true);
+        assert.equal(result.sessionId, "provider-session");
+        assert.equal(selectedSession, "provider-session");
+        assert.ok(Array.isArray((result.data as { providers?: unknown[] }).providers));
+      } finally {
+        api.session.use = originalUse as typeof api.session.use;
+      }
+    });
+
     it("provider health tool routes through policy and returns diagnostics", async () => {
       const tools = buildToolRegistry(api);
       const providerHealthTool = tools.find((t) => t.name === "bc_provider_health")!;
