@@ -82,7 +82,7 @@ Implementation review performed for first backend slice.
 Code review notes:
 
 - Local app server uses `createBrowserControl()` rather than a parallel automation engine.
-- CLI help exposes `web serve`, `web open`, and dashboard open backed by app server.
+- CLI help exposes `web serve --open` and dashboard open backed by app server, with `web open` retained only as a legacy alias.
 - Public exports added through `src/index.ts`.
 - Task/scheduler/log bridges and full UI/desktop shell remain incomplete.
 

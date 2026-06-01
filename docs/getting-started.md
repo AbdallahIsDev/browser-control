@@ -110,29 +110,29 @@ Normal Browser Control usage is CLI/MCP-first. The local dashboard is an experim
 For local operator testing only:
 
 ```powershell
-bc web open
+bc web serve --open
 ```
 
 This starts a loopback-only dashboard server in the background, opens a token-authenticated local URL, and exits. For a foreground server that stays attached to the terminal, run:
 
 ```powershell
-bc web open --wait=true
+bc web serve --open --wait=true
 ```
 
 If port `7790` is already in use, fall back to:
 
 ```powershell
-bc web open --port=0
+bc web serve --open --port=0
 ```
 
 Source checkout equivalents:
 
 ```powershell
-npm run cli -- web open
-npm run cli -- web open --port=0
+npm run cli -- web serve --open
+npm run cli -- web serve --open --port=0
 ```
 
-For scripts, prefer CLI/MCP package commands. If testing the experimental dashboard, `bc web open --json` prints machine-readable connection data, including a reachable `url`, tokenized `openUrl`, and background server `pid`. Stop that PID when done.
+For scripts, prefer CLI/MCP package commands. If testing the experimental dashboard, `bc web serve --open --json` prints machine-readable connection data, including a reachable `url`, tokenized `openUrl`, and background server `pid`. Stop that PID when done. `bc web open` remains as a legacy compatibility alias.
 
 ## First Terminal and Filesystem Workflow
 

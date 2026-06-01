@@ -423,7 +423,7 @@ test("bc web serve --json --port=0 stays alive until killed", async () => {
 	}
 });
 
-test("bc web open --json --port=0 exits cleanly", async () => {
+test("bc web serve --open --json --port=0 exits cleanly", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	try {
@@ -438,7 +438,8 @@ test("bc web open --json --port=0 exits cleanly", async () => {
 				"tsconfig-paths/register",
 				"src/cli.ts",
 				"web",
-				"open",
+				"serve",
+				"--open",
 				"--json",
 				"--port",
 				"0",
@@ -470,7 +471,49 @@ test("bc web open --json --port=0 exits cleanly", async () => {
 	}
 });
 
-test("bc web open --json --port=N exits with a reachable URL", async () => {
+test("bc web open remains a JSON-safe compatibility alias", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"web",
+				"open",
+				"--json",
+				"--port",
+				"0",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+				timeout: 10000,
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr);
+		const parsed = JSON.parse(result.stdout.trim().split(/\r?\n/u).filter(Boolean)[0]);
+		assert.strictEqual(parsed.success, true);
+		assert.match(parsed.url, /^http:\/\/127\.0\.0\.1:\d+$/u);
+		if (parsed.pid) {
+			await killPid(parsed.pid);
+		}
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		await removeHome(home);
+	}
+});
+
+test("bc web serve --open --json --port=N exits with a reachable URL", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	let parsed:
@@ -489,7 +532,8 @@ test("bc web open --json --port=N exits with a reachable URL", async () => {
 				"tsconfig-paths/register",
 				"src/cli.ts",
 				"web",
-				"open",
+				"serve",
+				"--open",
 				"--json",
 				"--port",
 				String(explicitPort),
@@ -518,7 +562,7 @@ test("bc web open --json --port=N exits with a reachable URL", async () => {
 	}
 });
 
-test("bc web serve persists reusable server info and bc web open reuses it", async () => {
+test("bc web serve persists reusable server info and bc web serve --open reuses it", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	const recordPath = path.join(home, "runtime", "web-server.json");
@@ -582,7 +626,8 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 				"tsconfig-paths/register",
 				"src/cli.ts",
 				"web",
-				"open",
+				"serve",
+				"--open",
 				"--json",
 				"--port",
 				String(port),
@@ -617,7 +662,7 @@ test("bc web serve persists reusable server info and bc web open reuses it", asy
 	}
 });
 
-test("bc web open reports readable fallback when an unknown process owns the port", async () => {
+test("bc web serve --open reports readable fallback when an unknown process owns the port", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	const busyServer = http.createServer((_request, response) => {
@@ -639,7 +684,8 @@ test("bc web open reports readable fallback when an unknown process owns the por
 				"tsconfig-paths/register",
 				"src/cli.ts",
 				"web",
-				"open",
+				"serve",
+				"--open",
 				"--json",
 				"--port",
 				String(port),
@@ -654,8 +700,8 @@ test("bc web open reports readable fallback when an unknown process owns the por
 
 		assert.notEqual(result.status, 0);
 		assert.match(result.stderr, new RegExp(`port ${port} is busy`, "i"));
-		assert.match(result.stderr, /bc web open --port=0/i);
-		assert.match(result.stderr, /Source checkout: `npm run cli -- web open --port=0`./i);
+		assert.match(result.stderr, /bc web serve --open --port=0/i);
+		assert.match(result.stderr, /Source checkout: `npm run cli -- web serve --open --port=0`./i);
 	} finally {
 		await new Promise((resolve) => busyServer.close(() => resolve(undefined)));
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;

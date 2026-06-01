@@ -38,14 +38,14 @@ Use MCP Lite when the client cannot run CLI directly. Use full MCP only when the
 Experimental local dashboard shortcuts:
 
 ```powershell
-bc web open
-bc web open --json
-bc web open --wait=true
-bc web open --port=0
-npm run cli -- web open
+bc web serve --open
+bc web serve --open --json
+bc web serve --open --wait=true
+bc web serve --open --port=0
+npm run cli -- web serve --open
 ```
 
-`bc web open` starts the experimental loopback operator UI. It is not the main production surface; prefer CLI/MCP package commands for normal agent integration. `--json` prints the reachable `url`, `openUrl`, `token`, and background `pid`; scripts should stop that PID when finished.
+`bc web serve --open` starts the experimental loopback operator UI. It is not the main production surface; prefer CLI/MCP package commands for normal agent integration. `--json` prints the reachable `url`, `openUrl`, `token`, and background `pid`; scripts should stop that PID when finished. `bc web open` remains as a legacy compatibility alias.
 
 ## Operator
 

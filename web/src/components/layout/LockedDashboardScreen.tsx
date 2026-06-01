@@ -7,17 +7,17 @@ const commands = [
 	{
 		label: "Installed command",
 		description: "Starts the local dashboard and opens a tokenized URL.",
-		command: "bc web open",
+		command: "bc web serve --open",
 	},
 	{
 		label: "Port-busy fallback",
 		description: "Use when port 7790 is already taken.",
-		command: "bc web open --port=0",
+		command: "bc web serve --open --port=0",
 	},
 	{
 		label: "Source checkout",
 		description: "Use inside this repo when running from source.",
-		command: "npm run cli -- web open",
+		command: "npm run cli -- web serve --open",
 	},
 ];
 
@@ -105,19 +105,19 @@ function AuthHelpPanel() {
 				<p>
 					1. Run{" "}
 					<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-						bc web open
+						bc web serve --open
 					</code>
 				</p>
 				<p>
 					2. If port 7790 is busy, run{" "}
 					<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-						bc web open --port=0
+						bc web serve --open --port=0
 					</code>
 				</p>
 				<p>
 					3. From source, run{" "}
 					<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">
-						npm run cli -- web open
+						npm run cli -- web serve --open
 					</code>
 				</p>
 			</div>

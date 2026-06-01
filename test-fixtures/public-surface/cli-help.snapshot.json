@@ -439,11 +439,13 @@
           "flags": [
             "host",
             "json",
+            "open",
             "port",
-            "token"
+            "token",
+            "wait"
           ],
           "jsonSupport": true,
-          "syntax": "web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>]"
+          "syntax": "web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>] [--open] [--wait]"
         },
         {
           "commandPath": [
@@ -454,20 +456,7 @@
           "description": "",
           "flags": [],
           "jsonSupport": false,
-          "syntax": "Start local web app server"
-        },
-        {
-          "commandPath": [
-            "web",
-            "open"
-          ],
-          "description": "Start and open local web app server",
-          "flags": [
-            "json",
-            "port"
-          ],
-          "jsonSupport": true,
-          "syntax": "web open [--json] [--port=7790]"
+          "syntax": "Start local web app server; optionally launch browser"
         },
         {
           "commandPath": [

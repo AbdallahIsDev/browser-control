@@ -273,6 +273,7 @@ const COMMANDER_BOOLEAN_OPTIONS = [
 	"local-ca",
 	"non-interactive",
 	"overwrite",
+	"open",
 	"persist",
 	"purge-profiles",
 	"recursive",
@@ -953,9 +954,8 @@ Operator:
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
   dashboard status [--json]                                          Show dashboard state
   dashboard open [--json] [--port=7790]                              Start/open local dashboard
-  web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>]
-                                                                      Start local web app server
-  web open [--json] [--port=7790]                                    Start and open local web app server
+  web serve [--json] [--host=127.0.0.1] [--port=7790] [--token=<token>] [--open] [--wait]
+                                                                      Start local web app server; optionally launch browser
   desktop start [--json]                                             Start the Electron desktop wrapper
 
 Workflow Graph (Section 29):
@@ -4673,8 +4673,8 @@ async function formatBusyWebPortMessage(
 	if (owner) {
 		lines.push(`Listener: ${owner}`);
 	}
-	lines.push("Run `bc web open --port=0` to start on a free port.");
-	lines.push("Source checkout: `npm run cli -- web open --port=0`.");
+	lines.push("Run `bc web serve --open --port=0` to start on a free port.");
+	lines.push("Source checkout: `npm run cli -- web serve --open --port=0`.");
 	return lines.join("\n");
 }
 
@@ -4908,6 +4908,8 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 	const { subcommand, flags } = args;
 	const jsonOutput = flags.json === "true";
 	const action = subcommand || "serve";
+	const legacyOpenCommand = action === "open";
+	const shouldOpenBrowser = flags.open === "true" || legacyOpenCommand;
 
 	switch (action) {
 		case "serve":
@@ -4936,7 +4938,11 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 			};
 
 			try {
-				if (action === "open" && token === undefined && port !== 0) {
+				if (legacyOpenCommand && !jsonOutput) {
+					console.warn("`bc web open` is deprecated; use `bc web serve --open`.");
+				}
+
+				if (shouldOpenBrowser && token === undefined && port !== 0) {
 					const reusable = await tryReuseWebServer({ host, port });
 					if (reusable) {
 						const openUrl = emitInfo(reusable);
@@ -4945,7 +4951,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 					}
 				}
 
-				if (action === "open" && flags.wait !== "true") {
+				if (shouldOpenBrowser && flags.wait !== "true") {
 					let info: {
 						host: string;
 						port: number;
@@ -4988,7 +4994,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 					const info = await server.listen();
 					const openUrl = emitInfo(info);
 					if (!jsonOutput) {
-						if (action === "open") openUrlInDefaultBrowser(openUrl);
+						if (shouldOpenBrowser) openUrlInDefaultBrowser(openUrl);
 						console.log("Press Ctrl+C to stop.");
 					}
 					// Block forever — the server stays alive until killed.
@@ -4997,7 +5003,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 				} catch (error: unknown) {
 					await server.close().catch(() => undefined);
 					if (isAddrInUseError(error)) {
-						if (action === "open" && token === undefined && port !== 0) {
+						if (shouldOpenBrowser && token === undefined && port !== 0) {
 							const reusable = await tryReuseWebServer({ host, port });
 							if (reusable) {
 								const openUrl = emitInfo(reusable);
@@ -5017,7 +5023,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 		}
 		default:
 			console.error(`Unknown web command: ${action}`);
-			console.error("Available: serve, open");
+			console.error("Available: serve");
 			throw commandFailed();
 	}
 }

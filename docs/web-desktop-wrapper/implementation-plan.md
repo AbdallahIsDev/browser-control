@@ -14,7 +14,7 @@
   - `src/web/security.ts`
   - `src/web/events.ts`
   - `src/web/types.ts`
-  - CLI `web serve`, `web open`, and dashboard open path.
+  - CLI `web serve --open`, legacy `web open` alias, and dashboard open path.
   - Focused tests in `tests/unit/web_app_server.test.ts`.
 
 ## Chosen Architecture

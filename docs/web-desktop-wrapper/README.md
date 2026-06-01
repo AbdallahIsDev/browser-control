@@ -83,7 +83,7 @@ Add:
 - `src/web/` app-server bridge and typed contracts
 - `web/` Vite/React operator UI
 - `desktop/` Electron Windows shell reusing built web UI
-- CLI commands for `bc web`, `bc web serve`, `bc web open`, and `bc desktop`
+- CLI commands for `bc web`, `bc web serve --open`, the legacy `bc web open` alias, and `bc desktop`
 - focused tests for app-server routes, security, event schemas, terminal bridge, and desktop security config
 
 Update:

@@ -221,7 +221,7 @@ test("no-token state shows locked dashboard with copyable CLI guidance", () => {
 	// CLI command hint — primary installed command
 	assert.match(
 		lockedSource,
-		/bc web open/,
+		/bc web serve --open/,
 		"No-token state should show installed CLI command hint (bc)",
 	);
 
@@ -245,14 +245,14 @@ test("no-token state shows locked dashboard with copyable CLI guidance", () => {
 
 	assert.match(
 		lockedSource,
-		/bc web open --port=0/,
+		/bc web serve --open --port=0/,
 		"No-token state should show port-busy fallback command",
 	);
 
 	// Dev fallback command hint
 	assert.match(
 		lockedSource,
-		/npm run cli -- web open/,
+		/npm run cli -- web serve --open/,
 		"No-token state should show dev fallback command hint",
 	);
 
