@@ -479,6 +479,7 @@ test("bc web open --json --port=N exits with a reachable URL", async () => {
 	try {
 		process.env.BROWSER_CONTROL_HOME = home;
 		const explicitPort = await getFreePort();
+		const tokenPath = path.join(home, "secrets", "web-dashboard-token");
 		const explicit = spawnSync(
 			process.execPath,
 			[
@@ -506,6 +507,7 @@ test("bc web open --json --port=N exits with a reachable URL", async () => {
 		assert.strictEqual(parsed?.success, true);
 		assert.match(parsed.url, new RegExp(`^http://127\\.0\\.0\\.1:${explicitPort}$`, "u"));
 		assert.equal(await requestStatus(parsed.url, parsed.token), 200);
+		assert.equal(fs.readFileSync(tokenPath, "utf8").trim(), parsed.token);
 	} finally {
 		if (parsed?.pid) {
 			await killPid(parsed.pid);

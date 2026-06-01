@@ -534,6 +534,63 @@ test("web app server persists reusable server info with restrictive permissions"
 	}
 });
 
+test("web app server reuses generated dashboard token across restarts", async () => {
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "bc-web-token-"));
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	const tokenPath = path.join(tmpHome, "secrets", "web-dashboard-token");
+
+	let firstServer: ReturnType<typeof createWebAppServer> | null = null;
+	let secondServer: ReturnType<typeof createWebAppServer> | null = null;
+	try {
+		firstServer = createWebAppServer({ api: mockApi() });
+		const firstInfo = await firstServer.listen(0, "127.0.0.1");
+		await firstServer.close();
+		firstServer = null;
+
+		assert.equal(fs.readFileSync(tokenPath, "utf8").trim(), firstInfo.token);
+		if (process.platform !== "win32") {
+			assert.equal(fs.statSync(tokenPath).mode & 0o777, 0o600);
+		}
+
+		secondServer = createWebAppServer({ api: mockApi() });
+		const secondInfo = await secondServer.listen(0, "127.0.0.1");
+
+		assert.equal(secondInfo.token, firstInfo.token);
+	} finally {
+		await firstServer?.close().catch(() => undefined);
+		await secondServer?.close().catch(() => undefined);
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	}
+});
+
+test("explicit web dashboard token does not overwrite persisted token", async () => {
+	const tmpHome = fs.mkdtempSync(
+		path.join(os.tmpdir(), "bc-web-explicit-token-"),
+	);
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	process.env.BROWSER_CONTROL_HOME = tmpHome;
+	const tokenPath = path.join(tmpHome, "secrets", "web-dashboard-token");
+	fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
+	fs.writeFileSync(tokenPath, "persisted-token\n", { mode: 0o600 });
+
+	let server: ReturnType<typeof createWebAppServer> | null = null;
+	try {
+		server = createWebAppServer({ api: mockApi(), token: "explicit-token" });
+		const info = await server.listen(0, "127.0.0.1");
+
+		assert.equal(info.token, "explicit-token");
+		assert.equal(fs.readFileSync(tokenPath, "utf8").trim(), "persisted-token");
+	} finally {
+		await server?.close().catch(() => undefined);
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(tmpHome, { recursive: true, force: true });
+	}
+});
+
 test("web app server protects API routes and exposes status/capabilities", async (t) => {
 	const server = createWebAppServer({ api: mockApi(), token: "test-token" });
 	t.after(() => server.close());

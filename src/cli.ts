@@ -4753,7 +4753,7 @@ async function waitForReachableWebUrl(
 async function startBackgroundWebServer(options: {
 	host: string;
 	port: number;
-	token: string;
+	token?: string;
 	allowRemote: boolean;
 }): Promise<{
 	host: string;
@@ -4777,9 +4777,8 @@ async function startBackgroundWebServer(options: {
 		options.host,
 		"--port",
 		String(options.port),
-		"--token",
-		options.token,
 	];
+	if (options.token !== undefined) bgArgs.push("--token", options.token);
 	if (options.allowRemote) bgArgs.push("--allow-remote");
 	const bgChild = spawn(process.execPath, bgArgs, {
 		stdio: "ignore",
@@ -4815,7 +4814,8 @@ async function startBackgroundWebServer(options: {
 					if (fs.existsSync(recordPath)) {
 						const parsed = JSON.parse(fs.readFileSync(recordPath, "utf8"));
 						if (
-							parsed?.token === options.token &&
+							typeof parsed?.token === "string" &&
+							(options.token === undefined || parsed.token === options.token) &&
 							parsed?.pid === bgChild.pid &&
 							parsed?.port &&
 							(options.port === 0 || parsed.port === options.port)
@@ -4915,7 +4915,6 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 			const { createWebAppServer, openUrlInDefaultBrowser } = await import(
 				"./web/server"
 			);
-			const { createLocalToken } = await import("./web/security");
 			const host = typeof flags.host === "string" ? flags.host : "127.0.0.1";
 			const port = typeof flags.port === "string" ? Number(flags.port) : 7790;
 			const token = typeof flags.token === "string" ? flags.token : undefined;
@@ -4947,7 +4946,6 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 				}
 
 				if (action === "open" && flags.wait !== "true") {
-					const bgToken = token || createLocalToken();
 					let info: {
 						host: string;
 						port: number;
@@ -4960,7 +4958,7 @@ async function handleWeb(args: ParsedArgs): Promise<void> {
 						info = await startBackgroundWebServer({
 							host,
 							port,
-							token: bgToken,
+							token,
 							allowRemote: flags["allow-remote"] === "true",
 						});
 					} catch (error) {

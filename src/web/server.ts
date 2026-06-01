@@ -23,7 +23,7 @@ import {
 } from "../shared/config";
 import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { logger } from "../shared/logger";
-import { getDataHome } from "../shared/paths";
+import { ensureDataHome, getDataHome } from "../shared/paths";
 import {
 	getStateStorage,
 	type StateStorage,
@@ -87,6 +87,7 @@ export interface WebAppServer {
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7790;
 const WEB_SERVER_RECORD_FILE = "web-server.json";
+const WEB_DASHBOARD_TOKEN_FILE = "web-dashboard-token";
 const WEB_RATE_LIMIT_WINDOW_MS = 60_000;
 const WEB_UNAUTHENTICATED_RATE_LIMIT = 60;
 const WEB_AUTHENTICATED_RATE_LIMIT = 300;
@@ -123,6 +124,55 @@ function automationStorePath(): string {
 
 function webServerRecordPath(): string {
 	return path.join(getDataHome(), "runtime", WEB_SERVER_RECORD_FILE);
+}
+
+function webDashboardTokenPath(): string {
+	return path.join(ensureDataHome(), "secrets", WEB_DASHBOARD_TOKEN_FILE);
+}
+
+function readPersistedWebDashboardToken(): string | null {
+	const tokenPath = webDashboardTokenPath();
+	if (!fs.existsSync(tokenPath)) return null;
+	if (
+		process.platform !== "win32" &&
+		fs.lstatSync(tokenPath).isSymbolicLink()
+	) {
+		throw new Error(
+			"Refusing to read symlinked Browser Control web dashboard token.",
+		);
+	}
+	const token = fs.readFileSync(tokenPath, "utf8").trim();
+	return token.length > 0 ? token : null;
+}
+
+function writePersistedWebDashboardToken(token: string): string {
+	const tokenPath = webDashboardTokenPath();
+	const tokenDir = path.dirname(tokenPath);
+	fs.mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
+	if (process.platform !== "win32") {
+		if (fs.lstatSync(tokenDir).isSymbolicLink()) {
+			throw new Error(
+				"Refusing to write Browser Control web dashboard token under a symlinked secrets directory.",
+			);
+		}
+		fs.chmodSync(tokenDir, 0o700);
+		if (fs.existsSync(tokenPath) && fs.lstatSync(tokenPath).isSymbolicLink()) {
+			throw new Error(
+				"Refusing to overwrite symlinked Browser Control web dashboard token.",
+			);
+		}
+	}
+	fs.writeFileSync(tokenPath, `${token}\n`, { encoding: "utf8", mode: 0o600 });
+	if (process.platform !== "win32") fs.chmodSync(tokenPath, 0o600);
+	return token;
+}
+
+function resolveWebDashboardToken(explicitToken?: string): string {
+	if (explicitToken !== undefined) return explicitToken;
+	return (
+		readPersistedWebDashboardToken() ??
+		writePersistedWebDashboardToken(createLocalToken())
+	);
 }
 
 function normalizeRemoteAddress(request: IncomingMessage): string {
@@ -940,7 +990,7 @@ function indexHtml(nonce: string): string {
 export function createWebAppServer(
 	options: WebAppServerOptions = {},
 ): WebAppServer {
-	const token = options.token ?? createLocalToken();
+	const token = resolveWebDashboardToken(options.token);
 	const host = options.host ?? DEFAULT_HOST;
 	const port = options.port ?? DEFAULT_PORT;
 	assertSafeBind(host, options.allowRemote === true);
