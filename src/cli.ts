@@ -235,6 +235,8 @@ export const VALUE_FLAGS = new Set([
 
 // Flags that can be repeated and should be collected as arrays
 const REPEATED_FLAGS = new Set(["file", "files", "data"]);
+const REPEATED_FLAG_DELIMITER =
+	"\x1f__BROWSER_CONTROL_REPEATED_FLAG_8b24a0f4_5f30_4d4f_b38b_1c47dd95e64d__\x1f";
 
 const FLAG_ALIASES: Record<string, string> = {
 	captureOnSuccess: "capture-on-success",
@@ -298,6 +300,14 @@ function canonicalFlagName(flag: string): string {
 	return FLAG_ALIASES[flag] ?? flag;
 }
 
+function appendRepeatedFlagValue(existing: string | undefined, value: string): string {
+	return existing ? `${existing}${REPEATED_FLAG_DELIMITER}${value}` : value;
+}
+
+function splitRepeatedFlagValues(value: string): string[] {
+	return value.split(REPEATED_FLAG_DELIMITER);
+}
+
 function hasConfirmation(flags: Record<string, string>, legacyToken: string): boolean {
 	return (
 		flags.yes === "true" ||
@@ -325,27 +335,21 @@ export function parseArgs(argv: string[]): ParsedArgs {
 			if (eqIndex !== -1) {
 				const key = canonicalFlagName(flagPart.slice(0, eqIndex));
 				const value = flagPart.slice(eqIndex + 1);
-				// Handle repeated flags by appending with null character delimiter
+				// Handle repeated flags by appending with an internal delimiter.
 				if (REPEATED_FLAGS.has(key)) {
-					if (result.flags[key]) {
-						result.flags[key] = `${result.flags[key]}\0${value}`;
-					} else {
-						result.flags[key] = value;
-					}
+					result.flags[key] = appendRepeatedFlagValue(result.flags[key], value);
 				} else {
 					result.flags[key] = value;
 				}
 			} else {
 				const key = canonicalFlagName(flagPart);
 				if (shouldConsumeFlagValue(key, args[i + 1])) {
-					// Handle repeated flags with space-separated values
+					// Handle repeated flags with space-separated values.
 					if (REPEATED_FLAGS.has(key)) {
-						if (result.flags[key]) {
-							result.flags[key] =
-								`${result.flags[key]}\0${args[i + 1]}`;
-						} else {
-							result.flags[key] = args[i + 1];
-						}
+						result.flags[key] = appendRepeatedFlagValue(
+							result.flags[key],
+							args[i + 1],
+						);
 					} else {
 						result.flags[key] = args[i + 1];
 					}
@@ -2038,14 +2042,14 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				(value): value is string => Boolean(value),
 			);
 			const filesRaw =
-				fileValues.length > 0 ? fileValues.join("\0") : undefined;
+				fileValues.length > 0 ? fileValues.join(REPEATED_FLAG_DELIMITER) : undefined;
 			const dataRaw = flags.data;
-			// Split on null character delimiter for repeated flags
+			// Split repeated flags without treating commas or null bytes as delimiters.
 			const files = filesRaw
-				? filesRaw.split("\0").map((f) => f.trim())
+				? splitRepeatedFlagValues(filesRaw).map((f) => f.trim())
 				: undefined;
 			const dataArray = dataRaw
-				? dataRaw.split("\0").map((d) => d.trim())
+				? splitRepeatedFlagValues(dataRaw).map((d) => d.trim())
 				: undefined;
 
 			if (!target) {
@@ -5282,7 +5286,7 @@ async function handleHarness(args: ParsedArgs): Promise<void> {
 				}
 				const filesFlag = flags.files;
 				const files = filesFlag
-					? filesFlag.split("\0").map((f) => {
+					? splitRepeatedFlagValues(filesFlag).map((f) => {
 						const [path, ...rest] = f.split(":");
 						return { path: path ?? "", content: rest.join(":") || "" };
 					})

@@ -1085,11 +1085,30 @@ test("parseArgs collects repeated drop file and data flags without comma splitti
   assert.equal(result.command, "browser");
   assert.equal(result.subcommand, "drop");
   assert.deepEqual(result.positional, ["@e1"]);
-  assert.equal(result.flags.file, "C:\\tmp\\one.txt\0C:\\tmp\\two.txt");
-  assert.equal(
-    result.flags.data,
-    "text/plain=hello,world\0application/json={\"url\":\"https://example.com?a=1\"}",
-  );
+  assert.match(result.flags.file ?? "", /C:\\tmp\\one\.txt/);
+  assert.match(result.flags.file ?? "", /C:\\tmp\\two\.txt/);
+  assert.doesNotMatch(result.flags.file ?? "", /\0/);
+  assert.match(result.flags.data ?? "", /text\/plain=hello,world/);
+  assert.match(result.flags.data ?? "", /application\/json=\{"url":"https:\/\/example\.com\?a=1"\}/);
+  assert.doesNotMatch(result.flags.data ?? "", /\0/);
+});
+
+test("parseArgs repeated flag delimiter preserves null bytes in values", () => {
+  const valueWithNull = "text/plain=hello\0world";
+  const result = parseArgs([
+    "node",
+    "cli.ts",
+    "browser",
+    "drop",
+    "@e1",
+    "--data",
+    valueWithNull,
+    "--data",
+    "text/html=<b>ok</b>",
+  ]);
+
+  assert.match(result.flags.data ?? "", /text\/plain=hello\0world/);
+  assert.match(result.flags.data ?? "", /text\/html=<b>ok<\/b>/);
 });
 
 test("parseArgs handles composite browser act flags", () => {

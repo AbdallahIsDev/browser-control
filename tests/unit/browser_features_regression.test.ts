@@ -145,10 +145,12 @@ test("CLI drop parser preserves repeated file flags and mime=value data", () => 
 
 	assert.equal(parsed.flags.file, "C:\\tmp\\one.txt");
 	assert.equal(parsed.flags.files, "C:\\tmp\\two.txt");
-	assert.equal(
+	assert.match(parsed.flags.data, /^text\/plain=hello:world=a=b/);
+	assert.match(
 		parsed.flags.data,
-		'text/plain=hello:world=a=b\0application/json={"url":"https://example.test?a=1:b"}',
+		/application\/json=\{"url":"https:\/\/example\.test\?a=1:b"\}$/,
 	);
+	assert.doesNotMatch(parsed.flags.data, /\0/);
 });
 
 test("source guards cover prior browser feature review regressions", () => {
@@ -188,10 +190,9 @@ test("source guards cover prior browser feature review regressions", () => {
 	assert.match(actions, /data-browser-control-screencast-root/);
 
 	assert.match(cli, /const fileValues = \[flags\.file, flags\.files\]/);
-	assert.match(
-		cli,
-		/const filesRaw\s*=\s*fileValues\.length > 0\s*\?\s*fileValues\.join\("\\0"\)\s*:\s*undefined/,
-	);
+	assert.match(cli, /appendRepeatedFlagValue\(result\.flags\[key\], value\)/);
+	assert.match(cli, /splitRepeatedFlagValues\(filesRaw\)/);
+	assert.doesNotMatch(cli, /join\("\\0"\)/);
 	assert.match(cli, /const eqIndex = d\.indexOf\("="\)/);
 	assert.match(cli, /getGlobalScreencastRecorder\(store\)/);
 
