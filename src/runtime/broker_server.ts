@@ -53,6 +53,8 @@ const MAX_SUBSCRIPTION_CHANNELS = 100;
 const MAX_SUBSCRIPTION_CHANNEL_LENGTH = 128;
 const BROKER_TASK_STATUS_STORE_PREFIX = "broker:task:";
 const BROKER_RATE_LIMIT_STORE_PREFIX = "broker:rate-limit:";
+const SUPPORTED_BROKER_API_VERSIONS = ["1"] as const;
+const CURRENT_BROKER_API_VERSION = "1";
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -250,6 +252,12 @@ interface RateLimitDecision {
 	retryAfterSeconds: number;
 }
 
+type BrokerApiVersion = (typeof SUPPORTED_BROKER_API_VERSIONS)[number];
+
+type ApiVersionNegotiation =
+	| { ok: true; version: BrokerApiVersion }
+	| { ok: false; statusCode: number; body: JsonRecord };
+
 interface BrokerTaskStatusRecord extends BrokerTaskStatusEntry {
 	updatedAt: number;
 }
@@ -346,6 +354,81 @@ function parseAllowedDomains(value: string | undefined): string[] {
 		}
 		return normalized;
 	});
+}
+
+function appendVaryHeader(response: ServerResponse, value: string): void {
+	const current = response.getHeader("Vary");
+	const values =
+		typeof current === "string"
+			? current.split(",").map((entry) => entry.trim()).filter(Boolean)
+			: Array.isArray(current)
+				? current.flatMap((entry) => String(entry).split(",").map((part) => part.trim()).filter(Boolean))
+				: [];
+	if (!values.some((entry) => entry.toLowerCase() === value.toLowerCase())) {
+		values.push(value);
+	}
+	response.setHeader("Vary", values.join(", "));
+}
+
+function parseAcceptedApiVersions(header: string | string[] | undefined): string[] {
+	const raw = Array.isArray(header) ? header.join(",") : header;
+	if (!raw?.trim()) return [];
+	return raw
+		.split(",")
+		.map((entry) => entry.trim().replace(/^v/iu, ""))
+		.filter(Boolean);
+}
+
+function pathApiVersion(pathname: string): string | null {
+	return /^\/api\/v(\d+)(?:\/|$)/u.exec(pathname)?.[1] ?? null;
+}
+
+function isSupportedBrokerApiVersion(version: string): version is BrokerApiVersion {
+	return SUPPORTED_BROKER_API_VERSIONS.includes(version as BrokerApiVersion);
+}
+
+function negotiateApiVersion(
+	request: IncomingMessage,
+	pathname: string,
+): ApiVersionNegotiation {
+	const pathVersion = pathApiVersion(pathname);
+	if (!pathname.startsWith("/api/") || !pathVersion) {
+		return { ok: true, version: CURRENT_BROKER_API_VERSION };
+	}
+
+	const accepted = parseAcceptedApiVersions(request.headers["accept-version"]);
+	if (!isSupportedBrokerApiVersion(pathVersion)) {
+		return {
+			ok: false,
+			statusCode: 406,
+			body: {
+				error: `Unsupported API version v${pathVersion}.`,
+				supportedVersions: [...SUPPORTED_BROKER_API_VERSIONS],
+			},
+		};
+	}
+	if (accepted.length > 0 && !accepted.includes(pathVersion)) {
+		return {
+			ok: false,
+			statusCode: 406,
+			body: {
+				error: `Accept-Version does not allow API version v${pathVersion}.`,
+				requestedVersion: pathVersion,
+				acceptedVersions: accepted,
+				supportedVersions: [...SUPPORTED_BROKER_API_VERSIONS],
+			},
+		};
+	}
+	return { ok: true, version: pathVersion };
+}
+
+function setApiVersionHeaders(
+	response: ServerResponse,
+	version: BrokerApiVersion,
+): void {
+	response.setHeader("API-Version", version);
+	response.setHeader("Supported-API-Versions", SUPPORTED_BROKER_API_VERSIONS.join(", "));
+	appendVaryHeader(response, "Accept-Version");
 }
 
 function isLoopbackCorsOrigin(origin: string): boolean {
@@ -1419,6 +1502,19 @@ export function createBrokerServer(
 				`http://${request.headers.host ?? DEFAULT_HOST}`,
 			);
 			const { pathname } = requestUrl;
+			const apiVersion = negotiateApiVersion(request, pathname);
+			if (!apiVersion.ok) {
+				response.setHeader(
+					"Supported-API-Versions",
+					SUPPORTED_BROKER_API_VERSIONS.join(", "),
+				);
+				appendVaryHeader(response, "Accept-Version");
+				writeJson(response, apiVersion.statusCode, apiVersion.body);
+				return;
+			}
+			if (pathname.startsWith("/api/")) {
+				setApiVersionHeaders(response, apiVersion.version);
+			}
 
 			// Require auth for all endpoints except health
 			if (!isHealthPath(pathname)) {

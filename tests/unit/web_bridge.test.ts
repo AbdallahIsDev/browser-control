@@ -31,3 +31,26 @@ test("fetchBrokerJson aborts broker requests after timeout", async (t) => {
   assert.ok(receivedSignal);
   assert.equal(receivedSignal.aborted, true);
 });
+
+test("fetchBrokerJson sends broker API version negotiation header", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let receivedHeaders: HeadersInit | undefined;
+
+  globalThis.fetch = (async (_input, init) => {
+    receivedHeaders = init?.headers;
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  await fetchBrokerJson("/api/v1/tasks", {
+    env: { ...process.env, BROKER_PORT: "1", BROKER_API_KEY: "test-key" },
+  });
+
+  assert.equal((receivedHeaders as Record<string, string>)["accept-version"], "1");
+});

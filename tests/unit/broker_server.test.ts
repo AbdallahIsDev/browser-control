@@ -106,7 +106,9 @@ test("createBrokerServer defaults CORS to loopback origins only", async (t) => {
     loopback.headers.get("access-control-allow-origin"),
     "http://127.0.0.1:5173",
   );
-  assert.equal(loopback.headers.get("vary"), "Origin");
+  const vary = loopback.headers.get("vary") ?? "";
+  assert.match(vary, /(?:^|,\s*)Origin(?:,|$)/i);
+  assert.match(vary, /(?:^|,\s*)Accept-Version(?:,|$)/i);
 });
 
 test("createBrokerServer supports explicit wildcard CORS opt-in", async (t) => {
@@ -534,6 +536,58 @@ test("createBrokerServer /health works without auth even with auto-generated key
 
   const configRes = await fetch(`${baseUrl}/api/v1/config`);
   assert.equal(configRes.status, 401);
+});
+
+test("createBrokerServer negotiates API v1 and rejects unsupported versions", async (t) => {
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "version-key" },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const accepted = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: { "accept-version": "1" },
+  });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.headers.get("api-version"), "1");
+  assert.equal(accepted.headers.get("supported-api-versions"), "1");
+  assert.match(accepted.headers.get("vary") ?? "", /accept-version/i);
+  assert.equal(accepted.headers.get("deprecation"), null);
+  assert.equal(accepted.headers.get("sunset"), null);
+
+  const explicitV1 = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: { "accept-version": "v1" },
+  });
+  assert.equal(explicitV1.status, 200);
+  assert.equal(explicitV1.headers.get("api-version"), "1");
+
+  const unsupportedHeader = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: { "accept-version": "2" },
+  });
+  const unsupportedHeaderBody = await unsupportedHeader.json() as {
+    error?: string;
+    supportedVersions?: string[];
+  };
+  assert.equal(unsupportedHeader.status, 406);
+  assert.match(unsupportedHeaderBody.error ?? "", /Accept-Version/u);
+  assert.deepEqual(unsupportedHeaderBody.supportedVersions, ["1"]);
+  assert.equal(unsupportedHeader.headers.get("supported-api-versions"), "1");
+
+  const unsupportedPath = await fetch(`${baseUrl}/api/v2/health`, {
+    headers: { "accept-version": "2" },
+  });
+  const unsupportedPathBody = await unsupportedPath.json() as {
+    error?: string;
+    supportedVersions?: string[];
+  };
+  assert.equal(unsupportedPath.status, 406);
+  assert.match(unsupportedPathBody.error ?? "", /Unsupported API version v2/u);
+  assert.deepEqual(unsupportedPathBody.supportedVersions, ["1"]);
 });
 
 test("createBrokerServer state endpoints work with X-Broker-Api-Key header", async (t) => {

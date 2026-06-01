@@ -21,6 +21,7 @@ export async function fetchBrokerJson(
 	const config = loadConfig({ env, validate: false });
 	const baseUrl = `http://127.0.0.1:${config.brokerPort}`;
 	const headers: Record<string, string> = {
+		"accept-version": "1",
 		"content-type": "application/json",
 	};
 	const token = env.BROKER_API_KEY || env.BROKER_SECRET;
