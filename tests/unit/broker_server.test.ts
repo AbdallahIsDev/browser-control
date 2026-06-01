@@ -959,6 +959,76 @@ test("createBrokerServer /api/v1/stats returns enriched format when getStats cal
   assert.equal(stats.successRate, 0.8);
 });
 
+test("createBrokerServer exposes authenticated Prometheus metrics", async (t) => {
+  const broker = createBrokerServer({
+    env: {
+      BROKER_API_KEY: "metrics-key",
+    },
+    callbacks: {
+      getStats: async () => ({
+        totalSteps: 5,
+        successCount: 4,
+        errorCount: 1,
+        successRate: 0.8,
+        averageDurationMs: 200,
+        captchasSolved: 0,
+        screenshotsCaptured: 0,
+        proxyUsage: {},
+        actions: {},
+        daemon: {
+          chromeConnected: true,
+        },
+        tasks: {
+          running: 3,
+          queued: 4,
+        },
+        scheduler: {
+          queueSize: 5,
+        },
+        activeSessions: 2,
+      }),
+    },
+  });
+
+  t.after(async () => {
+    await broker.close();
+  });
+
+  await broker.listen(0, "127.0.0.1");
+  const baseUrl = getBaseUrl(broker);
+
+  const unauthorized = await fetch(`${baseUrl}/metrics`);
+  assert.equal(unauthorized.status, 401);
+
+  const health = await fetch(`${baseUrl}/api/v1/health`, {
+    headers: {
+      "x-api-key": "metrics-key",
+    },
+  });
+  assert.equal(health.status, 200);
+
+  const response = await fetch(`${baseUrl}/metrics`, {
+    headers: {
+      "x-api-key": "metrics-key",
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /text\/plain/);
+
+  const body = await response.text();
+  assert.match(body, /# TYPE browser_control_broker_http_requests_total counter/);
+  assert.match(body, /browser_control_broker_http_requests_total\{method="GET",route="\/metrics",status="401"\} 1/);
+  assert.match(body, /browser_control_broker_http_requests_total\{method="GET",route="\/api\/v1\/health",status="200"\} 1/);
+  assert.match(body, /browser_control_broker_http_request_duration_seconds_count\{method="GET",route="\/api\/v1\/health",status="200"\} 1/);
+  assert.match(body, /browser_control_broker_active_sessions 2/);
+  assert.match(body, /browser_control_broker_chrome_connected 1/);
+  assert.match(body, /browser_control_broker_task_queue_depth 4/);
+  assert.match(body, /browser_control_broker_tasks_running 3/);
+  assert.match(body, /browser_control_broker_scheduler_queue_depth 5/);
+  assert.match(body, /browser_control_telemetry_steps_total\{result="success"\} 4/);
+  assert.match(body, /browser_control_telemetry_steps_total\{result="error"\} 1/);
+});
+
 test("createBrokerServer exposes operator status and config endpoints", async (t) => {
   const broker = createBrokerServer({
     env: {

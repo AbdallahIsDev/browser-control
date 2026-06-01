@@ -55,6 +55,20 @@ const BROKER_TASK_STATUS_STORE_PREFIX = "broker:task:";
 const BROKER_RATE_LIMIT_STORE_PREFIX = "broker:rate-limit:";
 const SUPPORTED_BROKER_API_VERSIONS = ["1"] as const;
 const CURRENT_BROKER_API_VERSION = "1";
+const PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
+const HTTP_DURATION_BUCKETS_SECONDS = [
+	0.005,
+	0.01,
+	0.025,
+	0.05,
+	0.1,
+	0.25,
+	0.5,
+	1,
+	2.5,
+	5,
+	10,
+];
 const HOSTNAME_PATTERN =
 	/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -252,6 +266,12 @@ interface RateLimitDecision {
 	retryAfterSeconds: number;
 }
 
+interface HttpMetricsEntry {
+	count: number;
+	durationSecondsSum: number;
+	buckets: Map<number, number>;
+}
+
 type BrokerApiVersion = (typeof SUPPORTED_BROKER_API_VERSIONS)[number];
 
 type ApiVersionNegotiation =
@@ -354,6 +374,216 @@ function parseAllowedDomains(value: string | undefined): string[] {
 		}
 		return normalized;
 	});
+}
+
+function createHttpMetricsEntry(): HttpMetricsEntry {
+	return {
+		count: 0,
+		durationSecondsSum: 0,
+		buckets: new Map(
+			HTTP_DURATION_BUCKETS_SECONDS.map((bucket) => [bucket, 0]),
+		),
+	};
+}
+
+function normalizeMetricRoute(pathname: string): string {
+	if (/^\/api\/v\d+\/tasks\/[^/]+\/status$/u.test(pathname)) {
+		return pathname.replace(
+			/^\/api\/v(\d+)\/tasks\/[^/]+\/status$/u,
+			"/api/v$1/tasks/:id/status",
+		);
+	}
+	if (/^\/api\/v\d+\/scheduler\/[^/]+\/(?:pause|resume)$/u.test(pathname)) {
+		return pathname.replace(
+			/^\/api\/v(\d+)\/scheduler\/[^/]+\/(pause|resume)$/u,
+			"/api/v$1/scheduler/:id/$2",
+		);
+	}
+	if (/^\/api\/v\d+\/scheduler\/[^/]+$/u.test(pathname)) {
+		return pathname.replace(
+			/^\/api\/v(\d+)\/scheduler\/[^/]+$/u,
+			"/api/v$1/scheduler/:id",
+		);
+	}
+	if (/^\/api\/v\d+\/config\/[^/]+$/u.test(pathname)) {
+		return pathname.replace(
+			/^\/api\/v(\d+)\/config\/[^/]+$/u,
+			"/api/v$1/config/:key",
+		);
+	}
+	if (/^\/api\/v\d+\/(?:term|fs)\/[^/]+$/u.test(pathname)) {
+		return pathname.replace(
+			/^\/api\/v(\d+)\/(term|fs)\/[^/]+$/u,
+			"/api/v$1/$2/:subcommand",
+		);
+	}
+	return pathname || "unknown";
+}
+
+function prometheusLabelValue(value: string): string {
+	return value
+		.replace(/\\/gu, "\\\\")
+		.replace(/\n/gu, "\\n")
+		.replace(/"/gu, '\\"');
+}
+
+function prometheusLabels(labels: Record<string, string>): string {
+	const entries = Object.entries(labels).map(
+		([key, value]) => `${key}="${prometheusLabelValue(value)}"`,
+	);
+	return entries.length > 0 ? `{${entries.join(",")}}` : "";
+}
+
+function prometheusSample(
+	name: string,
+	value: number,
+	labels: Record<string, string> = {},
+): string {
+	return `${name}${prometheusLabels(labels)} ${Number.isFinite(value) ? value : 0}`;
+}
+
+function recordHttpMetric(
+	metrics: Map<string, HttpMetricsEntry>,
+	method: string,
+	pathname: string,
+	statusCode: number,
+	durationSeconds: number,
+): void {
+	const route = normalizeMetricRoute(pathname);
+	const labels = { method, route, status: String(statusCode) };
+	const key = JSON.stringify(labels);
+	const entry = metrics.get(key) ?? createHttpMetricsEntry();
+	entry.count += 1;
+	entry.durationSecondsSum += durationSeconds;
+	for (const bucket of HTTP_DURATION_BUCKETS_SECONDS) {
+		if (durationSeconds <= bucket) {
+			entry.buckets.set(bucket, (entry.buckets.get(bucket) ?? 0) + 1);
+		}
+	}
+	metrics.set(key, entry);
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+function getMetricNumber(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function exportPrometheusMetrics(
+	httpMetrics: Map<string, HttpMetricsEntry>,
+	stats: Record<string, unknown>,
+	nowMs: number,
+): string {
+	const lines: string[] = [
+		"# HELP browser_control_broker_http_requests_total Broker HTTP requests by method, route, and status.",
+		"# TYPE browser_control_broker_http_requests_total counter",
+	];
+
+	for (const [key, entry] of httpMetrics.entries()) {
+		const labels = JSON.parse(key) as Record<string, string>;
+		lines.push(
+			prometheusSample(
+				"browser_control_broker_http_requests_total",
+				entry.count,
+				labels,
+			),
+		);
+	}
+
+	lines.push(
+		"# HELP browser_control_broker_http_request_duration_seconds Broker HTTP request duration histogram.",
+		"# TYPE browser_control_broker_http_request_duration_seconds histogram",
+	);
+	for (const [key, entry] of httpMetrics.entries()) {
+		const labels = JSON.parse(key) as Record<string, string>;
+		let cumulative = 0;
+		for (const bucket of HTTP_DURATION_BUCKETS_SECONDS) {
+			cumulative = entry.buckets.get(bucket) ?? cumulative;
+			lines.push(prometheusSample(
+				"browser_control_broker_http_request_duration_seconds_bucket",
+				cumulative,
+				{ ...labels, le: String(bucket) },
+			));
+		}
+		lines.push(prometheusSample(
+			"browser_control_broker_http_request_duration_seconds_bucket",
+			entry.count,
+			{ ...labels, le: "+Inf" },
+		));
+		lines.push(prometheusSample(
+			"browser_control_broker_http_request_duration_seconds_sum",
+			entry.durationSecondsSum,
+			labels,
+		));
+		lines.push(prometheusSample(
+			"browser_control_broker_http_request_duration_seconds_count",
+			entry.count,
+			labels,
+		));
+	}
+
+	const daemon = getRecord(stats.daemon);
+	const tasks = getRecord(stats.tasks);
+	const scheduler = getRecord(stats.scheduler);
+	lines.push(
+		"# HELP browser_control_broker_active_sessions Active browser sessions visible to the broker.",
+		"# TYPE browser_control_broker_active_sessions gauge",
+		prometheusSample(
+			"browser_control_broker_active_sessions",
+			getMetricNumber(stats.activeSessions),
+		),
+		"# HELP browser_control_broker_chrome_connected Whether the daemon reports a live Chrome/CDP connection.",
+		"# TYPE browser_control_broker_chrome_connected gauge",
+		prometheusSample("browser_control_broker_chrome_connected", daemon.chromeConnected === true ? 1 : 0),
+		"# HELP browser_control_broker_task_queue_depth Queued daemon tasks.",
+		"# TYPE browser_control_broker_task_queue_depth gauge",
+		prometheusSample(
+			"browser_control_broker_task_queue_depth",
+			getMetricNumber(tasks.queued),
+		),
+		"# HELP browser_control_broker_tasks_running Running daemon tasks.",
+		"# TYPE browser_control_broker_tasks_running gauge",
+		prometheusSample(
+			"browser_control_broker_tasks_running",
+			getMetricNumber(tasks.running),
+		),
+		"# HELP browser_control_broker_scheduler_queue_depth Scheduled task queue size.",
+		"# TYPE browser_control_broker_scheduler_queue_depth gauge",
+		prometheusSample(
+			"browser_control_broker_scheduler_queue_depth",
+			getMetricNumber(scheduler.queueSize),
+		),
+		"# HELP browser_control_telemetry_steps_total Retained telemetry events by result.",
+		"# TYPE browser_control_telemetry_steps_total counter",
+		prometheusSample(
+			"browser_control_telemetry_steps_total",
+			getMetricNumber(stats.successCount),
+			{ result: "success" },
+		),
+		prometheusSample(
+			"browser_control_telemetry_steps_total",
+			getMetricNumber(stats.errorCount),
+			{ result: "error" },
+		),
+		"# HELP browser_control_telemetry_average_duration_milliseconds Average retained telemetry event duration.",
+		"# TYPE browser_control_telemetry_average_duration_milliseconds gauge",
+		prometheusSample(
+			"browser_control_telemetry_average_duration_milliseconds",
+			getMetricNumber(stats.averageDurationMs),
+		),
+		"# HELP browser_control_broker_metrics_scrape_timestamp_seconds Unix timestamp for this metrics scrape.",
+		"# TYPE browser_control_broker_metrics_scrape_timestamp_seconds gauge",
+		prometheusSample(
+			"browser_control_broker_metrics_scrape_timestamp_seconds",
+			Math.floor(nowMs / 1000),
+		),
+	);
+
+	return `${lines.join("\n")}\n`;
 }
 
 function appendVaryHeader(response: ServerResponse, value: string): void {
@@ -1164,6 +1394,7 @@ export function createBrokerServer(
 			}).policyProfile,
 		});
 	const rateLimitBuckets = new Map<string, RateLimitBucket>();
+	const httpMetrics = new Map<string, HttpMetricsEntry>();
 	const taskStatuses = new Map<string, BrokerTaskStatusRecord>();
 	const server = http.createServer();
 	const webSocketServer = new WebSocketServer({ noServer: true });
@@ -1481,6 +1712,30 @@ export function createBrokerServer(
 	};
 
 	server.on("request", async (request, response) => {
+		const startedAt = process.hrtime.bigint();
+		let metricsPathname = "/";
+		let parsedRequestUrl: URL | null = null;
+		try {
+			parsedRequestUrl = new URL(
+				request.url ?? "/",
+				`http://${request.headers.host ?? DEFAULT_HOST}`,
+			);
+			metricsPathname = parsedRequestUrl.pathname;
+		} catch {
+			metricsPathname = request.url ?? "/";
+		}
+		response.once("finish", () => {
+			const durationSeconds =
+				Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+			recordHttpMetric(
+				httpMetrics,
+				request.method ?? "UNKNOWN",
+				metricsPathname,
+				response.statusCode,
+				durationSeconds,
+			);
+		});
+
 		setCorsHeaders(response, request, config);
 
 		const rateLimit = consumeRateLimit(request);
@@ -1497,11 +1752,12 @@ export function createBrokerServer(
 		}
 
 		try {
-			const requestUrl = new URL(
+			const requestUrl = parsedRequestUrl ?? new URL(
 				request.url ?? "/",
 				`http://${request.headers.host ?? DEFAULT_HOST}`,
 			);
 			const { pathname } = requestUrl;
+			metricsPathname = pathname;
 			const apiVersion = negotiateApiVersion(request, pathname);
 			if (!apiVersion.ok) {
 				response.setHeader(
@@ -1523,6 +1779,16 @@ export function createBrokerServer(
 					writeJson(response, 401, { error: "Unauthorized." });
 					return;
 				}
+			}
+
+			if (request.method === "GET" && pathname === "/metrics") {
+				const stats = getRecord(callbacks.getStats
+					? await callbacks.getStats()
+					: createDefaultTelemetrySummary());
+				response.setHeader("Content-Type", PROMETHEUS_CONTENT_TYPE);
+				response.writeHead(200);
+				response.end(exportPrometheusMetrics(httpMetrics, stats, now()));
+				return;
 			}
 
 			if (request.method === "POST" && pathname === "/api/v1/tasks/run") {
