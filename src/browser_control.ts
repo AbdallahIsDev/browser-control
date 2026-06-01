@@ -52,7 +52,6 @@ import type {
 } from "./observability/types";
 import { collectStatus } from "./operator/status";
 import type { SystemStatus } from "./operator/types";
-import { DefaultPolicyEngine } from "./policy/engine";
 import type {
 	ProviderListResult,
 	ProviderSelectionResult,
@@ -347,6 +346,7 @@ export interface FsNamespace {
 	writeOutput(options: {
 		filename: string;
 		content: string;
+		subdir?: "runtime" | "reports" | "screenshots" | "artifacts";
 	}): Promise<ActionResult<FileWriteResult>>;
 	ls(options: {
 		path: string;
@@ -625,14 +625,9 @@ export interface BrowserControlAPI {
 export function createBrowserControl(
 	options: BrowserControlOptions = {},
 ): BrowserControlAPI {
-	// If a policy profile was specified, create a policy engine with that profile
-	const policyEngine = options.policyProfile
-		? new DefaultPolicyEngine({ profileName: options.policyProfile })
-		: undefined;
-
 	const sessionManager = new SessionManager({
 		memoryStore: options.memoryStore,
-		policyEngine,
+		defaultPolicyProfile: options.policyProfile,
 	});
 
 	// ── Pre-warm daemon runtime (optional optimization) ─────────────
@@ -1105,7 +1100,7 @@ export function createBrowserControl(
 					steps: options.steps,
 					continueOnFailure: options.continueOnFailure,
 					writeOutput: async (opts) => {
-						const r = await fsActions.writeOutput({ filename: opts.filename, content: opts.content });
+						const r = await fsActions.writeOutput({ filename: opts.filename, content: opts.content, subdir: opts.subdir });
 						return r as unknown as ActionResult<Record<string, unknown>>;
 					},
 				});

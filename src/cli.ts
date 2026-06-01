@@ -207,6 +207,7 @@ const COMMANDER_VALUE_OPTIONS = [
 	"startup-dir",
 	"status-file",
 	"style",
+	"subdir",
 	"suite",
 	"tab",
 	"tab-ids",
@@ -1181,7 +1182,7 @@ Browser Commands:
   term status <sessionId>                                             Show resume status for a session
   fs read <path> [--max-bytes=<n>]                                    Read a file
   fs write <path> [--content=<text>] [--yes]                           Write to a file
-  fs write-output <filename> <content> [--json]                         Write under active session runtime
+  fs write-output <filename> <content> [--subdir=artifacts] [--json]     Write under active session runtime
   fs ls <path> [--recursive] [--include-hidden] [--ext=<.ext>]          List directory
   fs move <src> <dst> [--yes]                                          Move/rename
   fs rm <path> [--recursive] [--force] [--yes]                         Delete file/dir
@@ -4770,7 +4771,11 @@ export async function handleFs(args: ParsedArgs): Promise<void> {
 					console.error("Error: Output content is required");
 					throw commandFailed();
 				}
-				result = await fsActions.writeOutput({ filename, content });
+				result = await fsActions.writeOutput({
+					filename,
+					content,
+					subdir: flags.subdir as "runtime" | "reports" | "screenshots" | "artifacts" | undefined,
+				});
 				break;
 			}
 

@@ -136,7 +136,7 @@ bc browser act fill searchInput --text "Amazon" --json
 
 Composite `browser act` and `browser task run` commands use a 30s CLI guard by default. Pass `--timeout <ms>` or `--timeoutMs=<ms>` to lower or raise that guard for one command.
 
-`browser task run` executes multiple steps in one command and returns per-step success, duration, policy metadata, audit id, path, tab id, and final compact state. `writeOutput` steps route through `FsActions.writeOutput`; use `filename` plus `content`, with `target` kept only as a backward-compatible filename alias.
+`browser task run` executes multiple steps in one command and returns per-step success, duration, policy metadata, audit id, path, tab id, and final compact state. `writeOutput` steps route through `FsActions.writeOutput`; use `filename` plus `content`, optional `subdir` (`runtime`, `reports`, `screenshots`, or `artifacts`), with `target` kept only as a backward-compatible filename alias.
 
 Prefer `--steps-file <path>` for complex tasks, especially on Windows, to avoid shell-specific JSON quoting.
 
@@ -147,7 +147,7 @@ Example:
 [
   {"action":"open","url":"https://example.com"},
   {"action":"state","snapshot":true},
-  {"action":"writeOutput","filename":"result.json","content":"{\"done\":true}"}
+  {"action":"writeOutput","filename":"result.json","content":"{\"done\":true}","subdir":"artifacts"}
 ]
 '@ | Set-Content -Path .\steps.json
 
@@ -233,7 +233,7 @@ bc term exec "node --version" --json
 ```text
 fs read <path> [--max-bytes]
 fs write <path> [--content] [--create-dirs=false]
-fs write-output <filename> <content>
+fs write-output <filename> <content> [--subdir=runtime|reports|screenshots|artifacts]
 fs ls [path] [--recursive] [--include-hidden] [--ext]
 fs move <src> <dst>
 fs rm <path> [--recursive] [--force]
@@ -241,6 +241,8 @@ fs stat <path>
 ```
 
 `fs rm --recursive` can delete directory trees. Use policy profiles and scoped working directories for agent use.
+
+`fs write-output` defaults to the active session runtime directory. Use `--subdir=artifacts` for generated artifacts, `--subdir=reports` for reports, or `--subdir=screenshots` for screenshot-adjacent metadata.
 
 ## Services
 

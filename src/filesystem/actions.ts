@@ -31,6 +31,7 @@ import {
   type WriteFileOptions,
   type StatOptions,
 } from "./operations";
+import fs from "node:fs";
 import path from "node:path";
 import type { PolicyEvalResult, SessionManager } from "../session_manager";
 import { isPolicyAllowed } from "../session_manager";
@@ -47,6 +48,7 @@ import { getDataHome } from "../shared/paths";
 const log = logger.withComponent("fs_actions");
 
 export const DEFAULT_ALLOWED_ROOTS: readonly string[] = [];
+export type FsOutputSubdir = "runtime" | "reports" | "screenshots" | "artifacts";
 
 // ── Action Options ─────────────────────────────────────────────────────
 
@@ -74,10 +76,12 @@ export interface FsWriteOptions {
 }
 
 export interface FsWriteOutputOptions {
-  /** Filename relative to the active session runtime directory. */
+  /** Filename relative to the selected active session output directory. */
   filename: string;
   /** Content to write. */
   content: string;
+  /** Session runtime subdirectory to write under. Defaults to the runtime root. */
+  subdir?: FsOutputSubdir;
 }
 
 export interface FsListOptions {
@@ -135,15 +139,7 @@ export class FsActions {
     return session?.workingDirectory ?? session?.runtimeDir ?? getDataHome();
   }
 
-  private getRuntimeDirectory(): string {
-    const session = this.context.sessionManager.getActiveSession();
-    if (!session?.runtimeDir) {
-      throw new Error("No active session runtime directory");
-    }
-    return session.runtimeDir;
-  }
-
-  private getDefaultAllowedRoots(operation: "read" | "write" | "delete"): string[] {
+  private getDefaultAllowedRoots(operation: "read" | "write" | "write_output" | "delete"): string[] {
     const session = this.context.sessionManager.getActiveSession();
     const roots = new Set<string>([getDataHome()]);
     if (session?.runtimeDir) {
@@ -155,17 +151,57 @@ export class FsActions {
     return Array.from(roots);
   }
 
-  private resolveOutputPath(filename: string): string {
+  private getOutputRoot(subdir: FsOutputSubdir | undefined): string {
+    const session = this.context.sessionManager.getActiveSession();
+    if (!session?.runtimeDir) {
+      throw new Error("No active session runtime directory");
+    }
+    switch (subdir ?? "runtime") {
+      case "runtime":
+        return session.runtimeDir;
+      case "reports":
+        return session.reportsDir;
+      case "screenshots":
+        return session.screenshotsDir;
+      case "artifacts":
+        return session.artifactsDir;
+      default:
+        throw new Error("Output subdir must be runtime, reports, screenshots, or artifacts");
+    }
+  }
+
+  private isPathInside(childPath: string, parentPath: string): boolean {
+    const relative = path.relative(parentPath, childPath);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  }
+
+  private resolveExistingParentRealPath(targetPath: string): string {
+    let parent = path.dirname(targetPath);
+    while (!fs.existsSync(parent)) {
+      const next = path.dirname(parent);
+      if (next === parent) {
+        throw new Error(`Cannot validate output path parent: ${targetPath}`);
+      }
+      parent = next;
+    }
+    return fs.realpathSync(parent);
+  }
+
+  private resolveOutputPath(filename: string, subdir?: FsOutputSubdir): string {
     if (!filename || filename.trim().length === 0) {
       throw new Error("Output filename is required");
     }
     if (path.isAbsolute(filename)) {
       throw new Error("Absolute output paths require explicit fs.write permission");
     }
-    const runtimeDir = path.resolve(this.getRuntimeDirectory());
-    const resolved = path.resolve(runtimeDir, filename);
-    const relative = path.relative(runtimeDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    const outputRoot = path.resolve(this.getOutputRoot(subdir));
+    const resolved = path.resolve(outputRoot, filename);
+    if (!this.isPathInside(resolved, outputRoot)) {
+      throw new Error("Output filename must stay under the session runtime directory");
+    }
+    const realOutputRoot = fs.realpathSync(outputRoot);
+    const realParent = this.resolveExistingParentRealPath(resolved);
+    if (!this.isPathInside(realParent, realOutputRoot)) {
       throw new Error("Output filename must stay under the session runtime directory");
     }
     return resolved;
@@ -308,7 +344,7 @@ export class FsActions {
     const sessionId = this.getSessionId();
     let outputPath: string;
     try {
-      outputPath = this.resolveOutputPath(options.filename);
+      outputPath = this.resolveOutputPath(options.filename, options.subdir);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return failureResult<FileWriteResult>(message, {
@@ -326,6 +362,7 @@ export class FsActions {
     try {
       const result = fsWriteFile(outputPath, options.content, {
         createDirs: true,
+        allowedRoots: this.getDefaultAllowedRoots("write_output"),
       });
       log.info("Session output written", { path: result.path, sizeBytes: result.sizeBytes });
 

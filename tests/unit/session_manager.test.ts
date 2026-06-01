@@ -184,6 +184,18 @@ describe("SessionManager", () => {
       assert.equal(entry!.hasBrowser, false);
       assert.equal(entry!.hasTerminal, false);
     });
+
+    it("includes session output subdirectories", async () => {
+      await manager.create("output-session");
+
+      const result = manager.list();
+      const entry = result.data!.find((s: SessionListEntry) => s.name === "output-session");
+
+      assert.ok(entry);
+      assert.equal(entry.reportsDir, path.join(entry.runtimeDir, "reports"));
+      assert.equal(entry.screenshotsDir, path.join(entry.runtimeDir, "screenshots"));
+      assert.equal(entry.artifactsDir, path.join(entry.runtimeDir, "artifacts"));
+    });
   });
 
   describe("use", () => {

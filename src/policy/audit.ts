@@ -47,6 +47,7 @@ export class PolicyAuditLogger {
   private currentLogFile: string | null = null;
   private currentFileSize: number = 0;
   private pendingWrite: Promise<void> = Promise.resolve();
+  private closing = false;
 
   constructor(options: AuditLoggerOptions = {}) {
     this.auditDir = options.auditDir ?? path.join(getReportsDir(), "policy-audit");
@@ -137,6 +138,9 @@ export class PolicyAuditLogger {
         }
       }
     } catch (error: unknown) {
+      if (this.closing && (error as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
       this.auditLog.error("Failed to cleanup old audit files", {
         error: error instanceof Error ? error.message : String(error),
         auditDir: this.auditDir,
@@ -170,6 +174,9 @@ export class PolicyAuditLogger {
       await fs.promises.appendFile(this.currentLogFile, line, { encoding: "utf-8" });
       this.currentFileSize += Buffer.byteLength(line, "utf-8");
     } catch (error: unknown) {
+      if (this.closing && (error as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
       this.auditLog.error("Failed to write audit entry", {
         error: error instanceof Error ? error.message : String(error),
         logFile: this.currentLogFile,
@@ -471,6 +478,7 @@ export class PolicyAuditLogger {
    * Close the audit logger.
    */
   async close(): Promise<void> {
+    this.closing = true;
     await this.flush();
   }
 }

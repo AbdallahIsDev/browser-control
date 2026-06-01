@@ -4392,6 +4392,7 @@ describe("BrowserActions", () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const page = createMockPage("https://example.test/");
 			const manager = createConnectedBrowserManager([page]);
+			let calledSubdir: string | undefined;
 
 			try {
 				const sm = new SessionManager({
@@ -4403,17 +4404,20 @@ describe("BrowserActions", () => {
 
 				const result = await actions.taskRun({
 					steps: [
-						{ action: "writeOutput", filename: "test.txt", content: "world" },
+						{ action: "writeOutput", filename: "test.txt", content: "world", subdir: "artifacts" },
 					],
-					writeOutput: async (opts) => ({
-						success: true,
-						data: { path: "/tmp/test.txt", sizeBytes: 5 },
-						policyDecision: "allow",
-						auditId: "audit-123",
-						path: "command",
-						sessionId: "sess-1",
-						completedAt: new Date().toISOString(),
-					}),
+					writeOutput: async (opts) => {
+						calledSubdir = opts.subdir;
+						return {
+							success: true,
+							data: { path: "/tmp/test.txt", sizeBytes: 5 },
+							policyDecision: "allow",
+							auditId: "audit-123",
+							path: "command",
+							sessionId: "sess-1",
+							completedAt: new Date().toISOString(),
+						};
+					},
 				});
 
 				assert.equal(result.success, true);
@@ -4422,6 +4426,7 @@ describe("BrowserActions", () => {
 				assert.equal(result.data!.results[0].policy, "allow");
 				assert.equal(result.data!.results[0].auditId, "audit-123");
 				assert.equal(result.data!.results[0].path, "command");
+				assert.equal(calledSubdir, "artifacts");
 			} finally {
 				isolatedStore.close();
 			}

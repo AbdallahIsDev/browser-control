@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { WebSocket } from "ws";
 import { BrowserConnectionManager } from "./browser/connection";
+import { PolicyAuditLogger } from "./policy/audit";
 import { DefaultPolicyEngine } from "./policy/engine";
 import { defaultRouter, type ExecutionRouter } from "./policy/execution_router";
 import { getProfile } from "./policy/profiles";
@@ -173,6 +174,9 @@ export interface SessionListEntry {
 	hasTerminal: boolean;
 	workingDirectory: string;
 	runtimeDir: string;
+	reportsDir: string;
+	screenshotsDir: string;
+	artifactsDir: string;
 	createdAt: string;
 	lastActivityAt: string;
 }
@@ -827,6 +831,7 @@ export class SessionManager {
 	private readonly maxSessions: number;
 	private readonly sessionSweepIntervalMs: number;
 	private sessionSweepTimer: ReturnType<typeof setInterval> | null = null;
+	private readonly policyAuditLogger: PolicyAuditLogger | null = null;
 	private activeSessionId: string | null = null;
 
 	constructor(
@@ -869,9 +874,18 @@ export class SessionManager {
 				"BROWSER_CONTROL_SESSION_SWEEP_INTERVAL_MS",
 				DEFAULT_SESSION_SWEEP_INTERVAL_MS,
 			);
-		this.policyEngine =
-			options.policyEngine ??
-			new DefaultPolicyEngine({ profileName: this.defaultPolicyProfile });
+		if (options.policyEngine) {
+			this.policyEngine = options.policyEngine;
+		} else {
+			this.policyAuditLogger = new PolicyAuditLogger({ enabled: true });
+			this.policyEngine = new DefaultPolicyEngine({
+				profileName: this.defaultPolicyProfile,
+				auditEnabled: true,
+				auditHandler: (entry) => {
+					this.policyAuditLogger?.log(entry);
+				},
+			});
+		}
 		this.executionRouter = defaultRouter;
 		this.browserManager =
 			options.browserManager ??
@@ -1086,6 +1100,9 @@ export class SessionManager {
 				hasTerminal: s.terminalSessionId !== null,
 				workingDirectory: s.workingDirectory,
 				runtimeDir: s.runtimeDir,
+				reportsDir: s.reportsDir,
+				screenshotsDir: s.screenshotsDir,
+				artifactsDir: s.artifactsDir,
 				createdAt: s.createdAt,
 				lastActivityAt: s.lastActivityAt,
 			}),
@@ -2079,6 +2096,10 @@ export class SessionManager {
 			try {
 				this.memoryStore.close();
 			} catch { /* ignore */ }
+		}
+
+		if (this.policyAuditLogger) {
+			void this.policyAuditLogger.close();
 		}
 	}
 }

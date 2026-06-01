@@ -780,6 +780,21 @@ describe("MCP Tool Registry", () => {
       assert.equal((result.data as Record<string, unknown>).content, "hello mcp");
     });
 
+    it("bc_fs_write_output writes to the requested session artifact subdirectory", async () => {
+      const tools = buildToolRegistry(api);
+      const writeOutputTool = tools.find((t) => t.name === "bc_fs_write_output")!;
+
+      const result = await writeOutputTool.handler({
+        filename: "mcp-artifact.json",
+        content: "{\"mcp\":true}",
+        subdir: "artifacts",
+      });
+
+      assert.equal(result.success, true, result.error);
+      assert.equal((result.data as Record<string, unknown>).path, path.join(sessionRuntimeDir, "artifacts", "mcp-artifact.json"));
+      assert.equal(fs.readFileSync(path.join(sessionRuntimeDir, "artifacts", "mcp-artifact.json"), "utf-8"), "{\"mcp\":true}");
+    });
+
     it("bc_debug_health returns health report", async () => {
       const tools = buildToolRegistry(api);
       const healthTool = tools.find((t) => t.name === "bc_debug_health")!;

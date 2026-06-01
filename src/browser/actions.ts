@@ -289,6 +289,7 @@ export interface TaskStep {
 	screenshot?: boolean;
 	content?: string;
 	filename?: string;
+	subdir?: "runtime" | "reports" | "screenshots" | "artifacts";
 	parallel?: boolean;
 	concurrency?: number;
 }
@@ -1443,13 +1444,7 @@ export class BrowserActions {
 		const sessionId = this.getSessionId();
 		const activeSession = this.context.sessionManager.getActiveSession();
 		const outputDir = activeSession
-			? helpers.path.join(
-					ensureStructuredSessionRuntimeDir(
-						activeSession,
-						helpers.getDataHome(),
-					),
-					"screenshots",
-				)
+			? activeSession.screenshotsDir
 			: helpers.getSessionScreenshotsDir(sessionId);
 
 		helpers.fs.mkdirSync(outputDir, { recursive: true });
@@ -5500,7 +5495,7 @@ export class BrowserActions {
 	async taskRun(options: {
 		steps: TaskStep[];
 		continueOnFailure?: boolean;
-		writeOutput?: (opts: { filename: string; content: string }) => Promise<ActionResult<Record<string, unknown>>>;
+		writeOutput?: (opts: { filename: string; content: string; subdir?: "runtime" | "reports" | "screenshots" | "artifacts" }) => Promise<ActionResult<Record<string, unknown>>>;
 	}): Promise<ActionResult<TaskRunResult>> {
 		const sessionId = this.getSessionId();
 		const results: TaskStepResult[] = [];
@@ -5553,7 +5548,7 @@ export class BrowserActions {
 					if (!options.continueOnFailure) { aborted = true; break; }
 					continue;
 				}
-				const wRes = await options.writeOutput({ filename, content });
+				const wRes = await options.writeOutput({ filename, content, subdir: step.subdir });
 				const durationMs = Date.now() - stepStart;
 				if (wRes.success) {
 					results.push({

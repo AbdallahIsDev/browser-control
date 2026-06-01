@@ -1913,10 +1913,11 @@
           ],
           "description": "Write under active session runtime",
           "flags": [
-            "json"
+            "json",
+            "subdir"
           ],
           "jsonSupport": true,
-          "syntax": "fs write-output <filename> <content> [--json]"
+          "syntax": "fs write-output <filename> <content> [--subdir=artifacts] [--json]"
         },
         {
           "commandPath": [

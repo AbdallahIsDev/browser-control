@@ -1467,6 +1467,32 @@ test("fs write-output writes under the active session runtime directory", () => 
   }
 });
 
+test("fs write-output can target the session artifacts directory", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-write-output-artifacts-"));
+  try {
+    const created = runCli(["session", "create", "output-session", "--policy=trusted", "--yes", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+    assert.equal(created.status, 0, created.stderr);
+    const session = JSON.parse(created.stdout);
+    const artifactsDir = session.data.artifactsDir as string;
+
+    const result = runCli(["fs", "write-output", "artifact.json", "{\"ok\":true}", "--subdir=artifacts", "--json"], {
+      cwd: process.cwd(),
+      env: { BROWSER_CONTROL_HOME: home },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data.path, path.join(artifactsDir, "artifact.json"));
+    assert.equal(fs.readFileSync(parsed.data.path, "utf8"), "{\"ok\":true}");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("resolveMcpServeMode accepts --mode and -m lite", () => {
   const longFlag = parseArgs(["node", "cli.ts", "mcp", "serve", "--mode=lite"]);
   assert.equal(resolveMcpServeMode(longFlag), "lite");

@@ -199,7 +199,7 @@
         "rm": "(options: { path: string; recursive?: boolean | undefined; force?: boolean | undefined; }): Promise<ActionResult<DeleteResult>>",
         "stat": "(options: { path: string; }): Promise<ActionResult<FileStatResult>>",
         "write": "(options: { path: string; content: string; createDirs?: boolean | undefined; }): Promise<ActionResult<FileWriteResult>>",
-        "writeOutput": "(options: { filename: string; content: string; }): Promise<ActionResult<FileWriteResult>>"
+        "writeOutput": "(options: { filename: string; content: string; subdir?: \"runtime\" | \"reports\" | \"screenshots\" | \"artifacts\" | undefined; }): Promise<ActionResult<FileWriteResult>>"
       },
       "ProviderNamespace": {
         "catalog": "(): ActionResult<ProviderCatalogEntry[]>",

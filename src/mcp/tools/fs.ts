@@ -63,8 +63,13 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
       name: "bc_fs_write_output",
       description: "Write task output under the active session runtime directory. Rejects absolute paths and path traversal.",
       inputSchema: buildSchema({
-        filename: { type: "string", description: "Filename relative to the active session runtime directory." },
+        filename: { type: "string", description: "Filename relative to the selected active session output directory." },
         content: { type: "string", description: "Content to write." },
+        subdir: {
+          type: "string",
+          enum: ["runtime", "reports", "screenshots", "artifacts"],
+          description: "Session output subdirectory. Defaults to runtime.",
+        },
         sessionId: sessionIdSchema,
       }, ["filename", "content"]),
       handler: async (params) => {
@@ -72,6 +77,7 @@ export function buildFsTools(api: BrowserControlAPI): McpTool[] {
         return api.fs.writeOutput({
           filename: params.filename as string,
           content: params.content as string,
+          subdir: params.subdir as "runtime" | "reports" | "screenshots" | "artifacts" | undefined,
         });
       },
     },

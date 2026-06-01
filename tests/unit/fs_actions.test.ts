@@ -18,6 +18,25 @@ function createUnavailableBrowserManager() {
   } as unknown as BrowserConnectionManager;
 }
 
+async function waitForPolicyAuditEntry(dataHome: string, action: string): Promise<Record<string, unknown>> {
+  const auditDir = path.join(dataHome, "reports", "policy-audit");
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (fs.existsSync(auditDir)) {
+      for (const file of fs.readdirSync(auditDir)) {
+        if (!file.endsWith(".jsonl")) continue;
+        const lines = fs.readFileSync(path.join(auditDir, file), "utf-8").trim().split(/\r?\n/).filter(Boolean);
+        for (const line of lines) {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          const step = entry.step as Record<string, unknown> | undefined;
+          if (step?.action === action) return entry;
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Missing policy audit entry for ${action}`);
+}
+
 describe("FsActions", () => {
   let sessionManager: SessionManager;
   let fsActions: FsActions;
@@ -242,6 +261,34 @@ describe("FsActions", () => {
       assert.equal(fs.readFileSync(result.data!.path, "utf-8"), "# EspoCRM\n");
     });
 
+    it("persists a policy audit entry for task output writes", async () => {
+      const result = await fsActions.writeOutput({
+        filename: "audit-output.md",
+        content: "# Audit\n",
+      });
+
+      assert.equal(result.success, true, result.error);
+      assert.equal(result.policyDecision, "allow_with_audit");
+      const audit = await waitForPolicyAuditEntry(dataHome, "fs_write_output");
+      assert.equal(audit.decision, "allow_with_audit");
+      assert.equal(audit.sessionId, result.sessionId);
+    });
+
+    it("writes task output under the requested session artifact subdirectory", async () => {
+      const activeSession = sessionManager.getActiveSession();
+      assert.ok(activeSession);
+
+      const result = await fsActions.writeOutput({
+        filename: "bundle.json",
+        content: "{\"ok\":true}",
+        subdir: "artifacts",
+      });
+
+      assert.equal(result.success, true, result.error);
+      assert.equal(result.data?.path, path.join(activeSession.artifactsDir, "bundle.json"));
+      assert.equal(fs.readFileSync(result.data!.path, "utf-8"), "{\"ok\":true}");
+    });
+
     it("rejects output path traversal", async () => {
       const activeSession = sessionManager.getActiveSession();
       assert.ok(activeSession);
@@ -254,6 +301,31 @@ describe("FsActions", () => {
       assert.equal(result.success, false);
       assert.match(result.error ?? "", /session runtime directory/i);
       assert.equal(fs.existsSync(path.join(activeSession.runtimeDir, "..", "escape.md")), false);
+    });
+
+    it("rejects output writes through directory symlinks that escape the runtime directory", async (t) => {
+      const activeSession = sessionManager.getActiveSession();
+      assert.ok(activeSession);
+      const outsideDir = fs.mkdtempSync(path.join(tempDir, "outside-output-"));
+      const linkPath = path.join(activeSession.runtimeDir, "linked-outside");
+      try {
+        fs.symlinkSync(outsideDir, linkPath, process.platform === "win32" ? "junction" : "dir");
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "EPERM") {
+          t.skip("symlink creation requires privileges on this platform");
+          return;
+        }
+        throw error;
+      }
+
+      const result = await fsActions.writeOutput({
+        filename: "linked-outside/escape.md",
+        content: "escape",
+      });
+
+      assert.equal(result.success, false);
+      assert.match(result.error ?? "", /allowed roots|session runtime directory/i);
+      assert.equal(fs.existsSync(path.join(outsideDir, "escape.md")), false);
     });
   });
 

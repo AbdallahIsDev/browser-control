@@ -167,6 +167,11 @@ const BROWSER_STEP_PROPERTIES = {
   downloads: { type: "boolean", description: "Include recent downloads for state steps. Default: false.", default: false },
   content: { type: "string", description: "File content for writeOutput steps. Empty string is allowed." },
   filename: { type: "string", description: "Browser Control output filename for writeOutput steps." },
+  subdir: {
+    type: "string",
+    enum: ["runtime", "reports", "screenshots", "artifacts"],
+    description: "Session output subdirectory for writeOutput steps. Defaults to runtime.",
+  },
 };
 
 const BROWSER_STEP_SCHEMA = {

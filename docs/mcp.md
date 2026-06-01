@@ -351,7 +351,7 @@ Use `bc_task_run` to execute a sequence of actions in one call. Returns per-step
     "steps": [
       { "action": "open", "url": "https://example.com" },
       { "action": "state" },
-      { "action": "writeOutput", "filename": "report.json", "content": "{\"done\":true}" }
+      { "action": "writeOutput", "filename": "report.json", "content": "{\"done\":true}", "subdir": "reports" }
     ],
     "continueOnFailure": false
   }
@@ -362,14 +362,15 @@ Each step is validated before execution. Unknown actions, missing required field
 
 ## Write Output
 
-Use `bc_fs_write_output` to write a file under the active session runtime directory. Rejects absolute paths and path traversal.
+Use `bc_fs_write_output` to write a file under the active session runtime directory. Rejects absolute paths, path traversal, and symlink escapes. Set `subdir` to `reports`, `screenshots`, or `artifacts` to target those session subdirectories; default is `runtime`.
 
 ```json
 {
   "name": "bc_fs_write_output",
   "arguments": {
     "filename": "result.json",
-    "content": "{\"status\":\"ok\"}"
+    "content": "{\"status\":\"ok\"}",
+    "subdir": "artifacts"
   }
 }
 ```

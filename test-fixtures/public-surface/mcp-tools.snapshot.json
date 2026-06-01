@@ -1478,7 +1478,17 @@
             "type": "string"
           },
           "filename": {
-            "description": "Filename relative to the active session runtime directory.",
+            "description": "Filename relative to the selected active session output directory.",
+            "type": "string"
+          },
+          "subdir": {
+            "description": "Session output subdirectory. Defaults to runtime.",
+            "enum": [
+              "runtime",
+              "reports",
+              "screenshots",
+              "artifacts"
+            ],
             "type": "string"
           }
         },
@@ -4479,6 +4489,16 @@
                 "snapshot": {
                   "description": "Include accessibility snapshot for capture/captureMany/state steps. Default: true for capture/captureMany, false for state.",
                   "type": "boolean"
+                },
+                "subdir": {
+                  "description": "Session output subdirectory for writeOutput steps. Defaults to runtime.",
+                  "enum": [
+                    "runtime",
+                    "reports",
+                    "screenshots",
+                    "artifacts"
+                  ],
+                  "type": "string"
                 },
                 "tabId": {
                   "description": "Optional browser tab ID.",
