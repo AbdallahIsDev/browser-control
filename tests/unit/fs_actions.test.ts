@@ -61,6 +61,59 @@ describe("FsActions", () => {
       const actions = new FsActions({ sessionManager });
       assert.ok(actions);
     });
+
+    it("confines no-session filesystem actions to the data home", async () => {
+      const noSessionStore = new MemoryStore({ filename: ":memory:" });
+      const noSessionManager = new SessionManager({
+        memoryStore: noSessionStore,
+        browserManager: createUnavailableBrowserManager(),
+        defaultPolicyProfile: "trusted",
+      });
+      const noSessionFs = new FsActions({ sessionManager: noSessionManager });
+      const allowedFile = path.join(dataHome, "no-session-output.txt");
+      const outsideFile = path.join(tempDir, "outside-no-session.txt");
+      fs.writeFileSync(outsideFile, "outside");
+
+      try {
+        const written = await noSessionFs.write({
+          path: allowedFile,
+          content: "inside data home",
+        });
+        assert.equal(written.success, true, written.error);
+        assert.equal(fs.readFileSync(allowedFile, "utf8"), "inside data home");
+
+        const relativeWrite = await noSessionFs.write({
+          path: "relative-no-session.txt",
+          content: "relative data home",
+        });
+        assert.equal(relativeWrite.success, true, relativeWrite.error);
+        assert.equal(
+          fs.readFileSync(path.join(dataHome, "relative-no-session.txt"), "utf8"),
+          "relative data home",
+        );
+
+        const outsideRead = await noSessionFs.read({ path: outsideFile });
+        assert.equal(outsideRead.success, false);
+        assert.match(outsideRead.error ?? "", /not within allowed roots/i);
+
+        const outsideWrite = await noSessionFs.write({
+          path: outsideFile,
+          content: "blocked",
+        });
+        assert.equal(outsideWrite.success, false);
+        assert.match(outsideWrite.error ?? "", /not within allowed roots/i);
+
+        const outsideDelete = await noSessionFs.rm({
+          path: outsideFile,
+          confirmed: true,
+        });
+        assert.equal(outsideDelete.success, false);
+        assert.match(outsideDelete.error ?? "", /not within allowed roots/i);
+        assert.equal(fs.readFileSync(outsideFile, "utf8"), "outside");
+      } finally {
+        noSessionManager.close();
+      }
+    });
   });
 
   describe("write + read", () => {

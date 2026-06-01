@@ -42,6 +42,7 @@ import {
 import { logger } from "../shared/logger";
 import { collectFailureDebugMetadata } from "../observability/action_debug";
 import type { ExecutionPath, PolicyDecision, RiskLevel } from "../policy/types";
+import { getDataHome } from "../shared/paths";
 
 const log = logger.withComponent("fs_actions");
 
@@ -128,7 +129,8 @@ export class FsActions {
   }
 
   private getWorkingDirectory(): string | undefined {
-    return this.context.sessionManager.getActiveSession()?.workingDirectory;
+    const session = this.context.sessionManager.getActiveSession();
+    return session?.workingDirectory ?? session?.runtimeDir ?? getDataHome();
   }
 
   private getRuntimeDirectory(): string {
@@ -139,16 +141,16 @@ export class FsActions {
     return session.runtimeDir;
   }
 
-  private getDefaultAllowedRoots(operation: "read" | "write" | "delete"): string[] | undefined {
+  private getDefaultAllowedRoots(operation: "read" | "write" | "delete"): string[] {
     const session = this.context.sessionManager.getActiveSession();
-    const roots: string[] = [];
+    const roots = new Set<string>([getDataHome()]);
     if (session?.runtimeDir) {
-      roots.push(session.runtimeDir);
+      roots.add(session.runtimeDir);
     }
     if ((operation === "read" || operation === "write") && session?.workingDirectory) {
-      roots.push(session.workingDirectory);
+      roots.add(session.workingDirectory);
     }
-    return roots.length > 0 ? roots : undefined;
+    return Array.from(roots);
   }
 
   private resolveOutputPath(filename: string): string {
