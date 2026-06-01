@@ -179,6 +179,78 @@ test("setup --json emits only JSON and never prompts interactively", () => {
   }
 });
 
+test("setup rejects unknown flags before writing config", () => {
+  const home = makeHome();
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register",
+        "src/cli.ts",
+        "setup",
+        "--json",
+        "--non-interactive",
+        "--chrome-debugg-port=9222",
+        "--skip-browser-test",
+        "--skip-terminal-test",
+      ],
+      {
+        cwd: path.join(__dirname, "..", ".."),
+        env: { ...process.env, BROWSER_CONTROL_HOME: home },
+        encoding: "utf8",
+        input: "",
+        timeout: 5000,
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /unknown option '--chrome-debugg-port=9222'/);
+    assert.equal(fs.existsSync(path.join(home, "config", "config.json")), false);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("setup validates known flag values and rolls back invalid config writes", () => {
+  const home = makeHome();
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--require",
+        "ts-node/register",
+        "--require",
+        "tsconfig-paths/register",
+        "src/cli.ts",
+        "setup",
+        "--json",
+        "--non-interactive",
+        "--chrome-debug-port=not-a-number",
+        "--skip-browser-test",
+        "--skip-terminal-test",
+      ],
+      {
+        cwd: path.join(__dirname, "..", ".."),
+        env: { ...process.env, BROWSER_CONTROL_HOME: home },
+        encoding: "utf8",
+        input: "",
+        timeout: 5000,
+      },
+    );
+
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout) as { success: boolean; warnings: string[] };
+    assert.equal(parsed.success, false);
+    assert.equal(parsed.warnings.some((warning) => warning.includes("chromeDebugPort must be an integer")), true);
+    assert.equal(fs.existsSync(path.join(home, "config", "config.json")), false);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("setup reports browser test failures as unsuccessful", async () => {
   const home = makeHome();
   try {
