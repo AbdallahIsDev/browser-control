@@ -301,6 +301,41 @@ test("loadConfig reads stealth sub-options", () => {
   assert.equal(config.stealthWebglVendor, "Intel Inc.");
 });
 
+test("loadConfig warns when stealth sub-options are ignored", () => {
+  const warnings: string[] = [];
+  const config = loadConfig({
+    env: {
+      STEALTH_LOCALE: "en-US",
+      STEALTH_FINGERPRINT_SEED: "secret-seed",
+    },
+    validate: false,
+    onWarning: (message) => warnings.push(message),
+  });
+
+  assert.equal(config.stealthEnabled, false);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /stealthEnabled\/ENABLE_STEALTH is false/);
+  assert.match(warnings[0], /stealthLocale \(STEALTH_LOCALE\)/);
+  assert.match(warnings[0], /stealthFingerprintSeed \(STEALTH_FINGERPRINT_SEED\)/);
+  assert.doesNotMatch(warnings[0], /secret-seed/);
+});
+
+test("loadConfig does not warn when stealth sub-options are enabled", () => {
+  const warnings: string[] = [];
+  const config = loadConfig({
+    env: {
+      ENABLE_STEALTH: "true",
+      STEALTH_LOCALE: "en-US",
+      STEALTH_FINGERPRINT_SEED: "secret-seed",
+    },
+    validate: false,
+    onWarning: (message) => warnings.push(message),
+  });
+
+  assert.equal(config.stealthEnabled, true);
+  assert.deepEqual(warnings, []);
+});
+
 test("loadConfig reads PROXY_LIST as CSV", () => {
   const config = loadConfig({
     env: { PROXY_LIST: "http://proxy1:8080,http://proxy2:8080" },

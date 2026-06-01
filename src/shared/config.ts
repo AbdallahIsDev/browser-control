@@ -348,6 +348,19 @@ interface AdditionalConfigEnvDefinition {
   defaultValue?: string;
 }
 
+const STEALTH_SUB_OPTION_KEYS: ConfigKey[] = [
+  "stealthLocale",
+  "stealthTimezoneId",
+  "stealthFingerprintSeed",
+  "stealthWebglVendor",
+  "stealthWebglRenderer",
+  "stealthPlatform",
+  "stealthHardwareConcurrency",
+  "stealthDeviceMemory",
+];
+const STEALTH_CONFIG_IGNORED_WARNING_CODE = "BROWSER_CONTROL_STEALTH_CONFIG_IGNORED";
+const emittedConfigWarnings = new Set<string>();
+
 const CONFIG_VALUE_SCHEMA = z.union([
   z.string(),
   z.number(),
@@ -829,6 +842,42 @@ export interface LoadConfigOptions {
   validate?: boolean;
   /** Override process.env for testing */
   env?: NodeJS.ProcessEnv;
+  /** Receive non-fatal configuration warnings. Defaults to process warnings. */
+  onWarning?: (message: string) => void;
+}
+
+function emitConfigWarning(
+  options: LoadConfigOptions,
+  code: string,
+  message: string,
+): void {
+  if (options.onWarning) {
+    options.onWarning(message);
+    return;
+  }
+  const key = `${code}:${message}`;
+  if (emittedConfigWarnings.has(key)) return;
+  emittedConfigWarnings.add(key);
+  process.emitWarning(message, { code });
+}
+
+function warnIgnoredStealthSubOptions(
+  options: LoadConfigOptions,
+  effective: Record<ConfigKey, ConfigValue>,
+): void {
+  if (effective.stealthEnabled === true) return;
+  const setOptions = STEALTH_SUB_OPTION_KEYS.filter((key) => effective[key] !== undefined);
+  if (setOptions.length === 0) return;
+  const labels = setOptions.map((key) => {
+    const definition = CONFIG_BY_KEY.get(key);
+    const envVars = definition?.envVars.join("/") || key;
+    return `${key} (${envVars})`;
+  });
+  emitConfigWarning(
+    options,
+    STEALTH_CONFIG_IGNORED_WARNING_CODE,
+    `Stealth config option(s) ${labels.join(", ")} are set but stealthEnabled/ENABLE_STEALTH is false; they will be ignored until stealth is enabled.`,
+  );
 }
 
 /**
@@ -843,6 +892,7 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const env = options.env ?? process.env;
   const validate = options.validate ?? true;
   const effective = getRawEffectiveConfig({ env, validate });
+  warnIgnoredStealthSubOptions(options, effective);
 
   const dataHome = ensureDataHomeAtPath(effective.dataHome as string);
 
