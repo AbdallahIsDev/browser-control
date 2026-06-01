@@ -291,7 +291,7 @@
     },
     {
       "category": "browser",
-      "description": "Capture snapshot and/or screenshot evidence from the active or specified tab.",
+      "description": "Capture snapshot and/or screenshot evidence from the active or specified tab. Deprecated single-action MCP tool; prefer `bc_act` with action=\"capture\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -357,7 +357,7 @@
     },
     {
       "category": "browser",
-      "description": "Capture snapshot and/or screenshot evidence from multiple tabs.",
+      "description": "Capture snapshot and/or screenshot evidence from multiple tabs. Deprecated single-action MCP tool; prefer `bc_act` with action=\"captureMany\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -499,7 +499,7 @@
     },
     {
       "category": "browser",
-      "description": "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.",
+      "description": "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability. Deprecated single-action MCP tool; prefer `bc_act` with action=\"click\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1049,7 +1049,7 @@
     },
     {
       "category": "browser",
-      "description": "Fill a form field with text. Target can be a ref (@e3), CSS selector, or semantic text match. Use commit:true to press Tab after filling.",
+      "description": "Fill a form field with text. Target can be a ref (@e3), CSS selector, or semantic text match. Use commit:true to press Tab after filling. Deprecated single-action MCP tool; prefer `bc_act` with action=\"fill\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1120,7 +1120,7 @@
     },
     {
       "category": "browser",
-      "description": "Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'.",
+      "description": "Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'. Deprecated single-action MCP tool; prefer `bc_act` with action=\"fillMany\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2092,7 +2092,7 @@
     },
     {
       "category": "browser",
-      "description": "Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match.",
+      "description": "Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match. Deprecated single-action MCP tool; prefer `bc_act` with action=\"hover\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2267,7 +2267,7 @@
     },
     {
       "category": "browser",
-      "description": "Navigate the active or specified tab to a URL, replacing that tab.",
+      "description": "Navigate the active or specified tab to a URL, replacing that tab. Deprecated single-action MCP tool; prefer `bc_act` with action=\"navigate\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2425,7 +2425,7 @@
     },
     {
       "category": "browser",
-      "description": "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
+      "description": "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile. Deprecated single-action MCP tool; prefer `bc_act` with action=\"open\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2489,7 +2489,7 @@
     },
     {
       "category": "browser",
-      "description": "Open multiple URLs as tabs in the current browser session.",
+      "description": "Open multiple URLs as tabs in the current browser session. Deprecated single-action MCP tool; prefer `bc_act` with action=\"openMany\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3150,7 +3150,7 @@
     },
     {
       "category": "browser",
-      "description": "Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs.",
+      "description": "Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs. Deprecated single-action MCP tool; prefer `bc_act` with action=\"paste\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3215,7 +3215,7 @@
     },
     {
       "category": "browser",
-      "description": "Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape').",
+      "description": "Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape'). Deprecated single-action MCP tool; prefer `bc_act` with action=\"press\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3644,7 +3644,7 @@
     },
     {
       "category": "browser",
-      "description": "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
+      "description": "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy. Deprecated single-action MCP tool; prefer `bc_act` with action=\"screenshot\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3716,7 +3716,7 @@
     },
     {
       "category": "browser",
-      "description": "Scroll the page in a direction.",
+      "description": "Scroll the page in a direction. Deprecated single-action MCP tool; prefer `bc_act` with action=\"scroll\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4144,7 +4144,7 @@
     },
     {
       "category": "browser",
-      "description": "Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls.",
+      "description": "Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls. Deprecated single-action MCP tool; prefer `bc_act` with action=\"state\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4262,7 +4262,7 @@
     },
     {
       "category": "browser",
-      "description": "Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.",
+      "description": "Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive. Deprecated single-action MCP tool; prefer `bc_act` with action=\"tab-close\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -5365,7 +5365,7 @@
     },
     {
       "category": "browser",
-      "description": "Type text into the currently focused element (e.g., after clicking a textbox).",
+      "description": "Type text into the currently focused element (e.g., after clicking a textbox). Deprecated single-action MCP tool; prefer `bc_act` with action=\"type\" for lower token usage.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

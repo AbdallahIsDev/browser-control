@@ -88,6 +88,10 @@ const BROWSER_ACTION_VALUES = [
   "state",
 ] as const;
 
+function preferBcAct(description: string, action: typeof BROWSER_ACTION_VALUES[number]): string {
+  return `${description} Deprecated single-action MCP tool; prefer \`bc_act\` with action="${action}" for lower token usage.`;
+}
+
 const WAIT_UNTIL_SCHEMA = {
   type: "string",
   description: "Navigation wait condition.",
@@ -225,7 +229,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
   const tools: McpTool[] = [
     {
       name: "bc_browser_open",
-      description: "Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.",
+      description: preferBcAct("Open a URL in the browser. If no browser is connected, attempts to attach to a running browser or launch a managed automation profile.", "open"),
       inputSchema: buildSchema({
         url: { type: "string", description: "URL to navigate to." },
         waitUntil: { type: "string", description: "Navigation wait condition: 'load', 'domcontentloaded', 'networkidle', or 'commit'. Default: 'domcontentloaded'.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },
@@ -242,7 +246,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_open_many",
-      description: "Open multiple URLs as tabs in the current browser session.",
+      description: preferBcAct("Open multiple URLs as tabs in the current browser session.", "openMany"),
       inputSchema: buildSchema({
         urls: { type: "array", description: "Array of URLs or { url, label, waitUntil } objects to open." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
@@ -258,7 +262,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_navigate",
-      description: "Navigate the active or specified tab to a URL, replacing that tab.",
+      description: preferBcAct("Navigate the active or specified tab to a URL, replacing that tab.", "navigate"),
       inputSchema: buildSchema({
         url: { type: "string", description: "URL to navigate to." },
         waitUntil: { type: "string", description: "Navigation wait condition.", enum: ["load", "domcontentloaded", "networkidle", "commit"], default: "domcontentloaded" },
@@ -277,7 +281,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_capture",
-      description: "Capture snapshot and/or screenshot evidence from the active or specified tab.",
+      description: preferBcAct("Capture snapshot and/or screenshot evidence from the active or specified tab.", "capture"),
       inputSchema: buildSchema({
         tabId: { type: "string", description: "Optional tab ID." },
         snapshot: { type: "boolean", description: "Include an accessibility snapshot.", default: true },
@@ -298,7 +302,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_capture_many",
-      description: "Capture snapshot and/or screenshot evidence from multiple tabs.",
+      description: preferBcAct("Capture snapshot and/or screenshot evidence from multiple tabs.", "captureMany"),
       inputSchema: buildSchema({
         tabIds: { type: "array", description: "Tab IDs to capture." },
         snapshot: { type: "boolean", description: "Include accessibility snapshots.", default: true },
@@ -337,7 +341,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_click",
-      description: "Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.",
+      description: preferBcAct("Click an element on the page. Target can be a ref (@e3), CSS selector, or semantic text match. Prefer refs from a snapshot for stability.", "click"),
       inputSchema: buildSchema({
         target: { type: "string", description: "Element to click: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
@@ -358,7 +362,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_fill",
-      description: "Fill a form field with text. Target can be a ref (@e3), CSS selector, or semantic text match. Use commit:true to press Tab after filling.",
+      description: preferBcAct("Fill a form field with text. Target can be a ref (@e3), CSS selector, or semantic text match. Use commit:true to press Tab after filling.", "fill"),
       inputSchema: buildSchema({
         target: { type: "string", description: "Element to fill: ref (@e3), CSS selector, or text match." },
         text: { type: "string", description: "Text to enter." },
@@ -381,7 +385,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_fill_many",
-      description: "Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'.",
+      description: preferBcAct("Batch fill multiple form fields sequentially. Fields should be an array of objects with 'target' and 'text'.", "fillMany"),
       inputSchema: buildSchema({
         fields: { type: "array", description: "Array of fields to fill. Each must have { target, text }." },
         timeoutMs: { type: "number", description: "Timeout per field in milliseconds. Default: 5000." },
@@ -401,7 +405,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_hover",
-      description: "Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match.",
+      description: preferBcAct("Hover over an element. Target can be a ref (@e3), CSS selector, or semantic text match.", "hover"),
       inputSchema: buildSchema({
         target: { type: "string", description: "Element to hover: ref (@e3), CSS selector, or text match." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds. Default: 5000." },
@@ -420,7 +424,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_type",
-      description: "Type text into the currently focused element (e.g., after clicking a textbox).",
+      description: preferBcAct("Type text into the currently focused element (e.g., after clicking a textbox).", "type"),
       inputSchema: buildSchema({
         text: { type: "string", description: "Text to type." },
         delayMs: { type: "number", description: "Delay between keystrokes in milliseconds. Default: 0.", default: 0 },
@@ -439,7 +443,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_paste",
-      description: "Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs.",
+      description: preferBcAct("Paste/insert text into the focused element, optionally focusing a target first. Supports policy-approved secret:// refs.", "paste"),
       inputSchema: buildSchema({
         text: { type: "string", description: "Text to paste or a secret:// ref." },
         target: { type: "string", description: "Optional element to focus before pasting: ref (@e3), CSS selector, or text match." },
@@ -460,7 +464,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_press",
-      description: "Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape').",
+      description: preferBcAct("Press a keyboard key (e.g., 'Enter', 'Tab', 'ArrowDown', 'Escape').", "press"),
       inputSchema: buildSchema({
         key: { type: "string", description: "Key to press: Enter, Tab, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Escape, Backspace, etc." },
         tabId: { type: "string", description: "Optional tab ID." },
@@ -477,7 +481,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_scroll",
-      description: "Scroll the page in a direction.",
+      description: preferBcAct("Scroll the page in a direction.", "scroll"),
       inputSchema: buildSchema({
         direction: { type: "string", description: "Direction to scroll: up, down, left, right.", enum: ["up", "down", "left", "right"] },
         amount: { type: "number", description: "Pixels to scroll. Default: 300.", default: 300 },
@@ -496,7 +500,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_screenshot",
-      description: "Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.",
+      description: preferBcAct("Take a screenshot of the page or a specific element. Primary file always saves under Browser Control runtime; use copyTo only when the user requested an extra copy.", "screenshot"),
       inputSchema: buildSchema({
         copyTo: { type: "string", description: "Optional auxiliary copy destination. Primary screenshot still saves under the active session runtime screenshots directory." },
         fullPage: { type: "boolean", description: "Capture the full page instead of just the viewport.", default: false },
@@ -586,7 +590,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_tab_close",
-      description: "Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.",
+      description: preferBcAct("Close the current or specified browser tab. Keeps the browser session and automation lifecycle alive.", "tab-close"),
       inputSchema: buildSchema({
         tabId: { type: "string", description: "Optional tab ID or index. If omitted, closes the active tab." },
         sessionId: { type: "string", description: "Browser Control session ID. If omitted, uses the active session." },
@@ -811,7 +815,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_state",
-      description: "Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls.",
+      description: preferBcAct("Collect compact browser state: connected flag, active URL/title, tab list, dialogs, warnings, per-section status. Returns snapshot only when snapshot=true (off by default). Replaces tab list + dialog + downloads + snapshot calls.", "state"),
       inputSchema: buildSchema({
         tabId: { type: "string", description: "Optional tab ID to snapshot." },
         snapshot: { type: "boolean", description: "Include accessibility snapshot. Default: false (compact mode).", default: false },

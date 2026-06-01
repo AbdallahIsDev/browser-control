@@ -157,14 +157,7 @@ describe("MCP Tool Registry", () => {
 
       assert.deepEqual(names, [
         "bc_act",
-        "bc_capture",
-        "bc_capture_many",
-        "bc_click",
-        "bc_fill",
-        "bc_open",
-        "bc_open_many",
         "bc_snapshot",
-        "bc_state",
         "bc_tab_list",
         "bc_fs_write_output",
         "bc_session_status",
@@ -176,6 +169,33 @@ describe("MCP Tool Registry", () => {
         [],
         "lite mode should omit compatibility browser aliases to reduce tool schema tokens",
       );
+    });
+
+    it("lite mode excludes single-action tools covered by bc_act", () => {
+      const registry = createLazyToolRegistry(api, { mode: "lite" });
+      const redundantActionTools = [
+        "bc_open",
+        "bc_open_many",
+        "bc_navigate",
+        "bc_capture",
+        "bc_capture_many",
+        "bc_click",
+        "bc_fill",
+        "bc_fill_many",
+        "bc_hover",
+        "bc_type",
+        "bc_paste",
+        "bc_press",
+        "bc_scroll",
+        "bc_screenshot",
+        "bc_tab_close",
+        "bc_state",
+      ];
+
+      for (const name of redundantActionTools) {
+        assert.equal(registry.getTool(name), undefined, `${name} should be hidden in lite mode`);
+      }
+      assert.equal(registry.getTool("bc_act")?.name, "bc_act");
     });
 
     it("lazy registry loads no categories until a tool is requested", () => {
@@ -198,14 +218,7 @@ describe("MCP Tool Registry", () => {
       assert.deepEqual(registry.getLoadedCategoryNames(), ["status", "session", "browser", "fs"]);
       assert.deepEqual(names, [
         "bc_act",
-        "bc_capture",
-        "bc_capture_many",
-        "bc_click",
-        "bc_fill",
-        "bc_open",
-        "bc_open_many",
         "bc_snapshot",
-        "bc_state",
         "bc_tab_list",
         "bc_fs_write_output",
         "bc_session_status",
@@ -225,6 +238,36 @@ describe("MCP Tool Registry", () => {
       const tools = buildToolRegistry(api);
       for (const tool of tools) {
         assert.ok(tool.description.length > 0, `Tool ${tool.name} has no description`);
+      }
+    });
+
+    it("full MCP marks bc_act-covered single-action browser tools as deprecated", () => {
+      const tools = buildToolRegistry(api);
+      const byName = new Map(tools.map((tool) => [tool.name, tool]));
+      const deprecatedActionTools = [
+        "bc_open",
+        "bc_open_many",
+        "bc_navigate",
+        "bc_capture",
+        "bc_capture_many",
+        "bc_click",
+        "bc_fill",
+        "bc_fill_many",
+        "bc_hover",
+        "bc_type",
+        "bc_paste",
+        "bc_press",
+        "bc_scroll",
+        "bc_screenshot",
+        "bc_tab_close",
+        "bc_state",
+      ];
+
+      for (const name of deprecatedActionTools) {
+        const tool = byName.get(name);
+        assert.ok(tool, `${name} missing from full MCP`);
+        assert.match(tool.description, /Deprecated single-action MCP tool/);
+        assert.match(tool.description, /prefer `bc_act`/);
       }
     });
 

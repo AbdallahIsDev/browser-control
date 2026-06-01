@@ -28,14 +28,7 @@ export interface ToolRegistryOptions {
 }
 
 const LITE_TOOL_NAMES = new Set([
-  "bc_open",
-  "bc_open_many",
-  "bc_capture",
-  "bc_capture_many",
   "bc_snapshot",
-  "bc_click",
-  "bc_fill",
-  "bc_state",
   "bc_act",
   "bc_tab_list",
   "bc_task_run",

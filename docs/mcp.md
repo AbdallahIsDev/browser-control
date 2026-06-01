@@ -47,7 +47,7 @@ Use this priority for Codex, Hermes-like, OpenCode-like, Gemini CLI, Claude Code
 2. MCP Lite when the client is MCP-native or cannot run shell commands.
 3. Full MCP when the task needs tools outside Lite mode.
 
-MCP Lite exists to reduce token overhead by exposing high-level tools such as `bc_state`, `bc_act`, and `bc_task_run` instead of forcing many tiny tool calls.
+MCP Lite exists to reduce token overhead by exposing high-level tools such as `bc_act` and `bc_task_run` instead of forcing many tiny tool calls. Use `bc_act` with `action:"state"` for compact browser state in Lite mode.
 
 ## Security Considerations
 
@@ -396,9 +396,9 @@ Use `bc_fs_write_output` to write a file under the active session runtime direct
 
 Set `BROWSER_CONTROL_MCP_MODE=lite` or pass `{ mode: "lite" }` to expose a reduced toolset focused on browser automation. Lite mode includes the short primary browser tools:
 
-`bc_open`, `bc_open_many`, `bc_capture`, `bc_capture_many`, `bc_snapshot`, `bc_click`, `bc_fill`, `bc_state`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
+`bc_snapshot`, `bc_act`, `bc_task_run`, `bc_tab_list`, `bc_fs_write_output`, `bc_session_status`, `bc_status`
 
-Full MCP mode exposes the complete Browser Control surface with canonical `bc_*` tool names.
+Full MCP mode exposes the complete Browser Control surface with canonical `bc_*` tool names. Single-action browser tools such as `bc_click`, `bc_fill`, `bc_open`, and `bc_state` are deprecated in full mode because `bc_act` covers the same actions with less tool-schema overhead.
 
 Browser Control intentionally does not expose an arbitrary JavaScript console/eval MCP tool. Use accessibility actions, snapshots, debug read tools, network/console capture, or registered helpers. Arbitrary JS can read page data and mutate logged-in sessions, so agents must not invent eval tools.
 
@@ -416,7 +416,7 @@ Terminal tools distinguish:
 - Later terminal tools use `terminalSessionId` for the PTY terminal session returned by `bc_terminal_open`.
 - `sessionId` consistently means the Browser Control session for policy/session binding.
 
-Browser targets can be refs such as `@e3`, CSS selectors, or semantic text. Prefer `bc_snapshot` before `bc_click` or `bc_fill`.
+Browser targets can be refs such as `@e3`, CSS selectors, or semantic text. Prefer `bc_snapshot` before `bc_act` click or fill actions.
 
 ## Security Notes
 
