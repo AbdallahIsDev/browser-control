@@ -371,7 +371,6 @@ const USER_EDITABLE = [
 	"helpers",
 	"packages/installed",
 	"reports/exports",
-	"config/preferences.json",
 ];
 
 const PROTECTED_PATHS = [
@@ -591,7 +590,6 @@ export function exportDataHome(
 	for (const rel of [
 		"manifest.json",
 		"config/config.json",
-		"config/preferences.json",
 		"automations",
 		"workflows/definitions",
 		"helpers/registry.json",

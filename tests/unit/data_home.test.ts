@@ -512,10 +512,14 @@ test("data home report includes folder purpose, size, and staleness inventory", 
 	}
 });
 
-test("data export writes a portable manifest under reports exports", () => {
+test("data export writes a portable manifest under reports exports without stale preferences", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-export-"));
 	try {
 		ensureDataHomeAtPath(home);
+		fs.writeFileSync(
+			path.join(home, "config", "config.json"),
+			JSON.stringify({ logLevel: "debug" }),
+		);
 		fs.writeFileSync(
 			path.join(home, "config", "preferences.json"),
 			JSON.stringify({ theme: "dark" }),
@@ -526,8 +530,17 @@ test("data export writes a portable manifest under reports exports", () => {
 		assert.ok(result.exportDir.includes(path.join("reports", "exports")));
 		assert.equal(fs.existsSync(path.join(result.exportDir, "manifest.json")), true);
 		assert.equal(
-			fs.existsSync(path.join(result.exportDir, "config", "preferences.json")),
+			fs.existsSync(path.join(result.exportDir, "config", "config.json")),
 			true,
+		);
+		assert.equal(
+			fs.existsSync(path.join(result.exportDir, "config", "preferences.json")),
+			false,
+		);
+		const report = inspectDataHome(home);
+		assert.equal(
+			report.userEditable.some((entry) => entry.endsWith(path.join("config", "preferences.json"))),
+			false,
 		);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
