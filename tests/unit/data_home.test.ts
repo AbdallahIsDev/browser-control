@@ -284,6 +284,13 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 		);
 		assert.equal(manifest.schemaVersion, 2);
 		assert.equal(manifest.product, "browser-control");
+		assert.equal(manifest.compatibilityAliases[".interop"].current, "interop");
+		assert.match(manifest.compatibilityAliases[".interop"].createdAt, /^\d{4}-/u);
+		assert.match(manifest.compatibilityAliases[".interop"].expiresAt, /^\d{4}-/u);
+		assert.ok(
+			Date.parse(manifest.compatibilityAliases[".interop"].expiresAt) >
+				Date.parse(manifest.compatibilityAliases[".interop"].createdAt),
+		);
 		const readmePath = path.join(home, "README.md");
 		assert.equal(fs.existsSync(readmePath), true);
 		const readme = fs.readFileSync(readmePath, "utf8");
@@ -362,6 +369,57 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 		assert.ok(
 			report.legacyAliases.some((entry) => entry.legacy.endsWith(".interop")),
 		);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("data home manifest migrates flat aliases and prunes expired aliases", () => {
+	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-alias-expiry-"));
+	try {
+		fs.mkdirSync(home, { recursive: true });
+		const manifestPath = getDataHomeManifestPath(home);
+		const oldDate = "2020-01-01T00:00:00.000Z";
+		const createdAt = new Date().toISOString();
+		const futureDate = "2999-01-01T00:00:00.000Z";
+		fs.writeFileSync(
+			manifestPath,
+			`${JSON.stringify(
+				{
+					product: "browser-control",
+					schemaVersion: 2,
+					createdAt,
+					layout: "v2",
+					compatibilityAliases: {
+						".interop": {
+							current: "interop",
+							createdAt: oldDate,
+							expiresAt: "2020-01-02T00:00:00.000Z",
+						},
+						flat: "legacy/flat",
+						fresh: {
+							current: "legacy/fresh",
+							createdAt,
+							expiresAt: futureDate,
+						},
+					},
+				},
+				null,
+				2,
+			)}\n`,
+		);
+
+		ensureDataHomeAtPath(home);
+
+		const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+		assert.equal(manifest.compatibilityAliases[".interop"], undefined);
+		assert.equal(manifest.compatibilityAliases.flat.current, "legacy/flat");
+		assert.equal(manifest.compatibilityAliases.flat.createdAt, createdAt);
+		assert.match(manifest.compatibilityAliases.flat.expiresAt, /^\d{4}-/u);
+		assert.equal(manifest.compatibilityAliases.fresh.current, "legacy/fresh");
+		assert.equal(manifest.compatibilityAliases.fresh.expiresAt, futureDate);
+		assert.equal(manifest.compatibilityAliases.screenshots.current, "evidence/screenshots");
+		assert.match(manifest.compatibilityAliases.screenshots.expiresAt, /^\d{4}-/u);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}

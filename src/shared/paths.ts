@@ -3,10 +3,132 @@ import os from "node:os";
 import path from "node:path";
 const DEFAULT_HOME_NAME = ".browser-control";
 export const DATA_HOME_SCHEMA_VERSION = 2;
+const COMPATIBILITY_ALIAS_TTL_DAYS = 365;
+const COMPATIBILITY_ALIAS_TTL_MS =
+  COMPATIBILITY_ALIAS_TTL_DAYS * 24 * 60 * 60 * 1000;
+const DEFAULT_COMPATIBILITY_ALIASES: Record<string, string> = {
+  ".interop": "interop",
+  "chrome_pid.txt": "interop/chrome.pid",
+  screenshots: "evidence/screenshots",
+  "memory.sqlite": "memory/memory.sqlite",
+  "automation-helpers": "helpers",
+};
 export interface RuntimeSessionInfo {
   id: string;
   name: string;
   createdAt: string;
+}
+interface CompatibilityAliasEntry {
+  current: string;
+  createdAt: string;
+  expiresAt: string;
+}
+type DataHomeManifest = Record<string, unknown> & {
+  compatibilityAliases?: Record<string, unknown>;
+  createdAt?: unknown;
+  layout?: unknown;
+  product?: unknown;
+  schemaVersion?: unknown;
+};
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validIsoOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : undefined;
+}
+
+function expiresAtFor(createdAt: string): string {
+  return new Date(
+    Date.parse(createdAt) + COMPATIBILITY_ALIAS_TTL_MS,
+  ).toISOString();
+}
+
+function normalizeCompatibilityAliases(
+  aliases: Record<string, unknown> | undefined,
+  manifestCreatedAt: unknown,
+  now: Date,
+): Record<string, CompatibilityAliasEntry> {
+  const nowTime = now.getTime();
+  const nowIso = now.toISOString();
+  const createdFallback = validIsoOrUndefined(manifestCreatedAt) ?? nowIso;
+  const normalized: Record<string, CompatibilityAliasEntry> = {};
+  const expired = new Set<string>();
+  for (const [legacy, rawEntry] of Object.entries(aliases ?? {})) {
+    let current: string | undefined;
+    let createdAt = createdFallback;
+    let expiresAt: string | undefined;
+    if (typeof rawEntry === "string") {
+      current = rawEntry;
+    } else if (isObject(rawEntry)) {
+      current = typeof rawEntry.current === "string" ? rawEntry.current : undefined;
+      createdAt = validIsoOrUndefined(rawEntry.createdAt) ?? createdFallback;
+      expiresAt = validIsoOrUndefined(rawEntry.expiresAt);
+    }
+    if (!current) continue;
+    expiresAt ??= expiresAtFor(createdAt);
+    if (Date.parse(expiresAt) <= nowTime) {
+      expired.add(legacy);
+      continue;
+    }
+    normalized[legacy] = { current, createdAt, expiresAt };
+  }
+  for (const [legacy, current] of Object.entries(DEFAULT_COMPATIBILITY_ALIASES)) {
+    if (normalized[legacy] || expired.has(legacy)) continue;
+    const createdAt = nowIso;
+    normalized[legacy] = { current, createdAt, expiresAt: expiresAtFor(createdAt) };
+  }
+  return normalized;
+}
+
+function createDataHomeManifest(now = new Date()): DataHomeManifest {
+  const createdAt = now.toISOString();
+  return {
+    product: "browser-control",
+    schemaVersion: DATA_HOME_SCHEMA_VERSION,
+    createdAt,
+    layout: "v2",
+    compatibilityAliases: normalizeCompatibilityAliases(undefined, createdAt, now),
+  };
+}
+
+function upsertDataHomeManifest(manifestPath: string): void {
+  if (!fs.existsSync(manifestPath)) {
+    fs.writeFileSync(
+      manifestPath,
+      `${JSON.stringify(createDataHomeManifest(), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    return;
+  }
+  let parsed: DataHomeManifest;
+  try {
+    parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as DataHomeManifest;
+  } catch {
+    return;
+  }
+  if (!isObject(parsed)) return;
+  const now = new Date();
+  const createdAt = validIsoOrUndefined(parsed.createdAt) ?? now.toISOString();
+  const next: DataHomeManifest = {
+    ...parsed,
+    product: typeof parsed.product === "string" ? parsed.product : "browser-control",
+    schemaVersion: typeof parsed.schemaVersion === "number"
+      ? parsed.schemaVersion
+      : DATA_HOME_SCHEMA_VERSION,
+    createdAt,
+    layout: typeof parsed.layout === "string" ? parsed.layout : "v2",
+    compatibilityAliases: normalizeCompatibilityAliases(
+      isObject(parsed.compatibilityAliases) ? parsed.compatibilityAliases : undefined,
+      createdAt,
+      now,
+    ),
+  };
+  if (JSON.stringify(parsed) === JSON.stringify(next)) return;
+  fs.writeFileSync(manifestPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
 }
 function copyFileIfMissing(source: string, target: string): void {
   if (!fs.existsSync(source) || fs.existsSync(target)) return;
@@ -154,29 +276,7 @@ export function ensureDataHomeAtPath(home: string): string {
     }
   }
   const manifestPath = getDataHomeManifestPath(home);
-  if (!fs.existsSync(manifestPath)) {
-    fs.writeFileSync(
-      manifestPath,
-      `${JSON.stringify(
-        {
-          product: "browser-control",
-          schemaVersion: DATA_HOME_SCHEMA_VERSION,
-          createdAt: new Date().toISOString(),
-          layout: "v2",
-          compatibilityAliases: {
-            ".interop": "interop",
-            "chrome_pid.txt": "interop/chrome.pid",
-            screenshots: "evidence/screenshots",
-            "memory.sqlite": "memory/memory.sqlite",
-            "automation-helpers": "helpers",
-          },
-        },
-        null,
-        2,
-      )}\n`,
-      { mode: 0o600 },
-    );
-  }
+  upsertDataHomeManifest(manifestPath);
   const rootReadme = path.join(home, "README.md");
   if (!fs.existsSync(rootReadme)) {
     fs.writeFileSync(rootReadme, dataHomeReadmeText(), { mode: 0o600 });
