@@ -87,6 +87,9 @@ export function getProfileRegistryPath(): string {
 const DEFAULT_SHARED_PROFILE_ID = "default";
 const DEFAULT_SHARED_PROFILE_NAME = "default";
 const ISOLATED_PROFILE_PREFIX = "isolated-";
+const REGISTRY_LOCK_TIMEOUT_MS = 5_000;
+const REGISTRY_LOCK_RETRY_MS = 25;
+const REGISTRY_LOCK_STALE_MS = 30_000;
 
 // ── Profile Registry ────────────────────────────────────────────────
 
@@ -101,18 +104,83 @@ function loadRegistry(): ProfileRegistry {
     if (fs.existsSync(registryPath)) {
       return JSON.parse(fs.readFileSync(registryPath, "utf8")) as ProfileRegistry;
     }
-  } catch {
-    // Silently handle corrupt registry
+  } catch (error) {
+    const backupPath = `${registryPath}.corrupt-${Date.now()}`;
+    try {
+      fs.copyFileSync(registryPath, backupPath);
+    } catch {
+      // Best-effort backup only.
+    }
+    log.warn(
+      `Failed to load profile registry: ${error instanceof Error ? error.message : String(error)}. Starting with an empty registry; corrupt copy: ${backupPath}`,
+    );
   }
   return { profiles: [], updatedAt: new Date().toISOString() };
 }
 
-function saveRegistry(registry: ProfileRegistry): void {
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function acquireRegistryLock(lockPath: string): number {
+  const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS;
+  while (Date.now() <= deadline) {
+    try {
+      const fd = fs.openSync(lockPath, "wx");
+      fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+      return fd;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw error;
+      try {
+        const stat = fs.statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > REGISTRY_LOCK_STALE_MS) {
+          fs.rmSync(lockPath, { force: true });
+          continue;
+        }
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code !== "ENOENT") throw statError;
+      }
+      sleepSync(REGISTRY_LOCK_RETRY_MS);
+    }
+  }
+  throw new Error(`Timed out acquiring profile registry lock: ${lockPath}`);
+}
+
+function withRegistryLock<T>(fn: () => T): T {
+  const registryPath = getProfileRegistryPath();
+  const dir = path.dirname(registryPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const lockPath = `${registryPath}.lock`;
+  const fd = acquireRegistryLock(lockPath);
+  try {
+    return fn();
+  } finally {
+    fs.closeSync(fd);
+    fs.rmSync(lockPath, { force: true });
+  }
+}
+
+function writeRegistryAtomic(registry: ProfileRegistry): void {
   const registryPath = getProfileRegistryPath();
   const dir = path.dirname(registryPath);
   fs.mkdirSync(dir, { recursive: true });
   registry.updatedAt = new Date().toISOString();
-  fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+  const tempPath = path.join(
+    dir,
+    `.registry-${process.pid}-${Date.now()}-${randomUUID()}.tmp`,
+  );
+  fs.writeFileSync(tempPath, JSON.stringify(registry, null, 2));
+  fs.renameSync(tempPath, registryPath);
+}
+
+function updateRegistry(mutator: (registry: ProfileRegistry) => void): ProfileRegistry {
+  return withRegistryLock(() => {
+    const registry = loadRegistry();
+    mutator(registry);
+    writeRegistryAtomic(registry);
+    return registry;
+  });
 }
 
 function sizeOfPath(target: string): number {
@@ -145,49 +213,62 @@ export class BrowserProfileManager {
 	private ensureDefaultProfile(): void {
 		fs.mkdirSync(getProfileDataDir(DEFAULT_SHARED_PROFILE_ID), { recursive: true });
 		if (!this.registry.profiles.find((p) => p.id === DEFAULT_SHARED_PROFILE_ID)) {
-			const now = new Date().toISOString();
-			this.registry.profiles.push({
-				id: DEFAULT_SHARED_PROFILE_ID,
-				name: DEFAULT_SHARED_PROFILE_NAME,
-				type: "isolated",
-				createdAt: now,
-				lastUsedAt: now,
+			this.registry = updateRegistry((registry) => {
+				if (registry.profiles.find((p) => p.id === DEFAULT_SHARED_PROFILE_ID)) {
+					return;
+				}
+				const now = new Date().toISOString();
+				registry.profiles.push({
+					id: DEFAULT_SHARED_PROFILE_ID,
+					name: DEFAULT_SHARED_PROFILE_NAME,
+					type: "isolated",
+					createdAt: now,
+					lastUsedAt: now,
+				});
 			});
-			this.save();
 		}
 	}
 
   /** Create a new browser profile. */
   createProfile(name: string, type: ProfileType = "named"): BrowserProfile {
-    // Check for duplicate name
-    const existing = this.registry.profiles.find((p) => p.name === name);
-    if (existing) {
-      log.info(`Profile "${name}" already exists — returning existing.`);
-      return this.metadataToProfile(existing);
+    let selected: ProfileMetadata | undefined;
+    let created = false;
+
+    this.registry = updateRegistry((registry) => {
+      const existing = registry.profiles.find((p) => p.name === name);
+      if (existing) {
+        selected = existing;
+        return;
+      }
+
+      const id = type === "isolated"
+        ? `${ISOLATED_PROFILE_PREFIX}${Date.now()}-${randomUUID()}`
+        : name.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+
+      const now = new Date().toISOString();
+      const meta: ProfileMetadata = {
+        id,
+        name,
+        type,
+        createdAt: now,
+        lastUsedAt: now,
+      };
+
+      fs.mkdirSync(getProfileDataDir(id), { recursive: true });
+      registry.profiles.push(meta);
+      selected = meta;
+      created = true;
+    });
+
+    if (!selected) {
+      throw new Error(`Failed to create or load profile: ${name}`);
     }
-
-    const id = type === "isolated"
-      ? `${ISOLATED_PROFILE_PREFIX}${Date.now()}-${randomUUID()}`
-      : name.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
-
-    const now = new Date().toISOString();
-    const meta: ProfileMetadata = {
-      id,
-      name,
-      type,
-      createdAt: now,
-      lastUsedAt: now,
-    };
-
-    // Create the profile data directory
-    const dataDir = getProfileDataDir(id);
-    fs.mkdirSync(dataDir, { recursive: true });
-
-    this.registry.profiles.push(meta);
-    this.save();
-
-    log.info(`Profile "${name}" created (type: ${type}, id: ${id})`);
-    return this.metadataToProfile(meta);
+    if (created) {
+      log.info(`Profile "${name}" created (type: ${type}, id: ${selected.id})`);
+    } else {
+      log.info(`Profile "${name}" already exists — returning existing.`);
+    }
+    return this.metadataToProfile(selected);
   }
 
   /** Get a profile by its ID. */
@@ -229,14 +310,17 @@ export class BrowserProfileManager {
       return false;
     }
 
-    const index = this.registry.profiles.findIndex((p) => p.id === id);
-    if (index === -1) {
+    let removed: ProfileMetadata | undefined;
+    this.registry = updateRegistry((registry) => {
+      const index = registry.profiles.findIndex((p) => p.id === id);
+      if (index === -1) return;
+      removed = registry.profiles[index];
+      registry.profiles.splice(index, 1);
+    });
+
+    if (!removed) {
       return false;
     }
-
-    const meta = this.registry.profiles[index];
-    this.registry.profiles.splice(index, 1);
-    this.save();
 
     // Remove profile data directory
     const dataDir = getProfileDataDir(id);
@@ -248,12 +332,13 @@ export class BrowserProfileManager {
       log.warn(`Failed to remove profile data directory: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    log.info(`Profile "${meta.name}" (${id}) deleted.`);
+    log.info(`Profile "${removed.name}" (${id}) deleted.`);
     return true;
   }
 
   /** Delete a profile by name. */
   deleteProfileByName(name: string): boolean {
+    this.registry = loadRegistry();
     const meta = this.registry.profiles.find((p) => p.name === name);
     if (!meta) {
       return false;
@@ -263,11 +348,14 @@ export class BrowserProfileManager {
 
   /** Update the last-used timestamp for a profile. */
   touchProfile(id: string): void {
-    const meta = this.registry.profiles.find((p) => p.id === id);
-    if (meta) {
+    let touched = false;
+    this.registry = updateRegistry((registry) => {
+      const meta = registry.profiles.find((p) => p.id === id);
+      if (!meta) return;
       meta.lastUsedAt = new Date().toISOString();
-      this.save();
-    }
+      touched = true;
+    });
+    if (!touched) this.registry = loadRegistry();
   }
 
   /** Create a temporary isolated profile. */
@@ -278,6 +366,7 @@ export class BrowserProfileManager {
 
   /** Clean up expired isolated profiles (older than given age in ms). */
   cleanIsolatedProfiles(maxAgeMs: number = 24 * 60 * 60 * 1000): number {
+    this.reload();
     const now = Date.now();
     const toDelete: string[] = [];
 
@@ -308,6 +397,7 @@ export class BrowserProfileManager {
     dryRun?: boolean;
     now?: Date;
   } = {}): ProfilePurgeResult {
+    this.reload();
     const olderThanDays = options.olderThanDays ?? 30;
     if (!Number.isFinite(olderThanDays) || olderThanDays < 0) {
       throw new RangeError("olderThanDays must be a non-negative number");
@@ -373,11 +463,4 @@ export class BrowserProfileManager {
     };
   }
 
-  private save(): void {
-    try {
-      saveRegistry(this.registry);
-    } catch (error: unknown) {
-      log.error(`Failed to save profile registry: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
 }

@@ -222,6 +222,23 @@ describe("BrowserProfileManager", () => {
       assert.ok(profile);
       assert.equal(profile.name, "persist-test");
     });
+
+    it("should preserve profiles created by separate stale manager instances", () => {
+      const managerA = new BrowserProfileManager();
+      const managerB = new BrowserProfileManager();
+
+      managerA.createProfile("parallel-a", "named");
+      managerB.createProfile("parallel-b", "named");
+
+      const reloaded = new BrowserProfileManager();
+      assert.ok(reloaded.getProfileByName("parallel-a"));
+      assert.ok(reloaded.getProfileByName("parallel-b"));
+      assert.equal(fs.existsSync(`${getProfileRegistryPath()}.lock`), false);
+      assert.deepEqual(
+        fs.readdirSync(getProfilesDir()).filter((entry) => entry.endsWith(".tmp")),
+        [],
+      );
+    });
   });
 });
 
