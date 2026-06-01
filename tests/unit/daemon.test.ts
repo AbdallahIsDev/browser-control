@@ -213,6 +213,34 @@ test("Daemon start and stop manage pid lifecycle and daemon-status.json", async 
   }
 });
 
+test("Daemon start removes stale pid and status files before writing lifecycle state", async () => {
+  const { tempDir, pidPath, store, telemetry, config } = createTestConfig();
+  const statusPath = path.join(tempDir, "daemon-status.json");
+  fs.writeFileSync(pidPath, "999999999\n");
+  fs.writeFileSync(
+    statusPath,
+    JSON.stringify({ status: "running", pid: 999999999, reason: "stale" }),
+  );
+
+  let daemon: Daemon | null = null;
+  try {
+    daemon = new Daemon(config);
+    await daemon.start();
+
+    assert.equal(fs.readFileSync(pidPath, "utf8"), String(process.pid));
+    const statusRecord = JSON.parse(fs.readFileSync(statusPath, "utf8")) as DaemonStatusRecord;
+    assert.equal(statusRecord.status, "running");
+    assert.equal(statusRecord.pid, process.pid);
+    assert.notEqual(statusRecord.reason, "stale");
+  } finally {
+    if (daemon) {
+      await daemon.stop().catch(() => {});
+    }
+    store.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("Daemon emergencyKill stops broker and clears daemon lifecycle state", async () => {
   const brokerCalls = { start: 0, stop: 0 };
   const { tempDir, pidPath, store, telemetry, config } = createTestConfig({

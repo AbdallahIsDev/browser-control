@@ -36,6 +36,7 @@ import { SkillRegistry } from "../skill_registry";
 import { getStateStorage, type StateStorage, type StoredTask } from "../state/index";
 import { validateResize } from "../terminal/actions";
 import { TerminalBufferStore } from "../terminal/buffer_store";
+import { cleanupStaleDaemonFilesInDir } from "./daemon_cleanup";
 import {
 	buildResumeResult,
 	decideResume,
@@ -2700,6 +2701,7 @@ export class Daemon {
 
 	private writePidFile(): void {
 		const pidFilePath = this.config.pidFilePath ?? getPidFilePath();
+		cleanupStaleDaemonFilesInDir(path.dirname(pidFilePath));
 		fs.mkdirSync(path.dirname(pidFilePath), { recursive: true });
 		fs.writeFileSync(pidFilePath, String(process.pid));
 	}

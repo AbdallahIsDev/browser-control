@@ -341,11 +341,11 @@ function isAutomationBrowserCommand(command: string, homeDir?: string): boolean 
 export function cleanupStaleDaemonFiles(homeDir?: string): void {
   const dataHome = homeDir ?? getDataHome();
   for (const interopDir of [getInteropDir(dataHome), getLegacyInteropDir(dataHome)]) {
-    cleanupDaemonFilesInDir(interopDir);
+    cleanupStaleDaemonFilesInDir(interopDir);
   }
 }
 
-function cleanupDaemonFilesInDir(interopDir: string): void {
+export function cleanupStaleDaemonFilesInDir(interopDir: string): void {
   const pidFile = path.join(interopDir, "daemon.pid");
   const statusFile = path.join(interopDir, "daemon-status.json");
 
