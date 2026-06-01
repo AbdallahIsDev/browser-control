@@ -3486,10 +3486,6 @@
             "description": "Optional extra copy path. Primary screencast save remains in session runtime and is returned as runtimePath.",
             "type": "string"
           },
-          "path": {
-            "description": "Deprecated. Use copyTo. Primary screencast save remains in session runtime and is returned as runtimePath.",
-            "type": "string"
-          },
           "retention": {
             "description": "Retention policy: keep, delete-on-success, debug-only.",
             "enum": [

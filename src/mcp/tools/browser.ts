@@ -620,17 +620,16 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Start a browser screencast recording. Primary screencast artifacts are saved to session runtime; use copyTo only for an explicit extra copy.",
       inputSchema: buildSchema({
         copyTo: { type: "string", description: "Optional extra copy path. Primary screencast save remains in session runtime and is returned as runtimePath." },
-        path: { type: "string", description: "Deprecated. Use copyTo. Primary screencast save remains in session runtime and is returned as runtimePath." },
         showActions: { type: "boolean", description: "Display visible action labels during recording." },
         annotationPosition: { type: "string", description: "Position for action labels: top-left, top, top-right, bottom-left, bottom, bottom-right.", enum: ["top-left", "top", "top-right", "bottom-left", "bottom", "bottom-right"] },
         retention: { type: "string", description: "Retention policy: keep, delete-on-success, debug-only.", enum: ["keep", "delete-on-success", "debug-only"] },
         sessionId: sessionIdSchema,
       }),
+      validation: { forbiddenParameters: ["path"] },
       handler: async (params) => {
         if (params.sessionId) api.session.use(params.sessionId as string);
         const options: ScreencastOptions = {};
         if (params.copyTo) options.copyTo = params.copyTo as string;
-        if (params.path) options.path = params.path as string;
         if (params.showActions) options.showActions = params.showActions as boolean;
         if (params.annotationPosition) options.annotationPosition = params.annotationPosition as "top-left" | "top" | "top-right" | "bottom-left" | "bottom" | "bottom-right";
         if (params.retention) options.retention = params.retention as "keep" | "delete-on-success" | "debug-only";

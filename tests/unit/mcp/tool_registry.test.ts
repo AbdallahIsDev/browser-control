@@ -380,12 +380,24 @@ describe("MCP Tool Registry", () => {
       assert.equal(actTool.inputSchema.properties.captureOnSuccess, undefined);
     });
 
-    it("screencast start exposes copyTo and keeps path as deprecated shim", () => {
+    it("screencast start exposes copyTo and rejects deprecated path", () => {
       const tools = buildToolRegistry(api);
       const screencastTool = tools.find((t) => t.name === "bc_screencast_start")!;
 
       assert.match((screencastTool.inputSchema.properties.copyTo as any).description, /Primary screencast/);
-      assert.match((screencastTool.inputSchema.properties.path as any).description, /Deprecated/);
+      assert.equal(screencastTool.inputSchema.properties.path, undefined);
+      assert.deepEqual(screencastTool.validation?.forbiddenParameters, ["path"]);
+      const validationError = validateToolParams(
+        screencastTool.name,
+        screencastTool.inputSchema,
+        { path: "old.webm" },
+        screencastTool.validation,
+      );
+      assert.ok(validationError);
+      assert.match(
+        validationError,
+        /Unknown parameter 'path'/,
+      );
     });
 
     it("bc_act handler preserves object URL entries", async () => {
@@ -448,6 +460,41 @@ describe("MCP Tool Registry", () => {
         assert.equal("dialogId" in (capturedOptions ?? {}), false);
       } finally {
         browser.dialog = originalDialog;
+      }
+    });
+
+    it("bc_screencast_start handler forwards copyTo without deprecated path", async () => {
+      const screencast = api.browser.screencast as unknown as {
+        start: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
+      };
+      const originalStart = screencast.start;
+      let capturedOptions: Record<string, unknown> | undefined;
+      screencast.start = async (options) => {
+        capturedOptions = options;
+        return successResult(
+          { received: options },
+          { path: "command", sessionId: "test-session" },
+        );
+      };
+
+      const tools = buildToolRegistry(api);
+      const screencastTool = tools.find((t) => t.name === "bc_screencast_start")!;
+      try {
+        const result = await screencastTool.handler({
+          copyTo: "recordings/extra.webm",
+          showActions: true,
+          annotationPosition: "bottom",
+          retention: "debug-only",
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(capturedOptions?.copyTo, "recordings/extra.webm");
+        assert.equal(capturedOptions?.showActions, true);
+        assert.equal(capturedOptions?.annotationPosition, "bottom");
+        assert.equal(capturedOptions?.retention, "debug-only");
+        assert.equal("path" in (capturedOptions ?? {}), false);
+      } finally {
+        screencast.start = originalStart;
       }
     });
   });
