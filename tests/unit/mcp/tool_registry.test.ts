@@ -360,6 +360,9 @@ describe("MCP Tool Registry", () => {
       assert.match(stepItems.properties.action.description, /click|fill|scroll/);
       assert.match(stepItems.properties.target.description, /click|fill|hover/);
       assert.match(stepItems.properties.copyTo.description, /Primary save remains/);
+      assert.equal((stepItems.properties.amount as any).default, 300);
+      assert.equal((stepItems.properties.snapshot as any).default, undefined);
+      assert.match((stepItems.properties.snapshot as any).description, /Default: true for capture\/captureMany, false for state/);
       assert.ok("annotate" in stepItems.properties);
       assert.ok("refs" in stepItems.properties);
       assert.ok("dialog" in stepItems.properties);
@@ -379,6 +382,9 @@ describe("MCP Tool Registry", () => {
 
       assert.match((screenshotTool.inputSchema.properties.copyTo as any).description, /Primary screenshot/);
       assert.match((actTool.inputSchema.properties.copyTo as any).description, /Primary save remains/);
+      assert.equal((actTool.inputSchema.properties.amount as any).default, 300);
+      assert.equal((actTool.inputSchema.properties.snapshot as any).default, undefined);
+      assert.match((actTool.inputSchema.properties.snapshot as any).description, /Default: true for capture\/captureMany, false for state/);
       assert.ok("annotate" in actTool.inputSchema.properties, "bc_act should preserve bc_screenshot annotate");
       assert.ok("refs" in actTool.inputSchema.properties, "bc_act should preserve bc_screenshot refs");
       assert.ok("dialog" in actTool.inputSchema.properties, "bc_act should preserve bc_state dialog");

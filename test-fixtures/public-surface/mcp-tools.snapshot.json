@@ -30,6 +30,7 @@
             "type": "string"
           },
           "amount": {
+            "default": 300,
             "description": "Pixels to scroll. Default: 300.",
             "type": "number"
           },
@@ -135,8 +136,7 @@
             "type": "string"
           },
           "snapshot": {
-            "default": false,
-            "description": "Include snapshot for capture/state actions. Default: false (compact state only after other actions).",
+            "description": "Include snapshot for capture/captureMany/state actions. Default: true for capture/captureMany, false for state/capture-on-success.",
             "type": "boolean"
           },
           "tabId": {
@@ -4641,7 +4641,8 @@
                   "type": "string"
                 },
                 "amount": {
-                  "description": "Scroll amount in pixels.",
+                  "default": 300,
+                  "description": "Scroll amount in pixels. Default: 300.",
                   "type": "number"
                 },
                 "annotate": {
@@ -4731,7 +4732,7 @@
                   "type": "boolean"
                 },
                 "snapshot": {
-                  "description": "Include accessibility snapshot for capture/state steps.",
+                  "description": "Include accessibility snapshot for capture/captureMany/state steps. Default: true for capture/captureMany, false for state.",
                   "type": "boolean"
                 },
                 "tabId": {

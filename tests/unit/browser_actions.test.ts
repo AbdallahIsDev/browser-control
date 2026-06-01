@@ -3728,6 +3728,8 @@ describe("BrowserActions", () => {
 
 				assert.equal(result.success, true);
 				assert.ok(result.data);
+				const data = result.data as { result?: { snapshot?: unknown } };
+				assert.ok(data.result?.snapshot, "capture action should preserve bc_capture snapshot default");
 			} finally {
 				isolatedStore.close();
 			}
@@ -3755,8 +3757,64 @@ describe("BrowserActions", () => {
 
 				assert.equal(result.success, true);
 				assert.ok(result.data);
+				const data = result.data as { result?: { captures?: Array<{ snapshot?: unknown }> } };
+				assert.ok(data.result?.captures?.[0]?.snapshot, "captureMany action should preserve bc_capture snapshot default");
 			} finally {
 				isolatedStore.close();
+			}
+		});
+
+		it("taskRun forwards full step parity options into browserAct", async () => {
+			const capturedOptions: Array<Record<string, unknown>> = [];
+			const originalBrowserAct = browserActions.browserAct.bind(browserActions);
+			const originalBrowserState = browserActions.browserState.bind(browserActions);
+			(browserActions as unknown as {
+				browserAct: (options: Record<string, unknown>) => Promise<{
+					success: true;
+					data: Record<string, unknown>;
+					path: string;
+				}>;
+				browserState: () => Promise<{
+					success: true;
+					data: BrowserStateResult;
+				}>;
+			}).browserAct = async (options) => {
+				capturedOptions.push(options);
+				return {
+					success: true,
+					data: { tabId: "tab-1" },
+					path: "a11y",
+				};
+			};
+			(browserActions as unknown as {
+				browserState: () => Promise<{
+					success: true;
+					data: BrowserStateResult;
+				}>;
+			}).browserState = async () => ({
+				success: true,
+				data: { browserConnected: true, tabCount: 1, status: {} } as BrowserStateResult,
+			});
+
+			try {
+				const result = await browserActions.taskRun({
+					steps: [{
+						action: "state",
+						annotate: true,
+						refs: ["e1", "e2"],
+						dialog: false,
+						downloads: true,
+					}],
+				});
+
+				assert.equal(result.success, true);
+				assert.deepEqual(capturedOptions[0]?.refs, ["e1", "e2"]);
+				assert.equal(capturedOptions[0]?.annotate, true);
+				assert.equal(capturedOptions[0]?.dialog, false);
+				assert.equal(capturedOptions[0]?.downloads, true);
+			} finally {
+				browserActions.browserAct = originalBrowserAct;
+				browserActions.browserState = originalBrowserState;
 			}
 		});
 

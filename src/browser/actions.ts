@@ -5193,7 +5193,7 @@ export class BrowserActions {
 		case "capture": {
 			const r = await this.capture({
 				tabId: options.tabId,
-				snapshot: options.snapshot === true,
+				snapshot: options.snapshot,
 				screenshot: options.screenshot === true,
 			});
 			actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
@@ -5202,7 +5202,7 @@ export class BrowserActions {
 		case "captureMany": {
 			const captureManyIds = (options.urls ?? []).map((u: UrlEntry) => typeof u === "string" ? u : u.url);
 			const r = await this.captureMany(captureManyIds, {
-				snapshot: options.snapshot === true,
+				snapshot: options.snapshot,
 				screenshot: options.screenshot === true,
 			});
 				actResult = { ...r, data: r.data as unknown as Record<string, unknown> };
@@ -5363,7 +5363,11 @@ export class BrowserActions {
 				copyTo: step.copyTo,
 				outputPath: step.outputPath,
 				fullPage: step.fullPage,
+				annotate: step.annotate,
+				refs: step.refs,
 				captureOnSuccess: step.captureOnSuccess,
+				dialog: step.dialog,
+				downloads: step.downloads,
 				url: step.url,
 				urls: step.urls,
 				waitUntil: step.waitUntil,
