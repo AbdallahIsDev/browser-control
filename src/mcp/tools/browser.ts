@@ -766,7 +766,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
       description: "Detect or respond to browser dialogs (alerts, prompts, confirms). Call with action=list first to see active dialogs.",
       inputSchema: buildSchema({
         action: { type: "string", description: "Action to perform: list or respond.", enum: ["list", "respond"] },
-        dialog_id: { type: "string", description: "Dialog ID to respond to (required if action=respond)." },
+        dialogId: { type: "string", description: "Dialog ID to respond to (required if action=respond)." },
         response: { type: "string", description: "Response type: accept or dismiss.", enum: ["accept", "dismiss"] },
         text: { type: "string", description: "Text to enter into prompt dialogs." },
         tabId: { type: "string", description: "Optional tab ID." },
@@ -776,7 +776,7 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
         if (params.sessionId) api.session.use(params.sessionId as string);
         return api.browser.dialog({
           action: params.action as "list" | "respond",
-          dialog_id: params.dialog_id as string | undefined,
+          dialog_id: params.dialogId as string | undefined,
           response: params.response as "accept" | "dismiss" | undefined,
           text: params.text as string | undefined,
           tabId: params.tabId as string | undefined,

@@ -418,6 +418,38 @@ describe("MCP Tool Registry", () => {
         browser.act = originalAct;
       }
     });
+
+    it("bc_dialog handler maps camelCase dialogId to internal dialog_id", async () => {
+      const browser = api.browser as unknown as {
+        dialog: (options: Record<string, unknown>) => Promise<ActionResult<unknown>>;
+      };
+      const originalDialog = browser.dialog;
+      let capturedOptions: Record<string, unknown> | undefined;
+      browser.dialog = async (options) => {
+        capturedOptions = options;
+        return successResult(
+          { received: options },
+          { path: "command", sessionId: "test-session" },
+        );
+      };
+
+      const tools = buildToolRegistry(api);
+      const dialogTool = tools.find((t) => t.name === "bc_dialog")!;
+      try {
+        const result = await dialogTool.handler({
+          action: "respond",
+          dialogId: "dlg-123",
+          response: "accept",
+          text: "ok",
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(capturedOptions?.dialog_id, "dlg-123");
+        assert.equal("dialogId" in (capturedOptions ?? {}), false);
+      } finally {
+        browser.dialog = originalDialog;
+      }
+    });
   });
 
   describe("getToolCategories", () => {
@@ -979,11 +1011,12 @@ describe("MCP Tool Registry", () => {
       }
     });
 
-    it("bc_dialog schema requires action and has dialog_id", () => {
+    it("bc_dialog schema requires action and uses camelCase dialogId", () => {
       const tools = buildToolRegistry(api);
       const tool = tools.find((t) => t.name === "bc_dialog")!;
       assert.ok(tool.inputSchema.required?.includes("action"), "bc_dialog should require action");
-      assert.ok("dialog_id" in tool.inputSchema.properties, "bc_dialog should have dialog_id property");
+      assert.ok("dialogId" in tool.inputSchema.properties, "bc_dialog should have dialogId property");
+      assert.ok(!("dialog_id" in tool.inputSchema.properties), "bc_dialog should not expose dialog_id property");
       assert.ok("response" in tool.inputSchema.properties, "bc_dialog should have response property");
       assert.ok("text" in tool.inputSchema.properties, "bc_dialog should have text property");
       assert.ok("tabId" in tool.inputSchema.properties, "bc_dialog should have tabId property");

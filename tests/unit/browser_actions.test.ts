@@ -3479,6 +3479,45 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("uses the remaining active tab for tab-close compact state", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const targetPage = createMockPage("https://closing.example/");
+			const remainingPage = createMockPage("https://remaining.example/");
+			const state = { pages: [targetPage, remainingPage], newPages: 0 };
+			targetPage.close = async () => {
+				targetPage.calls.close += 1;
+				state.pages = state.pages.filter((page) => page !== targetPage);
+			};
+			const manager = createConnectedBrowserManager(state.pages, state);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.browserAct({
+					action: "tab-close",
+					tabId: targetPage.targetId,
+				});
+
+				assert.equal(result.success, true);
+				assert.ok(result.data);
+				const data = result.data as {
+					result: { tabId?: string };
+					state?: BrowserStateResult;
+				};
+				assert.equal(data.result.tabId, targetPage.targetId);
+				assert.equal(data.state?.browserConnected, true);
+				assert.equal(data.state?.tabId, remainingPage.targetId);
+				assert.deepEqual(data.state?.warnings, []);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
 		it("includes state in result when captureOnSuccess is true", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const page = createMockPage("https://example.test/");

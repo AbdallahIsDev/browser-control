@@ -5227,11 +5227,12 @@ export class BrowserActions {
 		const auditId = actResult.auditId;
 		const actPath = actResult.path;
 		const actTabId = actResult.data?.tabId as string | undefined ?? options.tabId;
+		const stateTabId = options.action === "tab-close" ? undefined : actTabId ?? options.tabId;
 
 		const state = options.action === "state"
 			? { success: true, data: actResult.data as unknown as BrowserStateResult }
 			: await this.browserState({
-				tabId: actTabId ?? options.tabId,
+				tabId: stateTabId,
 				snapshot: options.captureOnSuccess === true && options.snapshot === true,
 				screenshot: options.captureOnSuccess === true && options.screenshot === true,
 			});

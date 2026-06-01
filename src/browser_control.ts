@@ -1041,7 +1041,7 @@ export function createBrowserControl(
 			cdp: (o) => queueBrowserAction("browser_cdp", async () => attachCompactBrowserState(await browserActions.cdp(o), o.tabId)),
 			tabList: () => queueBrowserAction("browser_tab_list", () => browserActions.tabList()),
 			tabSwitch: (id) => queueBrowserAction("browser_tab_switch", async () => attachCompactBrowserState(await browserActions.tabSwitch(id), id)),
-			tabClose: (options) => queueBrowserAction("browser_tab_close", async () => attachCompactBrowserState(await browserActions.tabClose(options), options?.tabId)),
+			tabClose: (options) => queueBrowserAction("browser_tab_close", async () => attachCompactBrowserState(await browserActions.tabClose(options))),
 			close: () => queueBrowserAction("browser_close", async () => attachCompactBrowserState(await browserActions.close())),
 			provider: providerNamespace,
 			screencast: screencastNamespace,

@@ -864,7 +864,7 @@
             ],
             "type": "string"
           },
-          "dialog_id": {
+          "dialogId": {
             "description": "Dialog ID to respond to (required if action=respond).",
             "type": "string"
           },
