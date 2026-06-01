@@ -38,6 +38,7 @@ export interface DialogAuditEvent {
 }
 
 interface PendingDialog {
+  page: Page;
   dialog: PlaywrightDialog;
   info: DialogInfo;
   handled: boolean;
@@ -46,6 +47,8 @@ interface PendingDialog {
 
 interface PageHandlers {
   dialog: (d: PlaywrightDialog) => void;
+  close: () => void;
+  sessionId: string;
 }
 
 export class BrowserDialogSupervisor {
@@ -97,12 +100,16 @@ export class BrowserDialogSupervisor {
     if (typeof (page as any).on !== "function") return;
 
     const dialogHandler = (dialog: PlaywrightDialog): void => {
-      this.handlePlaywrightDialog(dialog, sessionId);
+      this.handlePlaywrightDialog(dialog, sessionId, page);
+    };
+    const closeHandler = (): void => {
+      this.detachFromPage(page);
     };
 
     page.on("dialog", dialogHandler);
+    page.on("close", closeHandler);
 
-    this.pageHandlers.set(page, { dialog: dialogHandler });
+    this.pageHandlers.set(page, { dialog: dialogHandler, close: closeHandler, sessionId });
   }
 
   detachFromPage(page: Page): void {
@@ -110,11 +117,27 @@ export class BrowserDialogSupervisor {
     if (!handlers) return;
     if (typeof (page as any).off === "function") {
       page.off("dialog", handlers.dialog);
+      page.off("close", handlers.close);
     }
     this.pageHandlers.delete(page);
+    this.clearPageDialogs(page, handlers.sessionId);
   }
 
-  private handlePlaywrightDialog(dialog: PlaywrightDialog, sessionId: string): void {
+  private clearPageDialogs(page: Page, sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    for (const [id, entry] of session) {
+      if (entry.page !== page) continue;
+      if (entry.timeout) clearTimeout(entry.timeout);
+      session.delete(id);
+    }
+    if (session.size === 0) {
+      this.sessions.delete(sessionId);
+      this.idCounters.delete(sessionId);
+    }
+  }
+
+  private handlePlaywrightDialog(dialog: PlaywrightDialog, sessionId: string, page: Page): void {
     const id = this.nextId(sessionId);
     const message = dialog.message();
     const info: DialogInfo = {
@@ -126,7 +149,7 @@ export class BrowserDialogSupervisor {
     };
 
     const session = this.ensureSession(sessionId);
-    session.set(id, { dialog, info, handled: false });
+    session.set(id, { page, dialog, info, handled: false });
 
     log.info("Dialog detected (Playwright)", { id, type: info.type, sessionId });
     this.emitAudit({ timestamp: info.createdAt, sessionId, dialogId: id, type: info.type, action: "detected" });

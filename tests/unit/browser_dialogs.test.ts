@@ -12,11 +12,13 @@ type DialogEventHandler = (dialog: {
   accept: (text?: string) => Promise<void>;
   dismiss: () => Promise<void>;
 }) => void;
+type PageEventHandler = DialogEventHandler | (() => void);
 
 interface FakePage {
   dialogHandler?: DialogEventHandler;
-  on: (event: string, handler: DialogEventHandler) => void;
-  off: (event: string, handler: DialogEventHandler) => void;
+  emit: (event: string) => void;
+  on: (event: string, handler: PageEventHandler) => void;
+  off: (event: string, handler: PageEventHandler) => void;
   context: () => {
     newCDPSession: () => Promise<{
       on: (e: string, cb: (...args: unknown[]) => void) => void;
@@ -45,16 +47,22 @@ function makeFakeDialog(
 }
 
 function makeFakePage(): FakePage {
-  let handler: DialogEventHandler | undefined;
+  const handlers = new Map<string, PageEventHandler>();
   return {
     get dialogHandler() {
-      return handler;
+      return handlers.get("dialog") as DialogEventHandler | undefined;
     },
-    on(event: string, h: DialogEventHandler) {
-      handler = h;
+    emit(event: string) {
+      const handler = handlers.get(event);
+      if (event === "close" && handler) {
+        (handler as () => void)();
+      }
     },
-    off(event: string, h: DialogEventHandler) {
-      if (handler === h) handler = undefined;
+    on(event: string, h: PageEventHandler) {
+      handlers.set(event, h);
+    },
+    off(event: string, h: PageEventHandler) {
+      if (handlers.get(event) === h) handlers.delete(event);
     },
     context: () => ({
       newCDPSession: mock.fn(() =>
@@ -70,6 +78,13 @@ function triggerDialogEvent(page: FakePage, dialog: ReturnType<typeof makeFakeDi
   } else {
     throw new Error("No dialog handler registered on page");
   }
+}
+
+function getTrackedDialogCount(sup: BrowserDialogSupervisor, sessionId: string): number {
+  const sessions = (sup as unknown as {
+    sessions: Map<string, Map<string, unknown>>;
+  }).sessions;
+  return sessions.get(sessionId)?.size ?? 0;
 }
 
 describe("BrowserDialogSupervisor", () => {
@@ -406,6 +421,59 @@ describe("BrowserDialogSupervisor", () => {
       sup.detachFromPage(page as unknown as Parameters<typeof sup.detachFromPage>[0]);
 
       assert.equal(page.dialogHandler, undefined, "handler should be removed");
+    });
+
+    it("detachFromPage clears tracked dialogs for that page session", () => {
+      const sup = new BrowserDialogSupervisor();
+      const page = makeFakePage();
+
+      sup.setHandlingMode("must_respond");
+      sup.attachToPage(page as unknown as Parameters<typeof sup.attachToPage>[0], "session-a");
+
+      triggerDialogEvent(page, makeFakeDialog());
+      const pending = sup.getPendingDialogs("session-a");
+      sup.respond(pending[0].id, "accept", undefined, undefined, "session-a");
+      assert.equal(getTrackedDialogCount(sup, "session-a"), 1);
+
+      sup.detachFromPage(page as unknown as Parameters<typeof sup.detachFromPage>[0]);
+
+      assert.equal(getTrackedDialogCount(sup, "session-a"), 0);
+    });
+
+    it("page close clears tracked dialogs for that page session", () => {
+      const sup = new BrowserDialogSupervisor();
+      const page = makeFakePage();
+
+      sup.setHandlingMode("must_respond");
+      sup.attachToPage(page as unknown as Parameters<typeof sup.attachToPage>[0], "session-a");
+
+      triggerDialogEvent(page, makeFakeDialog());
+      assert.equal(getTrackedDialogCount(sup, "session-a"), 1);
+
+      page.emit("close");
+
+      assert.equal(page.dialogHandler, undefined);
+      assert.equal(getTrackedDialogCount(sup, "session-a"), 0);
+    });
+
+    it("page close preserves dialogs from other pages in the same session", () => {
+      const sup = new BrowserDialogSupervisor();
+      const pageA = makeFakePage();
+      const pageB = makeFakePage();
+
+      sup.setHandlingMode("must_respond");
+      sup.attachToPage(pageA as unknown as Parameters<typeof sup.attachToPage>[0], "session-a");
+      sup.attachToPage(pageB as unknown as Parameters<typeof sup.attachToPage>[0], "session-a");
+
+      triggerDialogEvent(pageA, makeFakeDialog({ type: "alert" }));
+      triggerDialogEvent(pageB, makeFakeDialog({ type: "confirm" }));
+
+      pageA.emit("close");
+
+      const pending = sup.getPendingDialogs("session-a");
+      assert.equal(getTrackedDialogCount(sup, "session-a"), 1);
+      assert.equal(pending.length, 1);
+      assert.equal(pending[0].type, "confirm");
     });
 
     it("multiple attachToPage calls are idempotent", () => {
