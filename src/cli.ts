@@ -948,7 +948,7 @@ Operator:
   vault list|set|delete|grants [--json]                              Manage local credential vault secrets and grants
   captcha test [--json]                                               Check CAPTCHA provider configuration
   network rules list|add|remove [--json]                             Manage network privacy rules
-  network proxy list|add|remove|test [--json]                        Manage outbound proxy inventory
+  proxy list|add|remove|test [--json]                                Manage outbound proxy inventory
   data doctor [--cleanup|--purge-profiles] | cleanup [--purge-profiles] | export [--json]
                                                                       Inspect, clean, or export local data home
   benchmark run|results|compare [--suite=<name>] [--json]            Run and inspect product benchmarks
@@ -5918,6 +5918,9 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 	const { subcommand, positional, flags } = args;
 	const jsonOutput = flags.json === "true";
 	if (subcommand === "proxy") {
+		if (!jsonOutput) {
+			console.error("Warning: `bc network proxy` is deprecated; use `bc proxy`.");
+		}
 		await handleProxy({
 			...args,
 			subcommand: positional[0] ?? "list",
@@ -5927,7 +5930,7 @@ async function handleNetwork(args: ParsedArgs): Promise<void> {
 	}
 	if (subcommand !== "rules") {
 		console.error(`Unknown network command: ${subcommand}`);
-		console.error("Available: rules, proxy");
+		console.error("Available: rules");
 		throw commandFailed();
 	}
 	const rulesAction = positional[0] ?? "list";

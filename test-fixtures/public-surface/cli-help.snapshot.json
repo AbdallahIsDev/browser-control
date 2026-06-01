@@ -353,7 +353,6 @@
         },
         {
           "commandPath": [
-            "network",
             "proxy",
             "list|add|remove|test"
           ],
@@ -362,7 +361,7 @@
             "json"
           ],
           "jsonSupport": true,
-          "syntax": "network proxy list|add|remove|test [--json]"
+          "syntax": "proxy list|add|remove|test [--json]"
         },
         {
           "commandPath": [

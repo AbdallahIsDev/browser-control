@@ -55,7 +55,7 @@ setup [--json] [--non-interactive] [--profile] [--browser-mode] [--chrome-debug-
 config list|get <key>|set <key> <value> [--json]
 status [--json]
 network rules list|add|remove [--json]
-network proxy list|add|remove|test [--json]
+proxy list|add|remove|test [--json]
 ```
 
 Useful setup:

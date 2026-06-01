@@ -941,7 +941,8 @@ test("bc --help documents security-sensitive operator commands", () => {
 		assert.match(result.stdout, /Manage local credential vault secrets and grants/);
 		assert.match(result.stdout, /captcha test \[--json\]/);
 		assert.match(result.stdout, /network rules list\|add\|remove/);
-		assert.match(result.stdout, /network proxy list\|add\|remove\|test/);
+		assert.match(result.stdout, /proxy list\|add\|remove\|test/);
+		assert.doesNotMatch(result.stdout, /network proxy list\|add\|remove\|test/);
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}
@@ -1601,7 +1602,24 @@ test("bc workflow exposes events and typed state edit operator commands", async 
 	}
 });
 
-test("bc network proxy list delegates to proxy inventory", async () => {
+test("bc proxy list delegates to proxy inventory", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const output = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "proxy", "list", "--json"]);
+		});
+		const parsed = JSON.parse(output);
+		assert.deepEqual(parsed, []);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc network proxy list remains a JSON-safe compatibility alias", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;
 	try {
