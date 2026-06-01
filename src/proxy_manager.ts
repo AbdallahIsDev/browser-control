@@ -6,6 +6,7 @@ import type { BrowserContextOptions } from "playwright";
 import { redactString } from "./observability/redaction";
 import { ServiceRegistry, isValidServiceName, type ServiceEntry } from "./services/registry";
 import { getLocalhostCaStatus } from "./services/local_ca";
+import { splitCsv } from "./shared/format";
 import { getConfigDir } from "./shared/paths";
 
 export interface ProxyConfig {
@@ -56,13 +57,6 @@ export interface LocalhostProxyOptions {
 type ProxyConfigInput = string | Omit<ProxyConfig, "lastUsed"> & { lastUsed?: Date | string };
 
 const LOOPBACK_HOST = "127.0.0.1";
-
-function splitCsv(value: string): string[] {
-  return value
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
 
 function normalizeLastUsed(value: Date | string | undefined): Date | undefined {
   if (!value) {

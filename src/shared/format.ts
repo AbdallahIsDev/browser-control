@@ -12,6 +12,14 @@ export function formatCellValue(value: unknown, key?: string): string {
 	return String(value ?? "");
 }
 
+export function splitCsv(value: string | undefined): string[] {
+	if (!value?.trim()) return [];
+	return value
+		.split(",")
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+}
+
 export function formatTerminalActionResult(
 	result: any,
 	fallback = "Idle",

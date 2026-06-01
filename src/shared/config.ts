@@ -17,6 +17,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDataHome as _getDataHome, ensureDataHomeAtPath, getUserConfigPath } from "./paths";
+import { splitCsv } from "./format";
 import { redactString } from "../observability/redaction";
 
 /** Allow override for testing. */
@@ -148,11 +149,6 @@ export interface BrowserControlConfig {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function splitCsv(value: string | undefined): string[] {
-  if (!value?.trim()) return [];
-  return value.split(",").map((s) => s.trim()).filter(Boolean);
-}
 
 function normalizeOptionalString(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

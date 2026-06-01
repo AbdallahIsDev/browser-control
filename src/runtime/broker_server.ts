@@ -21,6 +21,7 @@ import {
 	setUserConfigValue,
 } from "../shared/config";
 import { constantTimeTokenEqual } from "../shared/auth";
+import { splitCsv } from "../shared/format";
 import { Logger } from "../shared/logger";
 import {
 	closeRequestStreamAfterResponse,
@@ -345,17 +346,6 @@ function isHealthPath(pathname: string): boolean {
 		pathname === "/readyz" ||
 		pathname === "/api/v1/health"
 	);
-}
-
-function splitCsv(value: string | undefined): string[] {
-	if (!value) {
-		return [];
-	}
-
-	return value
-		.split(",")
-		.map((entry) => entry.trim())
-		.filter(Boolean);
 }
 
 function normalizeOptionalString(value: string | undefined): string | null {
