@@ -102,6 +102,27 @@ test("doctor warns when a browser profile exceeds configured size threshold", as
   }
 });
 
+test("doctor warns when data home disk space is below configured threshold", async () => {
+  const home = makeHome();
+  try {
+    const result = await runDoctor({
+      env: {
+        BROWSER_CONTROL_HOME: home,
+        BROWSER_CHROME_PATH: path.join(home, "missing-chrome.exe"),
+        BROKER_PORT: "1",
+      },
+      diskSpaceWarnBytes: Number.MAX_SAFE_INTEGER,
+    });
+
+    const diskSpace = result.report.checks.find((check) => check.id === "data.home.diskSpace");
+    assert.equal(diskSpace?.status, "warn");
+    assert.equal(diskSpace?.critical, false);
+    assert.match(diskSpace?.details ?? "", /available/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("doctor node version check does not depend on caller cwd", async () => {
   const home = makeHome();
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-doctor-cwd-"));

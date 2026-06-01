@@ -23,9 +23,11 @@ interface DoctorOptions {
   cwd?: string;
   checks?: DoctorCheck[];
   profileSizeWarnBytes?: number;
+  diskSpaceWarnBytes?: number;
 }
 
 const DEFAULT_PROFILE_SIZE_WARN_BYTES = 500 * 1024 * 1024;
+const DEFAULT_DISK_SPACE_WARN_BYTES = 1024 * 1024 * 1024;
 
 function result(
   id: string,
@@ -83,6 +85,15 @@ function formatBytes(bytes: number): string {
   return `${bytes}B`;
 }
 
+function existingPathForStatfs(target: string): string {
+  let current = path.resolve(target);
+  const root = path.parse(current).root;
+  while (!fs.existsSync(current) && current !== root) {
+    current = path.dirname(current);
+  }
+  return fs.existsSync(current) ? current : root;
+}
+
 async function runCheck(check: DoctorCheck): Promise<DoctorCheckResult> {
   try {
     return await check();
@@ -104,6 +115,7 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
   const cwd = options.cwd ?? process.cwd();
   const config = loadConfig({ env, validate: false });
   const profileSizeWarnBytes = options.profileSizeWarnBytes ?? DEFAULT_PROFILE_SIZE_WARN_BYTES;
+  const diskSpaceWarnBytes = options.diskSpaceWarnBytes ?? DEFAULT_DISK_SPACE_WARN_BYTES;
 
   return [
     async () => {
@@ -121,6 +133,42 @@ export function buildDoctorChecks(options: DoctorOptions = {}): DoctorCheck[] {
       fs.writeFileSync(testPath, "ok");
       fs.unlinkSync(testPath);
       return result("data.home.writable", "Data Home Writable", "filesystem", "pass", `${home} exists and is writable.`, "No action needed.", true);
+    },
+    async () => {
+      try {
+        const statPath = existingPathForStatfs(config.dataHome);
+        const stats = fs.statfsSync(statPath);
+        const availableBytes = stats.bavail * stats.bsize;
+        return availableBytes < diskSpaceWarnBytes
+          ? result(
+              "data.home.diskSpace",
+              "Data Home Disk Space",
+              "filesystem",
+              "warn",
+              `${formatBytes(availableBytes)} available for ${config.dataHome}; threshold is ${formatBytes(diskSpaceWarnBytes)}.`,
+              "Free disk space or move BROWSER_CONTROL_HOME to a larger volume before long browser/runtime sessions.",
+              false,
+            )
+          : result(
+              "data.home.diskSpace",
+              "Data Home Disk Space",
+              "filesystem",
+              "pass",
+              `${formatBytes(availableBytes)} available for ${config.dataHome}.`,
+              "No action needed.",
+              false,
+            );
+      } catch (error) {
+        return result(
+          "data.home.diskSpace",
+          "Data Home Disk Space",
+          "filesystem",
+          "warn",
+          error instanceof Error ? error.message : String(error),
+          "Check available disk space for BROWSER_CONTROL_HOME manually.",
+          false,
+        );
+      }
     },
     async () => {
       const store = new MemoryStore({ filename: path.join(config.dataHome, "memory.sqlite") });
