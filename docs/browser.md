@@ -119,6 +119,27 @@ $env:BROWSER_DEBUG_PORT = "9223"
 
 In a source checkout, `launch_browser.bat 9222 127.0.0.1` still exists for Windows local-only CDP launch and writes CDP metadata under `.interop/chrome-debug.json`. The launcher defaults to `BROWSER_LAUNCH_PROFILE=isolated`, which starts a separate Browser Control profile. Set `BROWSER_LAUNCH_PROFILE=system` only when you intentionally want the real Chrome profile; if that profile is already running without CDP, close Chrome first.
 
+## Raw CDP Passthrough
+
+Raw CDP is an escape hatch for advanced diagnostics and browser introspection. It is gated by policy: `safe` and `balanced` sessions deny `cdp_execute`; `trusted` sessions allow it with audit logging.
+
+CLI:
+
+```powershell
+bc session create trusted-dev --policy trusted --yes
+bc browser cdp Runtime.evaluate --params '{"expression":"40 + 2","returnByValue":true}' --timeout-ms 5000 --json
+```
+
+MCP:
+
+- `bc_cdp` / `bc_browser_cdp`
+- Required: `method`, `timeoutMs`
+- Optional: `params`, `tabId`
+
+The implementation is page-scoped. `targetId` and `frameId` are rejected so callers do not accidentally operate on a different target than the visible Browser Control tab.
+
+Dangerous CDP methods remain blocked even under trusted policy. Use typed Browser Control commands instead for navigation, screenshots, cookies, target lifecycle, browser lifecycle, storage clearing, and security toggles.
+
 ## Degraded Mode
 
 When Chrome/CDP is unavailable:

@@ -67,15 +67,39 @@ test("parseArgs parses subcommands correctly", () => {
 });
 
 test("parseArgs parses session lifecycle subcommands", () => {
-  const destroy = parseArgs(["node", "cli.ts", "session", "destroy", "session-1"]);
-  assert.equal(destroy.command, "session");
-  assert.equal(destroy.subcommand, "destroy");
-  assert.deepEqual(destroy.positional, ["session-1"]);
+	const destroy = parseArgs(["node", "cli.ts", "session", "destroy", "session-1"]);
+	assert.equal(destroy.command, "session");
+	assert.equal(destroy.subcommand, "destroy");
+	assert.deepEqual(destroy.positional, ["session-1"]);
 
   const cleanup = parseArgs(["node", "cli.ts", "session", "cleanup", "--json"]);
   assert.equal(cleanup.command, "session");
   assert.equal(cleanup.subcommand, "cleanup");
-  assert.deepEqual(cleanup.flags, { json: "true" });
+	assert.deepEqual(cleanup.flags, { json: "true" });
+});
+
+test("parseArgs parses browser cdp with params and timeout-ms", () => {
+	const result = parseArgs([
+		"node",
+		"cli.ts",
+		"browser",
+		"cdp",
+		"Runtime.evaluate",
+		"--params",
+		'{"expression":"40 + 2","returnByValue":true}',
+		"--timeout-ms",
+		"1000",
+		"--tab-id",
+		"tab-1",
+		"--json",
+	]);
+	assert.equal(result.command, "browser");
+	assert.equal(result.subcommand, "cdp");
+	assert.deepEqual(result.positional, ["Runtime.evaluate"]);
+	assert.equal(result.flags.params, '{"expression":"40 + 2","returnByValue":true}');
+	assert.equal(result.flags.timeout, "1000");
+	assert.equal(result.flags["tab-id"], "tab-1");
+	assert.equal(result.flags.json, "true");
 });
 
 test("session create warns when using trusted policy in human output", () => {

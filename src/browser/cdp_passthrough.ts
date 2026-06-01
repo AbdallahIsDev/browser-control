@@ -11,17 +11,16 @@ const MAX_OUTPUT_CHARS = 100_000;
 
 const METHOD_REGEX = /^[A-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*$/u;
 
-const ALLOWED_SAFE_METHODS = new Set([
-	"DOM.getDocument",
-	"DOM.querySelector",
-	"DOM.querySelectorAll",
-	"DOM.getOuterHTML",
-	"Runtime.getProperties",
-	"Target.getTargets",
-	"Accessibility.getFullAXTree",
-	"CSS.getComputedStyleForNode",
-	"CSS.getPlatformFontsForNode",
-	"Overlay.inspectNodeMode",
+const DENIED_DANGEROUS_METHODS = new Set([
+	"Browser.close",
+	"Network.deleteCookies",
+	"Network.setCookie",
+	"Page.captureScreenshot",
+	"Page.navigate",
+	"Security.disable",
+	"Storage.clearDataForOrigin",
+	"Target.closeTarget",
+	"Target.createTarget",
 ]);
 
 function isJsonSerializable(value: unknown): boolean {
@@ -69,9 +68,9 @@ export async function executeCdpCommand(
 		);
 	}
 
-	if (!ALLOWED_SAFE_METHODS.has(method)) {
+	if (DENIED_DANGEROUS_METHODS.has(method)) {
 		return failureResult(
-			`CDP method "${method}" is not in the approved allowlist for raw CDP passthrough. Only read-only DOM/CSS/Accessibility introspection methods are allowed. Use safe actions for higher-risk CDP methods.`,
+			`CDP method "${method}" is blocked by the raw CDP dangerous-method denylist. Use the typed Browser Control action surface for navigation, screenshots, cookies, target lifecycle, or browser lifecycle operations.`,
 			{ path: "low_level", sessionId: sid },
 		);
 	}
@@ -105,9 +104,10 @@ export async function executeCdpCommand(
 	}
 
 	const effectiveTimeout = Math.min(timeoutMs, MAX_TIMEOUT_MS);
+	let client: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
 
 	try {
-		const client = await page.context().newCDPSession(page);
+		client = await page.context().newCDPSession(page);
 
 		const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
 
@@ -119,8 +119,6 @@ export async function executeCdpCommand(
 				});
 			}),
 		]);
-
-		await client.detach().catch(() => undefined);
 
 		const redacted = redactObject(truncateOutput(result));
 		const redactedStr =
@@ -146,5 +144,7 @@ export async function executeCdpCommand(
 			path: "low_level",
 			sessionId: sid,
 		});
+	} finally {
+		await client?.detach().catch(() => undefined);
 	}
 }

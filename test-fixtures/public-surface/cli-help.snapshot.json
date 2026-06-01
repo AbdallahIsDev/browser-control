@@ -691,6 +691,19 @@
         },
         {
           "commandPath": [
+            "cdp"
+          ],
+          "description": "Execute raw page-scoped CDP under trusted policy",
+          "flags": [
+            "json",
+            "params",
+            "timeout-ms"
+          ],
+          "jsonSupport": true,
+          "syntax": "cdp <method> [--params='<json>'] [--timeout-ms=<ms>] [--json]"
+        },
+        {
+          "commandPath": [
             "task",
             "run"
           ],
@@ -1251,6 +1264,20 @@
           ],
           "jsonSupport": true,
           "syntax": "browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--json]"
+        },
+        {
+          "commandPath": [
+            "browser",
+            "cdp"
+          ],
+          "description": "Execute raw page-scoped CDP. Supports --tab-id.",
+          "flags": [
+            "json",
+            "params",
+            "timeout-ms"
+          ],
+          "jsonSupport": true,
+          "syntax": "browser cdp <method> [--params='<json>'] [--timeout-ms=<ms>] [--json]"
         },
         {
           "commandPath": [

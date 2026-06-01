@@ -433,12 +433,12 @@
     },
     {
       "category": "browser",
-      "description": "Execute a raw CDP command via passthrough. Requires explicit timeoutMs. For page interactions, use click/fill/snapshot instead.",
+      "description": "Execute a raw page-scoped CDP command via passthrough under trusted policy. Requires explicit timeoutMs. targetId/frameId are currently rejected; dangerous browser lifecycle, navigation, screenshot, cookie, security, storage, and target lifecycle methods are blocked. For normal page interactions, use click/fill/snapshot/state instead.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "frameId": {
-            "description": "CDP frame ID (optional).",
+            "description": "Rejected in the current page-scoped implementation. Omit to use the current page.",
             "type": "string"
           },
           "method": {
@@ -454,7 +454,7 @@
             "type": "string"
           },
           "targetId": {
-            "description": "CDP target ID (optional).",
+            "description": "Rejected in the current page-scoped implementation. Omit to use the current page.",
             "type": "string"
           },
           "timeoutMs": {

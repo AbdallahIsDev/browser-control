@@ -798,12 +798,12 @@ export function buildBrowserTools(api: BrowserControlAPI): McpTool[] {
 
     {
       name: "bc_browser_cdp",
-      description: "Execute a raw CDP command via passthrough. Requires explicit timeoutMs. For page interactions, use click/fill/snapshot instead.",
+      description: "Execute a raw page-scoped CDP command via passthrough under trusted policy. Requires explicit timeoutMs. targetId/frameId are currently rejected; dangerous browser lifecycle, navigation, screenshot, cookie, security, storage, and target lifecycle methods are blocked. For normal page interactions, use click/fill/snapshot/state instead.",
       inputSchema: buildSchema({
         method: { type: "string", description: "CDP method to call (e.g., 'Network.enable')." },
         params: { type: "object", description: "CDP method parameters." },
-        targetId: { type: "string", description: "CDP target ID (optional)." },
-        frameId: { type: "string", description: "CDP frame ID (optional)." },
+        targetId: { type: "string", description: "Rejected in the current page-scoped implementation. Omit to use the current page." },
+        frameId: { type: "string", description: "Rejected in the current page-scoped implementation. Omit to use the current page." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds." },
         tabId: { type: "string", description: "Optional tab ID." },
         sessionId: sessionIdSchema,

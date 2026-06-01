@@ -35,25 +35,25 @@ test("cdp_passthrough: rejects method without domain", async () => {
 	assert.ok(result.error?.includes("Invalid CDP method format"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Browser.close", async () => {
+test("cdp_passthrough: rejects dangerous method Browser.close", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Browser.close", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Target.closeTarget", async () => {
+test("cdp_passthrough: rejects dangerous method Target.closeTarget", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Target.closeTarget", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Security.disable", async () => {
+test("cdp_passthrough: rejects dangerous method Security.disable", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Security.disable", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
 test("cdp_passthrough: rejects non-serializable params", async () => {
@@ -132,46 +132,50 @@ test("cdp_passthrough: blocks domain-less method", async () => {
 	assert.ok(result.error?.includes("Invalid CDP method format"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Page.navigate", async () => {
+test("cdp_passthrough: rejects dangerous method Page.navigate", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Page.navigate", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Page.captureScreenshot", async () => {
+test("cdp_passthrough: rejects dangerous method Page.captureScreenshot", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Page.captureScreenshot", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Storage.clearDataForOrigin", async () => {
+test("cdp_passthrough: rejects dangerous method Storage.clearDataForOrigin", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Storage.clearDataForOrigin", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Network.setCookie", async () => {
+test("cdp_passthrough: rejects dangerous method Network.setCookie", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Network.setCookie", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Network.deleteCookies", async () => {
+test("cdp_passthrough: rejects dangerous method Network.deleteCookies", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Network.deleteCookies", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
-test("cdp_passthrough: rejects method not in allowlist Runtime.evaluate", async () => {
-	const mockPage = {} as any;
-	const result = await executeCdpCommand(mockPage, { method: "Runtime.evaluate", timeoutMs: 5000 });
-	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+test("cdp_passthrough: allows Runtime.evaluate after policy gate", async () => {
+	const mockPage = getMockPage({ result: { type: "number", value: 42 } });
+	const result = await executeCdpCommand(mockPage, {
+		method: "Runtime.evaluate",
+		params: { expression: "40 + 2", returnByValue: true },
+		timeoutMs: 5000,
+	});
+	assert.equal(result.success, true);
+	assert.deepEqual(result.data?.result, { result: { type: "number", value: 42 } });
 });
 
 test("cdp_passthrough: rejects negative timeout", async () => {
@@ -257,11 +261,11 @@ test("policy: trusted profile allows cdp_execute with audit", () => {
 
 // ── Additional allowlist tests ──────────────────────────────────────
 
-test("cdp_passthrough: rejects method not in allowlist Target.createTarget", async () => {
+test("cdp_passthrough: rejects dangerous method Target.createTarget", async () => {
 	const mockPage = {} as any;
 	const result = await executeCdpCommand(mockPage, { method: "Target.createTarget", timeoutMs: 5000 });
 	assert.equal(result.success, false);
-	assert.ok(result.error?.includes("not in the approved allowlist"));
+	assert.ok(result.error?.includes("blocked"));
 });
 
 test("cdp_passthrough: allows DOM.querySelector from allowlist", async () => {

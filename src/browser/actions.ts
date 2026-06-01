@@ -25,6 +25,7 @@ import {
 import { collectFailureDebugMetadata } from "../observability/action_debug";
 import { getGlobalConsoleCapture } from "../observability/console_capture";
 import { getGlobalNetworkCapture } from "../observability/network_capture";
+import { redactObject, redactString } from "../observability/redaction";
 import type { RecordedActionKind } from "../observability/recorder";
 import { getGlobalScreencastRecorder } from "../observability/screencast";
 import type {
@@ -55,6 +56,7 @@ import {
 	getSessionDownloadsDir,
 	getSessionRuntimeDir,
 } from "../shared/paths";
+import { getStateStorage } from "../state/index";
 import {
 	CredentialVault,
 	containsSecretRef,
@@ -94,6 +96,7 @@ const NAVIGATION_RETRY_INITIAL_DELAY_MS = 500;
 const OPEN_MANY_PARALLEL_LIMIT = 4;
 const BROWSER_LAUNCH_RECOVERY_GUIDANCE =
 	"Try 'bc browser launch --port=<other>' with another profile/provider, or 'bc browser open <url>' after fixing Chrome launch.";
+const CDP_AUDIT_DETAILS_MAX_CHARS = 20_000;
 
 function resolveDownloadRegistryMaxEntries(value?: number): number {
 	if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -104,6 +107,71 @@ function resolveDownloadRegistryMaxEntries(value?: number): number {
 		return fromEnv;
 	}
 	return DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES;
+}
+
+function truncateAuditValue(value: unknown): unknown {
+	const raw = JSON.stringify(value);
+	if (raw.length <= CDP_AUDIT_DETAILS_MAX_CHARS) return value;
+	return {
+		_truncated: true,
+		_length: raw.length,
+		_preview: raw.slice(0, 2000),
+	};
+}
+
+function normalizeAuditValue(value: unknown): unknown {
+	if (value === undefined) return undefined;
+	const redacted = redactObject(truncateAuditValue(value));
+	if (typeof redacted === "string") return redactString(redacted);
+	return redacted;
+}
+
+async function recordCdpAuditEvent(input: {
+	action: "cdp_execute_success" | "cdp_execute_denied" | "cdp_execute_failed";
+	sessionId: string;
+	method: string;
+	options: {
+		params?: Record<string, unknown>;
+		targetId?: string;
+		frameId?: string;
+		tabId?: string;
+		timeoutMs?: number;
+	};
+	policyDecision?: PolicyDecision;
+	result?: unknown;
+	error?: string;
+	tabId?: string;
+	success: boolean;
+}): Promise<void> {
+	const timestamp = new Date().toISOString();
+	const scope = input.options.targetId
+		? "target"
+		: input.options.frameId
+			? "frame"
+			: "page";
+	const details = {
+		timestamp,
+		sessionId: input.sessionId,
+		method: input.method,
+		scope,
+		tabId: input.tabId ?? input.options.tabId,
+		targetId: input.options.targetId,
+		frameId: input.options.frameId,
+		timeoutMs: input.options.timeoutMs,
+		params: normalizeAuditValue(input.options.params),
+		result: normalizeAuditValue(input.result),
+		error: input.error ? redactString(input.error) : undefined,
+		success: input.success,
+	};
+
+	await getStateStorage().saveAuditEvent({
+		id: `cdp-audit-${randomUUID()}`,
+		action: input.action,
+		sessionId: input.sessionId,
+		policyDecision: input.policyDecision,
+		details: JSON.stringify(details),
+		timestamp,
+	});
 }
 
 function isSafeHighlightStyleValue(value: string): boolean {
@@ -2204,8 +2272,22 @@ export class BrowserActions {
 			"cdp_execute",
 			{ method: options.method },
 		);
-		if (!isPolicyAllowed(policyEval))
+		if (!isPolicyAllowed(policyEval)) {
+			await recordCdpAuditEvent({
+				action: "cdp_execute_denied",
+				sessionId,
+				method: options.method,
+				options,
+				policyDecision: policyEval.policyDecision,
+				error: policyEval.error,
+				success: false,
+			}).catch((error: unknown) => {
+				log.warn("Failed to record CDP policy denial audit event", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
 			return policyEval as ActionResult<{ result: unknown; tabId: string }>;
+		}
 
 		try {
 			const pageOrErr = await this.getConnectedPageForAction<{ result: unknown; tabId: string }>(options.tabId);
@@ -2214,15 +2296,64 @@ export class BrowserActions {
 			const tabId = await this.getTabIdForPage(page, options.tabId ?? "0");
 			const { executeCdpCommand } = await import("./cdp_passthrough");
 			const result = await executeCdpCommand(page, options, sessionId);
-			if (!result.success || !result.data) return result as ActionResult<{ result: unknown; tabId: string }>;
+			if (!result.success || !result.data) {
+				await recordCdpAuditEvent({
+					action: "cdp_execute_denied",
+					sessionId,
+					method: options.method,
+					options,
+					tabId,
+					policyDecision: policyEval.policyDecision,
+					error: result.error,
+					success: false,
+				}).catch((error: unknown) => {
+					log.warn("Failed to record CDP denial audit event", {
+						error: error instanceof Error ? error.message : String(error),
+					});
+				});
+				return failureResult(result.error ?? "CDP command failed", {
+					path: result.path ?? "low_level",
+					sessionId,
+					policyDecision: policyEval.policyDecision,
+					risk: policyEval.risk,
+					auditId: policyEval.auditId,
+				}) as ActionResult<{ result: unknown; tabId: string }>;
+			}
+			await recordCdpAuditEvent({
+				action: "cdp_execute_success",
+				sessionId,
+				method: options.method,
+				options,
+				tabId,
+				policyDecision: policyEval.policyDecision,
+				result: result.data.result,
+				success: true,
+			}).catch((error: unknown) => {
+				log.warn("Failed to record CDP success audit event", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			});
 			return successResult({ ...result.data, tabId }, {
 				path: result.path ?? "low_level",
 				sessionId,
-				policyDecision: result.policyDecision,
-				risk: result.risk,
-				auditId: result.auditId,
+				policyDecision: policyEval.policyDecision,
+				risk: policyEval.risk,
+				auditId: policyEval.auditId,
 			});
 		} catch (error: unknown) {
+			await recordCdpAuditEvent({
+				action: "cdp_execute_failed",
+				sessionId,
+				method: options.method,
+				options,
+				policyDecision: policyEval.policyDecision,
+				error: error instanceof Error ? error.message : String(error),
+				success: false,
+			}).catch((auditError: unknown) => {
+				log.warn("Failed to record CDP failure audit event", {
+					error: auditError instanceof Error ? auditError.message : String(auditError),
+				});
+			});
 			return this.failureWithDebug(
 				`CDP action failed: ${error instanceof Error ? error.message : String(error)}`,
 				error,

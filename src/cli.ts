@@ -301,6 +301,7 @@ export const COMMANDER_OPTION_SPECS: CommanderOptionSpec[] = [
 	{ name: "fullPage", canonicalName: "full-page", arity: "boolean" },
 	{ name: "outputPath", canonicalName: "output-path", arity: "value" },
 	{ name: "tabId", canonicalName: "tab-id", arity: "value" },
+	{ name: "timeout-ms", canonicalName: "timeout", arity: "value" },
 	{ name: "timeoutMs", canonicalName: "timeout", arity: "value" },
 ];
 
@@ -1068,6 +1069,7 @@ Browser Shortcuts (compatibility):
                                                                      Return compact browser state
   capture-many --tab-ids=<ids>|--urls='<json>' [--json]             Capture multiple tabs
   act <action> [target] [text] [--text=<text>] [--url=<url>] [--json] Run one composite browser action
+  cdp <method> [--params='<json>'] [--timeout-ms=<ms>] [--json]     Execute raw page-scoped CDP under trusted policy
   task run --steps='<json>'|--steps-file=<path> [--json]            Run multiple browser/fs-output steps
   tab list [--json]                                                 List browser tabs
   tab switch <id> [--json]                                          Switch to a browser tab
@@ -1122,6 +1124,8 @@ Browser Commands:
   browser capture-many --tab-ids=<ids>|--urls='<json>' [--json]      Capture multiple tabs
   browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--json]
                                                                       Run one composite browser action
+  browser cdp <method> [--params='<json>'] [--timeout-ms=<ms>] [--json]
+                                                                      Execute raw page-scoped CDP. Supports --tab-id.
   browser task run --steps='<json>'|--steps-file=<path> [--continue-on-failure] [--json] Run multiple browser/fs-output steps
   browser tab list [--json]                                          List browser tabs
   browser tab switch <id> [--json]                                   Switch to a browser tab
@@ -3494,6 +3498,44 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			break;
 		}
 
+		case "cdp": {
+			const method = positional[0];
+			if (!method) {
+				console.error("Error: CDP method is required (for example: Runtime.evaluate)");
+				throw commandFailed();
+			}
+			try {
+				const params = flags.params
+					? parseJsonFlag<Record<string, unknown>>(flags.params, "params")
+					: undefined;
+				if (params !== undefined && (params === null || Array.isArray(params) || typeof params !== "object")) {
+					console.error("Error: --params must be a JSON object");
+					throw commandFailed();
+				}
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeout ? Number(flags.timeout) : 5000;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.cdp({
+						method,
+						params,
+						timeoutMs,
+						tabId: flags.tab ?? flags["tab-id"],
+					}),
+					timeoutMs,
+					"browser cdp",
+				);
+				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
+				await finishTimedCliResult(timedOut);
+				if (!result.success) throw commandFailed();
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw commandFailed();
+			}
+			break;
+		}
+
 		// Section 31: Multi-step task runner
 		case "task": {
 			const taskAction = positional[0];
@@ -3767,6 +3809,7 @@ export async function runCli(argv = process.argv): Promise<void> {
 			case "capture":
 			case "capture-many":
 			case "act":
+			case "cdp":
 			case "highlight":
 			case "drop":
 			case "close":

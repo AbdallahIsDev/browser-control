@@ -38,6 +38,7 @@ type MockPageCalls = {
 		pattern: string | RegExp;
 		handler: (route: unknown) => Promise<void>;
 	}>;
+	cdp: Array<{ method: string; params?: Record<string, unknown> }>;
 	setWindowBounds: number;
 	activateTarget: number;
 	screenshot: number;
@@ -65,6 +66,7 @@ type MockPage = {
 	calls: MockPageCalls;
 	hasBrowserWindow?: boolean;
 	windowState?: "normal" | "minimized" | "maximized" | "fullscreen";
+	cdpResponses?: Record<string, unknown>;
 	targetId: string;
 	windowId?: number;
 	context?: () => MockBrowserContext;
@@ -338,6 +340,7 @@ function createMockBrowserContext(
 			off: () => undefined,
 			detach: async () => undefined,
 			send: async (method: string, _params?: Record<string, unknown>) => {
+				page.calls.cdp.push({ method, params: _params });
 				if (method === "Target.getTargetInfo") {
 					return { targetInfo: { targetId: page.targetId ?? page.url() } };
 				}
@@ -357,6 +360,9 @@ function createMockBrowserContext(
 				if (method === "Target.activateTarget") {
 					page.calls.activateTarget += 1;
 					return {};
+				}
+				if (Object.prototype.hasOwnProperty.call(page.cdpResponses ?? {}, method)) {
+					return page.cdpResponses?.[method];
 				}
 				return {};
 			},
@@ -406,6 +412,7 @@ function createMockPage(
 		windowState?: "normal" | "minimized" | "maximized" | "fullscreen";
 		gotoBlocker?: Promise<void>;
 		gotoErrors?: Error[];
+		cdpResponses?: Record<string, unknown>;
 	} = {},
 ): MockPage {
 	const calls = {
@@ -414,6 +421,7 @@ function createMockPage(
 		goto: [] as string[],
 		keyboardInsertText: [] as string[],
 		keyboardType: [] as string[],
+		cdp: [] as Array<{ method: string; params?: Record<string, unknown> }>,
 		routes: [] as Array<{
 			pattern: string | RegExp;
 			handler: (route: unknown) => Promise<void>;
@@ -428,6 +436,7 @@ function createMockPage(
 		calls,
 		hasBrowserWindow: options.hasBrowserWindow,
 		windowState: options.windowState,
+		cdpResponses: options.cdpResponses,
 		targetId: `target-${Math.random().toString(36).slice(2)}`,
 		bringToFront: async () => {
 			calls.bringToFront += 1;
@@ -557,6 +566,90 @@ describe("BrowserActions", () => {
 		it("uses global ref store when none provided", () => {
 			const actions = new BrowserActions({ sessionManager });
 			assert.ok(actions);
+		});
+	});
+
+	describe("cdp", () => {
+		it("allows trusted Runtime.evaluate and records a redacted success audit event", async () => {
+			const page = createMockPage("https://example.com", {
+				cdpResponses: {
+					"Runtime.evaluate": { result: { type: "number", value: 42 } },
+				},
+			});
+			const manager = createConnectedBrowserManager([page]);
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("trusted-cdp", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.cdp({
+					method: "Runtime.evaluate",
+					params: { expression: "40 + 2", returnByValue: true },
+					timeoutMs: 5000,
+				});
+
+				assert.equal(result.success, true);
+				assert.equal(result.policyDecision, "allow_with_audit");
+				assert.deepEqual(result.data?.result, {
+					result: { type: "number", value: 42 },
+				});
+				assert.equal(page.calls.cdp.some((entry) => entry.method === "Runtime.evaluate"), true);
+				const auditEvents = await getStateStorage().listAuditEvents(10);
+				assert.equal(auditEvents[0]?.action, "cdp_execute_success");
+				assert.equal(auditEvents[0]?.sessionId, isolatedSessionManager.getActiveSession()?.id);
+				const details = JSON.parse(auditEvents[0]?.details ?? "{}") as Record<string, unknown>;
+				assert.equal(details.method, "Runtime.evaluate");
+				assert.equal(details.scope, "page");
+				assert.equal(details.success, true);
+				assert.equal(typeof details.timestamp, "string");
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("blocks dangerous trusted CDP methods before sending and records denial audit", async () => {
+			const page = createMockPage("https://example.com");
+			const manager = createConnectedBrowserManager([page]);
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			try {
+				const isolatedSessionManager = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await isolatedSessionManager.create("trusted-cdp-deny", {
+					policyProfile: "trusted",
+					policyProfileEscalationConfirmed: true,
+				});
+				const isolatedActions = new BrowserActions({
+					sessionManager: isolatedSessionManager,
+				});
+
+				const result = await isolatedActions.cdp({
+					method: "Browser.close",
+					timeoutMs: 5000,
+				});
+
+				assert.equal(result.success, false);
+				assert.equal(result.policyDecision, "allow_with_audit");
+				assert.match(result.error ?? "", /blocked/);
+				assert.equal(page.calls.cdp.some((entry) => entry.method === "Browser.close"), false);
+				const auditEvents = await getStateStorage().listAuditEvents(10);
+				assert.equal(auditEvents[0]?.action, "cdp_execute_denied");
+				const details = JSON.parse(auditEvents[0]?.details ?? "{}") as Record<string, unknown>;
+				assert.equal(details.method, "Browser.close");
+				assert.equal(details.success, false);
+			} finally {
+				isolatedStore.close();
+			}
 		});
 	});
 
