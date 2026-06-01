@@ -147,6 +147,10 @@ export const sessionIdSchema = {
   description: "Browser Control session ID. If omitted, uses the active session.",
 } as const;
 
+const hiddenCommonParameters: Record<string, SchemaProperty> = {
+  sessionId: sessionIdSchema,
+};
+
 export function resolveMcpSessionId(
   api: BrowserControlAPI,
   params: Record<string, unknown>,
@@ -243,7 +247,10 @@ export function validateToolParams(toolName: string, schema: JSONSchema, params:
   const allowed = Object.keys(schema.properties);
 
   for (const key of Object.keys(params)) {
-    if (!Object.prototype.hasOwnProperty.call(schema.properties, key)) {
+    if (
+      !Object.prototype.hasOwnProperty.call(schema.properties, key) &&
+      !Object.prototype.hasOwnProperty.call(hiddenCommonParameters, key)
+    ) {
       return `Unknown parameter '${key}' for tool '${toolName}'. Allowed: ${allowed.join(", ")}.`;
     }
   }
@@ -256,7 +263,7 @@ export function validateToolParams(toolName: string, schema: JSONSchema, params:
 
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) continue;
-    const property = schema.properties[key];
+    const property = schema.properties[key] ?? hiddenCommonParameters[key];
     if (!property) continue;
 
     if (property.enum && !property.enum.includes(String(value))) {

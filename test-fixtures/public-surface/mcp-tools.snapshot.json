@@ -131,10 +131,6 @@
             "description": "Include screenshot for capture/state actions. Default: false.",
             "type": "boolean"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "snapshot": {
             "description": "Include snapshot for capture/captureMany/state actions. Default: true for capture/captureMany, false for state/capture-on-success.",
             "type": "boolean"
@@ -259,10 +255,6 @@
             "description": "CDP port number.",
             "type": "number"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "targetType": {
             "description": "Target type hint: chrome, chromium, msedge, electron, or unknown.",
             "type": "string"
@@ -319,10 +311,6 @@
             "default": false,
             "description": "Include a screenshot.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "snapshot": {
             "default": true,
@@ -385,10 +373,6 @@
             "default": false,
             "description": "Include screenshots.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "snapshot": {
             "default": true,
@@ -456,10 +440,6 @@
             "description": "CDP method parameters.",
             "type": "object"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -523,10 +503,6 @@
             "description": "Force click without actionability checks.",
             "type": "boolean"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -583,12 +559,7 @@
       "description": "Close the browser automation lifecycle. Managed Chrome is terminated; attached Chrome is detached without killing the user's browser.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -634,10 +605,6 @@
           "bundleId": {
             "description": "The debug bundle ID to retrieve.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -681,12 +648,7 @@
       "description": "Get captured browser console entries for a session. Returns log, warn, error, info, and debug entries with timestamps and source locations.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -728,12 +690,7 @@
       "description": "Get captured browser network entries for a session. Returns request failures and HTTP errors with URL, method, status, and duration.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -780,10 +737,6 @@
             "default": 9222,
             "description": "CDP port to check. Default: 9222.",
             "type": "number"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -827,12 +780,7 @@
       "description": "Detach from the current browser connection without closing attached browsers. For managed browsers, this is a no-op (use close instead). Returns structured detach result.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -895,10 +843,6 @@
             ],
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -951,12 +895,7 @@
       "description": "List recent downloads for the current session. Returns structured download information including filename, path, size, and status.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -1006,10 +945,6 @@
           "files": {
             "description": "Local file paths to drop.",
             "type": "array"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "tabId": {
             "description": "Optional tab ID.",
@@ -1068,10 +1003,6 @@
             "default": false,
             "description": "Press Tab after filling to move to the next field.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "tabId": {
             "description": "Optional tab ID.",
@@ -1144,10 +1075,6 @@
             "description": "Array of fields to fill. Each must have { target, text }.",
             "type": "array"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -1214,10 +1141,6 @@
             "default": false,
             "description": "Allow recursive directory deletion.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -1277,10 +1200,6 @@
             "default": false,
             "description": "Recurse into subdirectories.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -1327,10 +1246,6 @@
         "properties": {
           "dst": {
             "description": "Destination path.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "src": {
@@ -1390,10 +1305,6 @@
           "path": {
             "description": "File path to read.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -1442,10 +1353,6 @@
         "properties": {
           "path": {
             "description": "Path to stat.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -1505,10 +1412,6 @@
           "path": {
             "description": "File path to write.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -1563,10 +1466,6 @@
           "filename": {
             "description": "Filename relative to the active session runtime directory.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -1614,10 +1513,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -1678,10 +1573,6 @@
           "input": {
             "description": "Input parameters for the helper",
             "type": "object"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -1734,10 +1625,6 @@
           },
           "failureType": {
             "description": "Failure type to match",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "taskTag": {
@@ -1811,10 +1698,6 @@
             "description": "Helper purpose description",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "site": {
             "description": "Site name",
             "type": "string"
@@ -1881,12 +1764,7 @@
       "description": "List registered self-healing helpers.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -1931,10 +1809,6 @@
         "properties": {
           "helperId": {
             "description": "Helper ID to rollback",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "version": {
@@ -1990,10 +1864,6 @@
           "helperId": {
             "description": "Helper ID to validate",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -2047,10 +1917,6 @@
           "persist": {
             "description": "Whether to persist the highlight (default: false).",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "style": {
             "description": "Custom CSS for highlight overlay.",
@@ -2107,10 +1973,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -2183,10 +2045,6 @@
           "provider": {
             "description": "Provider to use for launch (e.g., 'local', 'browserless'). Default: active provider.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -2234,10 +2092,6 @@
           "all": {
             "description": "List all discovered browsers including those not currently attached.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -2282,10 +2136,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -2349,12 +2199,7 @@
       "description": "List recent blocked/aborted network request evidence for a session.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -2396,12 +2241,7 @@
       "description": "List privacy network rules, including user rules and built-in tracker rules.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -2444,10 +2284,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "url": {
             "description": "URL to navigate to.",
             "type": "string"
@@ -2508,10 +2344,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "urls": {
             "description": "Array of URLs or { url, label, waitUntil } objects to open.",
             "type": "array"
@@ -2564,10 +2396,6 @@
           "name": {
             "description": "Installed package name to evaluate.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -2616,10 +2444,6 @@
         "properties": {
           "name": {
             "description": "Optional installed package name to filter evaluation history.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2672,10 +2496,6 @@
           "permissionRef": {
             "description": "Permission kind or numeric permission index to grant.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -2726,10 +2546,6 @@
           "name": {
             "description": "Installed package name.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -2776,10 +2592,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "source": {
             "description": "Local package directory path to install.",
             "type": "string"
@@ -2828,12 +2640,7 @@
       "description": "List installed automation packages",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -2878,10 +2685,6 @@
         "properties": {
           "name": {
             "description": "Installed package name to remove.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -2939,10 +2742,6 @@
           },
           "reviewedBy": {
             "description": "Reviewer identifier recorded in review history.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "status": {
@@ -3005,10 +2804,6 @@
           "name": {
             "description": "Installed package name.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -3057,10 +2852,6 @@
         "properties": {
           "name": {
             "description": "Installed package name.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "workflowNameOrId": {
@@ -3116,10 +2907,6 @@
             "description": "Installed package name to update.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "source": {
             "description": "Optional local package directory path to update from.",
             "type": "string"
@@ -3169,10 +2956,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -3238,10 +3021,6 @@
             "description": "Key to press: Enter, Tab, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Escape, Backspace, etc.",
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -3290,12 +3069,7 @@
       "description": "List supported browser provider types, setup requirements, capabilities, and risk labels.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -3341,10 +3115,6 @@
           "name": {
             "description": "Optional provider name to check. Omit to check all providers.",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [],
@@ -3388,12 +3158,7 @@
       "description": "List available browser providers and the active provider.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -3438,10 +3203,6 @@
         "properties": {
           "name": {
             "description": "Provider name to activate (local, custom, browserless).",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -3514,10 +3275,6 @@
             ],
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "showActions": {
             "description": "Display visible action labels during recording.",
             "type": "boolean"
@@ -3564,12 +3321,7 @@
       "description": "Get the current screencast recording status.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -3611,12 +3363,7 @@
       "description": "Stop the current screencast recording and save the action timeline receipt.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -3674,10 +3421,6 @@
           },
           "refs": {
             "description": "Comma-separated list of specific refs to annotate (if annotate is true). If omitted, annotates all interactive elements.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "tabId": {
@@ -3746,10 +3489,6 @@
             ],
             "type": "string"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -3798,12 +3537,7 @@
       "description": "List all registered local services with their names, ports, protocols, and paths.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -3848,10 +3582,6 @@
         "properties": {
           "name": {
             "description": "Service name to resolve (e.g., 'trading-dashboard' or 'bc://trading-dashboard').",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -4052,12 +3782,7 @@
       "description": "Get the status of the active session or a specific session.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -4106,10 +3831,6 @@
           },
           "rootSelector": {
             "description": "Optional CSS selector to scope the snapshot to a subtree.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "tabId": {
@@ -4178,10 +3899,6 @@
             "default": false,
             "description": "Include screenshot. Default: false.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "snapshot": {
             "default": false,
@@ -4277,10 +3994,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID or index. If omitted, closes the active tab.",
             "type": "string"
@@ -4327,12 +4040,7 @@
       "description": "List all browser tabs with their IDs, URLs, and titles.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -4375,10 +4083,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Browser tab ID from tab list, state, or open results.",
             "type": "string"
@@ -4432,10 +4136,6 @@
             "default": false,
             "description": "Continue to next step if one fails. Default: false.",
             "type": "boolean"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           },
           "steps": {
             "description": "Array of browser task step objects. Each step must match the fields for its action.",
@@ -4855,10 +4555,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
@@ -4910,10 +4606,6 @@
         "properties": {
           "command": {
             "description": "Command to execute.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "terminalSessionId": {
@@ -4969,10 +4661,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
@@ -5021,12 +4709,7 @@
       "description": "List all active terminal sessions with their IDs, shells, working directories, and statuses.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -5075,10 +4758,6 @@
           },
           "name": {
             "description": "Human-readable name for the terminal session.",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "shell": {
@@ -5132,10 +4811,6 @@
             "description": "Maximum bytes to read.",
             "type": "number"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
@@ -5185,10 +4860,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID to resume from persisted state.",
             "type": "string"
@@ -5238,10 +4909,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID from bc_terminal_open. If omitted, snapshots all terminal sessions.",
             "type": "string"
@@ -5289,10 +4956,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID to inspect.",
             "type": "string"
@@ -5342,10 +5005,6 @@
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "terminalSessionId": {
             "description": "Terminal session ID from bc_terminal_open.",
             "type": "string"
@@ -5405,10 +5064,6 @@
             "description": "Delay between keystrokes in milliseconds. Default: 0.",
             "type": "number"
           },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          },
           "tabId": {
             "description": "Optional tab ID.",
             "type": "string"
@@ -5461,12 +5116,7 @@
       "description": "List credential vault entries without secret values. Raw secrets are never returned.",
       "inputSchema": {
         "additionalProperties": false,
-        "properties": {
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
-          }
-        },
+        "properties": {},
         "required": [],
         "type": "object"
       },
@@ -5520,10 +5170,6 @@
           "runId": {
             "description": "Workflow run ID to approve",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -5573,10 +5219,6 @@
         "properties": {
           "runId": {
             "description": "Workflow run ID to cancel",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -5630,10 +5272,6 @@
           },
           "runId": {
             "description": "Workflow run ID",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           },
           "value": {
@@ -5700,10 +5338,6 @@
           "runId": {
             "description": "Workflow run ID",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -5752,10 +5386,6 @@
         "properties": {
           "runId": {
             "description": "Workflow run ID to resume",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },
@@ -5806,10 +5436,6 @@
           "graph": {
             "description": "JSON-encoded workflow graph definition",
             "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
-            "type": "string"
           }
         },
         "required": [
@@ -5858,10 +5484,6 @@
         "properties": {
           "runId": {
             "description": "Workflow run ID",
-            "type": "string"
-          },
-          "sessionId": {
-            "description": "Browser Control session ID. If omitted, uses the active session.",
             "type": "string"
           }
         },

@@ -32,6 +32,10 @@ const log = logger.withComponent("mcp_server");
 
 const SERVER_NAME = "browser-control";
 const SERVER_VERSION = readPackageVersion();
+const SERVER_INSTRUCTIONS = [
+  "Use bc_session_select to change the active Browser Control session.",
+  "All tools also accept an optional hidden string sessionId override; omitted sessionId uses the active session.",
+].join(" ");
 
 type EventTargetLike = {
   once(event: string, listener: () => void): unknown;
@@ -192,6 +196,7 @@ export function createMcpServer(api?: BrowserControlAPI): Server {
       capabilities: {
         tools: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     },
   );
 

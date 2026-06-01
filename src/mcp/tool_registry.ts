@@ -372,6 +372,23 @@ function resolveToolRegistryMode(options: ToolRegistryOptions): "full" | "lite" 
   return options.mode ?? (process.env.BROWSER_CONTROL_MCP_MODE === "lite" ? "lite" : "full");
 }
 
+function hideCommonSessionIdParameter(tool: McpTool): McpTool {
+  if (!Object.prototype.hasOwnProperty.call(tool.inputSchema.properties, "sessionId")) {
+    return tool;
+  }
+
+  const { sessionId: _sessionId, ...properties } = tool.inputSchema.properties;
+  const required = tool.inputSchema.required?.filter((name) => name !== "sessionId");
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties,
+      ...(required ? { required } : {}),
+    },
+  };
+}
+
 export function createLazyToolRegistry(
   api: BrowserControlAPI,
   options: ToolRegistryOptions = {},
@@ -387,9 +404,9 @@ export function createLazyToolRegistry(
     const cached = categoryCache.get(category.name);
     if (cached) return cached;
 
-    const tools = category.build(api).filter((tool) =>
-      mode === "full" || LITE_TOOL_NAMES.has(tool.name),
-    );
+    const tools = category.build(api)
+      .filter((tool) => mode === "full" || LITE_TOOL_NAMES.has(tool.name))
+      .map(hideCommonSessionIdParameter);
     categoryCache.set(category.name, tools);
     for (const tool of tools) {
       toolCache.set(tool.name, tool);

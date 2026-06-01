@@ -5,7 +5,7 @@ import {
   createLazyToolRegistry,
   getToolCategories,
 } from "../../../src/mcp/tool_registry";
-import { actionResultToMcpResult, mcpErrorResult, sessionIdSchema, validateToolParams } from "../../../src/mcp/types";
+import { actionResultToMcpResult, mcpErrorResult, validateToolParams } from "../../../src/mcp/types";
 import { createBrowserControl, type BrowserControlAPI } from "../../../src/browser_control";
 import { MemoryStore } from "../../../src/memory_store";
 import * as os from "node:os";
@@ -1063,51 +1063,12 @@ describe("MCP Tool Registry", () => {
   });
 
   describe("schema shape", () => {
-    it("session-aware tools include sessionId in schema", () => {
+    it("advertised tool schemas hide the common sessionId override", () => {
       const tools = buildToolRegistry(api);
-      const browserToolNames = new Set([
-        "bc_open",
-        "bc_open_many",
-        "bc_navigate",
-        "bc_capture",
-        "bc_capture_many",
-        "bc_snapshot",
-        "bc_click",
-        "bc_fill",
-        "bc_fill_many",
-        "bc_hover",
-        "bc_type",
-        "bc_paste",
-        "bc_press",
-        "bc_scroll",
-        "bc_screenshot",
-        "bc_highlight",
-        "bc_generate_locator",
-        "bc_tab_list",
-        "bc_tab_switch",
-        "bc_tab_close",
-        "bc_close",
-        "bc_screencast_start",
-        "bc_screencast_stop",
-        "bc_screencast_status",
-        "bc_list",
-        "bc_attach",
-        "bc_detach",
-        "bc_launch",
-        "bc_drop",
-        "bc_downloads_list",
-        "bc_dialog",
-        "bc_cdp",
-        "bc_state",
-        "bc_act",
-      ]);
-      const browserTools = tools.filter((t) => browserToolNames.has(t.name));
 
-      for (const tool of browserTools) {
-        assert.ok(
-          "sessionId" in tool.inputSchema.properties,
-          `Tool ${tool.name} should have sessionId in schema`,
-        );
+      for (const tool of tools) {
+        assert.ok(!("sessionId" in tool.inputSchema.properties), `${tool.name} should not advertise common sessionId`);
+        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${tool.name} should not require common sessionId`);
       }
     });
 
@@ -1159,7 +1120,7 @@ describe("MCP Tool Registry", () => {
       assert.ok("response" in tool.inputSchema.properties, "bc_dialog should have response property");
       assert.ok("text" in tool.inputSchema.properties, "bc_dialog should have text property");
       assert.ok("tabId" in tool.inputSchema.properties, "bc_dialog should have tabId property");
-      assert.ok("sessionId" in tool.inputSchema.properties, "bc_dialog should have sessionId property");
+      assert.ok(!("sessionId" in tool.inputSchema.properties), "bc_dialog should hide common sessionId");
     });
 
     it("bc_cdp schema requires method/timeoutMs and has params/targetId/frameId", () => {
@@ -1172,7 +1133,7 @@ describe("MCP Tool Registry", () => {
       assert.ok("targetId" in tool.inputSchema.properties, "bc_cdp should have targetId property");
       assert.ok("frameId" in tool.inputSchema.properties, "bc_cdp should have frameId property");
       assert.ok("tabId" in tool.inputSchema.properties, "bc_cdp should have tabId property");
-      assert.ok("sessionId" in tool.inputSchema.properties, "bc_cdp should have sessionId property");
+      assert.ok(!("sessionId" in tool.inputSchema.properties), "bc_cdp should hide common sessionId");
     });
 
     it("bc_attach schema exposes one CDP endpoint parameter", () => {
@@ -1227,7 +1188,7 @@ describe("MCP Tool Registry", () => {
       const terminalTools = tools.filter((tool) => tool.name.startsWith("bc_terminal_"));
 
       for (const tool of terminalTools) {
-        assert.ok("sessionId" in tool.inputSchema.properties, `${tool.name} should accept Browser Control sessionId`);
+        assert.ok(!("sessionId" in tool.inputSchema.properties), `${tool.name} should hide Browser Control sessionId`);
         assert.ok(!("browserControlSessionId" in tool.inputSchema.properties), `${tool.name} should not expose browserControlSessionId`);
       }
 
@@ -1247,16 +1208,21 @@ describe("MCP Tool Registry", () => {
       }
     });
 
-    it("all MCP sessionId inputs use the shared optional schema without defaults", () => {
+    it("hidden sessionId remains accepted by validation without appearing in allowed parameters", () => {
       const tools = buildToolRegistry(api);
-      for (const tool of tools) {
-        const property = tool.inputSchema.properties.sessionId;
-        if (!property) continue;
+      const scrollTool = tools.find((t) => t.name === "bc_scroll")!;
 
-        assert.deepEqual(property, sessionIdSchema, `${tool.name} should reuse shared sessionId schema`);
-        assert.equal((property as { default?: unknown }).default, undefined, `${tool.name} should not advertise a sessionId default`);
-        assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${tool.name} should not require sessionId`);
-      }
+      assert.equal(
+        validateToolParams(scrollTool.name, scrollTool.inputSchema, { direction: "down", sessionId: "session-a" }, scrollTool.validation),
+        null,
+      );
+
+      const badSession = validateToolParams(scrollTool.name, scrollTool.inputSchema, { direction: "down", sessionId: 123 }, scrollTool.validation);
+      assert.match(badSession ?? "", /expected string, got number/);
+
+      const unknown = validateToolParams(scrollTool.name, scrollTool.inputSchema, { direction: "down", expression: "window.scrollBy(0, 500)" }, scrollTool.validation);
+      assert.match(unknown ?? "", /Allowed: direction, amount, tabId/);
+      assert.doesNotMatch(unknown ?? "", /sessionId/);
     });
 
     it("bc_act validation rejects action-specific missing parameters before handler execution", () => {
@@ -1305,7 +1271,7 @@ describe("MCP Tool Registry", () => {
 
       assert.ok(packageTools.length > 0, "Expected package tools in registry");
       for (const tool of packageTools) {
-        assert.ok("sessionId" in tool.inputSchema.properties, `${tool.name} should include sessionId`);
+        assert.ok(!("sessionId" in tool.inputSchema.properties), `${tool.name} should hide common sessionId`);
         assert.ok(!tool.inputSchema.required?.includes("sessionId"), `${tool.name} should not require sessionId`);
         for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
           assert.ok(schema.description, `${tool.name}.${name} should have a description`);

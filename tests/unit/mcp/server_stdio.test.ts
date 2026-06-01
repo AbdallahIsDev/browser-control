@@ -166,6 +166,8 @@ describe("MCP stdio server", () => {
 
     assert.ok(result.tools.some((tool) => tool.name === "bc_open"));
     assert.ok(result.tools.some((tool) => tool.name === "bc_session_status"));
+    assert.match(harness.client.getInstructions() ?? "", /hidden string sessionId override/);
+    assert.ok(result.tools.every((tool) => !("sessionId" in (tool.inputSchema.properties ?? {}))));
   });
 
   it("filters tools/list by the active safe policy profile", async () => {
@@ -213,7 +215,8 @@ describe("MCP stdio server", () => {
     }) as ToolCallResult;
     assert.equal(unknown.isError, true);
     assert.match(unknown.content[0].text, /Unknown parameter 'expression' for tool 'bc_scroll'/);
-    assert.match(unknown.content[0].text, /Allowed: direction, amount, tabId, sessionId/);
+    assert.match(unknown.content[0].text, /Allowed: direction, amount, tabId/);
+    assert.doesNotMatch(unknown.content[0].text, /sessionId/);
 
     const missing = await harness.client.callTool({
       name: "bc_scroll",
