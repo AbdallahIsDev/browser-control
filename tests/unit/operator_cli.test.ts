@@ -868,6 +868,37 @@ test("bc --help keeps promoted browser command guidance current", () => {
 	}
 });
 
+test("bc --help documents security-sensitive operator commands", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.match(result.stdout, /vault list\|set\|delete\|grants/);
+		assert.match(result.stdout, /Manage local credential vault secrets and grants/);
+		assert.match(result.stdout, /captcha test \[--json\]/);
+		assert.match(result.stdout, /network rules list\|add\|remove/);
+		assert.match(result.stdout, /network proxy list\|add\|remove\|test/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("removed term view alias fails before daemon work starts", () => {
 	const home = makeHome();
 	try {

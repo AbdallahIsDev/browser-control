@@ -316,6 +316,30 @@
         },
         {
           "commandPath": [
+            "vault",
+            "list|set|delete|grants"
+          ],
+          "description": "Manage local credential vault secrets and grants",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "vault list|set|delete|grants [--json]"
+        },
+        {
+          "commandPath": [
+            "captcha",
+            "test"
+          ],
+          "description": "Check CAPTCHA provider configuration",
+          "flags": [
+            "json"
+          ],
+          "jsonSupport": true,
+          "syntax": "captcha test [--json]"
+        },
+        {
+          "commandPath": [
             "network",
             "rules",
             "list|add|remove"

@@ -775,6 +775,8 @@ Operator:
                                                                       Create/update user config
   config list|get|set|env                                            Inspect or update effective config
   status [--json]                                                    Show daemon, broker, sessions, tasks, and health
+  vault list|set|delete|grants [--json]                              Manage local credential vault secrets and grants
+  captcha test [--json]                                               Check CAPTCHA provider configuration
   network rules list|add|remove [--json]                             Manage network privacy rules
   network proxy list|add|remove|test [--json]                        Manage outbound proxy inventory
   data doctor [--cleanup|--purge-profiles] | cleanup [--stale|--purge-profiles] | export [--json]
