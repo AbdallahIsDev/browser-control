@@ -873,6 +873,15 @@ test("bc --help keeps promoted browser command guidance current", () => {
 		assert.match(result.stdout, /Browser Namespace \(compatibility\):/);
 		assert.doesNotMatch(result.stdout, /term view <sessionId>/);
 		assert.doesNotMatch(result.stdout, /Shortcut for:/);
+		assert.doesNotMatch(
+			result.stdout,
+			/^  capture \[--snapshot\]/m,
+			"deprecated capture command must not appear in primary browser commands",
+		);
+		assert.match(
+			result.stdout,
+			/browser capture \[--snapshot\] \[--screenshot\] \[--json\]\s+Deprecated alias for browser state/,
+		);
 		for (const command of [
 			"open [url]",
 			"snapshot",

@@ -1098,8 +1098,8 @@ Browser Commands:
   navigate <url> [--tab=<id>] [--json]                              Navigate current or selected tab
   open-many --urls='<json>' [--json]                                Open multiple tabs
   snapshot [--boxes] [--json]                                       Take accessibility snapshot
-  state [--snapshot] [--screenshot] [--downloads] [--json]          Return compact browser state
-  capture [--snapshot] [--screenshot] [--json]                      Capture current tab state
+  state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]
+                                                                     Return compact browser state
   capture-many --tab-ids=<ids>|--urls='<json>' [--json]             Capture multiple tabs
   act <action> [target] [text] [--text=<text>] [--url=<url>] [--json] Run one composite browser action
   task run --steps='<json>'|--steps-file=<path> [--json]            Run multiple browser/fs-output steps
@@ -1150,8 +1150,9 @@ Browser Namespace (compatibility):
   browser navigate <url> [--tab=<id>] [--json]                       Navigate current or selected tab
   browser open-many --urls='<json>' [--json]                         Open multiple tabs
   browser snapshot [--boxes] [--json]                                Take accessibility snapshot
-  browser state [--snapshot] [--screenshot] [--downloads] [--json]   Return compact browser state
-  browser capture [--snapshot] [--screenshot] [--json]               Capture current tab state
+  browser state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]
+                                                                      Return compact browser state
+  browser capture [--snapshot] [--screenshot] [--json]               Deprecated alias for browser state
   browser capture-many --tab-ids=<ids>|--urls='<json>' [--json]      Capture multiple tabs
   browser act <action> [target] [text] [--text=<text>] [--url=<url>] [--timeout=<ms>] [--json]
                                                                       Run one composite browser action
@@ -3340,31 +3341,6 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			break;
 		}
 
-		case "capture": {
-			try {
-				const { createBrowserControl } = await import("./browser_control");
-				const bc = createBrowserControl();
-				const timeoutMs = flags.timeout;
-				const { result, timedOut } = await withCliTimeout(
-					bc.browser.act({
-						action: "capture",
-						tabId: flags.tab ?? flags["tab-id"],
-						snapshot: flags.snapshot ? flags.snapshot !== "false" : undefined,
-						screenshot: flags.screenshot === "true",
-					}),
-					timeoutMs ? Number(timeoutMs) : 60_000,
-					"browser capture",
-				);
-				outputJson(result, !jsonOutput);
-				await cleanupBrowserSession(bc, timedOut);
-				await finishTimedCliResult(timedOut);
-			} catch (error) {
-				console.error("Error:", (error as Error).message);
-				throw commandFailed();
-			}
-			break;
-		}
-
 		case "capture-many":
 		case "captureMany": {
 			try {
@@ -3425,8 +3401,15 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		}
 
 		// Section 31: Compact browser state
+		case "capture":
 		case "state": {
 			try {
+				const deprecatedCapture = subcommand === "capture";
+				if (deprecatedCapture) {
+					console.error(
+						"Warning: `bc browser capture` is deprecated; use `bc browser state`.",
+					);
+				}
 				const { createBrowserControl } = await import("./browser_control");
 				const bc = createBrowserControl();
 				const timeoutMs = flags.timeout;
@@ -3440,7 +3423,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 						downloads: flags.downloads === "true",
 					}),
 					timeoutMs ? Number(timeoutMs) : 30_000,
-					"browser state",
+					deprecatedCapture ? "browser capture" : "browser state",
 				);
 				outputJson(result, !jsonOutput);
 				await cleanupBrowserSession(bc, timedOut);
@@ -3581,7 +3564,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		default:
 			console.error(`Unknown browser command: ${subcommand}`);
 			console.error(
-				"Available: attach, launch, list, detach, status, open, navigate, open-many, snapshot, state, capture, capture-many, act, task, tab, highlight, drop, downloads, provider, profile, auth",
+				"Available: attach, launch, list, detach, status, open, navigate, open-many, snapshot, state, capture-many, act, task, tab, highlight, drop, downloads, provider, profile, auth",
 			);
 			throw commandFailed();
 	}
