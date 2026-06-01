@@ -48,6 +48,8 @@
 		"prepublishOnly": "npm run build && npm run web:build",
 		"test": "node scripts/run_active_tests.cjs",
 		"test:ci": "node scripts/run_active_tests.cjs",
+		"test:coverage": "node scripts/run_coverage.cjs",
+		"test:infra": "node scripts/check_test_infra.cjs",
 		"test:mcp": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 tests/unit/mcp/server_stdio.test.ts tests/unit/mcp/tool_registry.test.ts",
 		"test:mcp-stdio": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=30000 tests/integration/mcp_stdio_runtime.test.ts",
 		"test:flaky": "node --require ts-node/register --require tsconfig-paths/register --test --test-concurrency=1 --test-timeout=60000 tests/unit/process_leak_detection.test.ts tests/unit/cli_term_exit.test.ts tests/unit/browser_control.test.ts tests/unit/session_manager.test.ts",

@@ -25,7 +25,27 @@ const testRoots = [
   path.join(root, "tests", "unit"),
   path.join(root, "tests", "compatibility"),
   path.join(root, "tests", "integration"),
-];
+];
+
+function getTestConcurrency() {
+
+  const raw = testEnv.BROWSER_CONTROL_TEST_CONCURRENCY || "1";
+
+  if (!/^[1-9]\d*$/u.test(raw)) {
+
+    console.error("BROWSER_CONTROL_TEST_CONCURRENCY must be a positive integer.");
+
+    process.exit(1);
+
+  }
+
+  return raw;
+
+}
+
+
+
+const testConcurrency = getTestConcurrency();
 
 function collect(dir, output = []) {
   if (!fs.existsSync(dir)) return output;
@@ -59,7 +79,7 @@ for (let i = 0; i < files.length; i++) {
       "--require", "ts-node/register",
       "--require", "tsconfig-paths/register",
       "--test",
-      "--test-concurrency=1",
+      `--test-concurrency=${testConcurrency}`,
       "--test-timeout=120000",
       abs,
     ],
