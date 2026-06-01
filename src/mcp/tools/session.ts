@@ -68,7 +68,13 @@ export function buildSessionTools(api: BrowserControlAPI): McpTool[] {
         sessionId: { type: "string", description: "Session ID to check. If omitted, uses the active session." },
       }),
       handler: async (params) => {
-        return api.session.status(params.sessionId as string | undefined);
+        if (params.sessionId) {
+          const selected = api.session.use(params.sessionId as string);
+          if (!selected.success) {
+            return selected;
+          }
+        }
+        return api.session.status();
       },
     },
   ];

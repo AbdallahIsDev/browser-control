@@ -614,16 +614,28 @@ describe("MCP Tool Registry", () => {
     it("bc_session_status honors explicit sessionId", async () => {
       const tools = buildToolRegistry(api);
       const createTool = tools.find((t) => t.name === "bc_session_create")!;
+      const selectTool = tools.find((t) => t.name === "bc_session_select")!;
       const statusTool = tools.find((t) => t.name === "bc_session_status")!;
+
+      const first = await createTool.handler({ name: "first-session" });
+      assert.equal(first.success, true);
+      const firstId = (first.data as Record<string, unknown>).id as string;
 
       const other = await createTool.handler({ name: "other-session" });
       assert.equal(other.success, true);
       const otherId = (other.data as Record<string, unknown>).id as string;
 
+      const selectedFirst = await selectTool.handler({ nameOrId: firstId });
+      assert.equal(selectedFirst.success, true);
+
       const result = await statusTool.handler({ sessionId: otherId });
       assert.equal(result.success, true);
       assert.equal((result.data as Record<string, unknown>).id, otherId);
       assert.equal((result.data as Record<string, unknown>).name, "other-session");
+
+      const active = api.session.status();
+      assert.equal(active.success, true);
+      assert.equal(active.data?.id, otherId);
     });
 
     it("terminal resume/status MCP tools forward terminalSessionId", async () => {
