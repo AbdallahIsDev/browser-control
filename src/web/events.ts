@@ -8,6 +8,13 @@ import type { WebAppEvent, WebEventKind } from "./types";
 const MAX_RECENT_EVENTS = 200;
 const MAX_SUBSCRIPTION_CHANNELS = 100;
 const MAX_CHANNEL_LENGTH = 128;
+const DEFAULT_MAX_CLIENT_BUFFERED_BYTES = 1_000_000;
+const DEFAULT_SEND_TIMEOUT_MS = 5_000;
+
+interface WebEventHubOptions {
+	maxBufferedBytes?: number;
+	sendTimeoutMs?: number;
+}
 
 interface ClientEventFilter {
 	sessionId?: string;
@@ -35,7 +42,16 @@ export class WebEventHub {
 	private readonly wss = new WebSocketServer({ noServer: true });
 	private readonly recent: WebAppEvent[] = [];
 	private readonly clientFilters = new WeakMap<WebSocket, ClientEventFilter>();
+	private readonly sendTimeouts = new Set<NodeJS.Timeout>();
+	private readonly maxBufferedBytes: number;
+	private readonly sendTimeoutMs: number;
 	private nextId = 1;
+
+	constructor(options: WebEventHubOptions = {}) {
+		this.maxBufferedBytes =
+			options.maxBufferedBytes ?? DEFAULT_MAX_CLIENT_BUFFERED_BYTES;
+		this.sendTimeoutMs = options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS;
+	}
 
 	handleUpgrade(
 		request: IncomingMessage,
@@ -82,7 +98,8 @@ export class WebEventHub {
 			client.on("message", (data) => this.handleClientMessage(client, data));
 			client.once("close", () => this.clientFilters.delete(client));
 			this.wss.emit("connection", client, request);
-			client.send(
+			this.sendToClient(
+				client,
 				JSON.stringify({
 					type: "runtime.status",
 					replay: true,
@@ -115,7 +132,7 @@ export class WebEventHub {
 				client.readyState === WebSocket.OPEN &&
 				this.matchesFilter(client, event)
 			) {
-				client.send(raw);
+				this.sendToClient(client, raw);
 			}
 		}
 		return event;
@@ -145,7 +162,8 @@ export class WebEventHub {
 	private handleClientMessage(client: WebSocket, data: RawData): void {
 		const parsed = this.parseSubscriptionMessage(data);
 		if (!parsed.ok) {
-			client.send(
+			this.sendToClient(
+				client,
 				JSON.stringify({ type: "subscription.error", error: parsed.error }),
 			);
 			return;
@@ -166,7 +184,8 @@ export class WebEventHub {
 			...(channels.size > 0 ? { channels } : {}),
 		};
 		this.clientFilters.set(client, next);
-		client.send(
+		this.sendToClient(
+			client,
 			JSON.stringify({
 				type: "subscription.updated",
 				channels: Array.from(channels).sort(),
@@ -227,6 +246,55 @@ export class WebEventHub {
 		return channels;
 	}
 
+	private sendToClient(client: WebSocket, raw: string): void {
+		if (client.readyState !== WebSocket.OPEN) return;
+		if (client.bufferedAmount > this.maxBufferedBytes) {
+			this.dropClient(client);
+			return;
+		}
+
+		let settled = false;
+		const timeout = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			this.sendTimeouts.delete(timeout);
+			this.dropClient(client);
+		}, this.sendTimeoutMs);
+		timeout.unref?.();
+		this.sendTimeouts.add(timeout);
+
+		try {
+			client.send(raw, (error) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timeout);
+				this.sendTimeouts.delete(timeout);
+				if (error) this.dropClient(client);
+			});
+		} catch {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeout);
+				this.sendTimeouts.delete(timeout);
+			}
+			this.dropClient(client);
+		}
+	}
+
+	private dropClient(client: WebSocket): void {
+		this.clientFilters.delete(client);
+		if (client.readyState === WebSocket.CLOSED) return;
+		try {
+			client.terminate();
+		} catch {
+			try {
+				client.close();
+			} catch {
+				// Ignore close failures; this path is already isolating a bad client.
+			}
+		}
+	}
+
 	private payloadSessionId(payload: unknown): string | undefined {
 		if (!payload || typeof payload !== "object" || !("sessionId" in payload)) {
 			return undefined;
@@ -243,6 +311,8 @@ export class WebEventHub {
 
 	close(): Promise<void> {
 		return new Promise((resolve) => {
+			for (const timeout of this.sendTimeouts) clearTimeout(timeout);
+			this.sendTimeouts.clear();
 			for (const client of this.wss.clients) client.close();
 			this.wss.close(() => resolve());
 		});
