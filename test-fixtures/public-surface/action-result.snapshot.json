@@ -15,6 +15,10 @@
     "data",
     "warning",
     "error",
+    "errorCode",
+    "retryable",
+    "suggestedAction",
+    "errorMetadata",
     "auditId",
     "policyDecision",
     "risk",
@@ -30,6 +34,10 @@
     "debugBundleId": "bundle-sample",
     "debugBundlePath": "<data-home>/debug-bundles/bundle-sample.json",
     "error": "sample error",
+    "errorCode": "BROWSER_TAB_NOT_FOUND",
+    "errorMetadata": {
+      "tabId": "missing-tab"
+    },
     "partialDebug": true,
     "path": "a11y",
     "policyDecision": "deny",
@@ -39,18 +47,23 @@
       "requiresHuman": false,
       "retryReason": "sample"
     },
+    "retryable": true,
     "risk": "moderate",
     "sessionId": "session-1",
-    "success": false
+    "success": false,
+    "suggestedAction": "Run bc browser tab list, then retry with a known tabId."
   },
   "policyDenied": {
     "completedAt": "<iso-timestamp>",
     "error": "Policy denied: sample reason",
+    "errorCode": "POLICY_DENIED",
     "path": "command",
     "policyDecision": "deny",
+    "retryable": false,
     "risk": "high",
     "sessionId": "session-1",
-    "success": false
+    "success": false,
+    "suggestedAction": "Change the policy profile, request confirmation when supported, or choose a lower-risk action."
   },
   "source": "action_result.ts",
   "success": {

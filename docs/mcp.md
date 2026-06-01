@@ -123,15 +123,17 @@ network records, and exception text can still contain private data.
 
 ### Auditing
 
-MCP results preserve policy metadata from the shared `ActionResult` shape:
-`policyDecision`, `risk`, and `auditId` appear when available. Policy audit JSONL
-files are written under `<data-home>/reports/policy-audit/` when policy auditing
-is enabled. Session and workflow results may also contain audit ids for
+MCP results preserve policy and failure metadata from the shared `ActionResult`
+shape. `policyDecision`, `risk`, `auditId`, `errorCode`, `retryable`,
+`suggestedAction`, and safe `errorMetadata` appear when available. Policy audit
+JSONL files are written under `<data-home>/reports/policy-audit/` when policy
+auditing is enabled. Session and workflow results may also contain audit ids for
 confirmation, denied, or audited actions.
 
 For review:
 
-- inspect MCP responses for `policyDecision`, `risk`, and `auditId`
+- inspect MCP responses for `policyDecision`, `risk`, `auditId`, `errorCode`,
+  `retryable`, and `suggestedAction`
 - use `bc status --json` to confirm the active policy profile and data home
 - use `bc debug console --json` and `bc debug network --json` only when the
   active policy permits reading captured evidence
@@ -167,6 +169,9 @@ Tools return MCP content containing JSON for the same `ActionResult` shape used 
 ```
 
 MCP marks failed tool results as errors.
+Failed browser actions may include stable codes such as `STALE_REF`,
+`BROWSER_TAB_NOT_FOUND`, `DIALOG_BLOCKED`, `BROWSER_DISCONNECTED`, or
+`TARGET_RESOLUTION`.
 
 ## Tools
 

@@ -136,6 +136,31 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   },
 ];
 
+const ERROR_CODE_CATEGORIES: Record<string, FailureCategory> = {
+  STALE_REF: "ref_not_found",
+  SNAPSHOT_HYDRATION: "ref_not_found",
+  TARGET_RESOLUTION: "ref_not_found",
+  NAVIGATION_RACE: "page_not_found",
+  BROWSER_TAB_NOT_FOUND: "page_not_found",
+  FRAME_NOT_FOUND: "page_not_found",
+  DIALOG_BLOCKED: "ref_not_found",
+  POLICY_DENIED: "policy_denied",
+  PRIVATE_NETWORK_BLOCKED: "policy_denied",
+  BROWSER_DISCONNECTED: "browser_disconnected",
+  PROVIDER_CAPABILITY: "provider_failure",
+};
+
+function extractErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const record = error as { code?: unknown; errorCode?: unknown };
+  const code = typeof record.errorCode === "string"
+    ? record.errorCode
+    : typeof record.code === "string"
+      ? record.code
+      : null;
+  return code && ERROR_CODE_CATEGORIES[code] ? code : null;
+}
+
 // ── Guidance Rules ─────────────────────────────────────────────────────
 
 const GUIDANCE_RULES: Record<FailureCategory, RecoveryGuidance> = {
@@ -239,12 +264,70 @@ const GUIDANCE_RULES: Record<FailureCategory, RecoveryGuidance> = {
   },
 };
 
+const ERROR_CODE_GUIDANCE: Record<string, Partial<RecoveryGuidance>> = {
+  STALE_REF: {
+    canRetry: true,
+    retryReason: "Accessibility ref is stale or missing. Retry after refreshing the snapshot.",
+    suggestedAction: "Run bc browser snapshot, then retry with a current ref.",
+  },
+  SNAPSHOT_HYDRATION: {
+    canRetry: true,
+    retryReason: "Snapshot hydration may not have finished before timeout.",
+    suggestedAction: "Retry snapshot with waitForHydration enabled or a longer hydration timeout.",
+  },
+  TARGET_RESOLUTION: {
+    canRetry: true,
+    retryReason: "Target could not be resolved from the current page state.",
+    suggestedAction: "Refresh the snapshot, then retry with a ref, CSS selector, or more specific text.",
+  },
+  NAVIGATION_RACE: {
+    canRetry: true,
+    retryReason: "Navigation and page readiness raced with the action.",
+    suggestedAction: "Wait for navigation to settle, then retry the browser action.",
+  },
+  BROWSER_TAB_NOT_FOUND: {
+    canRetry: true,
+    retryReason: "The requested tab id is stale or no longer open.",
+    suggestedAction: "Run bc browser tab list, then retry with a known tabId.",
+  },
+  FRAME_NOT_FOUND: {
+    canRetry: true,
+    retryReason: "The requested frame is stale or no longer attached.",
+    suggestedAction: "Refresh the frame tree or use a known frameId/frameSelector.",
+  },
+  DIALOG_BLOCKED: {
+    canRetry: true,
+    retryReason: "A dialog may be blocking browser progress.",
+    suggestedAction: "List pending dialogs, respond to the blocking dialog, then retry.",
+  },
+  BROWSER_DISCONNECTED: {
+    canRetry: true,
+    retryReason: "Browser may have crashed or disconnected.",
+    suggestedAction: "Run bc browser state or bc browser launch, then retry the action.",
+  },
+  PROVIDER_CAPABILITY: {
+    canRetry: false,
+    retryReason: "The selected provider does not support the requested capability.",
+    suggestedAction: "Select a provider that supports the requested capability.",
+  },
+  PRIVATE_NETWORK_BLOCKED: {
+    canRetry: false,
+    retryReason: "Network policy blocked a private-network URL. Retry will fail until policy or URL changes.",
+    requiresConfirmation: true,
+    confirmationReason: "Accessing private-network URLs requires explicit trust and policy review.",
+    suggestedAction: "Use an allowed public URL or change the network policy.",
+  },
+};
+
 // ── Public API ─────────────────────────────────────────────────────────
 
 /**
  * Classify an error message into a known failure category.
  */
 export function classifyFailure(error: string | Error | unknown): FailureCategory {
+  const errorCode = extractErrorCode(error);
+  if (errorCode) return ERROR_CODE_CATEGORIES[errorCode];
+
   const message = error instanceof Error ? error.message : String(error);
 
   for (const pattern of ERROR_PATTERNS) {
@@ -262,6 +345,7 @@ export function classifyFailure(error: string | Error | unknown): FailureCategor
  * Generate recovery guidance for a failure.
  */
 export function generateRecoveryGuidance(error: string | Error | unknown): RecoveryGuidance {
+  const errorCode = extractErrorCode(error);
   const category = classifyFailure(error);
   const base = GUIDANCE_RULES[category];
 
@@ -270,6 +354,7 @@ export function generateRecoveryGuidance(error: string | Error | unknown): Recov
 
   return {
     ...base,
+    ...(errorCode ? ERROR_CODE_GUIDANCE[errorCode] : {}),
     ...(message.includes("network") && category === "unknown"
       ? {
           alternativePath: "command" as PolicyExecutionPath,

@@ -4299,6 +4299,54 @@ describe("BrowserActions", () => {
 			}
 		});
 
+		it("click failure for an unknown ref returns structured stale-ref error metadata", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.click({ target: "@missing-ref" });
+
+				assert.equal(result.success, false);
+				assert.equal(result.errorCode, "STALE_REF");
+				assert.equal(result.retryable, true);
+				assert.match(result.suggestedAction ?? "", /snapshot/i);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
+		it("missing tab returns structured tab-not-found error metadata", async () => {
+			const isolatedStore = new MemoryStore({ filename: ":memory:" });
+			const page = createMockPage("https://example.test/");
+			const manager = createConnectedBrowserManager([page]);
+
+			try {
+				const sm = new SessionManager({
+					memoryStore: isolatedStore,
+					browserManager: manager,
+				});
+				await sm.create("test", { policyProfile: "balanced" });
+				const actions = new BrowserActions({ sessionManager: sm });
+
+				const result = await actions.capture({ tabId: "missing-tab" });
+
+				assert.equal(result.success, false);
+				assert.equal(result.errorCode, "BROWSER_TAB_NOT_FOUND");
+				assert.equal(result.retryable, true);
+				assert.match(result.suggestedAction ?? "", /tab list/i);
+			} finally {
+				isolatedStore.close();
+			}
+		});
+
 		it("returns finalState after execution", async () => {
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 			const page = createMockPage("https://example.test/");

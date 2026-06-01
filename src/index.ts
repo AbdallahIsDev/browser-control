@@ -502,6 +502,21 @@ export {
 
 // Browser actions — canonical browser action surface
 export { BrowserActions } from "./browser/actions";
+export {
+  BrowserControlError,
+  BrowserDisconnectedError,
+  BrowserTabNotFoundError,
+  DialogBlockedError,
+  FrameNotFoundError,
+  NavigationRaceError,
+  PolicyDeniedError,
+  PrivateNetworkBlockedError,
+  ProviderCapabilityError,
+  SnapshotHydrationError,
+  StaleRefError,
+  TargetResolutionError,
+  getBrowserErrorDetails,
+} from "./browser/errors";
 
 export type {
   BrowserActionContext,
@@ -515,6 +530,10 @@ export type {
   ScrollOptions,
   ScreenshotOptions,
 } from "./browser/actions";
+export type {
+  BrowserErrorCode,
+  BrowserErrorDetails,
+} from "./browser/errors";
 
 // Terminal actions — canonical terminal action surface
 export { TerminalActions } from "./terminal/actions";

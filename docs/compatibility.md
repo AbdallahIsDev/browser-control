@@ -9,7 +9,7 @@ Stable surfaces are covered by semantic versioning and compatibility tests:
 - CLI command names, subcommand names, documented flags, and documented JSON output support from `bc --help`.
 - TypeScript exports from `index.ts`.
 - `createBrowserControl()` top-level object and namespaces: `browser`, `terminal`, `fs`, `session`, `service`, `provider`, `debug`, `config`, `status`, and `close`.
-- `ActionResult` core fields: `success`, `path`, `sessionId`, `data`, `warning`, `error`, `auditId`, `policyDecision`, `risk`, `completedAt`, debug bundle fields, recovery guidance, and partial-debug marker.
+- `ActionResult` core fields: `success`, `path`, `sessionId`, `data`, `warning`, `error`, `errorCode`, `retryable`, `suggestedAction`, `errorMetadata`, `auditId`, `policyDecision`, `risk`, `completedAt`, debug bundle fields, recovery guidance, and partial-debug marker.
 - MCP tool names, categories, descriptions, input schemas, and output wrapper shape.
 - Config keys and public environment variable aliases.
 - Data home behavior: `~/.browser-control` by default, `BROWSER_CONTROL_HOME` override, and documented subdirectories/files.

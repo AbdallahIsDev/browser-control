@@ -12,6 +12,7 @@ JSON mode:
 
 - Most action commands support `--json`.
 - Action commands return the formatted `ActionResult` shape.
+- Failed actions may include `errorCode`, `retryable`, `suggestedAction`, and safe `errorMetadata` for agent recovery.
 - `doctor --json`, `status --json`, and `config ... --json` return minified JSON.
 - `run` and `schedule` print JSON by default; `--json` makes it compact.
 - Successful output can be JSON where supported. Failures are stderr text with command-specific prefixes and non-zero exit codes; `--json` does not guarantee JSON-formatted errors.

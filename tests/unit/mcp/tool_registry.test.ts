@@ -18,7 +18,7 @@ import {
   resetCredentialVault,
 } from "../../../src/security/credential_vault";
 import type { ActionResult } from "../../../src/shared/action_result";
-import { successResult } from "../../../src/shared/action_result";
+import { failureResult, successResult } from "../../../src/shared/action_result";
 import { DefaultPolicyEngine } from "../../../src/policy/engine";
 import { getStateStorage, resetStateStorage } from "../../../src/state/index";
 
@@ -702,6 +702,24 @@ describe("MCP Tool Registry", () => {
   });
 
   describe("tool handlers", () => {
+    it("MCP result serialization preserves structured error metadata", () => {
+      const result = failureResult("Private network URL blocked", {
+        path: "a11y",
+        sessionId: "mcp-error-session",
+        errorCode: "PRIVATE_NETWORK_BLOCKED",
+        retryable: false,
+        suggestedAction: "Use an allowed public URL or change the network policy.",
+      });
+
+      const mcp = actionResultToMcpResult(result);
+      const parsed = JSON.parse(mcp.content[0].text);
+
+      assert.equal(mcp.isError, true);
+      assert.equal(parsed.errorCode, "PRIVATE_NETWORK_BLOCKED");
+      assert.equal(parsed.retryable, false);
+      assert.equal(parsed.suggestedAction, "Use an allowed public URL or change the network policy.");
+    });
+
     it("session tools return ActionResult shape", async () => {
       const tools = buildToolRegistry(api);
       const listTool = tools.find((t) => t.name === "bc_session_list")!;

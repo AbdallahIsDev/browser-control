@@ -472,10 +472,38 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserControlError"
+    },
+    {
+      "declarations": [
         "src/browser_control.ts"
       ],
       "kind": "type",
       "name": "BrowserControlOptions"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserDisconnectedError"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserErrorCode"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type",
+      "name": "BrowserErrorDetails"
     },
     {
       "declarations": [
@@ -518,6 +546,13 @@
       ],
       "kind": "type",
       "name": "BrowserProvider"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "BrowserTabNotFoundError"
     },
     {
       "declarations": [
@@ -1123,6 +1158,13 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "DialogBlockedError"
+    },
+    {
+      "declarations": [
         "src/snapshot_diff.ts"
       ],
       "kind": "value",
@@ -1445,6 +1487,13 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "FrameNotFoundError"
+    },
+    {
+      "declarations": [
         "src/filesystem/actions.ts"
       ],
       "kind": "type",
@@ -1582,6 +1631,13 @@
       ],
       "kind": "value",
       "name": "getAlternativePath"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "value",
+      "name": "getBrowserErrorDetails"
     },
     {
       "declarations": [
@@ -2523,6 +2579,13 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "NavigationRaceError"
+    },
+    {
+      "declarations": [
         "src/observability/network_capture.ts"
       ],
       "kind": "type+value",
@@ -2705,6 +2768,13 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "PolicyDeniedError"
+    },
+    {
+      "declarations": [
         "src/shared/action_result.ts"
       ],
       "kind": "value",
@@ -2751,6 +2821,13 @@
       ],
       "kind": "type",
       "name": "PressOptions"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "PrivateNetworkBlockedError"
     },
     {
       "declarations": [
@@ -2821,6 +2898,13 @@
       ],
       "kind": "type",
       "name": "ProviderCapabilities"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "ProviderCapabilityError"
     },
     {
       "declarations": [
@@ -3636,6 +3720,13 @@
     },
     {
       "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "SnapshotHydrationError"
+    },
+    {
+      "declarations": [
         "src/browser/actions.ts"
       ],
       "kind": "type",
@@ -3647,6 +3738,13 @@
       ],
       "kind": "type+value",
       "name": "StagehandManager"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "StaleRefError"
     },
     {
       "declarations": [
@@ -3703,6 +3801,13 @@
       ],
       "kind": "type",
       "name": "SystemStatus"
+    },
+    {
+      "declarations": [
+        "src/browser/errors.ts"
+      ],
+      "kind": "type+value",
+      "name": "TargetResolutionError"
     },
     {
       "declarations": [

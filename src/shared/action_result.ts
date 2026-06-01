@@ -26,6 +26,14 @@ export interface ActionResult<T = unknown> {
   warning?: string;
   /** Error message on failure. */
   error?: string;
+  /** Stable machine-readable error code for agent recovery. */
+  errorCode?: string;
+  /** Whether retrying the action may succeed without changing user intent. */
+  retryable?: boolean;
+  /** Suggested next action for automated or human recovery. */
+  suggestedAction?: string;
+  /** Safe structured error metadata; must not contain secrets or page-sensitive payloads. */
+  errorMetadata?: Record<string, unknown>;
   /** Audit ID if the action was recorded by the policy audit log. */
   auditId?: string;
   /** Policy decision that governed this action. */
@@ -85,6 +93,10 @@ export function failureResult<T = unknown>(
     auditId?: string;
     policyDecision?: PolicyDecision;
     risk?: RiskLevel;
+    errorCode?: string;
+    retryable?: boolean;
+    suggestedAction?: string;
+    errorMetadata?: Record<string, unknown>;
     debugBundleId?: string;
     debugBundlePath?: string;
     recoveryGuidance?: import("../observability/types").RecoveryGuidance;
@@ -96,6 +108,10 @@ export function failureResult<T = unknown>(
     path: options.path,
     sessionId: options.sessionId,
     error,
+    ...(options.errorCode ? { errorCode: options.errorCode } : {}),
+    ...(options.retryable !== undefined ? { retryable: options.retryable } : {}),
+    ...(options.suggestedAction ? { suggestedAction: options.suggestedAction } : {}),
+    ...(options.errorMetadata ? { errorMetadata: options.errorMetadata } : {}),
     ...(options.auditId ? { auditId: options.auditId } : {}),
     ...(options.policyDecision ? { policyDecision: options.policyDecision } : {}),
     ...(options.risk ? { risk: options.risk } : {}),
@@ -126,6 +142,9 @@ export function policyDeniedResult<T = unknown>(
     path: options.path,
     sessionId: options.sessionId,
     error: `Policy denied: ${reason}`,
+    errorCode: "POLICY_DENIED",
+    retryable: false,
+    suggestedAction: "Change the policy profile, request confirmation when supported, or choose a lower-risk action.",
     policyDecision: "deny",
     ...(options.risk ? { risk: options.risk } : {}),
     completedAt: new Date().toISOString(),
@@ -172,6 +191,10 @@ export function formatActionResult<T>(result: ActionResult<T>): Record<string, u
   if (result.data !== undefined) out.data = result.data;
   if (result.warning) out.warning = result.warning;
   if (result.error) out.error = result.error;
+  if (result.errorCode) out.errorCode = result.errorCode;
+  if (result.retryable !== undefined) out.retryable = result.retryable;
+  if (result.suggestedAction) out.suggestedAction = result.suggestedAction;
+  if (result.errorMetadata) out.errorMetadata = result.errorMetadata;
   if (result.auditId) out.auditId = result.auditId;
   if (result.policyDecision) out.policyDecision = result.policyDecision;
   if (result.risk) out.risk = result.risk;

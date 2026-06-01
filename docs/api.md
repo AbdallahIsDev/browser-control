@@ -114,6 +114,10 @@ interface ActionResult<T = unknown> {
   data?: T;
   warning?: string;
   error?: string;
+  errorCode?: string;
+  retryable?: boolean;
+  suggestedAction?: string;
+  errorMetadata?: Record<string, unknown>;
   auditId?: string;
   policyDecision?: "allow" | "deny" | "require_confirmation" | "allow_with_audit";
   risk?: "low" | "moderate" | "high" | "critical";
@@ -128,7 +132,9 @@ interface ActionResult<T = unknown> {
 Failure behavior:
 
 - `success: false` means the action did not complete.
-- Policy denial uses `error: "Policy denied: ..."` and `policyDecision: "deny"`.
+- Browser failures may include stable `errorCode` values such as `STALE_REF`, `BROWSER_TAB_NOT_FOUND`, `DIALOG_BLOCKED`, `BROWSER_DISCONNECTED`, or `TARGET_RESOLUTION`.
+- `retryable` and `suggestedAction` describe whether the same intent can be retried and what state to refresh first.
+- Policy denial uses `error: "Policy denied: ..."`, `errorCode: "POLICY_DENIED"`, `retryable: false`, and `policyDecision: "deny"`.
 - Confirmation requirements use `error: "Confirmation required: ..."` and do not execute the action.
 - Failed actions may include a debug bundle ID/path and recovery guidance.
 

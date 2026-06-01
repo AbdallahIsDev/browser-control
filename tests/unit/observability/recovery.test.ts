@@ -5,6 +5,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
+  BrowserTabNotFoundError,
+  PrivateNetworkBlockedError,
+  StaleRefError,
+} from "../../../src/browser/errors";
+import {
   classifyFailure,
   generateRecoveryGuidance,
   isRetryRecommended,
@@ -47,6 +52,16 @@ describe("classifyFailure", () => {
     const category = classifyFailure("Something weird happened");
     assert.strictEqual(category, "unknown");
   });
+
+  it("classifies typed stale-ref errors by code before regex", () => {
+    const category = classifyFailure(new StaleRefError("@missing"));
+    assert.strictEqual(category, "ref_not_found");
+  });
+
+  it("classifies ActionResult-like error codes", () => {
+    const category = classifyFailure({ errorCode: "BROWSER_TAB_NOT_FOUND" });
+    assert.strictEqual(category, "page_not_found");
+  });
 });
 
 describe("generateRecoveryGuidance", () => {
@@ -73,6 +88,18 @@ describe("generateRecoveryGuidance", () => {
   it("includes suggested action", () => {
     const guidance = generateRecoveryGuidance("Terminal session not found");
     assert(guidance.suggestedAction);
+  });
+
+  it("uses typed error retry guidance when available", () => {
+    const guidance = generateRecoveryGuidance(new BrowserTabNotFoundError("missing-tab"));
+    assert.strictEqual(guidance.canRetry, true);
+    assert.match(guidance.suggestedAction ?? "", /tab list/i);
+  });
+
+  it("treats private network blocks as non-retryable policy failures", () => {
+    const guidance = generateRecoveryGuidance(new PrivateNetworkBlockedError("http://127.0.0.1"));
+    assert.strictEqual(guidance.canRetry, false);
+    assert.strictEqual(guidance.requiresConfirmation, true);
   });
 });
 

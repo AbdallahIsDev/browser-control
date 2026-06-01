@@ -1620,8 +1620,29 @@ test("formatActionResult includes policy metadata for denied actions", async () 
   assert.equal(formatted.success, false);
   assert.equal(formatted.policyDecision, "deny");
   assert.equal(formatted.risk, "high");
+  assert.equal(formatted.errorCode, "POLICY_DENIED");
+  assert.equal(formatted.retryable, false);
   assert.ok(formatted.error);
   assert.ok(formatted.completedAt);
+});
+
+test("formatActionResult preserves structured error metadata", async () => {
+  const { failureResult, formatActionResult } = await import("../../src/shared/action_result");
+
+  const result = failureResult("Tab \"missing\" not found", {
+    path: "a11y",
+    sessionId: "error-session",
+    errorCode: "BROWSER_TAB_NOT_FOUND",
+    retryable: true,
+    suggestedAction: "Run bc browser tab list and retry with a known tabId.",
+    errorMetadata: { tabId: "missing" },
+  });
+  const formatted = formatActionResult(result);
+
+  assert.equal(formatted.errorCode, "BROWSER_TAB_NOT_FOUND");
+  assert.equal(formatted.retryable, true);
+  assert.equal(formatted.suggestedAction, "Run bc browser tab list and retry with a known tabId.");
+  assert.deepEqual(formatted.errorMetadata, { tabId: "missing" });
 });
 
 test("formatActionResult includes policy metadata for confirmation-required", async () => {

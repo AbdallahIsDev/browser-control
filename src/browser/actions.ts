@@ -85,6 +85,14 @@ import {
 	type DialogResponse,
 } from "./dialogs";
 import {
+	BrowserDisconnectedError,
+	BrowserTabNotFoundError,
+	DialogBlockedError,
+	getBrowserErrorDetails,
+	StaleRefError,
+	TargetResolutionError,
+} from "./errors";
+import {
 	BrowserActionQueue,
 	type BrowserActionQueueStats,
 } from "./action_queue";
@@ -965,9 +973,10 @@ export class BrowserActions {
 								attachError instanceof Error
 									? attachError.message
 									: String(attachError);
+							const message = `No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach and auto-launch is disabled. Close all Chrome windows, run ${formatLaunchBrowserCommand(config.chromeDebugPort)}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated, or enable auto-launch with BROWSER_AUTO_LAUNCH=true.`;
 							return this.failureWithDebug(
-								`No attachable Chrome on port ${config.chromeDebugPort}: ${attachMsg}. Browser mode is attach and auto-launch is disabled. Close all Chrome windows, run ${formatLaunchBrowserCommand(config.chromeDebugPort)}, then retry. For an isolated automation browser, set BROWSER_MODE=managed and BROWSER_LAUNCH_PROFILE=isolated, or enable auto-launch with BROWSER_AUTO_LAUNCH=true.`,
-								attachError,
+								message,
+								new BrowserDisconnectedError(message, attachError),
 								{
 									action: "browser_connect",
 									path: "a11y",
@@ -1000,11 +1009,13 @@ export class BrowserActions {
 								launchError instanceof Error
 									? launchError.message
 									: String(launchError);
-							return this.failureWithDebug(
+							const message =
 								`No browser was connected. Attach failed on port ${config.chromeDebugPort}: ${attachMsg}. ` +
-									`${config.browserMode === "managed" ? "Managed launch" : "Attach-mode launch"} also failed: ${launchMsg}. ` +
-									BROWSER_LAUNCH_RECOVERY_GUIDANCE,
-								launchError,
+								`${config.browserMode === "managed" ? "Managed launch" : "Attach-mode launch"} also failed: ${launchMsg}. ` +
+								BROWSER_LAUNCH_RECOVERY_GUIDANCE;
+							return this.failureWithDebug(
+								message,
+								new BrowserDisconnectedError(message, launchError),
 								{
 									action: "browser_connect",
 									path: "a11y",
@@ -1108,17 +1119,19 @@ export class BrowserActions {
 				return numericPage;
 			}
 			const sessionId = this.getSessionId();
+			const message = `Tab index ${tabId} out of range (0..${pages.length - 1})`;
 			return (await this.failureWithDebug(
-				`Tab index ${tabId} out of range (0..${pages.length - 1})`,
-				new Error(`Tab index ${tabId} out of range (0..${pages.length - 1})`),
+				message,
+				new BrowserTabNotFoundError(tabId, [...this.tabIdMap.keys()]),
 				{ action: "browser_action", path: "a11y", sessionId },
 			)) as ActionResult<T>;
 		}
 
 		const sessionId = this.getSessionId();
+		const knownTabs = [...this.tabIdMap.keys()];
 		return (await this.failureWithDebug(
-			`Tab "${tabId}" not found. Known tabs: [${[...this.tabIdMap.keys()].join(", ")}]`,
-			new Error(`Tab "${tabId}" not found`),
+			`Tab "${tabId}" not found. Known tabs: [${knownTabs.join(", ")}]`,
+			new BrowserTabNotFoundError(tabId, knownTabs),
 			{ action: "browser_action", path: "a11y", sessionId },
 		)) as ActionResult<T>;
 	}
@@ -1399,6 +1412,7 @@ export class BrowserActions {
 			auditId?: string;
 		},
 	): Promise<ActionResult<T>> {
+		const structuredError = getBrowserErrorDetails(error);
 		const debug = await collectFailureDebugMetadata({
 			action: options.action,
 			sessionId: options.sessionId,
@@ -1415,6 +1429,12 @@ export class BrowserActions {
 			policyDecision: options.policyDecision,
 			risk: options.risk,
 			auditId: options.auditId,
+			...(structuredError ? {
+				errorCode: structuredError.code,
+				retryable: structuredError.retryable,
+				suggestedAction: structuredError.suggestedAction,
+				...(structuredError.metadata ? { errorMetadata: structuredError.metadata } : {}),
+			} : {}),
 			...debug,
 		});
 	}
@@ -2219,6 +2239,9 @@ export class BrowserActions {
 					return failureResult("dialog_id is required for respond action", {
 						path: "a11y",
 						sessionId,
+						errorCode: "DIALOG_BLOCKED",
+						retryable: false,
+						suggestedAction: "Provide a dialog_id from bc browser dialog list, then retry.",
 					});
 				}
 				const action = options.response ?? "accept";
@@ -2242,9 +2265,12 @@ export class BrowserActions {
 				return successResult({ ...value, tabId }, { path: "a11y", sessionId });
 			}
 		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
 			return this.failureWithDebug(
-				`Dialog action failed: ${error instanceof Error ? error.message : String(error)}`,
-				error,
+				`Dialog action failed: ${message}`,
+				error instanceof DialogBlockedError
+					? error
+					: new DialogBlockedError(message, { action: options.action, dialogId: options.dialog_id }, error),
 				{ action: "browser_dialog", path: "a11y", sessionId },
 			);
 		}
@@ -2500,7 +2526,9 @@ export class BrowserActions {
 				});
 				return this.failureWithDebug(
 					`Could not resolve click target: ${options.target}`,
-					new Error(`Could not resolve click target: ${options.target}`),
+					this.isRefTarget(options.target)
+						? new StaleRefError(options.target)
+						: new TargetResolutionError(options.target),
 					{
 						action: "browser_click",
 						path: policyEval.path,
