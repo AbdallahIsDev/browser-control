@@ -3,19 +3,23 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-import {
-  formatLaunchBrowserCommand,
-  getLaunchBrowserScriptName,
-} from "../../src/browser/launch_help";
+import { formatLaunchBrowserCommand } from "../../src/browser/launch_help";
 
 describe("browser launch help", () => {
-  it("keeps developer script names separate from npm-safe user guidance", () => {
-    assert.equal(getLaunchBrowserScriptName("win32"), "launch_browser.bat");
-    assert.equal(getLaunchBrowserScriptName("linux"), "scripts/launch_browser.sh");
-    assert.equal(getLaunchBrowserScriptName("darwin"), "scripts/launch_browser.sh");
+  it("returns npm-safe browser launch commands", () => {
     assert.equal(formatLaunchBrowserCommand(9222, "win32"), "bc browser launch --port 9222");
     assert.equal(formatLaunchBrowserCommand(9222, "linux"), "bc browser launch --port 9222");
     assert.equal(formatLaunchBrowserCommand(undefined, "linux"), "bc browser launch");
+  });
+
+  it("does not keep checkout-only launcher script names in the user guidance helper", () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, "../..", "src/browser/launch_help.ts"),
+      "utf8",
+    );
+
+    assert.doesNotMatch(source, /launch_browser\.bat/u);
+    assert.doesNotMatch(source, /scripts\/launch_browser\.sh/u);
   });
 
   it("keeps user-facing generic launch guidance on the shared helper", () => {
