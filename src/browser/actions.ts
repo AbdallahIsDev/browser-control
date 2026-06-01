@@ -89,6 +89,8 @@ import {
 
 const log = logger.withComponent("browser_actions");
 const DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES = 200;
+const BROWSER_LAUNCH_RECOVERY_GUIDANCE =
+	"Try 'bc browser launch --port=<other>' with another profile/provider, or 'bc browser open <url>' after fixing Chrome launch.";
 
 function resolveDownloadRegistryMaxEntries(value?: number): number {
 	if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -918,7 +920,7 @@ export class BrowserActions {
 							return this.failureWithDebug(
 								`No browser was connected. Attach failed on port ${config.chromeDebugPort}: ${attachMsg}. ` +
 									`${config.browserMode === "managed" ? "Managed launch" : "Attach-mode launch"} also failed: ${launchMsg}. ` +
-									`Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
+									BROWSER_LAUNCH_RECOVERY_GUIDANCE,
 								launchError,
 								{
 									action: "browser_connect",
@@ -4463,7 +4465,7 @@ export class BrowserActions {
 		} catch (error: unknown) {
 			const message = error instanceof Error ? error.message : String(error);
 			return this.failureWithDebug(
-				`Browser launch failed: ${message}. Call \`bc_browser_launch\` with another port/profile/provider, or fix Chrome launch.`,
+				`Browser launch failed: ${message}. ${BROWSER_LAUNCH_RECOVERY_GUIDANCE}`,
 				error,
 				{
 					action: "browser_launch",

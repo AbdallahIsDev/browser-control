@@ -1310,12 +1310,16 @@ describe("BrowserActions", () => {
 					"error should include launch reason text",
 				);
 				assert.ok(
-					result.error?.includes("bc_browser_launch"),
-					"error should mention MCP tool guidance",
+					result.error?.includes("bc browser launch --port=<other>"),
+					"error should mention CLI launch guidance",
 				);
 				assert.ok(
-					!result.error?.includes("bc browser launch"),
-					"error should not use CLI-only guidance",
+					result.error?.includes("bc browser open <url>"),
+					"error should mention browser open recovery",
+				);
+				assert.ok(
+					!result.error?.includes("bc_browser_launch"),
+					"error should not leak MCP tool names",
 				);
 			} finally {
 				isolatedStore.close();
@@ -1353,7 +1357,10 @@ describe("BrowserActions", () => {
 					result.error?.includes("Managed launch also failed"),
 				);
 				assert.ok(
-					result.error?.includes("bc_browser_launch"),
+					result.error?.includes("bc browser launch --port=<other>"),
+				);
+				assert.ok(
+					!result.error?.includes("bc_browser_launch"),
 				);
 			} finally {
 				delete process.env.BROWSER_MODE;
@@ -2407,7 +2414,7 @@ describe("BrowserActions", () => {
 			}
 		});
 
-		it("launch failure error includes MCP tool guidance", async () => {
+		it("launch failure error includes CLI recovery guidance", async () => {
 			const { manager } = createUnavailableBrowserManager();
 			const isolatedStore = new MemoryStore({ filename: ":memory:" });
 
@@ -2426,10 +2433,11 @@ describe("BrowserActions", () => {
 				const result = await isolatedActions.launch();
 
 				assert.equal(result.success, false);
-				assert.ok(result.error?.includes("bc_browser_launch"));
+				assert.ok(result.error?.includes("bc browser launch --port=<other>"));
+				assert.ok(result.error?.includes("bc browser open <url>"));
 				assert.ok(
-					!result.error?.includes("Use 'bc browser launch'"),
-					"should not use CLI-only guidance",
+					!result.error?.includes("bc_browser_launch"),
+					"should not leak MCP tool names",
 				);
 			} finally {
 				isolatedStore.close();
