@@ -1601,7 +1601,7 @@
             "daemon",
             "status"
           ],
-          "description": "Check daemon status",
+          "description": "Show daemon-only status; use 'bc status' for full system status",
           "flags": [],
           "jsonSupport": false,
           "syntax": "daemon status"

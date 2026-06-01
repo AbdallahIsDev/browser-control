@@ -58,6 +58,8 @@ network rules list|add|remove [--json]
 proxy list|add|remove|test [--json]
 ```
 
+`status` is the full system status command: daemon, broker, browser sessions, terminal sessions, tasks, services, policy, data paths, and health.
+
 Useful setup:
 
 ```powershell
@@ -194,10 +196,12 @@ schedule resume <id>
 schedule remove <id>
 daemon start [--visible]
 daemon stop
-daemon status [--json]
+daemon status [--json]  # daemon-only status; use `bc status` for full system status
 daemon health [--json]
 daemon logs [--json]
 ```
+
+`daemon status` is scoped to daemon lifecycle checks and kept for scripts that manage daemon startup/shutdown. Prefer `status` when diagnosing overall product health.
 
 `package run --json` includes `data.savingsTelemetry` when replay metrics are available. The comparison uses the latest discovery recording for the same package name and reports duration, tool-call, and failure deltas.
 

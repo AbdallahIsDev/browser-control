@@ -956,6 +956,34 @@ test("bc --help keeps promoted browser command guidance current", () => {
 	}
 });
 
+test("bc --help clarifies daemon status scope", () => {
+	const home = makeHome();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				"--require",
+				"ts-node/register",
+				"--require",
+				"tsconfig-paths/register",
+				"src/cli.ts",
+				"--help",
+			],
+			{
+				cwd: process.cwd(),
+				env: { ...process.env, BROWSER_CONTROL_HOME: home },
+				encoding: "utf8",
+			},
+		);
+
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.match(result.stdout, /status \[--json\]\s+Show daemon, broker, sessions, tasks, and health/);
+		assert.match(result.stdout, /daemon status\s+Show daemon-only status; use 'bc status' for full system status/);
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
 test("bc --help documents security-sensitive operator commands", () => {
 	const home = makeHome();
 	try {
@@ -1771,6 +1799,23 @@ test("bc daemon status --json uses status daemon data shape", async () => {
 		assert.ok(parsed.broker);
 		assert.equal(parsed.broker.reachable, false);
 		assert.ok(parsed.health);
+	} finally {
+		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
+		else process.env.BROWSER_CONTROL_HOME = previousHome;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("bc daemon status human output points to full status", async () => {
+	const home = makeHome();
+	const previousHome = process.env.BROWSER_CONTROL_HOME;
+	try {
+		process.env.BROWSER_CONTROL_HOME = home;
+		const output = await captureStdout(async () => {
+			await runCli(["node", "cli.ts", "daemon", "status"]);
+		});
+		assert.match(output, /Daemon is not running/);
+		assert.match(output, /Scope: daemon only\. Use 'bc status' for full system status\./);
 	} finally {
 		if (previousHome === undefined) delete process.env.BROWSER_CONTROL_HOME;
 		else process.env.BROWSER_CONTROL_HOME = previousHome;

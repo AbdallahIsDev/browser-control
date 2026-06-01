@@ -1149,7 +1149,7 @@ Browser Namespace (compatibility):
   schedule remove <id>                                               Remove a scheduled task
   daemon start [--visible]                                           Start the daemon
   daemon stop                                                        Stop the daemon
-  daemon status                                                      Check daemon status
+  daemon status                                                      Show daemon-only status; use 'bc status' for full system status
   daemon health                                                      Run health checks
   daemon logs                                                        View daemon logs
   memory stats                                                       Show memory stats
@@ -1702,9 +1702,11 @@ async function handleDaemon(args: ParsedArgs): Promise<void> {
 				outputJson(daemonStatus, false);
 			} else if (daemonStatus.running) {
 				console.log(`Daemon is ${daemonStatus.state}${daemonStatus.pid ? ` (PID: ${daemonStatus.pid})` : ""}`);
+				console.log("Scope: daemon only. Use 'bc status' for full system status.");
 				console.log(`Broker: ${status.broker.reachable ? "reachable" : "unreachable"} (${status.broker.url})`);
 			} else {
 				console.log("Daemon is not running");
+				console.log("Scope: daemon only. Use 'bc status' for full system status.");
 			}
 			break;
 		}
