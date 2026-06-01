@@ -87,6 +87,7 @@ const BROWSER_ACTION_VALUES = [
   "fillMany",
   "state",
 ] as const;
+const BROWSER_TASK_ACTION_VALUES = [...BROWSER_ACTION_VALUES, "writeOutput"] as const;
 
 function preferBcAct(description: string, action: typeof BROWSER_ACTION_VALUES[number]): string {
   return `${description} Deprecated single-action MCP tool; prefer \`bc_act\` with action="${action}" for lower token usage.`;
@@ -137,8 +138,8 @@ const FIELDS_SCHEMA = {
 const BROWSER_STEP_PROPERTIES = {
   action: {
     type: "string",
-    description: "Step action: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, or state.",
-    enum: [...BROWSER_ACTION_VALUES],
+    description: "Step action: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state, or writeOutput.",
+    enum: [...BROWSER_TASK_ACTION_VALUES],
   },
   target: { type: "string", description: "Element ref or selector for click/fill/hover/type/paste/capture actions." },
   text: { type: "string", description: "Text for fill/type/paste actions." },
@@ -162,8 +163,8 @@ const BROWSER_STEP_PROPERTIES = {
   screenshot: { type: "boolean", description: "Include screenshot for capture/state steps." },
   dialog: { type: "boolean", description: "Include pending dialogs for state steps. Default: true.", default: true },
   downloads: { type: "boolean", description: "Include recent downloads for state steps. Default: false.", default: false },
-  content: { type: "string", description: "Reserved for future filesystem-output steps." },
-  filename: { type: "string", description: "Reserved output filename for future filesystem-output steps." },
+  content: { type: "string", description: "File content for writeOutput steps. Empty string is allowed." },
+  filename: { type: "string", description: "Browser Control output filename for writeOutput steps." },
 };
 
 const BROWSER_STEP_SCHEMA = {
@@ -189,6 +190,7 @@ const BROWSER_STEP_SCHEMA = {
     { properties: { action: { const: "tab-close" } }, required: ["action"] },
     { properties: { action: { const: "capture" } }, required: ["action"] },
     { properties: { action: { const: "state" } }, required: ["action"] },
+    { properties: { action: { const: "writeOutput" } }, required: ["action", "filename", "content"] },
   ],
 } as any;
 

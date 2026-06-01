@@ -4315,11 +4315,23 @@
                   "required": [
                     "action"
                   ]
+                },
+                {
+                  "properties": {
+                    "action": {
+                      "const": "writeOutput"
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "filename",
+                    "content"
+                  ]
                 }
               ],
               "properties": {
                 "action": {
-                  "description": "Step action: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, or state.",
+                  "description": "Step action: click, fill, press, hover, scroll, type, paste, screenshot, tab-close, open, navigate, openMany, capture, captureMany, fillMany, state, or writeOutput.",
                   "enum": [
                     "click",
                     "fill",
@@ -4336,7 +4348,8 @@
                     "capture",
                     "captureMany",
                     "fillMany",
-                    "state"
+                    "state",
+                    "writeOutput"
                   ],
                   "type": "string"
                 },
@@ -4355,7 +4368,7 @@
                   "type": "boolean"
                 },
                 "content": {
-                  "description": "Reserved for future filesystem-output steps.",
+                  "description": "File content for writeOutput steps. Empty string is allowed.",
                   "type": "string"
                 },
                 "continueOnFailure": {
@@ -4412,7 +4425,7 @@
                   "type": "array"
                 },
                 "filename": {
-                  "description": "Reserved output filename for future filesystem-output steps.",
+                  "description": "Browser Control output filename for writeOutput steps.",
                   "type": "string"
                 },
                 "force": {

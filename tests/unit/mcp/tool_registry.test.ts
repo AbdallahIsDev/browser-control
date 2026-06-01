@@ -367,12 +367,37 @@ describe("MCP Tool Registry", () => {
       assert.ok("refs" in stepItems.properties);
       assert.ok("dialog" in stepItems.properties);
       assert.ok("downloads" in stepItems.properties);
+      assert.ok(stepItems.properties.action.enum.includes("writeOutput"));
+      assert.match(stepItems.properties.action.description, /writeOutput/);
+      assert.match(stepItems.properties.content.description, /writeOutput/);
+      assert.match(stepItems.properties.filename.description, /writeOutput/);
       assert.equal(stepItems.properties.outputPath, undefined);
 
       const fieldsItems = stepItems.properties.fields.items;
       assert.equal(fieldsItems.properties.target.type, "string");
       assert.equal(fieldsItems.properties.text.type, "string");
       assert.deepEqual(fieldsItems.required, ["target", "text"]);
+
+      const writeOutputVariant = stepItems.oneOf.find(
+        (variant: any) => variant.properties?.action?.const === "writeOutput",
+      );
+      assert.ok(writeOutputVariant);
+      assert.deepEqual(writeOutputVariant.required, ["action", "filename", "content"]);
+    });
+
+    it("bc_task_run accepts writeOutput steps in MCP validation", () => {
+      const tools = buildToolRegistry(api);
+      const taskTool = tools.find((t) => t.name === "bc_task_run")!;
+
+      assert.equal(
+        validateToolParams(
+          taskTool.name,
+          taskTool.inputSchema,
+          { steps: [{ action: "writeOutput", filename: "mcp-task.txt", content: "saved" }] },
+          taskTool.validation,
+        ),
+        null,
+      );
     });
 
     it("screenshot tools expose copyTo without advertising outputPath", () => {
