@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 
 import { MemoryStore } from "../../src/memory_store";
 import { DefaultPolicyEngine } from "../../src/policy_engine";

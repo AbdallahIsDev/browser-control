@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 import { retryAction, waitForAny, waitForElement } from "../../browser_core";
 import { act } from "../../stagehand_core";
 import { resolveSelector } from "../../selector_store";

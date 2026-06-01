@@ -1,4 +1,4 @@
-import type { Page as PlaywrightPage } from "playwright";
+import type { Page as PlaywrightPage } from "playwright-core";
 import { z, type ZodTypeAny } from "zod";
 import { resolveDebugEndpointUrl } from "./core";
 import { loadConfig, type BrowserControlConfig } from "../shared/config";

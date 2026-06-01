@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { Locator, Page } from "playwright";
+import type { Locator, Page } from "playwright-core";
 import { getActiveStagehand, observe } from "./browser/stagehand_core";
 import { logger } from "./shared/logger";
 

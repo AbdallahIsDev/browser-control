@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import type { BrowserContext, Download, Locator, Page } from "playwright";
+import type { BrowserContext, Download, Locator, Page } from "playwright-core";
 import {
 	type A11yElement,
 	type A11ySnapshot,
@@ -3366,7 +3366,7 @@ export class BrowserActions {
 
 	private async injectHighlightOverlay(
 		page: Page,
-		locator: import("playwright").Locator,
+		locator: import("playwright-core").Locator,
 		customStyle?: string,
 		persist = false,
 	): Promise<void> {
@@ -3568,7 +3568,7 @@ export class BrowserActions {
 
 	private async elementToA11yElement(
 		_page: Page,
-		handle: import("playwright").ElementHandle,
+		handle: import("playwright-core").ElementHandle,
 		target: string,
 	): Promise<A11yElement> {
 		const element: A11yElement = {

@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Route, Response } from "playwright";
+import type { BrowserContext, Page, Route, Response } from "playwright-core";
 
 // ── Route types ─────────────────────────────────────────────────────
 

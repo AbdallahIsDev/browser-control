@@ -17,7 +17,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
-import { type Browser, type BrowserContext, chromium } from "playwright";
+import { type Browser, type BrowserContext, chromium } from "playwright-core";
 import { DefaultPolicyEngine } from "../policy/engine";
 import {
 	defaultRouter,

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { type Browser, chromium } from "playwright";
+import { type Browser, chromium } from "playwright-core";
 import { BrowserConnectionManager } from "../browser/connection";
 import { isDebugPortReady } from "../browser/core";
 import { StagehandManager } from "../browser/stagehand_core";
@@ -2215,7 +2215,7 @@ export class Daemon {
 		params: Record<string, unknown>,
 	): Promise<{
 		context: SkillContext;
-		freshPage: import("playwright").Page | null;
+		freshPage: import("playwright-core").Page | null;
 	} | null> {
 		const skill = this.skillRegistry.get(skillName);
 		if (!skill) {
@@ -2225,8 +2225,8 @@ export class Daemon {
 		const scopedMemory = new SkillMemoryStore(this.memoryStore, skillName);
 
 		// Determine page source
-		let page: import("playwright").Page;
-		let freshPage: import("playwright").Page | null = null;
+		let page: import("playwright-core").Page;
+		let freshPage: import("playwright-core").Page | null = null;
 		const sessions = this.stagehandManager.listSessions();
 		const sessionId = (params.sessionId as string) ?? sessions[0];
 		const connection = sessionId
@@ -2240,10 +2240,10 @@ export class Daemon {
 				return null;
 			}
 			page =
-				(await stagehand.context.newPage()) as unknown as import("playwright").Page;
+				(await stagehand.context.newPage()) as unknown as import("playwright-core").Page;
 			freshPage = page; // Track so we can close it after execution
 		} else if (connection) {
-			page = connection.page as unknown as import("playwright").Page;
+			page = connection.page as unknown as import("playwright-core").Page;
 		} else {
 			const contextErrors: string[] = [];
 			const manager = this.getSkillBrowserManager();
@@ -2382,7 +2382,7 @@ export class Daemon {
 		params: Record<string, unknown>,
 	): Promise<void> {
 		let skillContext: SkillContext | undefined;
-		let freshPage: import("playwright").Page | null = null;
+		let freshPage: import("playwright-core").Page | null = null;
 
 		try {
 			const builtResult = await this.buildSkillContext(skillName, params);

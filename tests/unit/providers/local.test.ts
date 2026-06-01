@@ -25,7 +25,7 @@ describe("LocalBrowserProvider", () => {
   it("should not throw on disconnect with null context", async () => {
     await assert.doesNotReject(() =>
       provider.disconnect({
-        browser: null as unknown as import("playwright").Browser,
+        browser: null as unknown as import("playwright-core").Browser,
         context: null,
         connection: {
           id: "test",

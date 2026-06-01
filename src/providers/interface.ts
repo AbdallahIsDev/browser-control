@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext } from "playwright";
+import type { Browser, BrowserContext } from "playwright-core";
 import type { BrowserConnection, BrowserConnectionMode } from "../browser/connection";
 import type { BrowserTargetType } from "../browser/connection";
 import type { AutomationContextOptions } from "../browser/core";

@@ -10,7 +10,7 @@
  * via depth-first traversal of the accessibility tree.
  */
 
-import type { CDPSession, Page } from "playwright";
+import type { CDPSession, Page } from "playwright-core";
 import type { DialogInfo } from "./browser/dialogs";
 import { logger } from "./shared/logger";
 

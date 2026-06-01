@@ -1,4 +1,4 @@
-import type { Page, Dialog as PlaywrightDialog } from "playwright";
+import type { Page, Dialog as PlaywrightDialog } from "playwright-core";
 import { logger } from "../shared/logger";
 import { redactString } from "../observability/redaction";
 

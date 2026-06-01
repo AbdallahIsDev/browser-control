@@ -8,7 +8,7 @@ import {
 	chromium,
 	type Locator,
 	type Page,
-} from "playwright";
+} from "playwright-core";
 import {
 	type ProxyConfig,
 	resolveProxyConfigSecrets,

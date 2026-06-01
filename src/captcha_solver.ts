@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 import type { Telemetry } from "./runtime/telemetry";
 
 export type CaptchaProvider = "2captcha" | "anticaptcha" | "capsolver";

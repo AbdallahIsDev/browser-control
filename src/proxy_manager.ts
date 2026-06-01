@@ -2,7 +2,7 @@ import fs from "node:fs";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
 import path from "node:path";
-import type { BrowserContextOptions } from "playwright";
+import type { BrowserContextOptions } from "playwright-core";
 import { redactString } from "./observability/redaction";
 import { ServiceRegistry, isValidServiceName, type ServiceEntry } from "./services/registry";
 import { getLocalhostCaStatus } from "./services/local_ca";

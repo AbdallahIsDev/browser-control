@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-core");
 
 const rawUrl = process.argv[2];
 
@@ -49,6 +49,13 @@ const PAGE_LABELS = {
 	command: "home",
 	packages: "Package Library",
 };
+
+function browserLaunchOptions(extra = {}) {
+	const executablePath = process.env.BROWSER_CHROME_PATH;
+	return executablePath
+		? { ...extra, executablePath }
+		: { ...extra, channel: process.env.BROWSER_CHANNEL || "chrome" };
+}
 
 async function waitForApp(page) {
 	await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 30000 });
@@ -129,7 +136,7 @@ async function assertNoHorizontalOverflow(page) {
 	fs.mkdirSync(reportDir, { recursive: true });
 	let browser;
 	try {
-		browser = await chromium.launch();
+		browser = await chromium.launch(browserLaunchOptions());
 
 		const desktop = await browser.newPage({
 			viewport: { width: 1440, height: 900 },

@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 
 import type { CaptchaSolver } from "./captcha_solver";
 import type { AIAgent } from "./ai_agent";

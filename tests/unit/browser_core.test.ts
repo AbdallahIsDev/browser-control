@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright-core";
 import { MemoryStore } from "../../src/memory_store";
 import fs from "node:fs";
 import os from "node:os";

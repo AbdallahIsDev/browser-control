@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 
 import { smartClick, smartFill } from "./browser/core";
 import { loadConfig, type BrowserControlConfig } from "./shared/config";

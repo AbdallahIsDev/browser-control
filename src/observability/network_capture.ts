@@ -10,7 +10,7 @@ import type { NetworkEntry } from "./types";
 import { redactNetworkEntry } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
 import type { MemoryStore } from "../runtime/memory_store";
-import type { Page, Request, Response } from "playwright";
+import type { Page, Request, Response } from "playwright-core";
 
 // ── Ring Buffer (shared with console_capture pattern) ──────────────────
 

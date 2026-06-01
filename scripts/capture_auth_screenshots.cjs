@@ -16,7 +16,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { chromium } = require("playwright-core");
 
 const args = {};
 for (const arg of process.argv.slice(2)) {
@@ -32,6 +32,13 @@ const TOKEN_URL = TOKEN ? `${BASE_URL}/#token=${TOKEN}` : null;
 const REPORT_DIR = path.resolve(__dirname, "..", "reports", "ui-verification");
 
 const SHOTS = [];
+
+function browserLaunchOptions(extra = {}) {
+	const executablePath = process.env.BROWSER_CHROME_PATH;
+	return executablePath
+		? { ...extra, executablePath }
+		: { ...extra, channel: process.env.BROWSER_CHANNEL || "chrome" };
+}
 
 // Always capture no-token screenshots
 SHOTS.push(
@@ -99,7 +106,7 @@ async function navigate(page, targetLabel) {
 
 	let browser;
 	try {
-		browser = await chromium.launch({ headless: true });
+		browser = await chromium.launch(browserLaunchOptions({ headless: true }));
 		const context = await browser.newContext({
 			viewport: { width: 1440, height: 900 },
 		});

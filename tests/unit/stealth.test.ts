@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import type { Browser, BrowserContext } from "playwright";
+import type { Browser, BrowserContext } from "playwright-core";
 
 import {
   buildStealthInitScript,

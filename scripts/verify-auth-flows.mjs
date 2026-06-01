@@ -8,7 +8,7 @@
  * Requires a running server on PORT with TOKEN.
  */
 
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
@@ -22,6 +22,13 @@ const summary = [];
 
 function screenshot(name) {
   return resolve(OUT, `${name}.png`);
+}
+
+function browserLaunchOptions(extra = {}) {
+  const executablePath = process.env.BROWSER_CHROME_PATH;
+  return executablePath
+    ? { ...extra, executablePath }
+    : { ...extra, channel: process.env.BROWSER_CHANNEL || "chrome" };
 }
 
 async function verify(page, { label, url, setup, checks }) {
@@ -54,10 +61,10 @@ async function verify(page, { label, url, setup, checks }) {
 }
 
 async function main() {
-  const browser = await chromium.launch({
+  const browser = await chromium.launch(browserLaunchOptions({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  }));
 
   try {
     const context = await browser.newContext({

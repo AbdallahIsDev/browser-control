@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 import { connectBrowser, getFramerPage } from "./browser/core";
 import {
   loadSelectorCache,

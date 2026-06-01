@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 
 import { AIAgent, GuardrailError } from "../../src/ai_agent";
 import type { AIGuardrails } from "../../src/ai_agent";

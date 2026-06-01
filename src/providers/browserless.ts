@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext } from "playwright";
+import { chromium, type Browser, type BrowserContext } from "playwright-core";
 import type {
   BrowserProvider,
   ProviderLaunchOptions,

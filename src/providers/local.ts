@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { chromium, type Browser, type BrowserContext } from "playwright";
+import { chromium, type Browser, type BrowserContext } from "playwright-core";
 import type {
   BrowserProvider,
   ProviderLaunchOptions,

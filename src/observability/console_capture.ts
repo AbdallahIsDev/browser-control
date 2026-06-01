@@ -10,7 +10,7 @@ import type { ConsoleEntry, ConsoleLevel } from "./types";
 import { redactConsoleEntry } from "./redaction";
 import { OBSERVABILITY_KEYS } from "./types";
 import type { MemoryStore } from "../runtime/memory_store";
-import type { ConsoleMessage, Page } from "playwright";
+import type { ConsoleMessage, Page } from "playwright-core";
 
 // ── Ring Buffer ────────────────────────────────────────────────────────
 

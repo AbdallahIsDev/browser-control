@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 import type { Skill, SkillContext, SkillManifest } from "../../skill";
 import { logger } from "../../shared/logger";
 

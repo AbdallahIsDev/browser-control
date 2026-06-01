@@ -11,7 +11,7 @@
  * Integrates with existing `saveContextCookies` / `restoreContextCookies` from memory_store.ts.
  */
 
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Page } from "playwright-core";
 import { MemoryStore, saveContextCookies, restoreContextCookies } from "../runtime/memory_store";
 import { createCredentialProtectionService } from "../security/credential_provider";
 import { logger } from "../shared/logger";

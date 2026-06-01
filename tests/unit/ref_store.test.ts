@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Page, Locator } from "playwright";
+import type { Page, Locator } from "playwright-core";
 import type { A11ySnapshot, A11yElement } from "../../src/a11y_snapshot";
 import { RefStore, getPageId, resolveRefLocator } from "../../src/ref_store";
 

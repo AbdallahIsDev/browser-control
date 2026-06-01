@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { _electron: electron } = require("playwright");
+const { _electron: electron } = require("playwright-core");
 
 const rootDir = path.resolve(__dirname, "..");
 const output =

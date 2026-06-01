@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Download, Page } from "playwright";
+import type { Download, Page } from "playwright-core";
 import { resolvePathSafe } from "../filesystem/operations";
 
 export interface DownloadOptions {

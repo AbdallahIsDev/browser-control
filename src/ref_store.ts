@@ -7,7 +7,7 @@
  * or when a new snapshot is generated.
  */
 
-import type { Page } from "playwright";
+import type { Page } from "playwright-core";
 import { logger } from "./shared/logger";
 import type { A11yElement, A11ySnapshot } from "./a11y_snapshot";
 
@@ -224,7 +224,7 @@ export async function resolveRefLocator(
   ref: string,
   options: ResolveRefOptions = {},
 ): Promise<{
-  locator: import("playwright").Locator;
+  locator: import("playwright-core").Locator;
   element: A11yElement;
   syntheticFallback: boolean;
   description: string;
@@ -304,7 +304,7 @@ function isSelectorSpecificEnough(selector: string): boolean {
 async function buildLocatorFromElement(
   page: Page,
   element: A11yElement,
-): Promise<import("playwright").Locator | null> {
+): Promise<import("playwright-core").Locator | null> {
   // Radios/checkboxes are often real inputs visually hidden offscreen while
   // labels are the actual click target. Prefer the label when present.
   if (element.role === "radio" || element.role === "checkbox") {

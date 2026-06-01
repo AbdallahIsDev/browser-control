@@ -67,6 +67,18 @@ test("package files include runtime and onboarding docs but exclude local/test a
   }
 });
 
+test("runtime uses playwright-core without bundling Playwright browsers", () => {
+  const pkg = readPackageJson();
+  assert.equal(pkg.dependencies?.playwright, undefined);
+  assert.equal(pkg.dependencies?.["playwright-core"], "^1.60.0");
+
+  const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")) as {
+    packages?: Record<string, unknown>;
+  };
+  assert.equal(lock.packages?.["node_modules/playwright"], undefined);
+  assert.ok(lock.packages?.["node_modules/playwright-core"]);
+});
+
 test("package smoke script exists", () => {
   assert.ok(fs.existsSync(path.join(root, "scripts", "package_smoke_test.cjs")));
 });

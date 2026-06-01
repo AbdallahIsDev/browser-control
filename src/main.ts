@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { Browser } from "playwright";
+import type { Browser } from "playwright-core";
 import { connectBrowser, getFramerPage, isDebugPortReady } from "./browser_core";
 import { formatLaunchBrowserCommand } from "./browser/launch_help";
 import { connectStagehand, disconnectStagehand } from "./stagehand_core";
