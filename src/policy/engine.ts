@@ -23,6 +23,7 @@ import type {
   PrivacyProfileName,
 } from "./types";
 import fs from "node:fs";
+import { BlockList, isIP } from "node:net";
 import path from "node:path";
 import { getBuiltInProfile, getProfile, getRiskDecisionMatrix } from "./profiles";
 import { Logger } from "../shared/logger";
@@ -35,6 +36,37 @@ export interface PolicyEngineOptions {
   auditEnabled?: boolean;
   auditHandler?: (entry: PolicyAuditEntry) => void;
   logger?: Logger;
+}
+
+function normalizeDomainOrIp(value: string): string {
+  const trimmed = value.trim().toLowerCase().replace(/\.$/, "");
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function matchesIpPattern(domain: string, pattern: string): boolean {
+  const domainVersion = isIP(domain);
+  if (domainVersion === 0) return false;
+
+  const cidrSeparator = pattern.indexOf("/");
+  if (cidrSeparator === -1) {
+    return isIP(pattern) === domainVersion && domain === pattern;
+  }
+
+  const baseAddress = pattern.slice(0, cidrSeparator);
+  const prefixText = pattern.slice(cidrSeparator + 1);
+  if (pattern.indexOf("/", cidrSeparator + 1) !== -1) return false;
+  if (isIP(baseAddress) !== domainVersion) return false;
+
+  const prefix = Number(prefixText);
+  const maxPrefix = domainVersion === 4 ? 32 : 128;
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > maxPrefix) return false;
+
+  const blockList = new BlockList();
+  blockList.addSubnet(baseAddress, prefix, domainVersion === 4 ? "ipv4" : "ipv6");
+  return blockList.check(domain, domainVersion === 4 ? "ipv4" : "ipv6");
 }
 
 // ─── Policy Engine Implementation ───────────────────────────────────────
@@ -777,9 +809,10 @@ export class DefaultPolicyEngine implements PolicyEngine {
    * Check if a domain matches any pattern in a list.
    */
   private matchesDomain(domain: string, patterns: string[]): boolean {
-    const normalized = domain.toLowerCase();
+    const normalized = normalizeDomainOrIp(domain);
     return patterns.some(pattern => {
-      const pat = pattern.toLowerCase();
+      const pat = normalizeDomainOrIp(pattern);
+      if (matchesIpPattern(normalized, pat)) return true;
       return normalized === pat || normalized.endsWith(`.${pat}`);
     });
   }
