@@ -256,6 +256,28 @@ test("config registry covers every loadConfig field", () => {
   }
 });
 
+test("configuration docs cover every settable config key", () => {
+  const env = { BROWSER_CONTROL_HOME: path.join(os.tmpdir(), `bc-config-docs-${Date.now()}`) };
+  try {
+    const docs = fs.readFileSync(path.join(process.cwd(), "docs", "configuration.md"), "utf8");
+    const mainTable = docs.match(/## Main Config Keys\r?\n([\s\S]*?)\r?\nAdditional env-only settings/u)?.[1] ?? "";
+    const documentedKeys = [...mainTable.matchAll(/^\| `([^`]+)` \|/gm)]
+      .map((match) => match[1])
+      .sort();
+    const registryKeys = getConfigEntries({ env, validate: false })
+      .map((entry) => String(entry.key))
+      .sort();
+
+    assert.deepEqual(
+      registryKeys.filter((key) => !documentedKeys.includes(key)),
+      [],
+      "docs/configuration.md should document every settable config key",
+    );
+  } finally {
+    fs.rmSync(env.BROWSER_CONTROL_HOME, { recursive: true, force: true });
+  }
+});
+
 test("loadConfig reads ENABLE_STEALTH", () => {
   const config = loadConfig({ env: { ENABLE_STEALTH: "true" }, validate: false });
   assert.equal(config.stealthEnabled, true);

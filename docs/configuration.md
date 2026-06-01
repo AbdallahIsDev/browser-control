@@ -59,33 +59,65 @@ Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run
 |---|---|---|
 | `dataHome` | `BROWSER_CONTROL_HOME` | `~/.browser-control` |
 | `brokerPort` | `BROKER_PORT` | `7788` |
+| `brokerAuthKey` | `BROKER_API_KEY`, `BROKER_SECRET` | unset |
+| `brokerAllowedOrigins` | `BROKER_ALLOWED_ORIGINS` | `[]` |
+| `brokerAllowedDomains` | `BROKER_ALLOWED_DOMAINS` | `[]` |
 | `chromeDebugPort` | `BROWSER_DEBUG_PORT` | `9222` |
 | `chromeBindAddress` | `BROWSER_BIND_ADDRESS` | `127.0.0.1` |
 | `chromePath` | `BROWSER_CHROME_PATH` | unset |
 | `browserDebugUrl` | `BROWSER_DEBUG_URL` | unset |
 | Debug file override gate | `BROWSER_ALLOW_DEBUG_FILE_READS` | `0` |
 | `browserMode` | `BROWSER_MODE` | `attach` |
+| `browserAutoLaunch` | `BROWSER_AUTO_LAUNCH` | `true` |
 | `browserLaunchProfile` | `BROWSER_LAUNCH_PROFILE` | `isolated` |
 | `browserUserDataDir` | `BROWSER_USER_DATA_DIR` | unset |
+| `browserViewportWidth` | `BROWSER_VIEWPORT_WIDTH` | `1365` |
+| `browserViewportHeight` | `BROWSER_VIEWPORT_HEIGHT` | `768` |
 | `browserUserAgent` | `BROWSER_USER_AGENT` | unset |
+| `browserActionMaxConcurrency` | `BROWSER_ACTION_MAX_CONCURRENCY` | `4` |
+| `browserActionMaxConcurrencyPerSession` | `BROWSER_ACTION_MAX_CONCURRENCY_PER_SESSION` | `1` |
+| `browserActionQueueMaxDepth` | `BROWSER_ACTION_QUEUE_MAX_DEPTH` | `100` |
+| `stealthEnabled` | `ENABLE_STEALTH` | `false` |
+| `stealthLocale` | `STEALTH_LOCALE` | unset |
+| `stealthTimezoneId` | `STEALTH_TIMEZONE_ID` | unset |
+| `stealthFingerprintSeed` | `STEALTH_FINGERPRINT_SEED` | unset |
+| `stealthWebglVendor` | `STEALTH_WEBGL_VENDOR` | unset |
+| `stealthWebglRenderer` | `STEALTH_WEBGL_RENDERER` | unset |
+| `stealthPlatform` | `STEALTH_PLATFORM` | unset |
+| `stealthHardwareConcurrency` | `STEALTH_HARDWARE_CONCURRENCY` | unset |
+| `stealthDeviceMemory` | `STEALTH_DEVICE_MEMORY` | unset |
+| `proxyList` | `PROXY_LIST` | `[]` |
 | `policyProfile` | `POLICY_PROFILE` | `balanced` |
 | `daemonVisible` | `DAEMON_VISIBLE` | `false` |
+| `resumePolicy` | `RESUME_POLICY` | `abandon` |
+| `memoryAlertMb` | `MEMORY_ALERT_MB` | `1024` |
+| `chromeTabLimit` | `CHROME_TAB_LIMIT` | `20` |
 | `logLevel` | `LOG_LEVEL` | `info` |
 | `logFile` | `LOG_FILE` | `false` |
 | `terminalShell` | `TERMINAL_SHELL` | auto |
 | `terminalCols` | `TERMINAL_COLS` | `80` |
 | `terminalRows` | `TERMINAL_ROWS` | `24` |
+| `terminalMaxOutputBytes` | `TERMINAL_MAX_OUTPUT_BYTES` | `1048576` |
+| `terminalMaxScrollbackLines` | `TERMINAL_MAX_SCROLLBACK_LINES` | `10000` |
+| `terminalMaxSerializedSessions` | `TERMINAL_MAX_SERIALIZED_SESSIONS` | `50` |
 | `terminalResumePolicy` | `TERMINAL_RESUME_POLICY` | `resume` |
 | `terminalAutoResume` | `TERMINAL_AUTO_RESUME` | `true` |
 | `browserlessEndpoint` | `BROWSERLESS_ENDPOINT` | unset |
 | `browserlessApiKey` | `BROWSERLESS_API_KEY` | unset |
 | `captchaProvider` | `CAPTCHA_PROVIDER` | unset |
 | `captchaApiKey` | `CAPTCHA_API_KEY` | unset |
+| `captchaTimeoutMs` | `CAPTCHA_TIMEOUT_MS` | `120000` |
+| `modelProvider` | `BROWSER_CONTROL_MODEL_PROVIDER` | `openrouter` |
+| `modelEndpoint` | `BROWSER_CONTROL_MODEL_ENDPOINT` | unset |
+| `modelApiKey` | `BROWSER_CONTROL_MODEL_API_KEY` | unset |
+| `modelName` | `BROWSER_CONTROL_MODEL_NAME` | unset |
 | `openrouterModel` | `OPENROUTER_MODEL`, `AI_AGENT_MODEL` | `openai/gpt-4.1-mini` |
 | `openrouterBaseUrl` | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `openrouterApiKey` | `OPENROUTER_API_KEY` | unset |
+| `aiAgentCostPerToken` | `AI_AGENT_COST_PER_TOKEN` | `0.0001` |
+| `stagehandModel` | `STAGEHAND_MODEL`, `OPENROUTER_MODEL` | `google/gemini-2.5-flash-preview:free` |
 
-Additional env-only settings include `BROKER_API_KEY`, `BROKER_SECRET`, `BROKER_ALLOWED_ORIGINS`, `BROKER_ALLOWED_DOMAINS`, `BROKER_RATE_LIMIT_WINDOW_MS`, `BROKER_RATE_LIMIT_MAX_REQUESTS`, `ENABLE_STEALTH`, `STEALTH_LOCALE`, `STEALTH_TIMEZONE_ID`, `STEALTH_FINGERPRINT_SEED`, `STEALTH_WEBGL_VENDOR`, `STEALTH_WEBGL_RENDERER`, `STEALTH_PLATFORM`, `STEALTH_HARDWARE_CONCURRENCY`, `STEALTH_DEVICE_MEMORY`, `PROXY_LIST`, `CAPTCHA_TIMEOUT_MS`, `AI_AGENT_COST_PER_TOKEN`, `STAGEHAND_MODEL`, `RESUME_POLICY`, `MEMORY_ALERT_MB`, `CHROME_TAB_LIMIT`, `TERMINAL_MAX_OUTPUT_BYTES`, `TERMINAL_MAX_SCROLLBACK_LINES`, and `TERMINAL_MAX_SERIALIZED_SESSIONS`.
+Additional env-only settings include `BROKER_MAX_BODY_BYTES`, `BROKER_RATE_LIMIT_WINDOW_MS`, `BROKER_RATE_LIMIT_MAX_REQUESTS`, `BROKER_RATE_LIMIT_BUCKET_TTL_MS`, `BROKER_TASK_STATUS_RETENTION_MS`, `BROWSER_ALLOW_REMOTE_CDP`, `BROWSER_CONTROL_ALLOW_SYSTEM_PROFILE`, `BROWSER_CONTROL_DOM_SNAPSHOT_FALLBACK`, `BROWSER_CONTROL_DOM_SNAPSHOT_TIMEOUT_MS`, `BROWSER_CONTROL_JSON_LOGS`, `BROWSER_CONTROL_JSON_OUTPUT`, `BROWSER_CONTROL_MCP_MODE`, `BROWSER_CONTROL_STATE_BACKEND`, `BROWSER_CONTROL_STDIO_MODE`, `BROWSER_DEBUG_HOST`, `BROWSER_DOWNLOAD_REGISTRY_MAX_ENTRIES`, `BROWSER_ENABLE_WSL_CDP_BRIDGE`, `BROWSER_TELEMETRY_MAX_EVENTS`, `BROWSERBASE_API_KEY`, and `BROWSERBASE_PROJECT_ID`.
 
 `BROWSER_DEBUG_RESOLV_CONF` and `BROWSER_DEBUG_ROUTE_TABLE` are advanced WSL troubleshooting overrides. They are ignored unless `BROWSER_ALLOW_DEBUG_FILE_READS=1`, and the referenced files must resolve under `runtime/debug/` inside the Browser Control data home.
 
