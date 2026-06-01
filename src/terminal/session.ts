@@ -88,6 +88,7 @@ export class PtyTerminalSession implements ITerminalSession {
 	/** FDs of active handles before PTY spawn, used to identify PTY-created Socket handles for cleanup. */
 	private _preSpawnFds: Set<number> = new Set();
 	private _dataListeners = new Set<(data: string) => void>();
+	private _stateListeners = new Set<() => void>();
 
 	constructor(id: string, shellInfo: ShellInfo, config: TerminalSessionConfig) {
 		this.id = id;
@@ -186,6 +187,7 @@ export class PtyTerminalSession implements ITerminalSession {
 			this._processExited = true;
 			this._status = "closed";
 			this._closed = true;
+			this.notifyStateListeners();
 			log.info("Terminal session exited", {
 				sessionId: this.id,
 				exitCode,
@@ -258,7 +260,9 @@ export class PtyTerminalSession implements ITerminalSession {
 			if (this._process) {
 				this._process.write(startCmd);
 				await new Promise((r) => setTimeout(r, 50));
-				this._process.write(execCmd);
+				if (this._process && !this._closed) {
+					this._process.write(execCmd);
+				}
 			}
 
 			// Wait for the end marker with expanded exit code to appear.
@@ -270,19 +274,46 @@ export class PtyTerminalSession implements ITerminalSession {
 			let timedOut = false;
 
 			const waitForEndMarker = async (): Promise<void> => {
-				const pollInterval = 50;
-				const deadline = timeoutMs > 0 ? startMs + timeoutMs : startMs + 30000;
+				const waitMs = timeoutMs > 0 ? timeoutMs : 30000;
+				await new Promise<void>((resolve, reject) => {
+					let settled = false;
+					let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+					let dataSubscription: { dispose(): void } | undefined;
+					let stateSubscription: { dispose(): void } | undefined;
 
-				while (Date.now() < deadline) {
-					if (endMarkerPattern.test(this._outputBuffer)) {
-						return;
-					}
-					if (this._closed) return;
-					await new Promise((r) => setTimeout(r, pollInterval));
-				}
-				timedOut = true;
-				await this.interrupt();
-				await new Promise((r) => setTimeout(r, 200));
+					const settle = (): void => {
+						if (settled) return;
+						settled = true;
+						if (timeoutHandle) clearTimeout(timeoutHandle);
+						dataSubscription?.dispose();
+						stateSubscription?.dispose();
+						resolve();
+					};
+
+					const checkOutput = (): void => {
+						if (endMarkerPattern.test(this._outputBuffer) || this._closed) {
+							settle();
+						}
+					};
+
+					const handleTimeout = async (): Promise<void> => {
+						if (settled) return;
+						settled = true;
+						if (timeoutHandle) clearTimeout(timeoutHandle);
+						dataSubscription?.dispose();
+						stateSubscription?.dispose();
+						timedOut = true;
+						await this.interrupt();
+						await new Promise((r) => setTimeout(r, 200));
+					};
+
+					dataSubscription = this.onData(checkOutput);
+					stateSubscription = this.onStateChange(checkOutput);
+					timeoutHandle = setTimeout(() => {
+						void handleTimeout().then(resolve, reject);
+					}, waitMs);
+					checkOutput();
+				});
 			};
 
 			await waitForEndMarker();
@@ -462,6 +493,28 @@ export class PtyTerminalSession implements ITerminalSession {
 		};
 	}
 
+	private onStateChange(listener: () => void): { dispose(): void } {
+		this._stateListeners.add(listener);
+		return {
+			dispose: () => {
+				this._stateListeners.delete(listener);
+			},
+		};
+	}
+
+	private notifyStateListeners(): void {
+		for (const listener of this._stateListeners) {
+			try {
+				listener();
+			} catch (err) {
+				log.warn("Error in terminal state listener", {
+					sessionId: this.id,
+					error: err,
+				});
+			}
+		}
+	}
+
 	async close(): Promise<void> {
 		if (this._closed) return;
 		this._status = "closed";
@@ -469,6 +522,7 @@ export class PtyTerminalSession implements ITerminalSession {
 		const processRef = this._process;
 		if (!processRef) {
 			this._closed = true;
+			this.notifyStateListeners();
 			return;
 		}
 
@@ -506,6 +560,7 @@ export class PtyTerminalSession implements ITerminalSession {
 		// and skips redundant cleanup, avoiding any state confusion.
 		this._process = null;
 		this._closed = true;
+		this.notifyStateListeners();
 		this.disposeListeners();
 		try {
 			processRef.kill();

@@ -137,6 +137,105 @@ test("terminal_session: interrupt waits for prompt before marking idle", { timeo
   assert.equal(internals._runningCommand, undefined);
 });
 
+test("terminal_session: exec resolves from data event when end marker arrives", { timeout: 5000 }, async () => {
+  const session = new PtyTerminalSession(
+    "event-wait-unit",
+    {
+      name: "mock-shell",
+      path: "mock-shell",
+      args: [],
+      family: "posix",
+      ptyCapable: true,
+    },
+    {},
+  );
+  const internals = session as unknown as {
+    _process: { write(data: string): void };
+    _outputBuffer: string;
+    _dataListeners: Set<(data: string) => void>;
+  };
+  let endMarkerAt = 0;
+  const emit = (data: string): void => {
+    internals._outputBuffer += data;
+    for (const listener of internals._dataListeners) {
+      listener(data);
+    }
+  };
+
+  internals._process = {
+    write(data: string) {
+      const startMarker = data.match(/(__BC_S_[0-9a-f]+__)/)?.[1];
+      if (startMarker) {
+        emit(`${startMarker}\n`);
+      }
+
+      const endMarkerBase = data.match(/(__BC_E_[0-9a-f]+)/)?.[1];
+      if (endMarkerBase) {
+        setTimeout(() => {
+          endMarkerAt = Date.now();
+          emit(`event-output\n${endMarkerBase}:0\n`);
+        }, 5);
+      }
+    },
+  };
+
+  const result = await session.exec("echo event-output", { timeoutMs: 1000 });
+  const elapsedAfterMarkerMs = Date.now() - endMarkerAt;
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /event-output/);
+  assert.ok(endMarkerAt > 0, "test did not emit the end marker");
+  assert.ok(
+    elapsedAfterMarkerMs < 35,
+    `exec waited ${elapsedAfterMarkerMs}ms after end marker instead of resolving from the data event`,
+  );
+});
+
+test("terminal_session: exec waiter resolves when session closes without more output", { timeout: 5000 }, async () => {
+  const session = new PtyTerminalSession(
+    "event-close-unit",
+    {
+      name: "mock-shell",
+      path: "mock-shell",
+      args: [],
+      family: "posix",
+      ptyCapable: true,
+    },
+    {},
+  );
+  const internals = session as unknown as {
+    _process: { write(data: string): void; kill(): void };
+    _outputBuffer: string;
+  };
+  let closedAt = 0;
+
+  internals._process = {
+    write(data: string) {
+      const startMarker = data.match(/(__BC_S_[0-9a-f]+__)/)?.[1];
+      if (startMarker) {
+        internals._outputBuffer += `${startMarker}\n`;
+      }
+    },
+    kill() {},
+  };
+
+  const execPromise = session.exec("sleep forever", { timeoutMs: 1000 });
+  setTimeout(() => {
+    closedAt = Date.now();
+    void session.close();
+  }, 5);
+
+  const result = await execPromise;
+  const elapsedAfterCloseMs = Date.now() - closedAt;
+
+  assert.equal(result.exitCode, 1);
+  assert.ok(closedAt > 0, "test did not close the session");
+  assert.ok(
+    elapsedAfterCloseMs < 35,
+    `exec waited ${elapsedAfterCloseMs}ms after close instead of resolving from lifecycle event`,
+  );
+});
+
 function sessionEchoCommand(): string {
   return os.platform() === "win32"
     ? 'Write-Output "session-hello"'
