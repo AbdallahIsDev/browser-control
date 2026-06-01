@@ -93,7 +93,7 @@ Remote provider configuration can include endpoint URLs and API keys. Provider r
 - use a dedicated browser profile for automation
 - avoid using everyday personal Chrome profile for CDP automation
 
-The Windows visible launcher defaults to the system Chrome profile for human-operated WSL/Windows attach flows. This keeps one visible Chrome window, but it also means local agents attached to CDP can interact with logged-in sites. Use `BROWSER_LAUNCH_PROFILE=isolated` when you want a separate automation profile instead.
+- the Windows visible launcher defaults to `BROWSER_LAUNCH_PROFILE=isolated`; use `BROWSER_LAUNCH_PROFILE=system` only when you intentionally want agents attached to CDP to interact with the normal Chrome profile and its existing cookies/logins
 - prefer loopback CDP bind addresses unless WSL/remote access needs more
 - use separate `BROWSER_CONTROL_HOME` values for experiments
 - keep destructive filesystem actions inside a project workspace

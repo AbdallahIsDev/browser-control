@@ -65,7 +65,7 @@ Use `bc data doctor --json` to inspect this layout. `bc data cleanup` is dry-run
 | `browserDebugUrl` | `BROWSER_DEBUG_URL` | unset |
 | Debug file override gate | `BROWSER_ALLOW_DEBUG_FILE_READS` | `0` |
 | `browserMode` | `BROWSER_MODE` | `attach` |
-| `browserLaunchProfile` | `BROWSER_LAUNCH_PROFILE` | `system` |
+| `browserLaunchProfile` | `BROWSER_LAUNCH_PROFILE` | `isolated` |
 | `browserUserDataDir` | `BROWSER_USER_DATA_DIR` | unset |
 | `browserUserAgent` | `BROWSER_USER_AGENT` | unset |
 | `policyProfile` | `POLICY_PROFILE` | `balanced` |

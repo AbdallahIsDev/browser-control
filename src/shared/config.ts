@@ -58,7 +58,7 @@ export interface BrowserControlConfig {
   browserMode: "managed" | "attach";
   /** Whether to auto-launch a managed browser when attach fails (default: true) */
   browserAutoLaunch: boolean;
-  /** Visible launcher profile mode (default: system) */
+  /** Visible launcher profile mode (default: isolated) */
   browserLaunchProfile: "system" | "isolated";
   /** Explicit Chrome user-data-dir for visible launcher */
   browserUserDataDir: string | undefined;

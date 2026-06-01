@@ -45,7 +45,7 @@ bc screenshot --json
 
 Without `--output`, screenshots are saved under the Browser Control runtime screenshots directory.
 
-The Windows launcher uses the system Chrome profile by default (`BROWSER_LAUNCH_PROFILE=system`) so there is one visible Chrome profile with your normal account, extensions, and New Tab page. Chrome cannot add remote debugging to an already-running non-CDP profile. If Chrome is already open and port `9222` is not reachable, close all Chrome windows first, then run the launcher once. To intentionally use a separate Browser Control profile, set `BROWSER_LAUNCH_PROFILE=isolated`.
+The Windows launcher uses a separate Browser Control profile by default (`BROWSER_LAUNCH_PROFILE=isolated`). Set `BROWSER_LAUNCH_PROFILE=system` only when you intentionally want one visible Chrome profile with your normal account, extensions, and New Tab page. Chrome cannot add remote debugging to an already-running non-CDP profile; if system-profile Chrome is already open and port `9222` is not reachable, close all Chrome windows first, then run the launcher once.
 
 The launcher writes CDP metadata to the Browser Control data home under `.interop/chrome-debug.json`. Browser Control uses that metadata plus WSL gateway candidates when attaching.
 
