@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { getDataHome as _getDataHome, ensureDataHomeAtPath, getUserConfigPath } from "./paths";
 import { redactString } from "../observability/redaction";
 
@@ -142,17 +143,6 @@ export interface BrowserControlConfig {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
-  if (!value) return fallback;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback;
-}
-
 function splitCsv(value: string | undefined): string[] {
   if (!value?.trim()) return [];
   return value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -228,18 +218,6 @@ export function ensureBrokerAuthKey(env: NodeJS.ProcessEnv = process.env): strin
   return key;
 }
 
-function parseFloat(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function parseResumePolicy(value: string | undefined): "resume" | "reschedule" | "abandon" {
-  const lowered = value?.trim().toLowerCase();
-  if (lowered === "resume" || lowered === "reschedule") return lowered;
-  return "abandon";
-}
-
 // ── User-Scoped Config Registry ──────────────────────────────────────
 
 export type ConfigSource = "default" | "user" | "env";
@@ -254,11 +232,16 @@ export type ConfigCategory =
   | "terminal"
   | "provider"
   | "captcha"
-  | "ai";
+  | "ai"
+  | "proxy"
+  | "stealth";
 
 export type ConfigKey =
   | "dataHome"
   | "brokerPort"
+  | "brokerAuthKey"
+  | "brokerAllowedOrigins"
+  | "brokerAllowedDomains"
   | "chromeDebugPort"
   | "chromeBindAddress"
   | "chromePath"
@@ -270,26 +253,45 @@ export type ConfigKey =
   | "browserViewportWidth"
   | "browserViewportHeight"
   | "browserUserAgent"
+  | "stealthEnabled"
+  | "stealthLocale"
+  | "stealthTimezoneId"
+  | "stealthFingerprintSeed"
+  | "stealthWebglVendor"
+  | "stealthWebglRenderer"
+  | "stealthPlatform"
+  | "stealthHardwareConcurrency"
+  | "stealthDeviceMemory"
+  | "proxyList"
   | "policyProfile"
   | "daemonVisible"
+  | "resumePolicy"
+  | "memoryAlertMb"
+  | "chromeTabLimit"
   | "logLevel"
   | "logFile"
   | "terminalShell"
   | "terminalCols"
   | "terminalRows"
+  | "terminalMaxOutputBytes"
+  | "terminalMaxScrollbackLines"
+  | "terminalMaxSerializedSessions"
   | "terminalResumePolicy"
   | "terminalAutoResume"
   | "browserlessEndpoint"
   | "browserlessApiKey"
   | "captchaProvider"
   | "captchaApiKey"
+  | "captchaTimeoutMs"
   | "modelProvider"
   | "modelEndpoint"
   | "modelApiKey"
   | "modelName"
   | "openrouterModel"
   | "openrouterBaseUrl"
-  | "openrouterApiKey";
+  | "openrouterApiKey"
+  | "aiAgentCostPerToken"
+  | "stagehandModel";
 
 export type UserConfig = Partial<Record<ConfigKey, ConfigValue>>;
 
@@ -341,6 +343,15 @@ interface AdditionalConfigEnvDefinition {
   defaultValue?: string;
 }
 
+const CONFIG_VALUE_SCHEMA = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+  z.undefined(),
+]);
+const USER_CONFIG_SCHEMA = z.record(z.string(), CONFIG_VALUE_SCHEMA);
+
 function requiredString(value: unknown, key: ConfigKey): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${key} must be a non-empty string.`);
@@ -368,6 +379,39 @@ function booleanValue(value: unknown, key: ConfigKey): boolean {
     if (["0", "false", "no", "off"].includes(lowered)) return false;
   }
   throw new Error(`${key} must be a boolean.`);
+}
+
+function stringArrayValue(value: unknown, key: ConfigKey): string[] {
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value.map((item) => item.trim()).filter(Boolean);
+  }
+  if (typeof value === "string") return splitCsv(value);
+  throw new Error(`${key} must be a string array or comma-separated string.`);
+}
+
+function optionalPositiveInt(value: unknown, key: ConfigKey): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return positiveIntValue(value, key);
+}
+
+function positiveIntValue(value: unknown, key: ConfigKey): number {
+  const parsed = integerValue(value, key);
+  if (parsed < 1) throw new Error(`${key} must be a positive integer.`);
+  return parsed;
+}
+
+function positiveFloatValue(value: unknown, key: ConfigKey): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${key} must be a positive number.`);
+  }
+  return parsed;
+}
+
+function resumePolicyValue(value: unknown): "resume" | "reschedule" | "abandon" {
+  const lowered = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (lowered === "resume" || lowered === "reschedule") return lowered;
+  return "abandon";
 }
 
 function ensurePort(value: ConfigValue, key: ConfigKey): void {
@@ -403,6 +447,9 @@ function ensureUrl(value: ConfigValue, key: ConfigKey): void {
 const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "dataHome", category: "runtime", envVars: ["BROWSER_CONTROL_HOME"], description: "Directory used for Browser Control runtime state, including sessions, logs, screenshots, profiles, and durable stores. Set this when you need an isolated workspace or a non-default data location.", defaultValue: (env) => getDataHome(env), parse: requiredString },
   { key: "brokerPort", category: "broker", envVars: ["BROKER_PORT"], description: "Port for the local broker HTTP API and WebSocket server. Change this when another service already uses the default port or when running multiple instances.", defaultValue: () => 7788, parse: integerValue, validate: ensurePort },
+  { key: "brokerAuthKey", category: "broker", envVars: ["BROKER_API_KEY", "BROKER_SECRET"], description: "Bearer token required for broker HTTP and WebSocket access. Prefer BROKER_API_KEY; BROKER_SECRET remains supported for legacy deployments.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "brokerAllowedOrigins", category: "broker", envVars: ["BROKER_ALLOWED_ORIGINS"], description: "Comma-separated browser origins allowed by the broker CORS guard. Use exact loopback origins for local dashboards and avoid broad wildcards unless explicitly needed.", defaultValue: () => [], parse: stringArrayValue },
+  { key: "brokerAllowedDomains", category: "broker", envVars: ["BROKER_ALLOWED_DOMAINS"], description: "Comma-separated host or domain allowlist for broker-submitted task URLs. Use this to restrict remote task navigation targets for shared or automated environments.", defaultValue: () => [], parse: stringArrayValue },
   { key: "chromeDebugPort", category: "browser", envVars: ["BROWSER_DEBUG_PORT"], description: "Chrome DevTools Protocol port used when attaching to a visible browser. The launcher scripts and attach-mode commands must use the same port.", defaultValue: () => 9222, parse: integerValue, validate: ensurePort },
   { key: "chromeBindAddress", category: "browser", envVars: ["BROWSER_BIND_ADDRESS"], description: "Network address where launched Chrome exposes its debugging port. Keep this on localhost unless you explicitly understand the remote-control risk.", defaultValue: () => "127.0.0.1", parse: requiredString },
   { key: "chromePath", category: "browser", envVars: ["BROWSER_CHROME_PATH"], description: "Explicit filesystem path to the Chrome or Chromium executable. Use this when automatic browser discovery picks the wrong binary or cannot find Chrome.", defaultValue: () => undefined, parse: optionalString },
@@ -414,13 +461,29 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts. This affects screenshots, layout-sensitive interactions, and tests that depend on responsive breakpoints.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserViewportHeight", category: "browser", envVars: ["BROWSER_VIEWPORT_HEIGHT"], description: "Default viewport height for automation-owned browser contexts. This affects visible page area, screenshot dimensions, and scroll behavior.", defaultValue: () => 768, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserUserAgent", category: "browser", envVars: ["BROWSER_USER_AGENT"], description: "User-Agent string applied to automation-owned browser contexts. Use this only when a target site or test requires a specific client identity.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthEnabled", category: "stealth", envVars: ["ENABLE_STEALTH"], description: "Enables stealth browser context options where supported. Use this only for legitimate testing scenarios that require deterministic fingerprint controls.", defaultValue: () => false, parse: booleanValue },
+  { key: "stealthLocale", category: "stealth", envVars: ["STEALTH_LOCALE"], description: "Locale value exposed in stealth contexts. Use this when tests need consistent language and regional formatting across machines.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthTimezoneId", category: "stealth", envVars: ["STEALTH_TIMEZONE_ID"], description: "Timezone identifier exposed in stealth contexts. Use this when tests need stable timezone behavior independent of host settings.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthFingerprintSeed", category: "stealth", envVars: ["STEALTH_FINGERPRINT_SEED"], description: "Seed used to derive deterministic stealth fingerprint values. This can identify runs and is treated as sensitive.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "stealthWebglVendor", category: "stealth", envVars: ["STEALTH_WEBGL_VENDOR"], description: "WebGL vendor string exposed in stealth contexts. Use this only for deterministic fingerprint testing of legitimate web workflows.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthWebglRenderer", category: "stealth", envVars: ["STEALTH_WEBGL_RENDERER"], description: "WebGL renderer string exposed in stealth contexts. Use this only for deterministic fingerprint testing of legitimate web workflows.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthPlatform", category: "stealth", envVars: ["STEALTH_PLATFORM"], description: "Navigator platform value exposed in stealth contexts. Use this when deterministic platform fingerprints are required for repeatable tests.", defaultValue: () => undefined, parse: optionalString },
+  { key: "stealthHardwareConcurrency", category: "stealth", envVars: ["STEALTH_HARDWARE_CONCURRENCY"], description: "Navigator hardwareConcurrency value exposed in stealth contexts. Use this to keep CPU-core fingerprints stable in controlled tests.", defaultValue: () => undefined, parse: optionalPositiveInt },
+  { key: "stealthDeviceMemory", category: "stealth", envVars: ["STEALTH_DEVICE_MEMORY"], description: "Navigator deviceMemory value exposed in stealth contexts. Use this only when a test needs a deterministic browser fingerprint.", defaultValue: () => undefined, parse: optionalPositiveInt },
+  { key: "proxyList", category: "proxy", envVars: ["PROXY_LIST"], description: "Comma-separated proxy URL list used by proxy-aware workflows. Proxy URLs can contain credentials, so this value is treated as sensitive.", defaultValue: () => [], parse: stringArrayValue, sensitive: true },
   { key: "policyProfile", category: "policy", envVars: ["POLICY_PROFILE"], description: "Default safety policy profile for sessions and actions. Use `safe` for stricter automation, `balanced` for normal work, and `trusted` only for high-trust local workflows.", defaultValue: () => "balanced", parse: requiredString, validate: ensureAllowed(["safe", "balanced", "trusted"]) },
   { key: "daemonVisible", category: "daemon", envVars: ["DAEMON_VISIBLE"], description: "Controls whether daemon helper processes use a visible console window on Windows. Keep it false for background operation and enable it only when debugging daemon startup.", defaultValue: () => false, parse: booleanValue },
+  { key: "resumePolicy", category: "daemon", envVars: ["RESUME_POLICY"], description: "Task resume policy used after daemon interruption. Use this to decide whether interrupted work should be abandoned, resumed, or rescheduled.", defaultValue: () => "abandon", parse: resumePolicyValue },
+  { key: "memoryAlertMb", category: "daemon", envVars: ["MEMORY_ALERT_MB"], description: "Memory threshold in megabytes used by health checks. Increase this on large hosts or lower it to catch memory growth earlier.", defaultValue: () => 1024, parse: positiveIntValue },
+  { key: "chromeTabLimit", category: "daemon", envVars: ["CHROME_TAB_LIMIT"], description: "Maximum active Chrome tabs before health checks warn. Use this to detect tab leaks and runaway browser workflows.", defaultValue: () => 20, parse: positiveIntValue },
   { key: "logLevel", category: "logging", envVars: ["LOG_LEVEL"], description: "Minimum severity level written to logs. Use `debug` for diagnosis and `info` or higher for normal local operation.", defaultValue: () => "info", parse: requiredString, validate: ensureAllowed(["debug", "info", "warn", "error", "critical"]) },
   { key: "logFile", category: "logging", envVars: ["LOG_FILE"], description: "Controls whether logs are also persisted to files under the runtime data home. Enable this when you need post-run diagnostics beyond terminal output.", defaultValue: () => false, parse: booleanValue },
   { key: "terminalShell", category: "terminal", envVars: ["TERMINAL_SHELL"], description: "Default shell executable or named shell for terminal sessions. Use this to prefer PowerShell, bash, zsh, or another installed shell.", defaultValue: () => undefined, parse: optionalString },
   { key: "terminalCols", category: "terminal", envVars: ["TERMINAL_COLS"], description: "Default terminal width in columns for new terminal sessions. Increase this when commands wrap too aggressively or when testing wide terminal layouts.", defaultValue: () => 80, parse: integerValue, validate: ensurePositiveInt },
   { key: "terminalRows", category: "terminal", envVars: ["TERMINAL_ROWS"], description: "Default terminal height in rows for new terminal sessions. Increase this when interactive tools need more visible screen space.", defaultValue: () => 24, parse: integerValue, validate: ensurePositiveInt },
+  { key: "terminalMaxOutputBytes", category: "terminal", envVars: ["TERMINAL_MAX_OUTPUT_BYTES"], description: "Maximum bytes captured from one terminal command. This bounds memory and response size for commands with large output.", defaultValue: () => 1024 * 1024, parse: positiveIntValue },
+  { key: "terminalMaxScrollbackLines", category: "terminal", envVars: ["TERMINAL_MAX_SCROLLBACK_LINES"], description: "Maximum terminal scrollback lines persisted for resume. Increase this for long-running interactive sessions or reduce it to limit stored output.", defaultValue: () => 10_000, parse: positiveIntValue },
+  { key: "terminalMaxSerializedSessions", category: "terminal", envVars: ["TERMINAL_MAX_SERIALIZED_SESSIONS"], description: "Maximum number of terminal sessions retained for resume. Increase this for many concurrent terminals or reduce it to keep startup recovery small.", defaultValue: () => 50, parse: positiveIntValue },
   { key: "terminalResumePolicy", category: "terminal", envVars: ["TERMINAL_RESUME_POLICY"], description: "Policy for reconstructing terminal sessions after daemon startup. Use `resume` to restore metadata and buffer, `metadata_only` to preserve identity only, or `abandon` to start clean.", defaultValue: () => "resume", parse: requiredString, validate: ensureAllowed(["resume", "metadata_only", "abandon"]) },
   { key: "terminalAutoResume", category: "terminal", envVars: ["TERMINAL_AUTO_RESUME"], description: "Controls whether terminal sessions are automatically restored when the daemon starts. Disable this when stale terminal state is more harmful than losing prior session context.", defaultValue: () => true, parse: booleanValue },
   { key: "browserlessEndpoint", category: "provider", envVars: ["BROWSERLESS_ENDPOINT"], description: "WebSocket or HTTPS endpoint for a Browserless remote browser provider. Configure this when browser sessions should run outside the local machine.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
@@ -437,6 +500,7 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
     },
   },
   { key: "captchaApiKey", category: "captcha", envVars: ["CAPTCHA_API_KEY"], description: "API key for the configured CAPTCHA solving provider. This is sensitive and should only be set for workflows that are allowed to use solver services.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "captchaTimeoutMs", category: "captcha", envVars: ["CAPTCHA_TIMEOUT_MS"], description: "Maximum time in milliseconds to wait for a CAPTCHA solver response. Increase this for slower providers or reduce it to fail blocked workflows faster.", defaultValue: () => 120_000, parse: positiveIntValue },
   { key: "modelProvider", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_PROVIDER"], description: "Canonical model provider used by the Browser Control model router. Choose `openrouter`, `ollama`, or `openai-compatible` based on where model requests should be sent.", defaultValue: () => "openrouter", parse: requiredString, validate: ensureAllowed(["openrouter", "ollama", "openai-compatible"]) },
   { key: "modelEndpoint", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_ENDPOINT"], description: "Canonical base URL override for the selected model provider. When modelProvider is `openrouter`, this takes precedence over legacy openrouterBaseUrl.", defaultValue: () => undefined, parse: optionalString, validate: ensureUrl },
   { key: "modelApiKey", category: "ai", envVars: ["BROWSER_CONTROL_MODEL_API_KEY"], description: "Canonical API key for the selected model provider in the model router. When modelProvider is `openrouter`, this sensitive value takes precedence over legacy openrouterApiKey.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
@@ -444,6 +508,8 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "openrouterModel", category: "ai", envVars: ["OPENROUTER_MODEL", "AI_AGENT_MODEL"], description: "Legacy OpenRouter model slug kept for older AI-agent configuration. Prefer modelName because canonical model* settings take precedence when both are configured.", defaultValue: () => "openai/gpt-4.1-mini", parse: requiredString },
   { key: "openrouterBaseUrl", category: "ai", envVars: ["OPENROUTER_BASE_URL"], description: "Legacy OpenRouter base URL kept for compatibility with older configuration. Prefer modelEndpoint because canonical model* settings take precedence when both are configured.", defaultValue: () => "https://openrouter.ai/api/v1", parse: requiredString, validate: ensureUrl },
   { key: "openrouterApiKey", category: "ai", envVars: ["OPENROUTER_API_KEY"], description: "Legacy API key for OpenRouter-backed AI-agent features. Prefer modelApiKey because canonical model* settings take precedence when both are configured.", defaultValue: () => undefined, parse: optionalString, sensitive: true },
+  { key: "aiAgentCostPerToken", category: "ai", envVars: ["AI_AGENT_COST_PER_TOKEN"], description: "Estimated AI-agent cost per token used for local cost tracking and budgeting. Set this when your configured model has different pricing than the default estimate.", defaultValue: () => 0.0001, parse: positiveFloatValue },
+  { key: "stagehandModel", category: "ai", envVars: ["STAGEHAND_MODEL", "OPENROUTER_MODEL"], description: "Model override used by Stagehand-backed automation. Explicit STAGEHAND_MODEL wins, then OPENROUTER_MODEL, then the free Gemini default.", defaultValue: (env) => normalizeOptionalString(env.OPENROUTER_MODEL) ?? "google/gemini-2.5-flash-preview:free", parse: requiredString },
 ];
 
 const ADDITIONAL_CONFIG_ENV_DEFINITIONS: AdditionalConfigEnvDefinition[] = [
@@ -606,7 +672,13 @@ export function loadUserConfig(options: { env?: NodeJS.ProcessEnv } = {}): UserC
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`User config must be a JSON object: ${filePath}`);
   }
-  return parsed as UserConfig;
+  const validated = USER_CONFIG_SCHEMA.parse(parsed);
+  for (const key of Object.keys(validated)) {
+    if (!CONFIG_BY_KEY.has(key as ConfigKey)) {
+      throw new Error(`Unknown config key in ${filePath}: ${key}`);
+    }
+  }
+  return validated as UserConfig;
 }
 
 export function saveUserConfig(config: UserConfig, options: { env?: NodeJS.ProcessEnv } = {}): string {
@@ -773,11 +845,10 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     throw new Error(`BROKER_PORT must be between 1 and 65535, got: ${brokerPortRaw}`);
   }
   const brokerAuthKey =
-    normalizeOptionalString(env.BROKER_API_KEY) ??
-    normalizeOptionalString(env.BROKER_SECRET) ??
+    (effective.brokerAuthKey as string | undefined) ??
     readBrokerAuthKeyFile(env);
-  const brokerAllowedOrigins = splitCsv(env.BROKER_ALLOWED_ORIGINS);
-  const brokerAllowedDomains = splitCsv(env.BROKER_ALLOWED_DOMAINS);
+  const brokerAllowedOrigins = effective.brokerAllowedOrigins as string[];
+  const brokerAllowedDomains = effective.brokerAllowedDomains as string[];
 
   // ── Chrome ──────────────────────────────────────────────────────
   const chromeDebugPort = effective.chromeDebugPort as number;
@@ -792,28 +863,24 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const browserViewportHeight = effective.browserViewportHeight as number;
 
   // ── Stealth ─────────────────────────────────────────────────────
-  const stealthEnabled = parseBoolean(env.ENABLE_STEALTH, false);
-  const stealthLocale = normalizeOptionalString(env.STEALTH_LOCALE);
-  const stealthTimezoneId = normalizeOptionalString(env.STEALTH_TIMEZONE_ID);
-  const stealthFingerprintSeed = normalizeOptionalString(env.STEALTH_FINGERPRINT_SEED);
-  const stealthWebglVendor = normalizeOptionalString(env.STEALTH_WEBGL_VENDOR);
-  const stealthWebglRenderer = normalizeOptionalString(env.STEALTH_WEBGL_RENDERER);
-  const stealthPlatform = normalizeOptionalString(env.STEALTH_PLATFORM);
-  const stealthHardwareConcurrency = env.STEALTH_HARDWARE_CONCURRENCY
-    ? parsePositiveInt(env.STEALTH_HARDWARE_CONCURRENCY, 8)
-    : undefined;
-  const stealthDeviceMemory = env.STEALTH_DEVICE_MEMORY
-    ? parsePositiveInt(env.STEALTH_DEVICE_MEMORY, 8)
-    : undefined;
+  const stealthEnabled = effective.stealthEnabled as boolean;
+  const stealthLocale = effective.stealthLocale as string | undefined;
+  const stealthTimezoneId = effective.stealthTimezoneId as string | undefined;
+  const stealthFingerprintSeed = effective.stealthFingerprintSeed as string | undefined;
+  const stealthWebglVendor = effective.stealthWebglVendor as string | undefined;
+  const stealthWebglRenderer = effective.stealthWebglRenderer as string | undefined;
+  const stealthPlatform = effective.stealthPlatform as string | undefined;
+  const stealthHardwareConcurrency = effective.stealthHardwareConcurrency as number | undefined;
+  const stealthDeviceMemory = effective.stealthDeviceMemory as number | undefined;
   const browserUserAgent = effective.browserUserAgent as string | undefined;
 
   // ── Proxy ──────────────────────────────────────────────────────
-  const proxyList = splitCsv(env.PROXY_LIST);
+  const proxyList = effective.proxyList as string[];
 
   // ── CAPTCHA ────────────────────────────────────────────────────
   const captchaProvider = effective.captchaProvider as string | undefined;
   const captchaApiKey = effective.captchaApiKey as string | undefined;
-  const captchaTimeoutMs = parsePositiveInt(env.CAPTCHA_TIMEOUT_MS, 120_000);
+  const captchaTimeoutMs = effective.captchaTimeoutMs as number;
 
   if (validate && captchaProvider && !captchaApiKey) {
     throw new Error("CAPTCHA_PROVIDER is set but CAPTCHA_API_KEY is missing.");
@@ -827,16 +894,13 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const openrouterApiKey = effective.openrouterApiKey as string | undefined;
   const openrouterModel = effective.openrouterModel as string;
   const openrouterBaseUrl = effective.openrouterBaseUrl as string;
-  const aiAgentCostPerToken = parseFloat(env.AI_AGENT_COST_PER_TOKEN, 0.0001);
-  // Stagehand has its own model preference: explicit STAGEHAND_MODEL > OPENROUTER_MODEL > free gemini default
-  const stagehandModel = normalizeOptionalString(env.STAGEHAND_MODEL)
-    ?? normalizeOptionalString(env.OPENROUTER_MODEL)
-    ?? "google/gemini-2.5-flash-preview:free";
+  const aiAgentCostPerToken = effective.aiAgentCostPerToken as number;
+  const stagehandModel = effective.stagehandModel as string;
 
   // ── Daemon ──────────────────────────────────────────────────────
-  const resumePolicy = parseResumePolicy(env.RESUME_POLICY);
-  const memoryAlertMb = parsePositiveInt(env.MEMORY_ALERT_MB, 1024);
-  const chromeTabLimit = parsePositiveInt(env.CHROME_TAB_LIMIT, 20);
+  const resumePolicy = effective.resumePolicy as "resume" | "reschedule" | "abandon";
+  const memoryAlertMb = effective.memoryAlertMb as number;
+  const chromeTabLimit = effective.chromeTabLimit as number;
   const daemonVisible = effective.daemonVisible as boolean;
 
   // ── Logging ────────────────────────────────────────────────────
@@ -858,9 +922,9 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const terminalShell = effective.terminalShell as string | undefined;
   const terminalCols = effective.terminalCols as number;
   const terminalRows = effective.terminalRows as number;
-  const terminalMaxOutputBytes = parsePositiveInt(env.TERMINAL_MAX_OUTPUT_BYTES, 1024 * 1024);
-  const terminalMaxScrollbackLines = parsePositiveInt(env.TERMINAL_MAX_SCROLLBACK_LINES, 10_000);
-  const terminalMaxSerializedSessions = parsePositiveInt(env.TERMINAL_MAX_SERIALIZED_SESSIONS, 50);
+  const terminalMaxOutputBytes = effective.terminalMaxOutputBytes as number;
+  const terminalMaxScrollbackLines = effective.terminalMaxScrollbackLines as number;
+  const terminalMaxSerializedSessions = effective.terminalMaxSerializedSessions as number;
   const terminalResumePolicy = effective.terminalResumePolicy as string;
   const validTerminalResumePolicies = ["resume", "metadata_only", "abandon"];
   if (validate && !validTerminalResumePolicies.includes(terminalResumePolicy)) {

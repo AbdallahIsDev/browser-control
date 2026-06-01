@@ -21,6 +21,37 @@
       "sensitive": false
     },
     {
+      "category": "broker",
+      "defaultValue": "[redacted]",
+      "description": "Bearer token required for broker HTTP and WebSocket access. Prefer BROKER_API_KEY; BROKER_SECRET remains supported for legacy deployments.",
+      "envVars": [
+        "BROKER_API_KEY",
+        "BROKER_SECRET"
+      ],
+      "key": "brokerAuthKey",
+      "sensitive": true
+    },
+    {
+      "category": "broker",
+      "defaultValue": [],
+      "description": "Comma-separated browser origins allowed by the broker CORS guard. Use exact loopback origins for local dashboards and avoid broad wildcards unless explicitly needed.",
+      "envVars": [
+        "BROKER_ALLOWED_ORIGINS"
+      ],
+      "key": "brokerAllowedOrigins",
+      "sensitive": false
+    },
+    {
+      "category": "broker",
+      "defaultValue": [],
+      "description": "Comma-separated host or domain allowlist for broker-submitted task URLs. Use this to restrict remote task navigation targets for shared or automated environments.",
+      "envVars": [
+        "BROKER_ALLOWED_DOMAINS"
+      ],
+      "key": "brokerAllowedDomains",
+      "sensitive": false
+    },
+    {
       "category": "browser",
       "defaultValue": 9222,
       "description": "Chrome DevTools Protocol port used when attaching to a visible browser. The launcher scripts and attach-mode commands must use the same port.",
@@ -127,6 +158,99 @@
       "sensitive": false
     },
     {
+      "category": "stealth",
+      "defaultValue": false,
+      "description": "Enables stealth browser context options where supported. Use this only for legitimate testing scenarios that require deterministic fingerprint controls.",
+      "envVars": [
+        "ENABLE_STEALTH"
+      ],
+      "key": "stealthEnabled",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "Locale value exposed in stealth contexts. Use this when tests need consistent language and regional formatting across machines.",
+      "envVars": [
+        "STEALTH_LOCALE"
+      ],
+      "key": "stealthLocale",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "Timezone identifier exposed in stealth contexts. Use this when tests need stable timezone behavior independent of host settings.",
+      "envVars": [
+        "STEALTH_TIMEZONE_ID"
+      ],
+      "key": "stealthTimezoneId",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "defaultValue": "[redacted]",
+      "description": "Seed used to derive deterministic stealth fingerprint values. This can identify runs and is treated as sensitive.",
+      "envVars": [
+        "STEALTH_FINGERPRINT_SEED"
+      ],
+      "key": "stealthFingerprintSeed",
+      "sensitive": true
+    },
+    {
+      "category": "stealth",
+      "description": "WebGL vendor string exposed in stealth contexts. Use this only for deterministic fingerprint testing of legitimate web workflows.",
+      "envVars": [
+        "STEALTH_WEBGL_VENDOR"
+      ],
+      "key": "stealthWebglVendor",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "WebGL renderer string exposed in stealth contexts. Use this only for deterministic fingerprint testing of legitimate web workflows.",
+      "envVars": [
+        "STEALTH_WEBGL_RENDERER"
+      ],
+      "key": "stealthWebglRenderer",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "Navigator platform value exposed in stealth contexts. Use this when deterministic platform fingerprints are required for repeatable tests.",
+      "envVars": [
+        "STEALTH_PLATFORM"
+      ],
+      "key": "stealthPlatform",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "Navigator hardwareConcurrency value exposed in stealth contexts. Use this to keep CPU-core fingerprints stable in controlled tests.",
+      "envVars": [
+        "STEALTH_HARDWARE_CONCURRENCY"
+      ],
+      "key": "stealthHardwareConcurrency",
+      "sensitive": false
+    },
+    {
+      "category": "stealth",
+      "description": "Navigator deviceMemory value exposed in stealth contexts. Use this only when a test needs a deterministic browser fingerprint.",
+      "envVars": [
+        "STEALTH_DEVICE_MEMORY"
+      ],
+      "key": "stealthDeviceMemory",
+      "sensitive": false
+    },
+    {
+      "category": "proxy",
+      "defaultValue": "[redacted]",
+      "description": "Comma-separated proxy URL list used by proxy-aware workflows. Proxy URLs can contain credentials, so this value is treated as sensitive.",
+      "envVars": [
+        "PROXY_LIST"
+      ],
+      "key": "proxyList",
+      "sensitive": true
+    },
+    {
       "category": "policy",
       "defaultValue": "balanced",
       "description": "Default safety policy profile for sessions and actions. Use `safe` for stricter automation, `balanced` for normal work, and `trusted` only for high-trust local workflows.",
@@ -144,6 +268,36 @@
         "DAEMON_VISIBLE"
       ],
       "key": "daemonVisible",
+      "sensitive": false
+    },
+    {
+      "category": "daemon",
+      "defaultValue": "abandon",
+      "description": "Task resume policy used after daemon interruption. Use this to decide whether interrupted work should be abandoned, resumed, or rescheduled.",
+      "envVars": [
+        "RESUME_POLICY"
+      ],
+      "key": "resumePolicy",
+      "sensitive": false
+    },
+    {
+      "category": "daemon",
+      "defaultValue": 1024,
+      "description": "Memory threshold in megabytes used by health checks. Increase this on large hosts or lower it to catch memory growth earlier.",
+      "envVars": [
+        "MEMORY_ALERT_MB"
+      ],
+      "key": "memoryAlertMb",
+      "sensitive": false
+    },
+    {
+      "category": "daemon",
+      "defaultValue": 20,
+      "description": "Maximum active Chrome tabs before health checks warn. Use this to detect tab leaks and runaway browser workflows.",
+      "envVars": [
+        "CHROME_TAB_LIMIT"
+      ],
+      "key": "chromeTabLimit",
       "sensitive": false
     },
     {
@@ -193,6 +347,36 @@
         "TERMINAL_ROWS"
       ],
       "key": "terminalRows",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": 1048576,
+      "description": "Maximum bytes captured from one terminal command. This bounds memory and response size for commands with large output.",
+      "envVars": [
+        "TERMINAL_MAX_OUTPUT_BYTES"
+      ],
+      "key": "terminalMaxOutputBytes",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": 10000,
+      "description": "Maximum terminal scrollback lines persisted for resume. Increase this for long-running interactive sessions or reduce it to limit stored output.",
+      "envVars": [
+        "TERMINAL_MAX_SCROLLBACK_LINES"
+      ],
+      "key": "terminalMaxScrollbackLines",
+      "sensitive": false
+    },
+    {
+      "category": "terminal",
+      "defaultValue": 50,
+      "description": "Maximum number of terminal sessions retained for resume. Increase this for many concurrent terminals or reduce it to keep startup recovery small.",
+      "envVars": [
+        "TERMINAL_MAX_SERIALIZED_SESSIONS"
+      ],
+      "key": "terminalMaxSerializedSessions",
       "sensitive": false
     },
     {
@@ -252,6 +436,16 @@
       ],
       "key": "captchaApiKey",
       "sensitive": true
+    },
+    {
+      "category": "captcha",
+      "defaultValue": 120000,
+      "description": "Maximum time in milliseconds to wait for a CAPTCHA solver response. Increase this for slower providers or reduce it to fail blocked workflows faster.",
+      "envVars": [
+        "CAPTCHA_TIMEOUT_MS"
+      ],
+      "key": "captchaTimeoutMs",
+      "sensitive": false
     },
     {
       "category": "ai",
@@ -321,19 +515,48 @@
       ],
       "key": "openrouterApiKey",
       "sensitive": true
+    },
+    {
+      "category": "ai",
+      "defaultValue": 0.0001,
+      "description": "Estimated AI-agent cost per token used for local cost tracking and budgeting. Set this when your configured model has different pricing than the default estimate.",
+      "envVars": [
+        "AI_AGENT_COST_PER_TOKEN"
+      ],
+      "key": "aiAgentCostPerToken",
+      "sensitive": false
+    },
+    {
+      "category": "ai",
+      "defaultValue": "google/gemini-2.5-flash-preview:free",
+      "description": "Model override used by Stagehand-backed automation. Explicit STAGEHAND_MODEL wins, then OPENROUTER_MODEL, then the free Gemini default.",
+      "envVars": [
+        "STAGEHAND_MODEL",
+        "OPENROUTER_MODEL"
+      ],
+      "key": "stagehandModel",
+      "sensitive": false
     }
   ],
   "envVars": [
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
+      "name": "AI_AGENT_COST_PER_TOKEN"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "AI_AGENT_MODEL"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "BROKER_ALLOWED_DOMAINS"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "BROKER_ALLOWED_ORIGINS"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "BROKER_API_KEY"
     },
     {
@@ -349,8 +572,16 @@
       "name": "BROKER_RATE_LIMIT_WINDOW_MS"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "BROKER_SECRET"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSERLESS_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSERLESS_ENDPOINT"
     },
     {
       "backedByConfigRegistry": false,
@@ -378,6 +609,22 @@
     },
     {
       "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_ENDPOINT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_NAME"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_CONTROL_MODEL_PROVIDER"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "BROWSER_DEBUG_PORT"
     },
     {
@@ -398,6 +645,10 @@
     },
     {
       "backedByConfigRegistry": true,
+      "name": "BROWSER_USER_AGENT"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "BROWSER_USER_DATA_DIR"
     },
     {
@@ -409,12 +660,28 @@
       "name": "BROWSER_VIEWPORT_WIDTH"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
+      "name": "CAPTCHA_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "CAPTCHA_PROVIDER"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "CAPTCHA_TIMEOUT_MS"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "CHROME_TAB_LIMIT"
     },
     {
       "backedByConfigRegistry": true,
       "name": "DAEMON_VISIBLE"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "ENABLE_STEALTH"
     },
     {
       "backedByConfigRegistry": true,
@@ -425,16 +692,68 @@
       "name": "LOG_LEVEL"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "MEMORY_ALERT_MB"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_API_KEY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_BASE_URL"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "OPENROUTER_MODEL"
     },
     {
       "backedByConfigRegistry": true,
       "name": "POLICY_PROFILE"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
+      "name": "PROXY_LIST"
+    },
+    {
+      "backedByConfigRegistry": true,
       "name": "RESUME_POLICY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STAGEHAND_MODEL"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_DEVICE_MEMORY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_FINGERPRINT_SEED"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_HARDWARE_CONCURRENCY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_LOCALE"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_PLATFORM"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_TIMEZONE_ID"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_WEBGL_RENDERER"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "STEALTH_WEBGL_VENDOR"
     },
     {
       "backedByConfigRegistry": true,
@@ -445,15 +764,15 @@
       "name": "TERMINAL_COLS"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "TERMINAL_MAX_OUTPUT_BYTES"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "TERMINAL_MAX_SCROLLBACK_LINES"
     },
     {
-      "backedByConfigRegistry": false,
+      "backedByConfigRegistry": true,
       "name": "TERMINAL_MAX_SERIALIZED_SESSIONS"
     },
     {

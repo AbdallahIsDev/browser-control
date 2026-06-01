@@ -234,6 +234,28 @@ test("config inventory descriptions are explanatory, not terse labels", () => {
   }
 });
 
+test("config registry covers every loadConfig field", () => {
+  const env = { BROWSER_CONTROL_HOME: path.join(os.tmpdir(), `bc-config-registry-${Date.now()}`) };
+  try {
+    const config = loadConfig({ env, validate: false }) as unknown as Record<string, unknown>;
+    const configKeys = Object.keys(config).sort();
+    const registryKeys = getConfigEntries({ env, validate: false }).map((entry) => String(entry.key)).sort();
+
+    assert.deepEqual(
+      configKeys.filter((key) => !registryKeys.includes(key)),
+      [],
+      "every loadConfig field should be backed by CONFIG_DEFINITIONS",
+    );
+    assert.deepEqual(
+      registryKeys.filter((key) => !configKeys.includes(key)),
+      [],
+      "CONFIG_DEFINITIONS should not expose keys missing from loadConfig",
+    );
+  } finally {
+    fs.rmSync(env.BROWSER_CONTROL_HOME, { recursive: true, force: true });
+  }
+});
+
 test("loadConfig reads ENABLE_STEALTH", () => {
   const config = loadConfig({ env: { ENABLE_STEALTH: "true" }, validate: false });
   assert.equal(config.stealthEnabled, true);
@@ -406,9 +428,6 @@ test(".env.example exists and documents key env vars", () => {
   ];
   for (const varName of requiredVars) {
     assert.ok(content.includes(varName), `.env.example should document ${varName}`);
-  }
-  for (const hiddenVar of ["BROWSERLESS_API_KEY", "ENABLE_STEALTH", "PROXY_LIST", "CAPTCHA_API_KEY", "OPENROUTER_API_KEY"]) {
-    assert.ok(!content.includes(hiddenVar), `.env.example should not advertise hidden non-core var ${hiddenVar}`);
   }
 });
 
