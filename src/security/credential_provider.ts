@@ -63,13 +63,16 @@ function writeVaultKeyAtomic(keyPath: string, value: Buffer): boolean {
 	const tmpPath = `${keyPath}.${process.pid}.${Date.now()}.${crypto.randomBytes(6).toString("hex")}.tmp`;
 	fs.writeFileSync(tmpPath, value, { mode: 0o600 });
 	if (process.platform !== "win32") fs.chmodSync(tmpPath, 0o600);
-	if (fs.existsSync(keyPath)) {
+	try {
+		fs.linkSync(tmpPath, keyPath);
+		if (process.platform !== "win32") fs.chmodSync(keyPath, 0o600);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+		throw error;
+	} finally {
 		fs.rmSync(tmpPath, { force: true });
-		return false;
 	}
-	fs.renameSync(tmpPath, keyPath);
-	if (process.platform !== "win32") fs.chmodSync(keyPath, 0o600);
-	return true;
 }
 
 function isLocalVaultKeyDescriptor(value: unknown): value is LocalVaultKeyDescriptor {

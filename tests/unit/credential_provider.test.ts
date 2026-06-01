@@ -41,27 +41,87 @@ function legacyEncrypt(plaintext: string, key: Buffer): string {
 	return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64");
 }
 
-test("local credential provider writes a passphrase descriptor via temp file then rename", () => {
+test("local credential provider preserves a competing vault key created during publish", () => {
+	const home = tempDataHome();
+	const keyPath = vaultKeyPath(home);
+	const originalRenameSync = fs.renameSync;
+	const originalLinkSync = fs.linkSync;
+	const originalWriteFileSync = fs.writeFileSync;
+	const competingKey = crypto.randomBytes(32);
+	const competingDescriptor = {
+		version: 2,
+		provider: "local-aes-gcm",
+		keySource: "random-file",
+		key: competingKey.toString("base64"),
+		createdAt: "2026-01-01T00:00:00.000Z",
+	};
+	let injectedCompetingKey = false;
+
+	function injectCompetingKey(): void {
+		if (injectedCompetingKey) return;
+		injectedCompetingKey = true;
+		fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
+		originalWriteFileSync(keyPath, JSON.stringify(competingDescriptor), {
+			mode: 0o600,
+		});
+	}
+
+	fs.renameSync = ((from, to) => {
+		if (String(to) === keyPath) injectCompetingKey();
+		return originalRenameSync(from, to);
+	}) as typeof fs.renameSync;
+	fs.linkSync = ((from, to) => {
+		if (String(to) === keyPath) injectCompetingKey();
+		return originalLinkSync(from, to);
+	}) as typeof fs.linkSync;
+
+	try {
+		withVaultPassphrase(undefined, () => {
+			const service = createCredentialProtectionService({
+				dataHome: home,
+				preferWindowsDpapi: false,
+			});
+			const protectedValue = service.protect("secret");
+			const descriptor = JSON.parse(fs.readFileSync(keyPath, "utf8"));
+
+			assert.deepEqual(descriptor, competingDescriptor);
+			assert.equal(injectedCompetingKey, true);
+			assert.equal(
+				createCredentialProtectionService({
+					dataHome: home,
+					preferWindowsDpapi: false,
+				}).unprotect(protectedValue),
+				"secret",
+			);
+		});
+	} finally {
+		fs.renameSync = originalRenameSync;
+		fs.linkSync = originalLinkSync;
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("local credential provider writes a passphrase descriptor via atomic temp-file link", () => {
 	const home = tempDataHome();
 	const keyPath = vaultKeyPath(home);
 	const originalWriteFileSync = fs.writeFileSync;
-	const originalRenameSync = fs.renameSync;
+	const originalLinkSync = fs.linkSync;
 	const keyWrites: string[] = [];
-	const keyRenames: Array<{ from: string; to: string }> = [];
+	const keyLinks: Array<{ from: string; to: string }> = [];
 
 	fs.writeFileSync = ((file, data, options) => {
 		const target = String(file);
 		if (target.includes(".vault-key")) keyWrites.push(target);
 		return originalWriteFileSync(file, data, options);
 	}) as typeof fs.writeFileSync;
-	fs.renameSync = ((from, to) => {
+	fs.linkSync = ((from, to) => {
 		const source = String(from);
 		const target = String(to);
 		if (source.includes(".vault-key") || target.includes(".vault-key")) {
-			keyRenames.push({ from: source, to: target });
+			keyLinks.push({ from: source, to: target });
 		}
-		return originalRenameSync(from, to);
-	}) as typeof fs.renameSync;
+		return originalLinkSync(from, to);
+	}) as typeof fs.linkSync;
 
 	try {
 		withVaultPassphrase("correct horse battery staple", () => {
@@ -74,7 +134,7 @@ test("local credential provider writes a passphrase descriptor via temp file the
 			assert.equal(keyWrites.length, 1);
 			assert.notEqual(keyWrites[0], keyPath);
 			assert.match(keyWrites[0], /\.vault-key\.\d+\.\d+\..+\.tmp$/u);
-			assert.deepEqual(keyRenames, [{ from: keyWrites[0], to: keyPath }]);
+			assert.deepEqual(keyLinks, [{ from: keyWrites[0], to: keyPath }]);
 			const descriptor = JSON.parse(fs.readFileSync(keyPath, "utf8")) as {
 				version: number;
 				keySource: string;
@@ -87,7 +147,7 @@ test("local credential provider writes a passphrase descriptor via temp file the
 		});
 	} finally {
 		fs.writeFileSync = originalWriteFileSync;
-		fs.renameSync = originalRenameSync;
+		fs.linkSync = originalLinkSync;
 		fs.rmSync(home, { recursive: true, force: true });
 	}
 });
