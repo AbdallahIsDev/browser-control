@@ -10,6 +10,7 @@ import type { SystemStatus } from "../operator/types";
 import { DefaultPolicyEngine } from "../policy/engine";
 import { defaultRouter } from "../policy/execution_router";
 import type { ExecutionContext, PolicyEngine, PolicyTaskIntent } from "../policy/types";
+import { createCredentialProtectionService } from "../security/credential_provider";
 import {
 	type ConfigEntry,
 	type ConfigSetResult,
@@ -53,6 +54,7 @@ const MAX_SUBSCRIPTION_CHANNELS = 100;
 const MAX_SUBSCRIPTION_CHANNEL_LENGTH = 128;
 const BROKER_TASK_STATUS_STORE_PREFIX = "broker:task:";
 const BROKER_RATE_LIMIT_STORE_PREFIX = "broker:rate-limit:";
+const PROTECTED_BROKER_TASK_STATUS_VERSION = 1;
 const SUPPORTED_BROKER_API_VERSIONS = ["1"] as const;
 const CURRENT_BROKER_API_VERSION = "1";
 const PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
@@ -282,6 +284,15 @@ interface BrokerTaskStatusRecord extends BrokerTaskStatusEntry {
 	updatedAt: number;
 }
 
+interface ProtectedBrokerTaskStatusRecord {
+	protected: true;
+	formatVersion: typeof PROTECTED_BROKER_TASK_STATUS_VERSION;
+	recordType: "broker-task-status";
+	taskId: string;
+	encryption: "credential-protection-service";
+	encryptedPayload: string;
+}
+
 function isBrokerTaskStatus(value: unknown): value is BrokerTaskStatus {
 	return (
 		value === "pending" ||
@@ -300,6 +311,21 @@ function isBrokerTaskStatusRecord(
 		typeof record.id === "string" &&
 		isBrokerTaskStatus(record.status) &&
 		typeof record.updatedAt === "number"
+	);
+}
+
+function isProtectedBrokerTaskStatusRecord(
+	value: unknown,
+): value is ProtectedBrokerTaskStatusRecord {
+	if (!value || typeof value !== "object") return false;
+	const record = value as Record<string, unknown>;
+	return (
+		record.protected === true &&
+		record.formatVersion === PROTECTED_BROKER_TASK_STATUS_VERSION &&
+		record.recordType === "broker-task-status" &&
+		typeof record.taskId === "string" &&
+		record.encryption === "credential-protection-service" &&
+		typeof record.encryptedPayload === "string"
 	);
 }
 
@@ -1385,6 +1411,7 @@ export function createBrokerServer(
 		options.callbacks ?? createCallbacksFromDaemon(options.daemon);
 	const now = options.now ?? Date.now;
 	const memoryStore = options.memoryStore;
+	const taskStatusProtection = createCredentialProtectionService();
 	const brokerPolicyEngine =
 		options.policyEngine ??
 		new DefaultPolicyEngine({
@@ -1418,12 +1445,67 @@ export function createBrokerServer(
 	const rateLimitKey = (identity: string): string =>
 		`${BROKER_RATE_LIMIT_STORE_PREFIX}${encodeURIComponent(identity)}`;
 
+	const protectTaskStatusRecord = (
+		entry: BrokerTaskStatusRecord,
+	): ProtectedBrokerTaskStatusRecord => ({
+		protected: true,
+		formatVersion: PROTECTED_BROKER_TASK_STATUS_VERSION,
+		recordType: "broker-task-status",
+		taskId: entry.id,
+		encryption: "credential-protection-service",
+		encryptedPayload: taskStatusProtection
+			.protect(JSON.stringify(entry))
+			.toString("base64"),
+	});
+
+	const unprotectTaskStatusRecord = (
+		record: ProtectedBrokerTaskStatusRecord,
+	): BrokerTaskStatusRecord | null => {
+		try {
+			const parsed = JSON.parse(
+				taskStatusProtection.unprotect(
+					Buffer.from(record.encryptedPayload, "base64"),
+				),
+			) as unknown;
+			if (!isBrokerTaskStatusRecord(parsed) || parsed.id !== record.taskId) {
+				return null;
+			}
+			return parsed;
+		} catch (error) {
+			brokerLog.warn("Failed to decrypt persisted broker task status", {
+				taskId: record.taskId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return null;
+		}
+	};
+
+	const loadPersistedTaskStatus = (
+		key: string,
+	): BrokerTaskStatusRecord | null => {
+		const record = memoryStore?.get<
+			BrokerTaskStatusRecord | ProtectedBrokerTaskStatusRecord
+		>(key);
+		if (isProtectedBrokerTaskStatusRecord(record)) {
+			return unprotectTaskStatusRecord(record);
+		}
+		if (isBrokerTaskStatusRecord(record)) {
+			return record;
+		}
+		return null;
+	};
+
 	const restorePersistedState = (): void => {
 		if (!memoryStore) return;
 		for (const key of memoryStore.keys(BROKER_TASK_STATUS_STORE_PREFIX)) {
-			const entry = memoryStore.get<BrokerTaskStatusRecord>(key);
-			if (isBrokerTaskStatusRecord(entry)) {
+			const entry = loadPersistedTaskStatus(key);
+			if (entry) {
 				taskStatuses.set(entry.id, entry);
+				memoryStore.set(
+					key,
+					protectTaskStatusRecord(entry),
+					config.taskStatusRetentionMs,
+				);
 			} else {
 				memoryStore.delete(key);
 			}
@@ -1444,7 +1526,11 @@ export function createBrokerServer(
 	};
 
 	const persistTaskStatus = (entry: BrokerTaskStatusRecord): void => {
-		memoryStore?.set(taskStatusKey(entry.id), entry, config.taskStatusRetentionMs);
+		memoryStore?.set(
+			taskStatusKey(entry.id),
+			protectTaskStatusRecord(entry),
+			config.taskStatusRetentionMs,
+		);
 	};
 
 	const deletePersistedTaskStatus = (taskId: string): void => {

@@ -803,7 +803,18 @@ test("createBrokerServer restores task statuses from MemoryStore", async () => {
     memoryStore: store,
   });
 
-  first.setTaskStatus("task-persisted", { status: "running" });
+  first.setTaskStatus("task-persisted", {
+    status: "completed",
+    result: { url: "https://private.example/path?token=secret-task-token" },
+  });
+  const stored = store.get<Record<string, unknown>>("broker:task:task-persisted");
+  assert.equal(stored?.protected, true);
+  assert.equal(stored?.recordType, "broker-task-status");
+  assert.equal(
+    JSON.stringify(stored).includes("secret-task-token"),
+    false,
+    "task status payload should not be stored as plaintext",
+  );
   await first.close();
 
   const second = createBrokerServer({
@@ -813,10 +824,40 @@ test("createBrokerServer restores task statuses from MemoryStore", async () => {
   try {
     assert.deepEqual(second.getTaskStatus("task-persisted"), {
       id: "task-persisted",
-      status: "running",
+      status: "completed",
+      result: { url: "https://private.example/path?token=secret-task-token" },
     });
   } finally {
     await second.close();
+    store.close();
+  }
+});
+
+test("createBrokerServer migrates legacy plaintext task statuses to protected storage", async () => {
+  const store = new MemoryStore({ filename: ":memory:" });
+  store.set("broker:task:legacy-task", {
+    id: "legacy-task",
+    status: "failed",
+    error: "failed on https://private.example/path?token=legacy-secret",
+    updatedAt: Date.now(),
+  });
+
+  const broker = createBrokerServer({
+    env: { BROKER_API_KEY: "persist-task-key" },
+    memoryStore: store,
+  });
+
+  try {
+    assert.deepEqual(broker.getTaskStatus("legacy-task"), {
+      id: "legacy-task",
+      status: "failed",
+      error: "failed on https://private.example/path?token=legacy-secret",
+    });
+    const migrated = store.get<Record<string, unknown>>("broker:task:legacy-task");
+    assert.equal(migrated?.protected, true);
+    assert.equal(JSON.stringify(migrated).includes("legacy-secret"), false);
+  } finally {
+    await broker.close();
     store.close();
   }
 });
