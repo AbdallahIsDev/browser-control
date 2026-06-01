@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import {
+	buildSafeChildEnv,
+	isSafeChildEnvName,
+} from "../../src/shared/safe_child_env";
 
 const security = require("../../desktop/security.cjs") as {
 	createBrowserWindowOptions(
@@ -21,16 +25,8 @@ const security = require("../../desktop/security.cjs") as {
 	isExternalHttpUrl(targetUrl: string, appOrigin: string): boolean;
 };
 
-const childEnv = require("../../safe_child_env.cjs") as {
-	buildSafeChildEnv(
-		source?: NodeJS.ProcessEnv,
-		extra?: NodeJS.ProcessEnv,
-	): NodeJS.ProcessEnv;
-	isSafeChildEnvName(name: string): boolean;
-};
-
 test("safe child env keeps runtime allowlist and drops unrelated secrets", () => {
-	const env = childEnv.buildSafeChildEnv(
+	const env = buildSafeChildEnv(
 		{
 			AWS_SECRET_ACCESS_KEY: "aws-secret",
 			BROWSER_CONTROL_HOME: "C:/bc",
@@ -53,6 +49,16 @@ test("safe child env keeps runtime allowlist and drops unrelated secrets", () =>
 	assert.equal(env.NODE_OPTIONS, "--enable-source-maps");
 	assert.equal(env.Path, "C:/Windows/System32");
 	assert.equal(env.USERPROFILE, "C:/Users/test-user");
+	assert.equal(isSafeChildEnvName("GITHUB_TOKEN"), false);
+});
+
+test("safe child env CommonJS wrapper exposes typed implementation for desktop runtime", () => {
+	const wrapper = require("../../safe_child_env.cjs");
+
+	assert.equal(typeof wrapper.buildSafeChildEnv, "function");
+	assert.equal(typeof wrapper.isSafeChildEnvName, "function");
+	assert.equal(wrapper.isSafeChildEnvName("BROWSER_CONTROL_HOME"), true);
+	assert.deepEqual(wrapper.buildSafeChildEnv({ GITHUB_TOKEN: "secret" }), {});
 });
 
 test("desktop app server spawn uses safe child env", () => {

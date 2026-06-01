@@ -10,13 +10,7 @@ import type { ScreencastOptions } from "./observability/types";
 import type { ProviderConfig } from "./providers/types";
 import type { ActionResult } from "./shared/action_result";
 import { installGlobalFatalHandlers } from "./shared/fatal_handlers";
-
-const { buildSafeChildEnv } = require("../safe_child_env.cjs") as {
-	buildSafeChildEnv(
-		source?: NodeJS.ProcessEnv,
-		extra?: NodeJS.ProcessEnv,
-	): NodeJS.ProcessEnv;
-};
+import { buildSafeChildEnv } from "./shared/safe_child_env";
 
 const TRUSTED_SESSION_WARNING =
 	"trusted policy allows credential reveal, raw CDP, and network interception. Only use for development environments.";
