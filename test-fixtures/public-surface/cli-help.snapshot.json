@@ -663,26 +663,16 @@
           ],
           "description": "Return compact browser state",
           "flags": [
+            "dialog",
             "downloads",
+            "full-page",
             "json",
             "screenshot",
-            "snapshot"
+            "snapshot",
+            "tab-id"
           ],
           "jsonSupport": true,
-          "syntax": "state [--snapshot] [--screenshot] [--downloads] [--json]"
-        },
-        {
-          "commandPath": [
-            "capture"
-          ],
-          "description": "Capture current tab state",
-          "flags": [
-            "json",
-            "screenshot",
-            "snapshot"
-          ],
-          "jsonSupport": true,
-          "syntax": "capture [--snapshot] [--screenshot] [--json]"
+          "syntax": "state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]"
         },
         {
           "commandPath": [
@@ -1218,20 +1208,23 @@
           ],
           "description": "Return compact browser state",
           "flags": [
+            "dialog",
             "downloads",
+            "full-page",
             "json",
             "screenshot",
-            "snapshot"
+            "snapshot",
+            "tab-id"
           ],
           "jsonSupport": true,
-          "syntax": "browser state [--snapshot] [--screenshot] [--downloads] [--json]"
+          "syntax": "browser state [--snapshot] [--screenshot] [--full-page] [--dialog] [--downloads] [--tab-id=<id>] [--json]"
         },
         {
           "commandPath": [
             "browser",
             "capture"
           ],
-          "description": "Capture current tab state",
+          "description": "Deprecated alias for browser state",
           "flags": [
             "json",
             "screenshot",

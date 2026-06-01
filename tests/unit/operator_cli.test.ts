@@ -1132,6 +1132,14 @@ test("top-level browser shortcuts keep the first user argument", () => {
 	]);
 });
 
+test("top-level browser shortcuts use the unified BrowserControl path", () => {
+	const source = fs.readFileSync(path.join(process.cwd(), "src", "cli.ts"), "utf8");
+	assert.doesNotMatch(source, /new BrowserActions/);
+	assert.doesNotMatch(source, /import\(["']\.\/browser\/actions["']\)/);
+	assert.match(source, /async function handleBrowserAction/);
+	assert.match(source, /await handleBrowser\(/);
+});
+
 test("bc policy import --json writes clean parseable JSON", async () => {
 	const home = makeHome();
 	const previousHome = process.env.BROWSER_CONTROL_HOME;

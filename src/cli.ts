@@ -6,7 +6,6 @@ import { Command, Option } from "commander";
 import type { BrowserActionName, LocatorCandidate, OpenOptions, UrlEntry } from "./browser/actions";
 import type { BrowserTargetType } from "./browser/connection";
 import type { KnowledgeKind, ValidationResult } from "./knowledge/types";
-import type { ScreencastOptions } from "./observability/types";
 import type { ProviderConfig } from "./providers/types";
 import type { ActionResult } from "./shared/action_result";
 import { installGlobalFatalHandlers } from "./shared/fatal_handlers";
@@ -540,41 +539,6 @@ function parseWaitUntil(value: string | undefined): OpenOptions["waitUntil"] {
 	}
 	throw new Error(
 		`Invalid --wait-until "${value}". Expected load, domcontentloaded, networkidle, or commit.`,
-	);
-}
-
-function parseAnnotationPosition(
-	value: string | undefined,
-): ScreencastOptions["annotationPosition"] {
-	if (value === undefined) return undefined;
-	if (
-		value === "top-left" ||
-		value === "top" ||
-		value === "top-right" ||
-		value === "bottom-left" ||
-		value === "bottom" ||
-		value === "bottom-right"
-	) {
-		return value;
-	}
-	throw new Error(
-		`Invalid --annotation-position "${value}". Expected top-left, top, top-right, bottom-left, bottom, or bottom-right.`,
-	);
-}
-
-function parseScreencastRetention(
-	value: string | undefined,
-): ScreencastOptions["retention"] {
-	if (value === undefined) return undefined;
-	if (
-		value === "keep" ||
-		value === "delete-on-success" ||
-		value === "debug-only"
-	) {
-		return value;
-	}
-	throw new Error(
-		`Invalid --retention "${value}". Expected keep, delete-on-success, or debug-only.`,
 	);
 }
 
@@ -3435,6 +3399,38 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 			break;
 		}
 
+		case "screenshot": {
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeout;
+				const refs = flags.refs
+					? flags.refs.split(",").map((ref) => ref.trim()).filter(Boolean)
+					: undefined;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.screenshot({
+						copyTo: flags["copy-to"],
+						outputPath: flags.output ?? flags["output-path"],
+						fullPage: flags["full-page"] === "true",
+						target: flags.target,
+						annotate: flags.annotate === "true",
+						refs,
+						tabId: flags.tab ?? flags["tab-id"],
+					}),
+					timeoutMs ? Number(timeoutMs) : 30_000,
+					"browser screenshot",
+				);
+				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
+				await finishTimedCliResult(timedOut);
+				if (!result.success) throw commandFailed();
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw commandFailed();
+			}
+			break;
+		}
+
 		// Section 31: Unified action
 		case "act": {
 			const action = positional[0];
@@ -3488,6 +3484,7 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 				outputJson(result, !jsonOutput);
 				await cleanupBrowserSession(bc, timedOut);
 				await finishTimedCliResult(timedOut);
+				if (!result.success) throw commandFailed();
 			} catch (error) {
 				console.error("Error:", (error as Error).message);
 				throw commandFailed();
@@ -3551,13 +3548,68 @@ async function handleBrowser(args: ParsedArgs): Promise<void> {
 		}
 
 		case "tab": {
-			const tabArgs: ParsedArgs = {
-				...args,
-				command: "tab",
-				subcommand: positional[0],
-				positional: positional.slice(1),
-			};
-			await handleBrowserAction("tab", tabArgs);
+			const tabAction = positional[0];
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeout;
+				let result: ActionResult;
+				if (tabAction === "list") {
+					result = await bc.browser.tabList();
+				} else if (tabAction === "switch") {
+					const targetTabId = positional[1];
+					if (!targetTabId) {
+						console.error("Error: Tab ID is required");
+						throw commandFailed();
+					}
+					result = await bc.browser.tabSwitch(targetTabId);
+				} else if (tabAction === "close") {
+					const { result: closeResult, timedOut } = await withCliTimeout(
+						bc.browser.tabClose({
+							tabId: flags.tab ?? flags["tab-id"] ?? positional[1],
+						}),
+						timeoutMs ? Number(timeoutMs) : 30_000,
+						"browser tab close",
+					);
+					outputJson(closeResult, !jsonOutput);
+					await cleanupBrowserSession(bc, timedOut);
+					await finishTimedCliResult(timedOut);
+					if (!closeResult.success) throw commandFailed();
+					break;
+				} else {
+					console.error(
+						"Error: Unknown tab command. Use 'tab list', 'tab switch <id>', or 'tab close'",
+					);
+					throw commandFailed();
+				}
+				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, false);
+				if (!result.success) throw commandFailed();
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw commandFailed();
+			}
+			break;
+		}
+
+		case "close": {
+			try {
+				const { createBrowserControl } = await import("./browser_control");
+				const bc = createBrowserControl();
+				const timeoutMs = flags.timeout;
+				const { result, timedOut } = await withCliTimeout(
+					bc.browser.tabClose({ tabId: flags.tab ?? flags["tab-id"] }),
+					timeoutMs ? Number(timeoutMs) : 30_000,
+					"browser close",
+				);
+				outputJson(result, !jsonOutput);
+				await cleanupBrowserSession(bc, timedOut);
+				await finishTimedCliResult(timedOut);
+				if (!result.success) throw commandFailed();
+			} catch (error) {
+				console.error("Error:", (error as Error).message);
+				throw commandFailed();
+			}
 			break;
 		}
 
@@ -3714,6 +3766,7 @@ export async function runCli(argv = process.argv): Promise<void> {
 			case "act":
 			case "highlight":
 			case "drop":
+			case "close":
 				await handleBrowser(asTopLevelBrowserArgs(args));
 				break;
 
@@ -3764,10 +3817,6 @@ export async function runCli(argv = process.argv): Promise<void> {
 
 			case "tab":
 				await handleBrowserAction("tab", args);
-				break;
-
-			case "close":
-				await handleBrowserAction("close", args);
 				break;
 
 			case "locator":
@@ -6113,255 +6162,58 @@ async function handleBrowserAction(
 	action: string,
 	args: ParsedArgs,
 ): Promise<void> {
-	const { flags } = args;
-	const positional = getBrowserActionPositionals(action, args);
-	const jsonOutput = flags.json === "true";
-
-	const { SessionManager } = await import("./session_manager");
-	const { BrowserActions } = await import("./browser/actions");
-	const { formatActionResult } = await import("./shared/action_result");
-
-	// Use or create a session manager singleton
-	if (!_sessionManager) {
-		_sessionManager = new SessionManager();
+	if (action === "snapshot") {
+		await handleBrowser(asTopLevelBrowserArgs(args, "snapshot"));
+		return;
 	}
 
-	const browserActions = new BrowserActions({
-		sessionManager: _sessionManager,
+	if (action === "tab") {
+		await handleBrowser({
+			...args,
+			command: "browser",
+			subcommand: "tab",
+			positional: [args.subcommand, ...args.positional].filter(
+				(value): value is string => Boolean(value),
+			),
+		});
+		return;
+	}
+
+	if (action === "screenshot") {
+		await handleBrowser(asTopLevelBrowserArgs(args, "screenshot"));
+		return;
+	}
+
+	if (action === "close") {
+		await handleBrowser(asTopLevelBrowserArgs(args, "close"));
+		return;
+	}
+
+	const flags = { ...args.flags };
+	let positional = getBrowserActionPositionals(action, args);
+
+	if (action === "type" || action === "paste") {
+		if (!flags.text && positional[0]) flags.text = positional[0];
+		positional = [];
+	}
+
+	if (action === "press") {
+		if (!flags.key && positional[0]) flags.key = positional[0];
+		positional = [];
+	}
+
+	if (action === "scroll") {
+		if (!flags.direction && positional[0]) flags.direction = positional[0];
+		positional = [];
+	}
+
+	await handleBrowser({
+		...args,
+		command: "browser",
+		subcommand: "act",
+		flags,
+		positional: [action, ...positional],
 	});
-
-	try {
-		let result: import("./shared/action_result").ActionResult | undefined;
-		const tabId = flags.tab ?? flags["tab-id"];
-		const continueOnFailure =
-			flags["continue-on-failure"] === "true";
-
-		switch (action) {
-			case "snapshot": {
-				result = await browserActions.takeSnapshot({
-					rootSelector: flags["root-selector"],
-					boxes: flags.boxes === "true",
-					tabId,
-				});
-				break;
-			}
-
-			case "click": {
-				const target = positional[0];
-				if (!target) {
-					console.error("Error: Target (ref, selector, or text) is required");
-					throw commandFailed();
-				}
-				result = await browserActions.click({
-					target,
-					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
-					force: flags.force === "true",
-					tabId,
-				});
-				break;
-			}
-
-			case "fill": {
-				const target = positional[0];
-				const text = positional[1];
-				if (!target || !text) {
-					console.error("Error: Target and text are required");
-					throw commandFailed();
-				}
-				result = await browserActions.fill({
-					target,
-					text,
-					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
-					commit: flags.commit === "true",
-					tabId,
-				});
-				break;
-			}
-
-			case "fill-many": {
-				const fieldsStr = flags.fields ?? positional[0];
-				if (!fieldsStr) {
-					console.error("Error: Fields JSON array is required (e.g. '[{\"target\":\"@e3\", \"text\":\"hello\"}]')");
-					throw commandFailed();
-				}
-				let fields: any[];
-				try {
-					fields = JSON.parse(fieldsStr);
-				} catch {
-					console.error("Error: Invalid JSON for fields");
-					throw commandFailed();
-				}
-				result = await browserActions.fillMany(fields, {
-					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
-					continueOnFailure,
-					tabId,
-				});
-				break;
-			}
-
-			case "hover": {
-				const target = positional[0];
-				if (!target) {
-					console.error("Error: Target is required");
-					throw commandFailed();
-				}
-				result = await browserActions.hover({
-					target,
-					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
-					tabId,
-				});
-				break;
-			}
-
-			case "type": {
-				const text = positional[0];
-				if (!text) {
-					console.error("Error: Text is required");
-					throw commandFailed();
-				}
-				result = await browserActions.type({
-					text,
-					delayMs: flags.delay ? Number(flags.delay) : undefined,
-					tabId,
-				});
-				break;
-			}
-
-			case "paste": {
-				const text = positional[0];
-				if (!text) {
-					console.error("Error: Text is required");
-					throw commandFailed();
-				}
-				result = await browserActions.paste({
-					text,
-					target: flags.target,
-					timeoutMs: flags.timeout ? Number(flags.timeout) : undefined,
-					tabId,
-				});
-				break;
-			}
-
-			case "press": {
-				const key = positional[0];
-				if (!key) {
-					console.error("Error: Key is required (e.g., Enter, Tab, ArrowDown)");
-					throw commandFailed();
-				}
-				result = await browserActions.press({ key, tabId });
-				break;
-			}
-
-			case "scroll": {
-				const direction = positional[0] ?? "down";
-				if (!["up", "down", "left", "right"].includes(direction)) {
-					console.error("Error: Direction must be up, down, left, or right");
-					throw commandFailed();
-				}
-				result = await browserActions.scroll({
-					direction: direction as "up" | "down" | "left" | "right",
-					amount: flags.amount ? Number(flags.amount) : undefined,
-					tabId,
-				});
-				break;
-			}
-
-			case "screenshot": {
-				const refs = flags.refs
-					? (flags.refs as string).split(",").map((r) => r.trim())
-					: undefined;
-				result = await browserActions.screenshot({
-					copyTo: flags["copy-to"],
-					outputPath: flags.output,
-					fullPage: flags["full-page"] === "true",
-					target: flags.target,
-					annotate: flags.annotate === "true",
-					refs,
-					tabId,
-				});
-				break;
-			}
-
-			case "tab": {
-				const tabAction = args.subcommand;
-				if (tabAction === "list") {
-					result = await browserActions.tabList();
-				} else if (tabAction === "switch") {
-					const tabId = positional[0];
-					if (!tabId) {
-						console.error("Error: Tab ID is required");
-						throw commandFailed();
-					}
-					result = await browserActions.tabSwitch(tabId);
-				} else if (tabAction === "close") {
-					result = await browserActions.tabClose({
-						tabId: flags.tab ?? flags["tab-id"],
-					});
-				} else {
-					console.error(
-						"Error: Unknown tab command. Use 'tab list', 'tab switch <id>', or 'tab close'",
-					);
-					throw commandFailed();
-				}
-				break;
-			}
-
-			case "close": {
-				result = await browserActions.tabClose();
-				break;
-			}
-
-			case "screencast": {
-				const screencastAction = args.subcommand;
-				if (screencastAction === "start") {
-					const options: ScreencastOptions = {};
-					if (flags["copy-to"]) options.copyTo = flags["copy-to"] as string;
-					if (flags.path) options.path = flags.path as string;
-					if (flags["show-actions"] === "true") options.showActions = true;
-					options.annotationPosition = parseAnnotationPosition(
-						flags["annotation-position"],
-					);
-					options.retention = parseScreencastRetention(flags.retention);
-					result = await browserActions.screencastStart(options);
-				} else if (screencastAction === "stop") {
-					result = await browserActions.screencastStop();
-				} else if (screencastAction === "status") {
-					result = await browserActions.screencastStatus();
-				} else {
-					console.error(
-						"Error: Unknown screencast command. Use 'screencast start', 'screencast stop', or 'screencast status'",
-					);
-					throw commandFailed();
-				}
-				break;
-			}
-
-			default:
-				console.error(`Unknown browser action: ${action}`);
-				throw commandFailed();
-		}
-
-		if (result) {
-			if (jsonOutput) {
-				outputJson(formatActionResult(result), false);
-			} else {
-				if (result.success) {
-					// Human-friendly output
-					if (result.data) outputJson(result.data, true);
-					else console.log("OK");
-					if (result.warning) console.warn(`Warning: ${result.warning}`);
-				} else {
-					console.error(`Error: ${result.error}`);
-					if (result.policyDecision)
-						console.error(`Policy: ${result.policyDecision}`);
-					throw commandFailed();
-				}
-			}
-		}
-	} catch (error) {
-		console.error("Error:", (error as Error).message);
-		throw commandFailed();
-	}
 }
 
 // ── Locator Handler (Section 25) ────────────────────────────────────────

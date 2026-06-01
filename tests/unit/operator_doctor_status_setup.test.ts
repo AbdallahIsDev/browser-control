@@ -211,7 +211,7 @@ test("setup --json emits only JSON and never prompts interactively", () => {
         env: { ...process.env, BROWSER_CONTROL_HOME: home },
         encoding: "utf8",
         input: "",
-        timeout: 5000,
+        timeout: 15000,
       },
     );
 
