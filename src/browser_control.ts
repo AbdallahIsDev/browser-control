@@ -1011,31 +1011,38 @@ export function createBrowserControl(
 		};
 	};
 
+	const queueBrowserAction = <T>(
+		actionName: string,
+		run: () => Promise<ActionResult<T>>,
+	): Promise<ActionResult<T>> => {
+		return browserActions.runQueuedAction(actionName, run);
+	};
+
 	return {
 		browser: {
-			open: async (o) => attachCompactBrowserState(await browserActions.open(o)),
-			navigate: async (o) => attachCompactBrowserState(await browserActions.navigate(o), o.tabId),
-			openMany: async (items) => attachCompactBrowserState(await browserActions.openMany(items)),
-			capture: async (o) => attachCompactBrowserState(await browserActions.capture(o), o?.tabId),
-			captureMany: async (ids, o) => attachCompactBrowserState(await browserActions.captureMany(ids, o)),
-			snapshot: (o) => browserActions.takeSnapshot(o),
-			click: async (o) => attachCompactBrowserState(await browserActions.click(o), o.tabId),
-			fill: async (o) => attachCompactBrowserState(await browserActions.fill(o), o.tabId),
-			fillMany: async (fields, options) => attachCompactBrowserState(await browserActions.fillMany(fields, options), options?.tabId),
-			hover: async (o) => attachCompactBrowserState(await browserActions.hover(o), o.tabId),
-			type: async (o) => attachCompactBrowserState(await browserActions.type(o), o.tabId),
-			paste: async (o) => attachCompactBrowserState(await browserActions.paste(o), o.tabId),
-			press: async (o) => attachCompactBrowserState(await browserActions.press(o), o.tabId),
-			scroll: async (o) => attachCompactBrowserState(await browserActions.scroll(o), o.tabId),
-			screenshot: async (o) => attachCompactBrowserState(await browserActions.screenshot(o), o?.tabId),
-			highlight: async (o) => attachCompactBrowserState(await browserActions.highlight(o), o.tabId),
-			generateLocator: (target, options) => browserActions.generateLocator(target, options),
-			dialog: async (o) => attachCompactBrowserState(await browserActions.dialog(o), o.tabId),
-			cdp: async (o) => attachCompactBrowserState(await browserActions.cdp(o), o.tabId),
-			tabList: () => browserActions.tabList(),
-			tabSwitch: async (id) => attachCompactBrowserState(await browserActions.tabSwitch(id), id),
-			tabClose: async (options) => attachCompactBrowserState(await browserActions.tabClose(options), options?.tabId),
-			close: async () => attachCompactBrowserState(await browserActions.close()),
+			open: (o) => queueBrowserAction("browser_open", async () => attachCompactBrowserState(await browserActions.open(o))),
+			navigate: (o) => queueBrowserAction("browser_navigate", async () => attachCompactBrowserState(await browserActions.navigate(o), o.tabId)),
+			openMany: (items) => queueBrowserAction("browser_open_many", async () => attachCompactBrowserState(await browserActions.openMany(items))),
+			capture: (o) => queueBrowserAction("browser_capture", async () => attachCompactBrowserState(await browserActions.capture(o), o?.tabId)),
+			captureMany: (ids, o) => queueBrowserAction("browser_capture_many", async () => attachCompactBrowserState(await browserActions.captureMany(ids, o))),
+			snapshot: (o) => queueBrowserAction("browser_snapshot", () => browserActions.takeSnapshot(o)),
+			click: (o) => queueBrowserAction("browser_click", async () => attachCompactBrowserState(await browserActions.click(o), o.tabId)),
+			fill: (o) => queueBrowserAction("browser_fill", async () => attachCompactBrowserState(await browserActions.fill(o), o.tabId)),
+			fillMany: (fields, options) => queueBrowserAction("browser_fill_many", async () => attachCompactBrowserState(await browserActions.fillMany(fields, options), options?.tabId)),
+			hover: (o) => queueBrowserAction("browser_hover", async () => attachCompactBrowserState(await browserActions.hover(o), o.tabId)),
+			type: (o) => queueBrowserAction("browser_type", async () => attachCompactBrowserState(await browserActions.type(o), o.tabId)),
+			paste: (o) => queueBrowserAction("browser_paste", async () => attachCompactBrowserState(await browserActions.paste(o), o.tabId)),
+			press: (o) => queueBrowserAction("browser_press", async () => attachCompactBrowserState(await browserActions.press(o), o.tabId)),
+			scroll: (o) => queueBrowserAction("browser_scroll", async () => attachCompactBrowserState(await browserActions.scroll(o), o.tabId)),
+			screenshot: (o) => queueBrowserAction("browser_screenshot", async () => attachCompactBrowserState(await browserActions.screenshot(o), o?.tabId)),
+			highlight: (o) => queueBrowserAction("browser_highlight", async () => attachCompactBrowserState(await browserActions.highlight(o), o.tabId)),
+			generateLocator: (target, options) => queueBrowserAction("browser_generate_locator", () => browserActions.generateLocator(target, options)),
+			dialog: (o) => queueBrowserAction("browser_dialog", async () => attachCompactBrowserState(await browserActions.dialog(o), o.tabId)),
+			cdp: (o) => queueBrowserAction("browser_cdp", async () => attachCompactBrowserState(await browserActions.cdp(o), o.tabId)),
+			tabList: () => queueBrowserAction("browser_tab_list", () => browserActions.tabList()),
+			tabSwitch: (id) => queueBrowserAction("browser_tab_switch", async () => attachCompactBrowserState(await browserActions.tabSwitch(id), id)),
+			tabClose: (options) => queueBrowserAction("browser_tab_close", async () => attachCompactBrowserState(await browserActions.tabClose(options), options?.tabId)),
+			close: () => queueBrowserAction("browser_close", async () => attachCompactBrowserState(await browserActions.close())),
 			provider: providerNamespace,
 			screencast: screencastNamespace,
 			// Section 27: Browser discovery and attach UX
@@ -1061,7 +1068,7 @@ export function createBrowserControl(
 					completedAt: new Date().toISOString(),
 				};
 			},
-			attach: async (options) => {
+			attach: async (options) => queueBrowserAction("browser_attach", async () => {
 				const bm = sessionManager.getBrowserManager();
 				const cdpUrl = options.cdp ?? options.endpoint;
 				const result = await bm.attach({
@@ -1076,8 +1083,8 @@ export function createBrowserControl(
 					data: { attached: true, endpoint: result.cdpEndpoint },
 					completedAt: new Date().toISOString(),
 				};
-			},
-			detach: async () => {
+			}),
+			detach: async () => queueBrowserAction("browser_detach", async () => {
 				const policyEval = sessionManager.evaluateAction("browser_detach", {});
 				if (!isPolicyAllowed(policyEval))
 					return policyEval as ActionResult<BrowserDetachResult>;
@@ -1093,8 +1100,8 @@ export function createBrowserControl(
 					data: result,
 					completedAt: new Date().toISOString(),
 				};
-			},
-			launch: async (options) => {
+			}),
+			launch: async (options) => queueBrowserAction("browser_launch", async () => {
 				const result = await browserActions.launch({
 					port: options?.port,
 					profile: options?.profile,
@@ -1104,14 +1111,14 @@ export function createBrowserControl(
 					...result,
 					completedAt: new Date().toISOString(),
 				};
-			},
-			drop: async (options) => attachCompactBrowserState(await browserActions.drop(options), options.tabId),
+			}),
+			drop: (options) => queueBrowserAction("browser_drop", async () => attachCompactBrowserState(await browserActions.drop(options), options.tabId)),
 			downloads: {
-				list: () => browserActions.downloadsList(),
+				list: () => queueBrowserAction("browser_downloads_list", () => browserActions.downloadsList()),
 			},
-			state: (options) => browserActions.browserState(options),
-			act: (options) => browserActions.browserAct(options),
-			taskRun: async (options) => {
+			state: (options) => queueBrowserAction("browser_state", () => browserActions.browserState(options)),
+			act: (options) => queueBrowserAction(`browser_${options.action}`, () => browserActions.browserAct(options)),
+			taskRun: async (options) => queueBrowserAction("browser_task_run", async () => {
 				const result = await browserActions.taskRun({
 					steps: options.steps,
 					continueOnFailure: options.continueOnFailure,
@@ -1121,7 +1128,7 @@ export function createBrowserControl(
 					},
 				});
 				return result;
-			},
+			}),
 		},
 		terminal: {
 			open: (o) => terminalActions.open(o),

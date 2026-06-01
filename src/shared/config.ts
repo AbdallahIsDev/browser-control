@@ -107,6 +107,12 @@ export interface BrowserControlConfig {
   memoryAlertMb: number;
   /** Chrome session limit (default: 20) */
   chromeTabLimit: number;
+  /** Global concurrent browser action limit (default: 4) */
+  browserActionMaxConcurrency: number;
+  /** Per-session concurrent browser action limit (default: 1) */
+  browserActionMaxConcurrencyPerSession: number;
+  /** Maximum queued browser actions before rejecting new work (default: 100) */
+  browserActionQueueMaxDepth: number;
   /** Whether daemon launches should use a visible console window on Windows */
   daemonVisible: boolean;
 
@@ -268,6 +274,9 @@ export type ConfigKey =
   | "resumePolicy"
   | "memoryAlertMb"
   | "chromeTabLimit"
+  | "browserActionMaxConcurrency"
+  | "browserActionMaxConcurrencyPerSession"
+  | "browserActionQueueMaxDepth"
   | "logLevel"
   | "logFile"
   | "terminalShell"
@@ -461,6 +470,9 @@ const CONFIG_DEFINITIONS: ConfigDefinition[] = [
   { key: "browserViewportWidth", category: "browser", envVars: ["BROWSER_VIEWPORT_WIDTH"], description: "Default viewport width for automation-owned browser contexts. This affects screenshots, layout-sensitive interactions, and tests that depend on responsive breakpoints.", defaultValue: () => 1365, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserViewportHeight", category: "browser", envVars: ["BROWSER_VIEWPORT_HEIGHT"], description: "Default viewport height for automation-owned browser contexts. This affects visible page area, screenshot dimensions, and scroll behavior.", defaultValue: () => 768, parse: integerValue, validate: ensurePositiveInt },
   { key: "browserUserAgent", category: "browser", envVars: ["BROWSER_USER_AGENT"], description: "User-Agent string applied to automation-owned browser contexts. Use this only when a target site or test requires a specific client identity.", defaultValue: () => undefined, parse: optionalString },
+  { key: "browserActionMaxConcurrency", category: "browser", envVars: ["BROWSER_ACTION_MAX_CONCURRENCY"], description: "Maximum browser actions allowed to execute at once across all sessions. Lower this to protect Chrome/CDP resources; raise it only when the host and provider can sustain more parallel work.", defaultValue: () => 4, parse: positiveIntValue },
+  { key: "browserActionMaxConcurrencyPerSession", category: "browser", envVars: ["BROWSER_ACTION_MAX_CONCURRENCY_PER_SESSION"], description: "Maximum browser actions allowed to execute at once for one session. The default serializes each session to prevent tab/state races while still allowing different sessions to make progress.", defaultValue: () => 1, parse: positiveIntValue },
+  { key: "browserActionQueueMaxDepth", category: "browser", envVars: ["BROWSER_ACTION_QUEUE_MAX_DEPTH"], description: "Maximum queued browser actions before Browser Control rejects additional work with a clear queue-full error. Lower this to fail fast under overload or raise it when short bursts are expected and latency is acceptable.", defaultValue: () => 100, parse: positiveIntValue },
   { key: "stealthEnabled", category: "stealth", envVars: ["ENABLE_STEALTH"], description: "Enables stealth browser context options where supported. Use this only for legitimate testing scenarios that require deterministic fingerprint controls.", defaultValue: () => false, parse: booleanValue },
   { key: "stealthLocale", category: "stealth", envVars: ["STEALTH_LOCALE"], description: "Locale value exposed in stealth contexts. Use this when tests need consistent language and regional formatting across machines.", defaultValue: () => undefined, parse: optionalString },
   { key: "stealthTimezoneId", category: "stealth", envVars: ["STEALTH_TIMEZONE_ID"], description: "Timezone identifier exposed in stealth contexts. Use this when tests need stable timezone behavior independent of host settings.", defaultValue: () => undefined, parse: optionalString },
@@ -901,6 +913,9 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
   const resumePolicy = effective.resumePolicy as "resume" | "reschedule" | "abandon";
   const memoryAlertMb = effective.memoryAlertMb as number;
   const chromeTabLimit = effective.chromeTabLimit as number;
+  const browserActionMaxConcurrency = effective.browserActionMaxConcurrency as number;
+  const browserActionMaxConcurrencyPerSession = effective.browserActionMaxConcurrencyPerSession as number;
+  const browserActionQueueMaxDepth = effective.browserActionQueueMaxDepth as number;
   const daemonVisible = effective.daemonVisible as boolean;
 
   // ── Logging ────────────────────────────────────────────────────
@@ -981,6 +996,9 @@ export function loadConfig(options: LoadConfigOptions = {}): BrowserControlConfi
     resumePolicy,
     memoryAlertMb,
     chromeTabLimit,
+    browserActionMaxConcurrency,
+    browserActionMaxConcurrencyPerSession,
+    browserActionQueueMaxDepth,
     daemonVisible,
 
     logLevel,

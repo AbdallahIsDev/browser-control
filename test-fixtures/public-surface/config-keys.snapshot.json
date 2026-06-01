@@ -158,6 +158,36 @@
       "sensitive": false
     },
     {
+      "category": "browser",
+      "defaultValue": 4,
+      "description": "Maximum browser actions allowed to execute at once across all sessions. Lower this to protect Chrome/CDP resources; raise it only when the host and provider can sustain more parallel work.",
+      "envVars": [
+        "BROWSER_ACTION_MAX_CONCURRENCY"
+      ],
+      "key": "browserActionMaxConcurrency",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": 1,
+      "description": "Maximum browser actions allowed to execute at once for one session. The default serializes each session to prevent tab/state races while still allowing different sessions to make progress.",
+      "envVars": [
+        "BROWSER_ACTION_MAX_CONCURRENCY_PER_SESSION"
+      ],
+      "key": "browserActionMaxConcurrencyPerSession",
+      "sensitive": false
+    },
+    {
+      "category": "browser",
+      "defaultValue": 100,
+      "description": "Maximum queued browser actions before Browser Control rejects additional work with a clear queue-full error. Lower this to fail fast under overload or raise it when short bursts are expected and latency is acceptable.",
+      "envVars": [
+        "BROWSER_ACTION_QUEUE_MAX_DEPTH"
+      ],
+      "key": "browserActionQueueMaxDepth",
+      "sensitive": false
+    },
+    {
       "category": "stealth",
       "defaultValue": false,
       "description": "Enables stealth browser context options where supported. Use this only for legitimate testing scenarios that require deterministic fingerprint controls.",
@@ -582,6 +612,18 @@
     {
       "backedByConfigRegistry": true,
       "name": "BROWSERLESS_ENDPOINT"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_ACTION_MAX_CONCURRENCY"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_ACTION_MAX_CONCURRENCY_PER_SESSION"
+    },
+    {
+      "backedByConfigRegistry": true,
+      "name": "BROWSER_ACTION_QUEUE_MAX_DEPTH"
     },
     {
       "backedByConfigRegistry": false,

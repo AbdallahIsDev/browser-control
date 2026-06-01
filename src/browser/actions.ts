@@ -82,6 +82,10 @@ import {
 	type DialogInfo,
 	type DialogResponse,
 } from "./dialogs";
+import {
+	BrowserActionQueue,
+	type BrowserActionQueueStats,
+} from "./action_queue";
 
 const log = logger.withComponent("browser_actions");
 const DEFAULT_DOWNLOAD_REGISTRY_MAX_ENTRIES = 200;
@@ -130,6 +134,7 @@ export interface BrowserStateResult {
 	activeElementHint?: string;
 	warnings: string[];
 	status: Record<string, "ok" | "error" | "skipped">;
+	queue?: BrowserActionQueueStats;
 }
 
 export type BrowserActionName =
@@ -237,6 +242,22 @@ export interface BrowserActionContext {
 	serviceRegistry?: ServiceRegistry;
 	/** Maximum in-memory Playwright download records retained per BrowserActions instance. */
 	downloadRegistryMaxEntries?: number;
+	/** Shared browser action scheduler. Defaults to a process-wide queue. */
+	actionQueue?: BrowserActionQueue;
+}
+
+let globalActionQueue: BrowserActionQueue | undefined;
+
+function getGlobalBrowserActionQueue(): BrowserActionQueue {
+	if (!globalActionQueue) {
+		const config = loadConfig({ validate: false });
+		globalActionQueue = new BrowserActionQueue({
+			maxGlobalConcurrency: config.browserActionMaxConcurrency,
+			maxPerSessionConcurrency: config.browserActionMaxConcurrencyPerSession,
+			maxQueueDepth: config.browserActionQueueMaxDepth,
+		});
+	}
+	return globalActionQueue;
 }
 
 export interface OpenOptions {
@@ -454,6 +475,7 @@ export class BrowserActions {
 	private readonly downloadContexts = new WeakSet<BrowserContext>();
 	private readonly downloadRegistry: Array<ExtendedDownloadResult & { sortTimeMs: number }> = [];
 	private readonly maxDownloadRegistryEntries: number;
+	private readonly actionQueue: BrowserActionQueue;
 	private readonly trackedPages = new WeakSet<Page>();
 	private selectedPage?: Page;
 
@@ -463,6 +485,27 @@ export class BrowserActions {
 		this.maxDownloadRegistryEntries = resolveDownloadRegistryMaxEntries(
 			context.downloadRegistryMaxEntries,
 		);
+		this.actionQueue = context.actionQueue ?? getGlobalBrowserActionQueue();
+	}
+
+	getActionQueueStats(): BrowserActionQueueStats {
+		return this.actionQueue.stats();
+	}
+
+	async runQueuedAction<T>(
+		actionName: string,
+		run: () => Promise<ActionResult<T>>,
+	): Promise<ActionResult<T>> {
+		const sessionId = this.getSessionId();
+		try {
+			return await this.actionQueue.enqueue(sessionId, actionName, run);
+		} catch (error: unknown) {
+			const message = error instanceof Error ? error.message : String(error);
+			return failureResult(`Browser action queue rejected ${actionName}: ${message}`, {
+				path: "a11y",
+				sessionId,
+			});
+		}
 	}
 
 	private recordPackageAction(
@@ -4886,6 +4929,7 @@ export class BrowserActions {
 			dialogCount: 0,
 			warnings,
 			status,
+			queue: this.getActionQueueStats(),
 		};
 
 		// Check browser is connected and honor explicit/persisted active tab.
