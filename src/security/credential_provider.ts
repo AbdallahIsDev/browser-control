@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { getSecretsDir } from "../shared/paths";
+import { ensureSecretsDir, getSecretsDir } from "../shared/paths";
 import { logger } from "../shared/logger";
 
 const LOCAL_VAULT_KEY_PBKDF2_ITERATIONS = 600_000;
@@ -190,7 +190,7 @@ function ensureCurrentVaultKey(dataHome?: string): Buffer {
 	) satisfies LocalVaultKeyDescriptor;
 
 	if (!existing) {
-		fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
+		ensureSecretsDir(dataHome);
 		if (!writeVaultKeyDescriptorAtomic(keyPath, descriptor)) {
 			return ensureCurrentVaultKey(dataHome);
 		}

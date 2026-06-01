@@ -73,7 +73,6 @@ const REQUIRED_DIRS = [
 	"config",
 	"interop",
 	"runtime",
-	"secrets",
 	"state",
 ] as const;
 

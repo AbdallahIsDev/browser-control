@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { getDataHome as _getDataHome, ensureDataHomeAtPath, getUserConfigPath } from "./paths";
+import { getDataHome as _getDataHome, ensureDataHomeAtPath, ensureSecretsDir, getUserConfigPath } from "./paths";
 import { splitCsv } from "./format";
 import { redactString } from "../observability/redaction";
 
@@ -168,7 +168,7 @@ function getLegacyBrokerAuthKeyPaths(env: NodeJS.ProcessEnv): string[] {
 }
 
 function writePrivateFile(filePath: string, value: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  ensureSecretsDir(path.dirname(path.dirname(filePath)));
   fs.writeFileSync(filePath, `${value.trim()}\n`, { mode: 0o600 });
   if (process.platform !== "win32") {
     fs.chmodSync(path.dirname(filePath), 0o700);

@@ -23,7 +23,7 @@ import {
 } from "../shared/config";
 import { installGlobalFatalHandlers } from "../shared/fatal_handlers";
 import { logger } from "../shared/logger";
-import { ensureDataHome, getDataHome } from "../shared/paths";
+import { ensureDataHome, ensureSecretsDir, getDataHome } from "../shared/paths";
 import {
 	getStateStorage,
 	type StateStorage,
@@ -154,7 +154,10 @@ function webServerRecordPath(): string {
 }
 
 function webDashboardTokenPath(): string {
-	return path.join(ensureDataHome(), "secrets", WEB_DASHBOARD_TOKEN_FILE);
+	return path.join(
+		ensureSecretsDir(ensureDataHome()),
+		WEB_DASHBOARD_TOKEN_FILE,
+	);
 }
 
 function readPersistedWebDashboardToken(): string | null {

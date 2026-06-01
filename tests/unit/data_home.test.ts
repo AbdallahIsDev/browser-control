@@ -11,6 +11,7 @@ import {
 import {
 	ensureDataHomeAtPath,
 	ensureDataHome,
+	ensureSecretsDir,
 	getDataHome,
 	getDataHomeManifestPath,
 	getEvidenceScreenshotsDir,
@@ -216,10 +217,11 @@ test("fresh data home init creates only essential root directories", () => {
 			.map((entry) => entry.name)
 			.sort();
 
-		assert.deepEqual(dirs, ["config", "interop", "runtime", "secrets", "state"]);
+		assert.deepEqual(dirs, ["config", "interop", "runtime", "state"]);
 		assert.equal(fs.existsSync(path.join(home, "manifest.json")), true);
 		assert.equal(fs.existsSync(path.join(home, "README.md")), true);
 		assert.equal(fs.existsSync(path.join(home, "legacy")), false);
+		assert.equal(fs.existsSync(path.join(home, "secrets")), false);
 		assert.equal(fs.existsSync(path.join(home, ".interop")), false);
 		assert.equal(fs.existsSync(path.join(home, "runtime", "temp")), false);
 	} finally {
@@ -231,6 +233,7 @@ test("secrets README documents vault key exposure boundary", () => {
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-data-home-secrets-readme-"));
 	try {
 		ensureDataHomeAtPath(home);
+		ensureSecretsDir(home);
 		const readme = fs.readFileSync(path.join(home, "secrets", "README.md"), "utf8");
 
 		assert.match(readme, /\.vault-key/);
@@ -360,9 +363,10 @@ test("data home v2 creates manifest, essential dirs, and non-destructive legacy 
 		assert.match(readme, /created lazily/);
 		assert.match(readme, /runtime\/temp/);
 		assert.match(readme, /Do not delete/);
-		for (const rel of ["config", "runtime", "state", "secrets", "interop"]) {
+		for (const rel of ["config", "runtime", "state", "interop"]) {
 			assert.equal(fs.existsSync(path.join(home, rel)), true, `${rel} should be created on init`);
 		}
+		assert.equal(fs.existsSync(path.join(home, "secrets")), false, "secrets should be lazy");
 		for (const rel of [
 			"automations",
 			"backups",

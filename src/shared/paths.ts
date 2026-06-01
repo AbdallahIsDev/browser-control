@@ -193,6 +193,21 @@ function dataHomeReadmeText(): string {
   ].join("\n");
 }
 
+function secretsReadmeText(): string {
+  return [
+    "# Browser Control Secrets",
+    "",
+    "Provider keys and other secrets are stored separately from normal preferences.",
+    "Values in this folder must be redacted from UI, logs, debug bundles, and exports.",
+    "",
+    "The `.vault-key` file is the local fallback vault decryption key.",
+    "Never commit, sync, or back up `.vault-key` alongside vault contents.",
+    "Treat `.vault-key` like a password: file possession can decrypt local fallback vault entries.",
+    "On Windows, POSIX file modes are advisory; protect this folder with user/account-level access control.",
+    "",
+  ].join("\n");
+}
+
 export function getDataHome(): string {
   const override = process.env.BROWSER_CONTROL_HOME;
   let resolved: string;
@@ -262,7 +277,6 @@ export function ensureDataHomeAtPath(home: string): string {
     path.join(home, "config"),
     path.join(home, "interop"),
     path.join(home, "runtime"),
-    path.join(home, "secrets"),
     path.join(home, "state"),
   ];
   for (const dir of dirs) {
@@ -280,25 +294,6 @@ export function ensureDataHomeAtPath(home: string): string {
   const rootReadme = path.join(home, "README.md");
   if (!fs.existsSync(rootReadme)) {
     fs.writeFileSync(rootReadme, dataHomeReadmeText(), { mode: 0o600 });
-  }
-  const secretsReadme = path.join(home, "secrets", "README.md");
-  if (!fs.existsSync(secretsReadme)) {
-    fs.writeFileSync(
-      secretsReadme,
-      [
-        "# Browser Control Secrets",
-        "",
-        "Provider keys and other secrets are stored separately from normal preferences.",
-        "Values in this folder must be redacted from UI, logs, debug bundles, and exports.",
-        "",
-        "The `.vault-key` file is the local fallback vault decryption key.",
-        "Never commit, sync, or back up `.vault-key` alongside vault contents.",
-        "Treat `.vault-key` like a password: file possession can decrypt local fallback vault entries.",
-        "On Windows, POSIX file modes are advisory; protect this folder with user/account-level access control.",
-        "",
-      ].join("\n"),
-      { mode: 0o600 },
-    );
   }
   copyDirFilesIfMissing(path.join(home, ".interop"), path.join(home, "interop"));
   copyFileIfMissing(path.join(home, "chrome_pid.txt"), path.join(home, "interop", "chrome.pid"));
@@ -413,6 +408,22 @@ export function getStateDir(dataHome?: string): string {
 }
 export function getSecretsDir(dataHome?: string): string {
   return path.join(dataHome ?? getDataHome(), "secrets");
+}
+export function ensureSecretsDir(dataHome?: string): string {
+  const dir = getSecretsDir(dataHome);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") {
+    const stat = fs.lstatSync(dir);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Refusing to use symlinked Browser Control secrets directory: ${dir}`);
+    }
+    fs.chmodSync(dir, 0o700);
+  }
+  const readmePath = path.join(dir, "README.md");
+  if (!fs.existsSync(readmePath)) {
+    fs.writeFileSync(readmePath, secretsReadmeText(), { mode: 0o600 });
+  }
+  return dir;
 }
 export function getMemoryDir(dataHome?: string): string {
   return path.join(dataHome ?? getDataHome(), "memory");
