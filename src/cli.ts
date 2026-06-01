@@ -201,6 +201,7 @@ const COMMANDER_VALUE_OPTIONS = [
 	"scope-name",
 	"secret-id",
 	"secret-name",
+	"secret-value",
 	"site",
 	"site-scope",
 	"signer",
@@ -222,7 +223,6 @@ const COMMANDER_VALUE_OPTIONS = [
 	"type",
 	"url",
 	"usage",
-	"value",
 	"wait-until",
 	"annotation-position",
 	"direction",
@@ -466,8 +466,17 @@ function normalizeCommanderBooleanAssignments(rawArgs: string[]): {
 	return { args, explicitFlags };
 }
 
+function normalizeLegacyVaultValueFlag(rawArgs: string[]): string[] {
+	if (rawArgs[0] !== "vault" || rawArgs[1] !== "set") return rawArgs;
+	return rawArgs.map((arg) => {
+		if (arg === "--value") return "--secret-value";
+		if (arg.startsWith("--value=")) return `--secret-value=${arg.slice("--value=".length)}`;
+		return arg;
+	});
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
-	const rawArgs = argv.slice(2);
+	const rawArgs = normalizeLegacyVaultValueFlag(argv.slice(2));
 	const normalized = normalizeCommanderBooleanAssignments(rawArgs);
 	const result: ParsedArgs = {
 		command: "",
@@ -5930,7 +5939,7 @@ async function handleVault(args: ParsedArgs): Promise<void> {
 				const scope = flags.scope;
 				const scopeName = flags["scope-name"] ?? positional[0];
 				const secretName = flags["secret-name"] ?? positional[1];
-				const value = flags.value ?? positional[2];
+				const value = flags["secret-value"] ?? positional[2];
 				if (
 					scope !== "site" &&
 					scope !== "package" &&

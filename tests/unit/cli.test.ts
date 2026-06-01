@@ -853,6 +853,41 @@ test("parseArgs handles proxy add with positional URL", () => {
   assert.deepEqual(result.positional, ["http://proxy.example.com:8080"]);
 });
 
+test("parseArgs scopes legacy --value alias to vault set", () => {
+  const legacy = parseArgs([
+    "node",
+    "cli.ts",
+    "vault",
+    "set",
+    "--scope",
+    "site",
+    "example.test",
+    "api-token",
+    "--value",
+    "secret",
+  ]);
+  assert.equal(legacy.flags["secret-value"], "secret");
+  assert.equal(legacy.flags.value, undefined);
+
+  const explicit = parseArgs([
+    "node",
+    "cli.ts",
+    "vault",
+    "set",
+    "--scope",
+    "site",
+    "example.test",
+    "api-token",
+    "--secret-value=secret",
+  ]);
+  assert.equal(explicit.flags["secret-value"], "secret");
+
+  assert.throws(
+    () => parseArgs(["node", "cli.ts", "memory", "set", "key", "--value", "secret"]),
+    /unknown option '--value'/,
+  );
+});
+
 test("proxy add stores proxy credentials in the credential vault", async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-home-"));
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-proxy-cwd-"));
@@ -983,6 +1018,41 @@ test("vault set and delete accept standard yes confirmations", () => {
     );
     assert.equal(deleted.status, 0, deleted.stderr);
     assert.deepEqual(JSON.parse(deleted.stdout), { success: true, id: body.id });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("vault set accepts explicit --secret-value without registering generic --value", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-secret-value-home-"));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bc-cli-vault-secret-value-cwd-"));
+  const env = {
+    BROWSER_CONTROL_HOME: home,
+    BROWSER_CONTROL_STATE_BACKEND: "json",
+  };
+
+  try {
+    const stored = runCli(
+      [
+        "vault",
+        "set",
+        "--scope",
+        "site",
+        "example.test",
+        "api-token",
+        "--secret-value",
+        "secret-value",
+        "--yes",
+        "--json",
+      ],
+      { cwd, env },
+    );
+    assert.equal(stored.status, 0, stored.stderr);
+    const body = JSON.parse(stored.stdout) as { id: string; hasValue: boolean };
+    assert.match(body.id, /^secret:\/\/site\/example\.test\/api-token$/u);
+    assert.equal(body.hasValue, true);
+    assert.doesNotMatch(stored.stdout, /secret-value/u);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });
