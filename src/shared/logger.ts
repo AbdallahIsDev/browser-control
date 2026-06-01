@@ -4,6 +4,7 @@ import { getLogsDir } from "./paths";
 import { redactObject, redactString } from "../observability/redaction";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "critical";
+export type LogFormat = "text" | "json";
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,
@@ -19,6 +20,10 @@ function parseLevel(value: string | undefined): LogLevel {
     return normalized as LogLevel;
   }
   return "info";
+}
+
+function parseFormat(value: string | undefined): LogFormat {
+  return value?.trim().toLowerCase() === "json" ? "json" : "text";
 }
 
 function isProtocolStdoutReserved(): boolean {
@@ -43,6 +48,18 @@ interface LoggerExitProcess {
 
 const activeFileLoggers = new Set<Logger>();
 const installedExitProcesses = new WeakSet<object>();
+const DEFAULT_FILE_FLUSH_INTERVAL_MS = 100;
+const DEFAULT_FILE_BATCH_SIZE = 100;
+
+interface LoggerOptions {
+  component?: string;
+  level?: LogLevel;
+  logDir?: string;
+  fileEnabled?: boolean;
+  format?: LogFormat;
+  fileFlushIntervalMs?: number;
+  fileBatchSize?: number;
+}
 
 export function closeActiveLoggers(): void {
   for (const activeLogger of Array.from(activeFileLoggers)) {
@@ -70,13 +87,26 @@ export class Logger {
 
   private readonly logDir: string;
 
+  private readonly format: LogFormat;
+
+  private readonly fileFlushIntervalMs: number;
+
+  private readonly fileBatchSize: number;
+
   private stream: fs.WriteStream | null = null;
 
-  constructor(options: { component?: string; level?: LogLevel; logDir?: string; fileEnabled?: boolean } = {}) {
+  private fileBuffer: string[] = [];
+
+  private flushTimer: NodeJS.Timeout | null = null;
+
+  constructor(options: LoggerOptions = {}) {
     this.component = options.component ?? "core";
     this.minLevel = options.level ?? parseLevel(process.env.LOG_LEVEL);
     this.logDir = options.logDir ?? getLogsDir();
     this.fileEnabled = options.fileEnabled ?? (process.env.LOG_FILE === "true");
+    this.format = options.format ?? parseFormat(process.env.BROWSER_CONTROL_LOG_FORMAT);
+    this.fileFlushIntervalMs = Math.max(1, options.fileFlushIntervalMs ?? DEFAULT_FILE_FLUSH_INTERVAL_MS);
+    this.fileBatchSize = Math.max(1, options.fileBatchSize ?? DEFAULT_FILE_BATCH_SIZE);
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -84,6 +114,18 @@ export class Logger {
   }
 
   private formatRecord(record: LogRecord): string {
+    if (this.format === "json") {
+      return JSON.stringify({
+        timestamp: record.timestamp,
+        level: record.level,
+        component: record.component,
+        message: redactString(record.message),
+        ...(record.data && Object.keys(record.data).length > 0
+          ? { data: redactObject(record.data) }
+          : {}),
+      });
+    }
+
     const base = `${record.timestamp} [${record.level.toUpperCase()}] [${record.component}] ${redactString(record.message)}`;
     if (record.data && Object.keys(record.data).length > 0) {
       return `${base} ${JSON.stringify(redactObject(record.data))}`;
@@ -139,19 +181,69 @@ export class Logger {
         activeFileLoggers.add(this);
         installLoggerExitHandlers();
       }
-      this.stream.write(`${line}\n`);
+      this.fileBuffer.push(line);
+      if (this.fileBuffer.length >= this.fileBatchSize) {
+        this.flushFileBuffer();
+      } else {
+        this.scheduleFileFlush();
+      }
     } catch {
       // Silently ignore file write failures — stdout is still active
     }
   }
 
-  close(): void {
-    if (this.stream) {
-      const stream = this.stream;
-      this.stream = null;
-      activeFileLoggers.delete(this);
-      stream.end();
+  private scheduleFileFlush(): void {
+    if (this.flushTimer) {
+      return;
     }
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flushFileBuffer();
+    }, this.fileFlushIntervalMs);
+    this.flushTimer.unref?.();
+  }
+
+  private clearFlushTimer(): void {
+    if (!this.flushTimer) {
+      return;
+    }
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+  }
+
+  private flushFileBuffer(): void {
+    this.clearFlushTimer();
+    if (!this.stream || this.fileBuffer.length === 0) {
+      return;
+    }
+    const chunk = `${this.fileBuffer.join("\n")}\n`;
+    this.fileBuffer = [];
+    this.stream.write(chunk);
+  }
+
+  async flush(): Promise<void> {
+    this.flushFileBuffer();
+    const stream = this.stream;
+    if (!stream) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      stream.write("", (error?: Error | null) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  close(): void {
+    this.flushFileBuffer();
+    if (!this.stream) {
+      return;
+    }
+    const stream = this.stream;
+    this.stream = null;
+    activeFileLoggers.delete(this);
+    stream.end();
   }
 
   debug(message: string, data?: Record<string, unknown>): void { this.write("debug", message, data); }
@@ -167,6 +259,9 @@ export class Logger {
       level: this.minLevel,
       logDir: this.logDir,
       fileEnabled: this.fileEnabled,
+      format: this.format,
+      fileFlushIntervalMs: this.fileFlushIntervalMs,
+      fileBatchSize: this.fileBatchSize,
     });
   }
 }

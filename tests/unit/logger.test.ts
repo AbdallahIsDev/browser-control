@@ -149,6 +149,45 @@ test("Logger redacts credential URL objects from structured data", () => {
   assert.ok(output.stdout.includes("session=ok"));
 });
 
+test("Logger supports opt-in structured JSON console output", () => {
+  const logger = new Logger({ component: "json-test", level: "info", fileEnabled: false, format: "json" });
+
+  const output = captureOutput(() => {
+    logger.info("token=supersecrettoken1234567890", {
+      count: 42,
+      Authorization: "Bearer secretbearertoken1234567890",
+    });
+  });
+
+  const record = JSON.parse(output.stdout.trim()) as LogRecord;
+  assert.equal(record.level, "info");
+  assert.equal(record.component, "json-test");
+  assert.ok(record.message.includes("REDACTED"));
+  assert.equal(record.data?.count, 42);
+  assert.equal(record.data?.Authorization, "[REDACTED]");
+  assert.ok(!output.stdout.includes("supersecrettoken1234567890"));
+  assert.ok(!output.stdout.includes("secretbearertoken1234567890"));
+});
+
+test("Logger supports BROWSER_CONTROL_LOG_FORMAT=json opt-in", () => {
+  const previousFormat = process.env.BROWSER_CONTROL_LOG_FORMAT;
+  try {
+    process.env.BROWSER_CONTROL_LOG_FORMAT = "json";
+    const logger = new Logger({ component: "env-json-test", level: "info", fileEnabled: false });
+
+    const output = captureOutput(() => {
+      logger.info("env json");
+    });
+
+    const record = JSON.parse(output.stdout.trim()) as LogRecord;
+    assert.equal(record.component, "env-json-test");
+    assert.equal(record.message, "env json");
+  } finally {
+    if (previousFormat === undefined) delete process.env.BROWSER_CONTROL_LOG_FORMAT;
+    else process.env.BROWSER_CONTROL_LOG_FORMAT = previousFormat;
+  }
+});
+
 test("Logger does not append data when no structured data is given", () => {
   const logger = new Logger({ component: "test", level: "info", fileEnabled: false });
 
@@ -203,6 +242,47 @@ test("Logger writes to file when fileEnabled is true", async () => {
     const content = fs.readFileSync(path.join(tempDir, logFiles[0]), "utf8");
     assert.ok(content.includes("file test"));
   } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("Logger queues file writes without synchronous appendFileSync and flushes on demand", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "logger-async-test-"));
+  const originalAppendFileSync = fs.appendFileSync;
+
+  try {
+    fs.appendFileSync = (() => {
+      throw new Error("appendFileSync should not be used for logger writes");
+    }) as typeof fs.appendFileSync;
+
+    const logger = new Logger({
+      component: "test",
+      level: "info",
+      logDir: tempDir,
+      fileEnabled: true,
+      fileFlushIntervalMs: 60_000,
+      fileBatchSize: 100,
+    });
+
+    captureOutput(() => {
+      logger.info("queued file test");
+    });
+
+    const logFilesBeforeFlush = fs.readdirSync(tempDir).filter((f) => f.endsWith(".log"));
+    if (logFilesBeforeFlush.length > 0) {
+      const beforeContent = fs.readFileSync(path.join(tempDir, logFilesBeforeFlush[0]), "utf8");
+      assert.equal(beforeContent, "");
+    }
+
+    await logger.flush();
+    logger.close();
+
+    const logFiles = fs.readdirSync(tempDir).filter((f) => f.endsWith(".log"));
+    assert.ok(logFiles.length >= 1, `Expected at least one log file in ${tempDir}`);
+    const content = fs.readFileSync(path.join(tempDir, logFiles[0]), "utf8");
+    assert.ok(content.includes("queued file test"));
+  } finally {
+    fs.appendFileSync = originalAppendFileSync;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
