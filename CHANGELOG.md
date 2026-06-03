@@ -61,10 +61,10 @@ All notable changes to Browser Control will be documented in this file.
 - ✅ Performance tracing
 - ✅ Recovery guidance
 
-#### Web Dashboard & Desktop
-- ✅ React 19 + Vite web dashboard
-- ✅ Electron 41 desktop wrapper
-- ✅ Loopback-only Express backend
+#### Web Dashboard & Desktop (Experimental / Internal Operator Surfaces)
+- 🧪 React 19 + Vite web dashboard (experimental, package-first redesign pending)
+- 🧪 Electron 41 desktop wrapper (experimental, internal operator surface)
+- 🧪 Loopback-only Express backend
 
 #### Workflow & Automation
 - ✅ Linear workflow graph runtime (run/status/resume/approve/cancel)

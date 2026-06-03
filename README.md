@@ -20,9 +20,11 @@
 
 ## What It Does
 
-Browser Control gives AI agents a **local, policy-governed runtime** for reusable Chromium browser workflows, evidence capture, filesystem reports, and helper scripts.
+Browser Control gives any AI agent the ability to use a web browser and do real-world tasks for you.
 
-It does not replace Codex/Claude Code. It works with existing agents to turn repeated browser tasks into reusable Automation Packages.
+Instead of just talking to you, your AI can now open web pages, click buttons, fill out forms, and handle boring online chores directly on your computer. It does all this while following strict safety rules, so you are always in complete control.
+
+It works with Codex/Claude Code or other existing agents to turn repeated browser tasks into reusable Automation Packages.
 
 | Domain | Capabilities |
 |--------|-------------|
@@ -48,11 +50,24 @@ Public integration is CLI-first and MCP-first. The TypeScript API is available f
 
 <video src="https://github.com/user-attachments/assets/bb9cd071-9f50-44de-8012-6d3bfdc7a1a1" controls autoplay muted loop width="100%"></video>
 
+### MiMo by Xiaomi
+
+Tested with Browser Control workflow automation tasks, including browser navigation, form filling, information extraction, and report generation. MiMo demonstrated solid performance on structured multi-step workflows.
+
+> [Xiaomi MiMo](https://platform.xiaomimimo.com/docs/en-US/welcome) · [MiMo on Hugging Face](https://huggingface.co/XiaomiMiMo)
+
 <br/>
 
 ## ⚡ Quick Start
 
 **Prerequisite:** Node.js `>= 22`
+
+```powershell
+npm install -g @abdallahisdev/browser-control
+bc --help
+```
+
+From source (development):
 
 ```powershell
 git clone https://github.com/AbdallahIsDev/browser-control.git
@@ -61,13 +76,6 @@ npm install
 npm run typecheck
 npm run build
 npm link              # Makes `bc` command globally available
-```
-
-Experimental npm package:
-
-```powershell
-npm install -g @abdallahisdev/browser-control
-bc --help
 ```
 
 First setup:
@@ -109,7 +117,7 @@ bc browser auth import auth-state.json --stored
 
 ## ⚡ Agent Execution Model
 
-For Codex, Hermes-like agents, OpenCode-like agents, Gemini CLI, Claude Code, and any agent that can run shell commands, use CLI-first automation:
+For Codex, Claude Code, OpenCode, Hermes, OpenClaw, and any agent that can run shell commands, use CLI-first automation:
 
 ```powershell
 bc status --json

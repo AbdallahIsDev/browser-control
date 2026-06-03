@@ -6,7 +6,9 @@ node_modules/
 .commandcode/
 desktop/BrowserControlLauncher/
 desktop/bin/
+.opencode/
 CLAUDE.md
+AGENT_INSTRUCTIONS.md
 
 .env
 .env.*
@@ -65,3 +67,7 @@ scratch/
 .commandcode/
 
 .tmp-*
+.ask-me/
+cross-reference-report.md
+Browser_Control_Complete_Review_Report.md
+Browser_Control_Comprehensive_Review.md

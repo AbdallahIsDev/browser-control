@@ -3,17 +3,13 @@
 ## Current Strategic Direction
 
 Browser Control is a reusable browser workflow runtime for AI agents.
-
 It is not a coding agent, not an IDE, not a general AI chat application, and not a replacement for Codex, Claude Code, Cursor, or similar agent products.
-
 Browser Control should integrate with those agents, not compete with them.
 
 ## Core Product Thesis
 
 General agents repeatedly rediscover the same browser workflows from scratch.
-
 Browser Control exists to reduce that waste.
-
 A successful browser task should become a reusable Automation Package that can be replayed, repaired, versioned, reviewed, and shared.
 
 ## Main Value Proposition
@@ -32,21 +28,15 @@ The main business value is reduced time, reduced token usage, better repeatabili
 ## Primary Product Surface
 
 The primary product is Automation Packages.
-
 The dashboard and desktop app are experimental/internal operator surfaces for managing packages, runs, evidence, permissions, failures, and repairs.
-
 They should not become a general chat app or AI coding IDE.
-
 They must not be presented as the main production product until stable and redesigned around Automation Packages.
 
 ## Supporting Surfaces
 
 CLI, MCP, TypeScript API, terminal, filesystem, workflows, harness, and dashboard exist to support reusable browser automation packages.
-
 CLI, MCP, and API are integration surfaces for existing agents. They exist to create, run, replay, repair, evaluate, and review Automation Packages.
-
 Terminal and filesystem tools exist to support browser workflows, evidence files, reports, package helper scripts, and local verification output.
-
 They are not the product story by themselves.
 
 ## What Browser Control Is Not
