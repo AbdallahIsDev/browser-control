@@ -62,6 +62,12 @@ For browser games or complex apps:
 - Map coordinates only after verifying viewport and element bounds.
 - Do not use hidden engines/APIs unless user explicitly permits them.
 
+## Stagehand — Removed
+
+Stagehand (`@browserbasehq/stagehand`) has been removed from the project. It required an external LLM API key (OpenRouter), adding a paid third-party dependency that conflicts with the project's goal of self-contained browser automation. Everything Stagehand provided is already covered by Playwright + a11y tree + CDP DOM.
+
+If you encounter any leftover references to Stagehand, `stagehand_core`, `StagehandManager`, `connectStagehand`, `disconnectStagehand`, `getActiveStagehand`, `activeStagehand`, `OPENROUTER_API_KEY`, `STAGEHAND_MODEL`, or `stagehandModel` — remove them.
+
 Cleanup:
 
 - Close only tabs/sessions/helpers created for the task when safe.
